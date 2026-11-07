@@ -16,7 +16,7 @@ import { getBaseUrl } from '@/features/dashboard/lib/getBaseUrl';
 import { keystoneContext } from '@/features/keystone/context';
 import { authorizeMcpRequest } from '@/features/keystone/mcp-oauth/http';
 import { internalGraphqlEndpoint } from '@/features/keystone/lib/internal-origin';
-import { DOMAIN_TOOLS, runDomainTool } from '@/features/keystone/mcp/registry';
+import { DOMAIN_TOOLS, runDomainTool } from '@/features/keystone/mcp';
 
 // Get simple type name for display
 function getSimpleTypeName(type: any): string {

@@ -24,3 +24,34 @@ export function publicCode(prefix: string, groups = 2) {
   const parts = Array.from({ length: groups }, (_, i) => chars.slice(i * 4, i * 4 + 4).join(''))
   return `${prefix}-${parts.join('-')}`
 }
+
+/** A practice-lifetime serial without a year (client C-000123, patient P-000123), same lock rule. */
+export async function nextSerial(tx: Tx, prefix: string, width = 6) {
+  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error('Serial prefix must be 1-5 capital letters')
+  const key = `${prefix}-serial`
+  await advisoryLock(tx, `sequence:${key}`)
+  const row = await tx.sequence.upsert({ where: { key }, create: { key, nextValue: 2 }, update: { nextValue: { increment: 1 } } })
+  return `${prefix}-${String(row.nextValue - 1).padStart(width, '0')}`
+}
+
+/** Reserve n consecutive yearly references at once (bulk loads): one lock, one round trip. */
+export async function reserveReferences(tx: Tx, prefix: string, n: number, now = new Date(), width = 6) {
+  if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error('Reference prefix must be 2-5 capital letters')
+  if (n <= 0) return []
+  const key = `${prefix}-${now.getUTCFullYear()}`
+  await advisoryLock(tx, `sequence:${key}`)
+  const row = await tx.sequence.upsert({ where: { key }, create: { key, nextValue: n + 1 }, update: { nextValue: { increment: n } } })
+  const first = row.nextValue - n
+  return Array.from({ length: n }, (_, i) => `${key}-${String(first + i).padStart(width, '0')}`)
+}
+
+/** Reserve n consecutive practice-lifetime serials (C-000123…). */
+export async function reserveSerials(tx: Tx, prefix: string, n: number, width = 6) {
+  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error('Serial prefix must be 1-5 capital letters')
+  if (n <= 0) return []
+  const key = `${prefix}-serial`
+  await advisoryLock(tx, `sequence:${key}`)
+  const row = await tx.sequence.upsert({ where: { key }, create: { key, nextValue: n + 1 }, update: { nextValue: { increment: n } } })
+  const first = row.nextValue - n
+  return Array.from({ length: n }, (_, i) => `${prefix}-${String(first + i).padStart(width, '0')}`)
+}

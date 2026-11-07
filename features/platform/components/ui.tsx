@@ -77,4 +77,4 @@ export function Stat({ name, value }: { name: string; value: React.ReactNode }) 
   );
 }
 
-export const Meta = ({ children }: { children: React.ReactNode }) => <span className="min-w-0 break-words text-xs text-muted-foreground">{children}</span>;
+export const Meta = ({ children }: { children: React.ReactNode }) => <span className="block min-w-0 break-words text-xs text-muted-foreground">{children}</span>;

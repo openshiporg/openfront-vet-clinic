@@ -28,7 +28,7 @@ export default async function ReadAuditPage({ searchParams }: { searchParams?: P
       <Section title={resource ? `Reads of ${resource}` : actor ? `Reads by ${actor}` : 'Latest reads'} aside={resource || actor ? <Link href="/dashboard/platform/read-audit" className="text-xs underline">Show all</Link> : null}>
         {data.readAudits.length ? data.readAudits.map(r => (
           <Row key={r.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <Link className="font-medium underline-offset-2 hover:underline" href={`/dashboard/platform/read-audit?actor=${encodeURIComponent(r.actorId)}`}>{r.actorLabel ?? r.actorId}</Link>
                 <span className="text-xs text-muted-foreground">{r.actorKind}</span>

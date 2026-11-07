@@ -43,7 +43,7 @@ export default async function TeamPage() {
       <Section title="Staff">
         {data.staffMembers.length ? data.staffMembers.map(s => (
           <Row key={s.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{s.displayName}</span>{s.credentials ? <span className="text-xs text-muted-foreground">{s.credentials}</span> : null}</div>
               <Meta>{s.user?.role?.name ?? label(s.kind)} · {label(s.employment)} · {s.locations.map(l => l.code).join(', ') || s.homeLocation?.code}{s.user?.accessExpiresAt ? ` · access until ${s.user.accessExpiresAt.slice(0, 10)}` : ''}</Meta>
               {s.licenses.map(l => (
@@ -57,7 +57,7 @@ export default async function TeamPage() {
       <Section title="DEA registrations (one per location and registrant)">
         {data.deaRegistrations === null ? <Empty>You need controlled-substance access to see DEA registrations.</Empty> : dea.length ? dea.map(r => (
           <Row key={r.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-mono font-medium">{r.registrationNumber}</span><span>{r.registrantName}</span></div>
               <Meta>{r.location?.name} · schedules {(r.schedules ?? []).join(', ')} · {label(r.registrantKind)} · {expiry(today, r.expiresOn)}</Meta>
             </div>

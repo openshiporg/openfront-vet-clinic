@@ -1,5 +1,6 @@
 import { APPROVAL_POLICIES, DEA_REGISTRATIONS, LOCATIONS, PRACTICE, ROLES, STAFF } from '@/features/keystone/seed/practice'
 import { POLICY_PACKS } from '@/features/keystone/seed/policies'
+import { APPOINTMENT_TYPES, HOUSEHOLD_COUNT, KNOWLEDGE_BASE, REFERRAL_HOSPITALS, RESOURCES, SPECIES } from '@/features/keystone/seed/clinicData'
 
 /**
  * What "Load Cedar Creek" creates, section by section. Each section is one idempotent server
@@ -20,6 +21,24 @@ export const SETUP_SECTIONS = [
       `${POLICY_PACKS.length} policy packs: federal DEA/FDA/FCC + California`,
       'US federal business-day calendar 2026-2028 and location hours',
       `${APPROVAL_POLICIES.length} maker-checker approval policies`,
+    ],
+  },
+  {
+    id: 'clinic',
+    title: 'Clients, patients, schedule and the AI receptionist',
+    mutation: 'mutation LoadClinic($idempotencyKey: String!) { loadClinicSetup(idempotencyKey: $idempotencyKey) }',
+    field: 'loadClinicSetup',
+    items: [
+      `${SPECIES.length} species with breeds and colours`,
+      `${RESOURCES.length} rooms and equipment across both locations`,
+      `${APPOINTMENT_TYPES.length} appointment types (surgery and dental are requests the DVM confirms)`,
+      'Weekly schedules for DVMs, RVTs and the groomer',
+      'Phone triage protocol v1 (red flags → ER instruction and urgent transfer)',
+      `${KNOWLEDGE_BASE.length} knowledge-base answers and the SMS templates`,
+      `${REFERRAL_HOSPITALS.length} referral hospitals, two open 24 hours`,
+      'The AI receptionist with its reception grants (voice stays off until approved)',
+      `${HOUSEHOLD_COUNT} fictional households with pets, weights, microchips and alerts`,
+      "Today's day sheet and the first controlled-substance containers",
     ],
   },
 ] as const

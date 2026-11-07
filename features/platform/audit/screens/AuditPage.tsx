@@ -36,7 +36,7 @@ export default async function AuditPage({ searchParams }: { searchParams?: Promi
       <Section title={entity ? `Events for ${entity}` : 'Latest events'} aside={entity ? <Link href="/dashboard/platform/audit" className="text-xs underline">Show all</Link> : null}>
         {data.auditEvents.length ? data.auditEvents.map(e => (
           <Row key={e.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-mono text-xs text-muted-foreground">#{e.seq}</span><span className="font-medium">{e.eventType}</span></div>
               <Meta>
                 <Link className="underline underline-offset-2" href={`/dashboard/platform/audit?entity=${encodeURIComponent(e.entityId)}`}>{e.entityType} {e.entityId}</Link>

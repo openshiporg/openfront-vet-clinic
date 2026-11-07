@@ -82,7 +82,7 @@ export const ComplianceTask = list({
     location: relationship({ ref: 'Location', ...readOnly }),
     startedAt: timestamp({ ...readOnly }),
     dueAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
-    dedupeKey: systemText({ indexed: 'unique' }),
+    dedupeKey: systemText({ indexed: 'unique', nullable: true }),
     escalations: json({ ...readOnly }),
     status: lifecycle(['open', 'done', 'overdue', 'waived']),
     evidence: json({ ...readOnly }),
@@ -99,7 +99,7 @@ export const Task = list({
   access: governed('canAccessDashboard'),
   ui: { labelField: 'title', listView: { initialColumns: ['title', 'kind', 'priority', 'assignee', 'dueAt', 'status'], initialSort: { field: 'dueAt', direction: 'ASC' } } },
   fields: {
-    ref: systemText({ indexed: 'unique' }),
+    ref: systemText({ indexed: 'unique', nullable: true }),
     kind: fixedChoice(['call_back', 'refill_review', 'result_review', 'record_unsigned', 'records_request', 'registration_review', 'follow_up', 'agent_handoff', 'general']),
     title: systemText({ required: true }),
     detail: text({ ...readOnly, ui: { ...readOnly.ui, displayMode: 'textarea' } }),

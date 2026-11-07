@@ -42,7 +42,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams?: P
           const mine = r.requestedBy?.id === me;
           return (
             <Row key={r.id}>
-              <div className="min-w-0 flex-1 space-y-1">
+              <div className="min-w-0 flex-1 basis-64 space-y-1">
                 <span className="font-medium">{label(r.action.replace('.', ' · '))}</span>
                 {r.summary ? <p className="break-words text-sm">{r.summary}</p> : null}
                 <Meta>

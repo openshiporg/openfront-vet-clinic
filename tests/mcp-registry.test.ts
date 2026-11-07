@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parse } from 'graphql'
-import { assertToolAllowed, DOMAIN_TOOLS, NEVER_TOOL_PATTERNS, registerDomainTools } from '../features/keystone/mcp/registry'
+import { assertToolAllowed, DOMAIN_TOOLS, NEVER_TOOL_PATTERNS, registerDomainTools } from '../features/keystone/mcp'
 import { NEVER_FOR_AGENTS } from '../features/keystone/access'
 import { collectReads } from '../features/keystone/security/readAudit'
 

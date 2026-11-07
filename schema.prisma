@@ -12,40 +12,49 @@ generator client {
 }
 
 model User {
-  id                                  String                @id @default(cuid())
-  name                                String                @default("")
-  email                               String                @unique @default("")
+  id                                  String                 @id @default(cuid())
+  name                                String                 @default("")
+  email                               String                 @unique @default("")
   password                            String
-  role                                Role?                 @relation("User_role", fields: [roleId], references: [id])
-  roleId                              String?               @map("role")
-  kind                                UserKindType?         @default(staff)
-  title                               String                @default("")
-  staffMember                         StaffMember?          @relation("StaffMember_user")
-  mfaEnrolled                         Boolean               @default(false)
+  role                                Role?                  @relation("User_role", fields: [roleId], references: [id])
+  roleId                              String?                @map("role")
+  kind                                UserKindType?          @default(staff)
+  title                               String                 @default("")
+  staffMember                         StaffMember?           @relation("StaffMember_user")
+  mfaEnrolled                         Boolean                @default(false)
   accessExpiresAt                     DateTime?
-  onboardingStatus                    String?               @default("not_started")
-  createdAt                           DateTime              @default(now())
-  updatedAt                           DateTime              @default(now()) @updatedAt
+  onboardingStatus                    String?                @default("not_started")
+  createdAt                           DateTime               @default(now())
+  updatedAt                           DateTime               @default(now()) @updatedAt
   passwordResetToken                  String?
   passwordResetIssuedAt               DateTime?
   passwordResetRedeemedAt             DateTime?
-  from_OAuthToken_user                OAuthToken[]          @relation("OAuthToken_user")
-  from_AgentIdentity_owner            AgentIdentity[]       @relation("AgentIdentity_owner")
-  from_ApprovalDecision_decidedBy     ApprovalDecision[]    @relation("ApprovalDecision_decidedBy")
-  from_ApprovalRequest_requestedBy    ApprovalRequest[]     @relation("ApprovalRequest_requestedBy")
-  from_AuditEvent_actorUser           AuditEvent[]          @relation("AuditEvent_actorUser")
-  from_AuditEvent_approver            AuditEvent[]          @relation("AuditEvent_approver")
-  from_BreakGlassEvent_user           BreakGlassEvent[]     @relation("BreakGlassEvent_user")
-  from_BreakGlassEvent_reviewedBy     BreakGlassEvent[]     @relation("BreakGlassEvent_reviewedBy")
-  from_Notification_recipient         Notification[]        @relation("Notification_recipient")
-  from_ProfessionalLicense_verifiedBy ProfessionalLicense[] @relation("ProfessionalLicense_verifiedBy")
-  from_ComplianceTask_completedBy     ComplianceTask[]      @relation("ComplianceTask_completedBy")
-  from_LegalHold_placedBy             LegalHold[]           @relation("LegalHold_placedBy")
-  from_LegalHold_releasedBy           LegalHold[]           @relation("LegalHold_releasedBy")
-  from_Note_author                    Note[]                @relation("Note_author")
-  from_PolicyVersion_publishedBy      PolicyVersion[]       @relation("PolicyVersion_publishedBy")
-  from_Task_createdByUser             Task[]                @relation("Task_createdByUser")
-  from_Proposal_proposedByUser        Proposal[]            @relation("Proposal_proposedByUser")
+  from_OAuthToken_user                OAuthToken[]           @relation("OAuthToken_user")
+  from_AgentIdentity_owner            AgentIdentity[]        @relation("AgentIdentity_owner")
+  from_ApprovalDecision_decidedBy     ApprovalDecision[]     @relation("ApprovalDecision_decidedBy")
+  from_ApprovalRequest_requestedBy    ApprovalRequest[]      @relation("ApprovalRequest_requestedBy")
+  from_AuditEvent_actorUser           AuditEvent[]           @relation("AuditEvent_actorUser")
+  from_AuditEvent_approver            AuditEvent[]           @relation("AuditEvent_approver")
+  from_BreakGlassEvent_user           BreakGlassEvent[]      @relation("BreakGlassEvent_user")
+  from_BreakGlassEvent_reviewedBy     BreakGlassEvent[]      @relation("BreakGlassEvent_reviewedBy")
+  from_Notification_recipient         Notification[]         @relation("Notification_recipient")
+  from_ProfessionalLicense_verifiedBy ProfessionalLicense[]  @relation("ProfessionalLicense_verifiedBy")
+  from_ComplianceTask_completedBy     ComplianceTask[]       @relation("ComplianceTask_completedBy")
+  from_LegalHold_placedBy             LegalHold[]            @relation("LegalHold_placedBy")
+  from_LegalHold_releasedBy           LegalHold[]            @relation("LegalHold_releasedBy")
+  from_Note_author                    Note[]                 @relation("Note_author")
+  from_PolicyVersion_publishedBy      PolicyVersion[]        @relation("PolicyVersion_publishedBy")
+  from_Task_createdByUser             Task[]                 @relation("Task_createdByUser")
+  from_AlertAcknowledgement_user      AlertAcknowledgement[] @relation("AlertAcknowledgement_user")
+  from_ClientPerson_user              ClientPerson[]         @relation("ClientPerson_user")
+  from_ConsentRecord_capturedByUser   ConsentRecord[]        @relation("ConsentRecord_capturedByUser")
+  from_PatientAlert_createdBy         PatientAlert[]         @relation("PatientAlert_createdBy")
+  from_PatientOwnership_recordedBy    PatientOwnership[]     @relation("PatientOwnership_recordedBy")
+  from_RecordsRelease_releasedByUser  RecordsRelease[]       @relation("RecordsRelease_releasedByUser")
+  from_Appointment_bookedByUser       Appointment[]          @relation("Appointment_bookedByUser")
+  from_SegmentTransition_by           SegmentTransition[]    @relation("SegmentTransition_by")
+  from_TriageAssessment_actorUser     TriageAssessment[]     @relation("TriageAssessment_actorUser")
+  from_Proposal_proposedByUser        Proposal[]             @relation("Proposal_proposedByUser")
 
   @@index([roleId])
 }
@@ -170,29 +179,36 @@ model OAuthToken {
 }
 
 model AgentIdentity {
-  id                                    String            @id @default(cuid())
-  name                                  String            @unique @default("")
-  kind                                  String            @default("voice_receptionist")
-  model                                 String            @default("")
-  provider                              String            @default("")
-  owner                                 User?             @relation("AgentIdentity_owner", fields: [ownerId], references: [id])
-  ownerId                               String?           @map("owner")
-  status                                String            @default("active")
-  killSwitch                            Boolean           @default(false)
-  limits                                Json?             @default("{\"toolCallsPerRun\":40}")
-  oauthApp                              OAuthApp?         @relation("AgentIdentity_oauthApp", fields: [oauthAppId], references: [id])
-  oauthAppId                            String?           @map("oauthApp")
-  grants                                AgentToolGrant[]  @relation("AgentToolGrant_agent")
-  runs                                  AgentRun[]        @relation("AgentRun_agent")
-  version                               Int               @default(0)
-  createdAt                             DateTime          @default(now())
-  updatedAt                             DateTime          @default(now()) @updatedAt
-  from_ApprovalRequest_requestedByAgent ApprovalRequest[] @relation("ApprovalRequest_requestedByAgent")
-  from_AuditEvent_actorAgent            AuditEvent[]      @relation("AuditEvent_actorAgent")
-  from_Note_authorAgent                 Note[]            @relation("Note_authorAgent")
-  from_Task_createdByAgent              Task[]            @relation("Task_createdByAgent")
-  from_AgentAction_agent                AgentAction[]     @relation("AgentAction_agent")
-  from_Proposal_proposedByAgent         Proposal[]        @relation("Proposal_proposedByAgent")
+  id                                    String             @id @default(cuid())
+  name                                  String             @unique @default("")
+  kind                                  String             @default("voice_receptionist")
+  model                                 String             @default("")
+  provider                              String             @default("")
+  owner                                 User?              @relation("AgentIdentity_owner", fields: [ownerId], references: [id])
+  ownerId                               String?            @map("owner")
+  status                                String             @default("active")
+  killSwitch                            Boolean            @default(false)
+  limits                                Json?              @default("{\"toolCallsPerRun\":40}")
+  oauthApp                              OAuthApp?          @relation("AgentIdentity_oauthApp", fields: [oauthAppId], references: [id])
+  oauthAppId                            String?            @map("oauthApp")
+  grants                                AgentToolGrant[]   @relation("AgentToolGrant_agent")
+  runs                                  AgentRun[]         @relation("AgentRun_agent")
+  version                               Int                @default(0)
+  createdAt                             DateTime           @default(now())
+  updatedAt                             DateTime           @default(now()) @updatedAt
+  from_ApprovalRequest_requestedByAgent ApprovalRequest[]  @relation("ApprovalRequest_requestedByAgent")
+  from_AuditEvent_actorAgent            AuditEvent[]       @relation("AuditEvent_actorAgent")
+  from_Note_authorAgent                 Note[]             @relation("Note_authorAgent")
+  from_Task_createdByAgent              Task[]             @relation("Task_createdByAgent")
+  from_ConsentRecord_capturedByAgent    ConsentRecord[]    @relation("ConsentRecord_capturedByAgent")
+  from_RecordsRelease_releasedByAgent   RecordsRelease[]   @relation("RecordsRelease_releasedByAgent")
+  from_RecordsRequest_createdByAgent    RecordsRequest[]   @relation("RecordsRequest_createdByAgent")
+  from_RefillRequest_createdByAgent     RefillRequest[]    @relation("RefillRequest_createdByAgent")
+  from_Appointment_bookedByAgent        Appointment[]      @relation("Appointment_bookedByAgent")
+  from_TriageAssessment_actorAgent      TriageAssessment[] @relation("TriageAssessment_actorAgent")
+  from_CallRecord_agent                 CallRecord[]       @relation("CallRecord_agent")
+  from_AgentAction_agent                AgentAction[]      @relation("AgentAction_agent")
+  from_Proposal_proposedByAgent         Proposal[]         @relation("Proposal_proposedByAgent")
 
   @@index([ownerId])
   @@index([oauthAppId])
@@ -225,28 +241,29 @@ model ApprovalPolicy {
 }
 
 model ApprovalRequest {
-  id                           String             @id @default(cuid())
-  action                       String             @default("")
-  summary                      String             @default("")
-  targetList                   String             @default("")
-  targetId                     String             @default("")
-  payload                      Json?
-  payloadHash                  String             @default("")
-  requiredPermission           String             @default("")
-  requestedBy                  User?              @relation("ApprovalRequest_requestedBy", fields: [requestedById], references: [id])
-  requestedById                String?            @map("requestedBy")
-  requestedByAgent             AgentIdentity?     @relation("ApprovalRequest_requestedByAgent", fields: [requestedByAgentId], references: [id])
-  requestedByAgentId           String?            @map("requestedByAgent")
-  status                       String             @default("pending")
-  expiresAt                    DateTime?
-  consumedAt                   DateTime?
-  decisions                    ApprovalDecision[] @relation("ApprovalDecision_request")
-  version                      Int                @default(0)
-  createdAt                    DateTime           @default(now())
-  updatedAt                    DateTime           @default(now()) @updatedAt
-  from_PolicyVersion_approval  PolicyVersion[]    @relation("PolicyVersion_approval")
-  from_AgentToolGrant_approval AgentToolGrant[]   @relation("AgentToolGrant_approval")
-  from_Proposal_approval       Proposal[]         @relation("Proposal_approval")
+  id                                  String                  @id @default(cuid())
+  action                              String                  @default("")
+  summary                             String                  @default("")
+  targetList                          String                  @default("")
+  targetId                            String                  @default("")
+  payload                             Json?
+  payloadHash                         String                  @default("")
+  requiredPermission                  String                  @default("")
+  requestedBy                         User?                   @relation("ApprovalRequest_requestedBy", fields: [requestedById], references: [id])
+  requestedById                       String?                 @map("requestedBy")
+  requestedByAgent                    AgentIdentity?          @relation("ApprovalRequest_requestedByAgent", fields: [requestedByAgentId], references: [id])
+  requestedByAgentId                  String?                 @map("requestedByAgent")
+  status                              String                  @default("pending")
+  expiresAt                           DateTime?
+  consumedAt                          DateTime?
+  decisions                           ApprovalDecision[]      @relation("ApprovalDecision_request")
+  version                             Int                     @default(0)
+  createdAt                           DateTime                @default(now())
+  updatedAt                           DateTime                @default(now()) @updatedAt
+  from_PolicyVersion_approval         PolicyVersion[]         @relation("PolicyVersion_approval")
+  from_TriageProtocolVersion_approval TriageProtocolVersion[] @relation("TriageProtocolVersion_approval")
+  from_AgentToolGrant_approval        AgentToolGrant[]        @relation("AgentToolGrant_approval")
+  from_Proposal_approval              Proposal[]              @relation("Proposal_approval")
 
   @@index([action])
   @@index([targetId])
@@ -354,24 +371,29 @@ model CommandReceipt {
 }
 
 model Document {
-  id                               String               @id @default(cuid())
-  title                            String               @default("")
-  kind                             String               @default("other")
-  storageKey                       String               @default("")
-  sha256                           String               @default("")
-  mimeType                         String               @default("")
-  sizeBytes                        Int?
-  documentVersion                  Int?                 @default(1)
-  supersedes                       Document?            @relation("Document_supersedes", fields: [supersedesId], references: [id])
-  supersedesId                     String?              @map("supersedes")
-  visibility                       String               @default("internal")
-  retentionUntil                   DateTime?            @postgresql.Date
-  signedAt                         DateTime?
-  esignEnvelopeId                  String               @default("")
-  createdAt                        DateTime             @default(now())
-  updatedAt                        DateTime             @default(now()) @updatedAt
-  from_Document_supersedes         Document[]           @relation("Document_supersedes")
-  from_DeaPowerOfAttorney_document DeaPowerOfAttorney[] @relation("DeaPowerOfAttorney_document")
+  id                                          String               @id @default(cuid())
+  title                                       String               @default("")
+  kind                                        String               @default("other")
+  storageKey                                  String               @default("")
+  sha256                                      String               @default("")
+  mimeType                                    String               @default("")
+  sizeBytes                                   Int?
+  documentVersion                             Int?                 @default(1)
+  supersedes                                  Document?            @relation("Document_supersedes", fields: [supersedesId], references: [id])
+  supersedesId                                String?              @map("supersedes")
+  visibility                                  String               @default("internal")
+  retentionUntil                              DateTime?            @postgresql.Date
+  signedAt                                    DateTime?
+  esignEnvelopeId                             String               @default("")
+  createdAt                                   DateTime             @default(now())
+  updatedAt                                   DateTime             @default(now()) @updatedAt
+  from_Document_supersedes                    Document[]           @relation("Document_supersedes")
+  from_DeaPowerOfAttorney_document            DeaPowerOfAttorney[] @relation("DeaPowerOfAttorney_document")
+  from_ConsentRecord_evidence                 ConsentRecord[]      @relation("ConsentRecord_evidence")
+  from_Patient_photo                          Patient[]            @relation("Patient_photo")
+  from_PatientOwnership_evidence              PatientOwnership[]   @relation("PatientOwnership_evidence")
+  from_PetInsurancePolicy_clientAuthorisation PetInsurancePolicy[] @relation("PetInsurancePolicy_clientAuthorisation")
+  from_RecordsRequest_authorisationDocument   RecordsRequest[]     @relation("RecordsRequest_authorisationDocument")
 
   @@index([supersedesId])
 }
@@ -567,27 +589,31 @@ model DeaRegistration {
   createdAt                              DateTime             @default(now())
   updatedAt                              DateTime             @default(now()) @updatedAt
   from_LicenseEvaluation_deaRegistration LicenseEvaluation[]  @relation("LicenseEvaluation_deaRegistration")
+  from_Prescription_deaRegistration      Prescription[]       @relation("Prescription_deaRegistration")
+  from_CsContainer_deaRegistration       CsContainer[]        @relation("CsContainer_deaRegistration")
+  from_CsLogEntry_deaRegistration        CsLogEntry[]         @relation("CsLogEntry_deaRegistration")
 
   @@index([staffMemberId])
   @@index([locationId])
 }
 
 model LicenseEvaluation {
-  id                String               @id @default(cuid())
-  action            String               @default("")
-  staffMember       StaffMember?         @relation("LicenseEvaluation_staffMember", fields: [staffMemberId], references: [id])
-  staffMemberId     String?              @map("staffMember")
-  location          Location?            @relation("LicenseEvaluation_location", fields: [locationId], references: [id])
-  locationId        String?              @map("location")
-  at                DateTime
-  onDate            DateTime?            @postgresql.Date
-  license           ProfessionalLicense? @relation("LicenseEvaluation_license", fields: [licenseId], references: [id])
-  licenseId         String?              @map("license")
-  deaRegistration   DeaRegistration?     @relation("LicenseEvaluation_deaRegistration", fields: [deaRegistrationId], references: [id])
-  deaRegistrationId String?              @map("deaRegistration")
-  policyVersions    Json?
-  result            String
-  findings          Json?
+  id                                  String               @id @default(cuid())
+  action                              String               @default("")
+  staffMember                         StaffMember?         @relation("LicenseEvaluation_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId                       String?              @map("staffMember")
+  location                            Location?            @relation("LicenseEvaluation_location", fields: [locationId], references: [id])
+  locationId                          String?              @map("location")
+  at                                  DateTime
+  onDate                              DateTime?            @postgresql.Date
+  license                             ProfessionalLicense? @relation("LicenseEvaluation_license", fields: [licenseId], references: [id])
+  licenseId                           String?              @map("license")
+  deaRegistration                     DeaRegistration?     @relation("LicenseEvaluation_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId                   String?              @map("deaRegistration")
+  policyVersions                      Json?
+  result                              String
+  findings                            Json?
+  from_Prescription_licenseEvaluation Prescription[]       @relation("Prescription_licenseEvaluation")
 
   @@index([action])
   @@index([staffMemberId])
@@ -627,6 +653,17 @@ model Location {
   from_Incident_location              Incident[]              @relation("Incident_location")
   from_PolicyBinding_location         PolicyBinding[]         @relation("PolicyBinding_location")
   from_Task_location                  Task[]                  @relation("Task_location")
+  from_Client_primaryLocation         Client[]                @relation("Client_primaryLocation")
+  from_VcprRecord_location            VcprRecord[]            @relation("VcprRecord_location")
+  from_Appointment_location           Appointment[]           @relation("Appointment_location")
+  from_Resource_location              Resource[]              @relation("Resource_location")
+  from_StaffSchedule_location         StaffSchedule[]         @relation("StaffSchedule_location")
+  from_WaitlistEntry_location         WaitlistEntry[]         @relation("WaitlistEntry_location")
+  from_WhiteboardEntry_location       WhiteboardEntry[]       @relation("WhiteboardEntry_location")
+  from_CallRecord_location            CallRecord[]            @relation("CallRecord_location")
+  from_KnowledgeBaseEntry_location    KnowledgeBaseEntry[]    @relation("KnowledgeBaseEntry_location")
+  from_Prescription_location          Prescription[]          @relation("Prescription_location")
+  from_CsContainer_location           CsContainer[]           @relation("CsContainer_location")
 
   @@index([calendarId])
 }
@@ -705,6 +742,20 @@ model StaffMember {
   from_LicenseEvaluation_staffMember    LicenseEvaluation[]   @relation("LicenseEvaluation_staffMember")
   from_PracticeSettings_medicalDirector PracticeSettings[]    @relation("PracticeSettings_medicalDirector")
   from_Task_assignee                    Task[]                @relation("Task_assignee")
+  from_Patient_preferredDvm             Patient[]             @relation("Patient_preferredDvm")
+  from_RefillRequest_decidedBy          RefillRequest[]       @relation("RefillRequest_decidedBy")
+  from_VcprRecord_dvm                   VcprRecord[]          @relation("VcprRecord_dvm")
+  from_WeightMeasurement_measuredBy     WeightMeasurement[]   @relation("WeightMeasurement_measuredBy")
+  from_Appointment_provider             Appointment[]         @relation("Appointment_provider")
+  from_AppointmentSegment_staff         AppointmentSegment[]  @relation("AppointmentSegment_staff")
+  from_ProviderReservation_staffMember  ProviderReservation[] @relation("ProviderReservation_staffMember")
+  from_StaffSchedule_staffMember        StaffSchedule[]       @relation("StaffSchedule_staffMember")
+  from_WhiteboardEntry_assignedDvm      WhiteboardEntry[]     @relation("WhiteboardEntry_assignedDvm")
+  from_WhiteboardEntry_assignedTech     WhiteboardEntry[]     @relation("WhiteboardEntry_assignedTech")
+  from_CommsThread_assignedTo           CommsThread[]         @relation("CommsThread_assignedTo")
+  from_Prescription_prescriber          Prescription[]        @relation("Prescription_prescriber")
+  from_CsContainer_openedBy             CsContainer[]         @relation("CsContainer_openedBy")
+  from_CsLogEntry_actor                 CsLogEntry[]          @relation("CsLogEntry_actor")
 
   @@index([homeLocationId])
 }
@@ -719,7 +770,7 @@ model ComplianceTask {
   locationId      String?        @map("location")
   startedAt       DateTime?
   dueAt           DateTime
-  dedupeKey       String         @unique @default("")
+  dedupeKey       String?        @unique
   escalations     Json?
   status          String         @default("open")
   evidence        Json?
@@ -861,6 +912,10 @@ model PolicyVersion {
   updatedAt                          DateTime          @default(now()) @updatedAt
   from_ComplianceTask_policyVersion  ComplianceTask[]  @relation("ComplianceTask_policyVersion")
   from_RetentionPolicy_policyVersion RetentionPolicy[] @relation("RetentionPolicy_policyVersion")
+  from_ConsentRecord_policyVersion   ConsentRecord[]   @relation("ConsentRecord_policyVersion")
+  from_RecordsRequest_policyVersion  RecordsRequest[]  @relation("RecordsRequest_policyVersion")
+  from_VcprRecord_policyVersion      VcprRecord[]      @relation("VcprRecord_policyVersion")
+  from_Prescription_policyVersion    Prescription[]    @relation("Prescription_policyVersion")
 
   @@unique([packId, versionNumber], map: "PolicyVersion_pack_number_key")
   @@index([packId])
@@ -892,7 +947,7 @@ model Tag {
 
 model Task {
   id               String         @id @default(cuid())
-  ref              String         @unique @default("")
+  ref              String?        @unique
   kind             String
   title            String         @default("")
   detail           String         @default("")
@@ -922,6 +977,1199 @@ model Task {
   @@index([createdByUserId])
 }
 
+model AlertAcknowledgement {
+  id            String        @id @default(cuid())
+  alert         PatientAlert? @relation("AlertAcknowledgement_alert", fields: [alertId], references: [id])
+  alertId       String?       @map("alert")
+  user          User?         @relation("AlertAcknowledgement_user", fields: [userId], references: [id])
+  userId        String?       @map("user")
+  appointment   Appointment?  @relation("AlertAcknowledgement_appointment", fields: [appointmentId], references: [id])
+  appointmentId String?       @map("appointment")
+  at            DateTime
+
+  @@index([alertId])
+  @@index([userId])
+  @@index([appointmentId])
+}
+
+model Breed {
+  id                          String    @id @default(cuid())
+  species                     Species?  @relation("Breed_species", fields: [speciesId], references: [id])
+  speciesId                   String?   @map("species")
+  name                        String    @default("")
+  registryCode                String    @default("")
+  sizeClass                   String?
+  geneticFlags                Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @default(now()) @updatedAt
+  from_Patient_breed          Patient[] @relation("Patient_breed")
+  from_Patient_secondaryBreed Patient[] @relation("Patient_secondaryBreed")
+
+  @@unique([speciesId, name], map: "Breed_species_name_key")
+  @@index([speciesId])
+}
+
+model Client {
+  id                           String             @id @default(cuid())
+  ref                          String             @unique @default("")
+  publicCode                   String?            @unique
+  displayName                  String             @default("")
+  kind                         String
+  status                       String             @default("prospect")
+  primaryLocation              Location?          @relation("Client_primaryLocation", fields: [primaryLocationId], references: [id])
+  primaryLocationId            String?            @map("primaryLocation")
+  addressLine1                 String             @default("")
+  addressLine2                 String             @default("")
+  city                         String             @default("")
+  stateCode                    String             @default("")
+  postalCode                   String             @default("")
+  creditLimitMinor             BigInt             @default(0)
+  accountFlags                 Json?              @default("{}")
+  taxExempt                    Boolean            @default(false)
+  mergedInto                   Client?            @relation("Client_mergedInto", fields: [mergedIntoId], references: [id])
+  mergedIntoId                 String?            @map("mergedInto")
+  people                       ClientPerson[]     @relation("ClientPerson_client")
+  ownerships                   PatientOwnership[] @relation("PatientOwnership_client")
+  source                       String
+  version                      Int                @default(0)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @default(now()) @updatedAt
+  from_Client_mergedInto       Client[]           @relation("Client_mergedInto")
+  from_RecordsRequest_client   RecordsRequest[]   @relation("RecordsRequest_client")
+  from_RefillRequest_client    RefillRequest[]    @relation("RefillRequest_client")
+  from_Appointment_client      Appointment[]      @relation("Appointment_client")
+  from_TriageAssessment_client TriageAssessment[] @relation("TriageAssessment_client")
+  from_WaitlistEntry_client    WaitlistEntry[]    @relation("WaitlistEntry_client")
+  from_CallRecord_client       CallRecord[]       @relation("CallRecord_client")
+  from_CommsThread_client      CommsThread[]      @relation("CommsThread_client")
+  from_Suppression_client      Suppression[]      @relation("Suppression_client")
+  from_Prescription_client     Prescription[]     @relation("Prescription_client")
+  from_CsLogEntry_client       CsLogEntry[]       @relation("CsLogEntry_client")
+
+  @@index([primaryLocationId])
+  @@index([mergedIntoId])
+}
+
+model ClientPerson {
+  id                              String           @id @default(cuid())
+  client                          Client?          @relation("ClientPerson_client", fields: [clientId], references: [id])
+  clientId                        String?          @map("client")
+  firstName                       String           @default("")
+  lastName                        String           @default("")
+  relationship                    String
+  isPrimary                       Boolean          @default(false)
+  canBook                         Boolean          @default(true)
+  canApproveTreatment             Boolean          @default(false)
+  canReceiveRecords               Boolean          @default(false)
+  canPay                          Boolean          @default(true)
+  canAuthoriseEuthanasia          Boolean          @default(false)
+  dateOfBirth                     DateTime?        @postgresql.Date
+  preferredLanguage               String           @default("")
+  user                            User?            @relation("ClientPerson_user", fields: [userId], references: [id])
+  userId                          String?          @map("user")
+  identityVerifiedAt              DateTime?
+  contactPoints                   ContactPoint[]   @relation("ContactPoint_person")
+  version                         Int              @default(0)
+  createdAt                       DateTime         @default(now())
+  updatedAt                       DateTime         @default(now()) @updatedAt
+  from_RecordsRequest_requestedBy RecordsRequest[] @relation("RecordsRequest_requestedBy")
+  from_RefillRequest_requestedBy  RefillRequest[]  @relation("RefillRequest_requestedBy")
+  from_CallRecord_person          CallRecord[]     @relation("CallRecord_person")
+  from_PortalSession_person       PortalSession[]  @relation("PortalSession_person")
+
+  @@index([clientId])
+  @@index([userId])
+}
+
+model ColourMarking {
+  id        String   @id @default(cuid())
+  species   Species? @relation("ColourMarking_species", fields: [speciesId], references: [id])
+  speciesId String?  @map("species")
+  name      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([speciesId])
+}
+
+model ConsentRecord {
+  id                String         @id @default(cuid())
+  contactPoint      ContactPoint?  @relation("ConsentRecord_contactPoint", fields: [contactPointId], references: [id])
+  contactPointId    String?        @map("contactPoint")
+  purpose           String
+  action            String
+  method            String
+  evidence          Document?      @relation("ConsentRecord_evidence", fields: [evidenceId], references: [id])
+  evidenceId        String?        @map("evidence")
+  callRecord        CallRecord?    @relation("ConsentRecord_callRecord", fields: [callRecordId], references: [id])
+  callRecordId      String?        @map("callRecord")
+  keyword           String         @default("")
+  capturedByUser    User?          @relation("ConsentRecord_capturedByUser", fields: [capturedByUserId], references: [id])
+  capturedByUserId  String?        @map("capturedByUser")
+  capturedByAgent   AgentIdentity? @relation("ConsentRecord_capturedByAgent", fields: [capturedByAgentId], references: [id])
+  capturedByAgentId String?        @map("capturedByAgent")
+  policyVersion     PolicyVersion? @relation("ConsentRecord_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId   String?        @map("policyVersion")
+  at                DateTime
+
+  @@index([contactPointId])
+  @@index([evidenceId])
+  @@index([callRecordId])
+  @@index([capturedByUserId])
+  @@index([capturedByAgentId])
+  @@index([policyVersionId])
+}
+
+model ContactPoint {
+  id                              String          @id @default(cuid())
+  person                          ClientPerson?   @relation("ContactPoint_person", fields: [personId], references: [id])
+  personId                        String?         @map("person")
+  kind                            String
+  value                           String          @default("")
+  valueHash                       String          @default("")
+  isPrimary                       Boolean         @default(false)
+  verifiedAt                      DateTime?
+  canText                         Boolean         @default(false)
+  status                          String          @default("active")
+  consents                        ConsentRecord[] @relation("ConsentRecord_contactPoint")
+  version                         Int             @default(0)
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @default(now()) @updatedAt
+  from_CommsThread_contactPoint   CommsThread[]   @relation("CommsThread_contactPoint")
+  from_PortalSession_contactPoint PortalSession[] @relation("PortalSession_contactPoint")
+  from_Suppression_contactPoint   Suppression[]   @relation("Suppression_contactPoint")
+
+  @@unique([personId, valueHash], map: "ContactPoint_person_value_key")
+  @@index([personId])
+  @@index([valueHash])
+}
+
+model Microchip {
+  id                 String    @id @default(cuid())
+  patient            Patient?  @relation("Microchip_patient", fields: [patientId], references: [id])
+  patientId          String?   @map("patient")
+  number             String    @default("")
+  standard           String
+  implantedOn        DateTime? @postgresql.Date
+  registry           String    @default("")
+  registeredToClient Boolean   @default(false)
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([number])
+}
+
+model Patient {
+  id                              String               @id @default(cuid())
+  ref                             String               @unique @default("")
+  name                            String               @default("")
+  kind                            String
+  species                         Species?             @relation("Patient_species", fields: [speciesId], references: [id])
+  speciesId                       String?              @map("species")
+  breed                           Breed?               @relation("Patient_breed", fields: [breedId], references: [id])
+  breedId                         String?              @map("breed")
+  secondaryBreed                  Breed?               @relation("Patient_secondaryBreed", fields: [secondaryBreedId], references: [id])
+  secondaryBreedId                String?              @map("secondaryBreed")
+  sex                             String
+  reproductiveStatus              String
+  dateOfBirth                     DateTime?            @postgresql.Date
+  dobEstimated                    Boolean              @default(false)
+  colourMarkings                  String               @default("")
+  status                          String               @default("pending")
+  deceasedAt                      DateTime?
+  codeStatus                      String
+  preferredDvm                    StaffMember?         @relation("Patient_preferredDvm", fields: [preferredDvmId], references: [id])
+  preferredDvmId                  String?              @map("preferredDvm")
+  groupSize                       Int?
+  mergedInto                      Patient?             @relation("Patient_mergedInto", fields: [mergedIntoId], references: [id])
+  mergedIntoId                    String?              @map("mergedInto")
+  photo                           Document?            @relation("Patient_photo", fields: [photoId], references: [id])
+  photoId                         String?              @map("photo")
+  ownerships                      PatientOwnership[]   @relation("PatientOwnership_patient")
+  alerts                          PatientAlert[]       @relation("PatientAlert_patient")
+  weights                         WeightMeasurement[]  @relation("WeightMeasurement_patient")
+  microchips                      Microchip[]          @relation("Microchip_patient")
+  vcprs                           VcprRecord[]         @relation("VcprRecord_patient")
+  insurancePolicies               PetInsurancePolicy[] @relation("PetInsurancePolicy_patient")
+  version                         Int                  @default(0)
+  createdAt                       DateTime             @default(now())
+  updatedAt                       DateTime             @default(now()) @updatedAt
+  from_Patient_mergedInto         Patient[]            @relation("Patient_mergedInto")
+  from_RecordsRequest_patient     RecordsRequest[]     @relation("RecordsRequest_patient")
+  from_RefillRequest_patient      RefillRequest[]      @relation("RefillRequest_patient")
+  from_AppointmentPatient_patient AppointmentPatient[] @relation("AppointmentPatient_patient")
+  from_TriageAssessment_patient   TriageAssessment[]   @relation("TriageAssessment_patient")
+  from_WaitlistEntry_patients     WaitlistEntry[]      @relation("WaitlistEntry_patients")
+  from_WhiteboardEntry_patient    WhiteboardEntry[]    @relation("WhiteboardEntry_patient")
+  from_CommsMessage_patient       CommsMessage[]       @relation("CommsMessage_patient")
+  from_Suppression_patient        Suppression[]        @relation("Suppression_patient")
+  from_Prescription_patient       Prescription[]       @relation("Prescription_patient")
+  from_CsLogEntry_patient         CsLogEntry[]         @relation("CsLogEntry_patient")
+
+  @@index([speciesId])
+  @@index([breedId])
+  @@index([secondaryBreedId])
+  @@index([preferredDvmId])
+  @@index([mergedIntoId])
+  @@index([photoId])
+}
+
+model PatientAlert {
+  id               String                 @id @default(cuid())
+  patient          Patient?               @relation("PatientAlert_patient", fields: [patientId], references: [id])
+  patientId        String?                @map("patient")
+  kind             String
+  severity         String
+  text             String                 @default("")
+  active           Boolean                @default(true)
+  createdBy        User?                  @relation("PatientAlert_createdBy", fields: [createdById], references: [id])
+  createdById      String?                @map("createdBy")
+  acknowledgements AlertAcknowledgement[] @relation("AlertAcknowledgement_alert")
+  version          Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([createdById])
+}
+
+model PatientOwnership {
+  id            String    @id @default(cuid())
+  patient       Patient?  @relation("PatientOwnership_patient", fields: [patientId], references: [id])
+  patientId     String?   @map("patient")
+  client        Client?   @relation("PatientOwnership_client", fields: [clientId], references: [id])
+  clientId      String?   @map("client")
+  role          String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  basis         String
+  evidence      Document? @relation("PatientOwnership_evidence", fields: [evidenceId], references: [id])
+  evidenceId    String?   @map("evidence")
+  recordedBy    User?     @relation("PatientOwnership_recordedBy", fields: [recordedById], references: [id])
+  recordedById  String?   @map("recordedBy")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([evidenceId])
+  @@index([recordedById])
+}
+
+model PetInsurancePolicy {
+  id                    String           @id @default(cuid())
+  patient               Patient?         @relation("PetInsurancePolicy_patient", fields: [patientId], references: [id])
+  patientId             String?          @map("patient")
+  insurer               ThirdPartyPayer? @relation("PetInsurancePolicy_insurer", fields: [insurerId], references: [id])
+  insurerId             String?          @map("insurer")
+  policyNumber          String           @default("")
+  plan                  String           @default("")
+  deductibleMinor       BigInt?
+  reimbursementRate     Decimal?         @postgresql.Decimal(12, 6)
+  effectiveFrom         DateTime?        @postgresql.Date
+  effectiveTo           DateTime?        @postgresql.Date
+  directPayEligible     Boolean          @default(false)
+  clientAuthorisation   Document?        @relation("PetInsurancePolicy_clientAuthorisation", fields: [clientAuthorisationId], references: [id])
+  clientAuthorisationId String?          @map("clientAuthorisation")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([insurerId])
+  @@index([clientAuthorisationId])
+}
+
+model RecordsRelease {
+  id                String          @id @default(cuid())
+  request           RecordsRequest? @relation("RecordsRelease_request", fields: [requestId], references: [id])
+  requestId         String?         @map("request")
+  recipient         String          @default("")
+  channel           String
+  documents         Json?
+  releasedByUser    User?           @relation("RecordsRelease_releasedByUser", fields: [releasedByUserId], references: [id])
+  releasedByUserId  String?         @map("releasedByUser")
+  releasedByAgent   AgentIdentity?  @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
+  releasedByAgentId String?         @map("releasedByAgent")
+  at                DateTime
+
+  @@index([requestId])
+  @@index([releasedByUserId])
+  @@index([releasedByAgentId])
+}
+
+model RecordsRequest {
+  id                      String           @id @default(cuid())
+  ref                     String           @unique @default("")
+  patient                 Patient?         @relation("RecordsRequest_patient", fields: [patientId], references: [id])
+  patientId               String?          @map("patient")
+  client                  Client?          @relation("RecordsRequest_client", fields: [clientId], references: [id])
+  clientId                String?          @map("client")
+  requesterKind           String
+  requesterName           String           @default("")
+  requesterContact        String           @default("")
+  requestedBy             ClientPerson?    @relation("RecordsRequest_requestedBy", fields: [requestedById], references: [id])
+  requestedById           String?          @map("requestedBy")
+  channel                 String
+  basis                   String
+  scope                   String           @default("")
+  authorisationDocument   Document?        @relation("RecordsRequest_authorisationDocument", fields: [authorisationDocumentId], references: [id])
+  authorisationDocumentId String?          @map("authorisationDocument")
+  status                  String           @default("received")
+  responseDueAt           DateTime?
+  policyVersion           PolicyVersion?   @relation("RecordsRequest_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId         String?          @map("policyVersion")
+  callRecord              CallRecord?      @relation("RecordsRequest_callRecord", fields: [callRecordId], references: [id])
+  callRecordId            String?          @map("callRecord")
+  createdByAgent          AgentIdentity?   @relation("RecordsRequest_createdByAgent", fields: [createdByAgentId], references: [id])
+  createdByAgentId        String?          @map("createdByAgent")
+  releases                RecordsRelease[] @relation("RecordsRelease_request")
+  version                 Int              @default(0)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([requestedById])
+  @@index([authorisationDocumentId])
+  @@index([policyVersionId])
+  @@index([callRecordId])
+  @@index([createdByAgentId])
+}
+
+model ReferralHospital {
+  id                               String             @id @default(cuid())
+  name                             String             @default("")
+  kind                             String             @default("emergency")
+  phone                            String             @default("")
+  fax                              String             @default("")
+  email                            String             @default("")
+  addressLine1                     String             @default("")
+  city                             String             @default("")
+  stateCode                        String             @default("")
+  lat                              Decimal?           @postgresql.Decimal(9, 6)
+  lng                              Decimal?           @postgresql.Decimal(9, 6)
+  open24h                          Boolean            @default(false)
+  hours                            Json?
+  verifiedChannel                  Boolean            @default(false)
+  active                           Boolean            @default(true)
+  createdAt                        DateTime           @default(now())
+  updatedAt                        DateTime           @default(now()) @updatedAt
+  from_TriageAssessment_referredTo TriageAssessment[] @relation("TriageAssessment_referredTo")
+}
+
+model ReferringVet {
+  id              String   @id @default(cuid())
+  name            String   @default("")
+  clinicName      String   @default("")
+  phone           String   @default("")
+  fax             String   @default("")
+  email           String   @default("")
+  verifiedChannel Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model RefillRequest {
+  id               String         @id @default(cuid())
+  ref              String         @unique @default("")
+  patient          Patient?       @relation("RefillRequest_patient", fields: [patientId], references: [id])
+  patientId        String?        @map("patient")
+  client           Client?        @relation("RefillRequest_client", fields: [clientId], references: [id])
+  clientId         String?        @map("client")
+  requestedBy      ClientPerson?  @relation("RefillRequest_requestedBy", fields: [requestedById], references: [id])
+  requestedById    String?        @map("requestedBy")
+  channel          String
+  productText      String         @default("")
+  pharmacyNote     String         @default("")
+  status           String         @default("received")
+  slaDueAt         DateTime?
+  decidedBy        StaffMember?   @relation("RefillRequest_decidedBy", fields: [decidedById], references: [id])
+  decidedById      String?        @map("decidedBy")
+  decidedAt        DateTime?
+  denialReason     String         @default("")
+  callRecord       CallRecord?    @relation("RefillRequest_callRecord", fields: [callRecordId], references: [id])
+  callRecordId     String?        @map("callRecord")
+  createdByAgent   AgentIdentity? @relation("RefillRequest_createdByAgent", fields: [createdByAgentId], references: [id])
+  createdByAgentId String?        @map("createdByAgent")
+  version          Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([requestedById])
+  @@index([decidedById])
+  @@index([callRecordId])
+  @@index([createdByAgentId])
+}
+
+model Species {
+  id                           String            @id @default(cuid())
+  code                         String            @unique @default("")
+  name                         String            @default("")
+  module                       String            @default("companion")
+  defaultWeightUnit            String            @default("kg")
+  vitalsReference              Json?
+  breeds                       Breed[]           @relation("Breed_species")
+  active                       Boolean           @default(true)
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @default(now()) @updatedAt
+  from_ColourMarking_species   ColourMarking[]   @relation("ColourMarking_species")
+  from_Patient_species         Patient[]         @relation("Patient_species")
+  from_AppointmentType_species AppointmentType[] @relation("AppointmentType_species")
+}
+
+model ThirdPartyPayer {
+  id                              String               @id @default(cuid())
+  name                            String               @unique @default("")
+  kind                            String               @default("insurer")
+  directPay                       Boolean              @default(false)
+  phone                           String               @default("")
+  claimsEmail                     String               @default("")
+  portalUrl                       String               @default("")
+  adapterKey                      String               @default("manual")
+  active                          Boolean              @default(true)
+  createdAt                       DateTime             @default(now())
+  updatedAt                       DateTime             @default(now()) @updatedAt
+  from_PetInsurancePolicy_insurer PetInsurancePolicy[] @relation("PetInsurancePolicy_insurer")
+}
+
+model VcprRecord {
+  id                     String         @id @default(cuid())
+  patient                Patient?       @relation("VcprRecord_patient", fields: [patientId], references: [id])
+  patientId              String?        @map("patient")
+  scope                  String
+  dvm                    StaffMember?   @relation("VcprRecord_dvm", fields: [dvmId], references: [id])
+  dvmId                  String?        @map("dvm")
+  location               Location?      @relation("VcprRecord_location", fields: [locationId], references: [id])
+  locationId             String?        @map("location")
+  establishedByRef       String         @default("")
+  establishedVia         String
+  establishedAt          DateTime
+  expiresAt              DateTime
+  status                 String         @default("active")
+  policyVersion          PolicyVersion? @relation("VcprRecord_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId        String?        @map("policyVersion")
+  terminatedReason       String         @default("")
+  version                Int            @default(0)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @default(now()) @updatedAt
+  from_Prescription_vcpr Prescription[] @relation("Prescription_vcpr")
+
+  @@index([patientId])
+  @@index([dvmId])
+  @@index([locationId])
+  @@index([policyVersionId])
+}
+
+model WeightMeasurement {
+  id                 String       @id @default(cuid())
+  patient            Patient?     @relation("WeightMeasurement_patient", fields: [patientId], references: [id])
+  patientId          String?      @map("patient")
+  value              Decimal      @postgresql.Decimal(10, 4)
+  unit               String
+  valueKg            Decimal      @postgresql.Decimal(10, 4)
+  method             String
+  bodyConditionScore Int?
+  measuredAt         DateTime
+  measuredBy         StaffMember? @relation("WeightMeasurement_measuredBy", fields: [measuredById], references: [id])
+  measuredById       String?      @map("measuredBy")
+  appointment        Appointment? @relation("WeightMeasurement_appointment", fields: [appointmentId], references: [id])
+  appointmentId      String?      @map("appointment")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([measuredById])
+  @@index([appointmentId])
+}
+
+model Appointment {
+  id                                    String                 @id @default(cuid())
+  ref                                   String                 @unique @default("")
+  location                              Location?              @relation("Appointment_location", fields: [locationId], references: [id])
+  locationId                            String?                @map("location")
+  client                                Client?                @relation("Appointment_client", fields: [clientId], references: [id])
+  clientId                              String?                @map("client")
+  appointmentType                       AppointmentType?       @relation("Appointment_appointmentType", fields: [appointmentTypeId], references: [id])
+  appointmentTypeId                     String?                @map("appointmentType")
+  provider                              StaffMember?           @relation("Appointment_provider", fields: [providerId], references: [id])
+  providerId                            String?                @map("provider")
+  startsAt                              DateTime
+  endsAt                                DateTime
+  status                                String                 @default("requested")
+  channel                               String
+  bookedByUser                          User?                  @relation("Appointment_bookedByUser", fields: [bookedByUserId], references: [id])
+  bookedByUserId                        String?                @map("bookedByUser")
+  bookedByAgent                         AgentIdentity?         @relation("Appointment_bookedByAgent", fields: [bookedByAgentId], references: [id])
+  bookedByAgentId                       String?                @map("bookedByAgent")
+  slotToken                             String                 @default("")
+  reason                                String                 @default("")
+  triage                                TriageAssessment?      @relation("Appointment_triage", fields: [triageId], references: [id])
+  triageId                              String?                @map("triage")
+  callRecord                            CallRecord?            @relation("Appointment_callRecord", fields: [callRecordId], references: [id])
+  callRecordId                          String?                @map("callRecord")
+  cancelReason                          String                 @default("")
+  cancelledAt                           DateTime?
+  confirmedAt                           DateTime?
+  checkedInAt                           DateTime?
+  completedAt                           DateTime?
+  patients                              AppointmentPatient[]   @relation("AppointmentPatient_appointment")
+  segments                              AppointmentSegment[]   @relation("AppointmentSegment_appointment")
+  reservations                          ResourceReservation[]  @relation("ResourceReservation_appointment")
+  providerReservations                  ProviderReservation[]  @relation("ProviderReservation_appointment")
+  version                               Int                    @default(0)
+  createdAt                             DateTime               @default(now())
+  updatedAt                             DateTime               @default(now()) @updatedAt
+  from_AlertAcknowledgement_appointment AlertAcknowledgement[] @relation("AlertAcknowledgement_appointment")
+  from_WeightMeasurement_appointment    WeightMeasurement[]    @relation("WeightMeasurement_appointment")
+  from_WaitlistEntry_bookedAppointment  WaitlistEntry[]        @relation("WaitlistEntry_bookedAppointment")
+  from_WhiteboardEntry_appointment      WhiteboardEntry[]      @relation("WhiteboardEntry_appointment")
+  from_CommsMessage_appointment         CommsMessage[]         @relation("CommsMessage_appointment")
+
+  @@index([locationId])
+  @@index([clientId])
+  @@index([appointmentTypeId])
+  @@index([providerId])
+  @@index([bookedByUserId])
+  @@index([bookedByAgentId])
+  @@index([triageId])
+  @@index([callRecordId])
+}
+
+model AppointmentPatient {
+  id                  String       @id @default(cuid())
+  appointment         Appointment? @relation("AppointmentPatient_appointment", fields: [appointmentId], references: [id])
+  appointmentId       String?      @map("appointment")
+  patient             Patient?     @relation("AppointmentPatient_patient", fields: [patientId], references: [id])
+  patientId           String?      @map("patient")
+  reason              String       @default("")
+  status              String       @default("scheduled")
+  weightSkippedReason String       @default("")
+  version             Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @default(now()) @updatedAt
+
+  @@unique([appointmentId, patientId], map: "AppointmentPatient_appointment_patient_key")
+  @@index([appointmentId])
+  @@index([patientId])
+}
+
+model AppointmentSegment {
+  id            String              @id @default(cuid())
+  appointment   Appointment?        @relation("AppointmentSegment_appointment", fields: [appointmentId], references: [id])
+  appointmentId String?             @map("appointment")
+  kind          String
+  startsAt      DateTime
+  endsAt        DateTime
+  resource      Resource?           @relation("AppointmentSegment_resource", fields: [resourceId], references: [id])
+  resourceId    String?             @map("resource")
+  staff         StaffMember?        @relation("AppointmentSegment_staff", fields: [staffId], references: [id])
+  staffId       String?             @map("staff")
+  status        String              @default("planned")
+  transitions   SegmentTransition[] @relation("SegmentTransition_segment")
+  version       Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @default(now()) @updatedAt
+
+  @@index([appointmentId])
+  @@index([resourceId])
+  @@index([staffId])
+}
+
+model AppointmentType {
+  id                                         String                  @id @default(cuid())
+  code                                       String                  @unique @default("")
+  name                                       String                  @default("")
+  category                                   String                  @default("wellness")
+  durationMinutes                            Int
+  segments                                   Json?
+  species                                    Species[]               @relation("AppointmentType_species")
+  requiredResourceKinds                      Json?                   @default("[\"exam_room\"]")
+  providerKinds                              Json?                   @default("[\"dvm\"]")
+  aiBookable                                 Boolean                 @default(false)
+  portalBookable                             Boolean                 @default(false)
+  requestOnly                                Boolean                 @default(false)
+  newClientAllowed                           Boolean                 @default(true)
+  depositRequired                            String                  @default("none")
+  depositMinor                               BigInt?
+  vcprQualifying                             Boolean                 @default(false)
+  colour                                     String                  @default("")
+  active                                     Boolean                 @default(true)
+  createdAt                                  DateTime                @default(now())
+  updatedAt                                  DateTime                @default(now()) @updatedAt
+  from_Appointment_appointmentType           Appointment[]           @relation("Appointment_appointmentType")
+  from_WaitlistEntry_appointmentType         WaitlistEntry[]         @relation("WaitlistEntry_appointmentType")
+  from_PublicAppointmentType_appointmentType PublicAppointmentType[] @relation("PublicAppointmentType_appointmentType")
+}
+
+model ProviderReservation {
+  id            String       @id @default(cuid())
+  staffMember   StaffMember? @relation("ProviderReservation_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId String?      @map("staffMember")
+  appointment   Appointment? @relation("ProviderReservation_appointment", fields: [appointmentId], references: [id])
+  appointmentId String?      @map("appointment")
+  startsAt      DateTime
+  endsAt        DateTime
+  status        String       @default("held")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@index([staffMemberId])
+  @@index([appointmentId])
+}
+
+model Resource {
+  id                                String                @id @default(cuid())
+  location                          Location?             @relation("Resource_location", fields: [locationId], references: [id])
+  locationId                        String?               @map("location")
+  kind                              String                @default("exam_room")
+  name                              String                @default("")
+  sortOrder                         Int?                  @default(0)
+  active                            Boolean               @default(true)
+  createdAt                         DateTime              @default(now())
+  updatedAt                         DateTime              @default(now()) @updatedAt
+  from_AppointmentSegment_resource  AppointmentSegment[]  @relation("AppointmentSegment_resource")
+  from_ResourceReservation_resource ResourceReservation[] @relation("ResourceReservation_resource")
+  from_WhiteboardEntry_room         WhiteboardEntry[]     @relation("WhiteboardEntry_room")
+
+  @@index([locationId])
+}
+
+model ResourceReservation {
+  id            String       @id @default(cuid())
+  resource      Resource?    @relation("ResourceReservation_resource", fields: [resourceId], references: [id])
+  resourceId    String?      @map("resource")
+  appointment   Appointment? @relation("ResourceReservation_appointment", fields: [appointmentId], references: [id])
+  appointmentId String?      @map("appointment")
+  startsAt      DateTime
+  endsAt        DateTime
+  status        String       @default("held")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@index([resourceId])
+  @@index([appointmentId])
+}
+
+model SegmentTransition {
+  id         String              @id @default(cuid())
+  segment    AppointmentSegment? @relation("SegmentTransition_segment", fields: [segmentId], references: [id])
+  segmentId  String?             @map("segment")
+  fromStatus String              @default("")
+  toStatus   String              @default("")
+  by         User?               @relation("SegmentTransition_by", fields: [byId], references: [id])
+  byId       String?             @map("by")
+  at         DateTime
+
+  @@index([segmentId])
+  @@index([byId])
+}
+
+model StaffSchedule {
+  id                    String       @id @default(cuid())
+  staffMember           StaffMember? @relation("StaffSchedule_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId         String?      @map("staffMember")
+  location              Location?    @relation("StaffSchedule_location", fields: [locationId], references: [id])
+  locationId            String?      @map("location")
+  kind                  String       @default("recurring")
+  weekday               Int?
+  localDate             DateTime?    @postgresql.Date
+  startTime             String       @default("")
+  endTime               String       @default("")
+  appointmentCategories Json?
+  effectiveFrom         DateTime?    @postgresql.Date
+  effectiveTo           DateTime?    @postgresql.Date
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @default(now()) @updatedAt
+
+  @@index([staffMemberId])
+  @@index([locationId])
+}
+
+model TriageAssessment {
+  id                      String                 @id @default(cuid())
+  patient                 Patient?               @relation("TriageAssessment_patient", fields: [patientId], references: [id])
+  patientId               String?                @map("patient")
+  client                  Client?                @relation("TriageAssessment_client", fields: [clientId], references: [id])
+  clientId                String?                @map("client")
+  callRecord              CallRecord?            @relation("TriageAssessment_callRecord", fields: [callRecordId], references: [id])
+  callRecordId            String?                @map("callRecord")
+  protocolVersion         TriageProtocolVersion? @relation("TriageAssessment_protocolVersion", fields: [protocolVersionId], references: [id])
+  protocolVersionId       String?                @map("protocolVersion")
+  complaint               String                 @default("")
+  answers                 Json?
+  redFlagsHit             Json?
+  level                   String
+  outcome                 String
+  referredTo              ReferralHospital?      @relation("TriageAssessment_referredTo", fields: [referredToId], references: [id])
+  referredToId            String?                @map("referredTo")
+  actorKind               String
+  actorUser               User?                  @relation("TriageAssessment_actorUser", fields: [actorUserId], references: [id])
+  actorUserId             String?                @map("actorUser")
+  actorAgent              AgentIdentity?         @relation("TriageAssessment_actorAgent", fields: [actorAgentId], references: [id])
+  actorAgentId            String?                @map("actorAgent")
+  at                      DateTime
+  from_Appointment_triage Appointment[]          @relation("Appointment_triage")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([callRecordId])
+  @@index([protocolVersionId])
+  @@index([referredToId])
+  @@index([actorUserId])
+  @@index([actorAgentId])
+}
+
+model TriageProtocol {
+  id        String                  @id @default(cuid())
+  code      String                  @unique @default("")
+  name      String                  @default("")
+  versions  TriageProtocolVersion[] @relation("TriageProtocolVersion_protocol")
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @default(now()) @updatedAt
+}
+
+model TriageProtocolVersion {
+  id                                    String             @id @default(cuid())
+  protocol                              TriageProtocol?    @relation("TriageProtocolVersion_protocol", fields: [protocolId], references: [id])
+  protocolId                            String?            @map("protocol")
+  versionNumber                         Int
+  label                                 String             @default("")
+  questions                             Json?
+  redFlags                              Json?
+  levelRules                            Json?
+  scripts                               Json?
+  contentHash                           String             @default("")
+  status                                String             @default("draft")
+  publishedAt                           DateTime?
+  approval                              ApprovalRequest?   @relation("TriageProtocolVersion_approval", fields: [approvalId], references: [id])
+  approvalId                            String?            @map("approval")
+  createdAt                             DateTime           @default(now())
+  updatedAt                             DateTime           @default(now()) @updatedAt
+  from_TriageAssessment_protocolVersion TriageAssessment[] @relation("TriageAssessment_protocolVersion")
+
+  @@unique([protocolId, versionNumber], map: "TriageProtocolVersion_protocol_number_key")
+  @@index([protocolId])
+  @@index([approvalId])
+}
+
+model WaitlistEntry {
+  id                  String           @id @default(cuid())
+  client              Client?          @relation("WaitlistEntry_client", fields: [clientId], references: [id])
+  clientId            String?          @map("client")
+  patients            Patient[]        @relation("WaitlistEntry_patients")
+  location            Location?        @relation("WaitlistEntry_location", fields: [locationId], references: [id])
+  locationId          String?          @map("location")
+  appointmentType     AppointmentType? @relation("WaitlistEntry_appointmentType", fields: [appointmentTypeId], references: [id])
+  appointmentTypeId   String?          @map("appointmentType")
+  preferredWindows    Json?
+  urgency             String
+  status              String           @default("waiting")
+  offeredSlotToken    String           @default("")
+  offerExpiresAt      DateTime?
+  bookedAppointment   Appointment?     @relation("WaitlistEntry_bookedAppointment", fields: [bookedAppointmentId], references: [id])
+  bookedAppointmentId String?          @map("bookedAppointment")
+  note                String           @default("")
+  version             Int              @default(0)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @default(now()) @updatedAt
+
+  @@index([clientId])
+  @@index([locationId])
+  @@index([appointmentTypeId])
+  @@index([bookedAppointmentId])
+}
+
+model WhiteboardEntry {
+  id             String       @id @default(cuid())
+  location       Location?    @relation("WhiteboardEntry_location", fields: [locationId], references: [id])
+  locationId     String?      @map("location")
+  patient        Patient?     @relation("WhiteboardEntry_patient", fields: [patientId], references: [id])
+  patientId      String?      @map("patient")
+  appointment    Appointment? @relation("WhiteboardEntry_appointment", fields: [appointmentId], references: [id])
+  appointmentId  String?      @map("appointment")
+  status         String       @default("waiting")
+  room           Resource?    @relation("WhiteboardEntry_room", fields: [roomId], references: [id])
+  roomId         String?      @map("room")
+  assignedDvm    StaffMember? @relation("WhiteboardEntry_assignedDvm", fields: [assignedDvmId], references: [id])
+  assignedDvmId  String?      @map("assignedDvm")
+  assignedTech   StaffMember? @relation("WhiteboardEntry_assignedTech", fields: [assignedTechId], references: [id])
+  assignedTechId String?      @map("assignedTech")
+  flags          Json?        @default("[]")
+  since          DateTime
+  version        Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([roomId])
+  @@index([assignedDvmId])
+  @@index([assignedTechId])
+}
+
+model CallRecord {
+  id                               String             @id @default(cuid())
+  ref                              String             @unique @default("")
+  direction                        String
+  from                             String             @default("")
+  to                               String             @default("")
+  location                         Location?          @relation("CallRecord_location", fields: [locationId], references: [id])
+  locationId                       String?            @map("location")
+  client                           Client?            @relation("CallRecord_client", fields: [clientId], references: [id])
+  clientId                         String?            @map("client")
+  person                           ClientPerson?      @relation("CallRecord_person", fields: [personId], references: [id])
+  personId                         String?            @map("person")
+  answeredBy                       String
+  agent                            AgentIdentity?     @relation("CallRecord_agent", fields: [agentId], references: [id])
+  agentId                          String?            @map("agent")
+  agentRun                         AgentRun?          @relation("CallRecord_agentRun", fields: [agentRunId], references: [id])
+  agentRunId                       String?            @map("agentRun")
+  providerCallId                   String             @default("")
+  adapterKey                       String             @default("")
+  disclosurePlayedAt               DateTime?
+  recordingConsent                 String
+  callerVerifiedAt                 DateTime?
+  verificationMethod               String
+  transcript                       Json?              @default("[]")
+  summary                          String             @default("")
+  disposition                      String
+  transferTo                       String             @default("")
+  startedAt                        DateTime
+  endedAt                          DateTime?
+  durationSeconds                  Int?
+  recordingRef                     String             @default("")
+  status                           String             @default("ringing")
+  version                          Int                @default(0)
+  createdAt                        DateTime           @default(now())
+  updatedAt                        DateTime           @default(now()) @updatedAt
+  from_ConsentRecord_callRecord    ConsentRecord[]    @relation("ConsentRecord_callRecord")
+  from_RecordsRequest_callRecord   RecordsRequest[]   @relation("RecordsRequest_callRecord")
+  from_RefillRequest_callRecord    RefillRequest[]    @relation("RefillRequest_callRecord")
+  from_Appointment_callRecord      Appointment[]      @relation("Appointment_callRecord")
+  from_TriageAssessment_callRecord TriageAssessment[] @relation("TriageAssessment_callRecord")
+
+  @@index([locationId])
+  @@index([clientId])
+  @@index([personId])
+  @@index([agentId])
+  @@index([agentRunId])
+  @@index([providerCallId])
+}
+
+model CommsMessage {
+  id            String       @id @default(cuid())
+  thread        CommsThread? @relation("CommsMessage_thread", fields: [threadId], references: [id])
+  threadId      String?      @map("thread")
+  direction     String
+  purpose       String
+  templateCode  String       @default("")
+  to            String       @default("")
+  from          String       @default("")
+  body          String       @default("")
+  status        String       @default("queued")
+  blockedReason String       @default("")
+  providerId    String       @default("")
+  patient       Patient?     @relation("CommsMessage_patient", fields: [patientId], references: [id])
+  patientId     String?      @map("patient")
+  appointment   Appointment? @relation("CommsMessage_appointment", fields: [appointmentId], references: [id])
+  appointmentId String?      @map("appointment")
+  sentAt        DateTime?
+  version       Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@index([threadId])
+  @@index([providerId])
+  @@index([patientId])
+  @@index([appointmentId])
+}
+
+model CommsThread {
+  id             String         @id @default(cuid())
+  client         Client?        @relation("CommsThread_client", fields: [clientId], references: [id])
+  clientId       String?        @map("client")
+  contactPoint   ContactPoint?  @relation("CommsThread_contactPoint", fields: [contactPointId], references: [id])
+  contactPointId String?        @map("contactPoint")
+  channel        String
+  subject        String         @default("")
+  status         String         @default("open")
+  assignedTo     StaffMember?   @relation("CommsThread_assignedTo", fields: [assignedToId], references: [id])
+  assignedToId   String?        @map("assignedTo")
+  lastMessageAt  DateTime?
+  messages       CommsMessage[] @relation("CommsMessage_thread")
+  version        Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now()) @updatedAt
+
+  @@index([clientId])
+  @@index([contactPointId])
+  @@index([assignedToId])
+}
+
+model KnowledgeBaseEntry {
+  id           String    @id @default(cuid())
+  topic        String    @default("")
+  keywords     Json?     @default("[]")
+  content      String    @default("")
+  visibility   String    @default("public")
+  location     Location? @relation("KnowledgeBaseEntry_location", fields: [locationId], references: [id])
+  locationId   String?   @map("location")
+  entryVersion Int?      @default(1)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([topic])
+  @@index([locationId])
+}
+
+model MessageTemplate {
+  id              String   @id @default(cuid())
+  code            String   @default("")
+  purpose         String   @default("care")
+  channel         String   @default("sms")
+  locale          String   @default("en-US")
+  body            String   @default("")
+  templateVersion Int?     @default(1)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@unique([code, channel, locale, templateVersion], map: "MessageTemplate_code_channel_locale_version_key")
+}
+
+model PortalSession {
+  id             String        @id @default(cuid())
+  person         ClientPerson? @relation("PortalSession_person", fields: [personId], references: [id])
+  personId       String?       @map("person")
+  contactPoint   ContactPoint? @relation("PortalSession_contactPoint", fields: [contactPointId], references: [id])
+  contactPointId String?       @map("contactPoint")
+  tokenHash      String        @unique @default("")
+  otpHash        String        @default("")
+  otpAttempts    Int?          @default(0)
+  status         String        @default("pending")
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  ipHash         String        @default("")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+
+  @@index([personId])
+  @@index([contactPointId])
+}
+
+model PublicAppointmentType {
+  id                String           @id @default(cuid())
+  appointmentType   AppointmentType? @relation("PublicAppointmentType_appointmentType", fields: [appointmentTypeId], references: [id])
+  appointmentTypeId String?          @map("appointmentType")
+  publicName        String           @default("")
+  description       String           @default("")
+  mode              String           @default("book")
+  newClients        Boolean          @default(false)
+  sortOrder         Int?             @default(0)
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @default(now()) @updatedAt
+
+  @@index([appointmentTypeId])
+}
+
+model PublicSiteProfile {
+  id                   Int      @id
+  headline             String   @default("Cedar Creek Animal Hospital")
+  onlineBookingEnabled Boolean  @default(true)
+  newClientBookingMode String   @default("request")
+  bookingWindowDays    Int?     @default(60)
+  minimumNoticeMinutes Int?     @default(120)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now()) @updatedAt
+}
+
+model RateLimitBucket {
+  id          String   @id @default(cuid())
+  key         String   @unique @default("")
+  windowStart DateTime
+  count       Int?     @default(0)
+}
+
+model Suppression {
+  id             String        @id @default(cuid())
+  contactPoint   ContactPoint? @relation("Suppression_contactPoint", fields: [contactPointId], references: [id])
+  contactPointId String?       @map("contactPoint")
+  patient        Patient?      @relation("Suppression_patient", fields: [patientId], references: [id])
+  patientId      String?       @map("patient")
+  client         Client?       @relation("Suppression_client", fields: [clientId], references: [id])
+  clientId       String?       @map("client")
+  reason         String
+  until          DateTime?
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+
+  @@index([contactPointId])
+  @@index([patientId])
+  @@index([clientId])
+}
+
+model DrugProduct {
+  id                            String             @id @default(cuid())
+  displayName                   String             @default("")
+  genericName                   String             @default("")
+  brandName                     String             @default("")
+  form                          String
+  strength                      Decimal?           @postgresql.Decimal(18, 6)
+  strengthUnit                  String?
+  per                           String?
+  concentration                 Decimal?           @postgresql.Decimal(18, 6)
+  concentrationUnit             String             @default("")
+  packageQty                    Decimal?           @postgresql.Decimal(18, 6)
+  packageUnit                   String?
+  csSchedule                    String
+  stateCsSchedule               Json?
+  isHumanLabel                  Boolean            @default(false)
+  approvalStatus                String
+  multiDoseBudDays              Int?
+  ndc                           String             @default("")
+  requiresWitnessOnAdminister   Boolean            @default(false)
+  active                        Boolean            @default(true)
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @default(now()) @updatedAt
+  from_PrescriptionLine_product PrescriptionLine[] @relation("PrescriptionLine_product")
+  from_CsContainer_product      CsContainer[]      @relation("CsContainer_product")
+
+  @@index([ndc])
+}
+
+model Prescription {
+  id                  String             @id @default(cuid())
+  ref                 String             @unique @default("")
+  patient             Patient?           @relation("Prescription_patient", fields: [patientId], references: [id])
+  patientId           String?            @map("patient")
+  client              Client?            @relation("Prescription_client", fields: [clientId], references: [id])
+  clientId            String?            @map("client")
+  location            Location?          @relation("Prescription_location", fields: [locationId], references: [id])
+  locationId          String?            @map("location")
+  prescriber          StaffMember?       @relation("Prescription_prescriber", fields: [prescriberId], references: [id])
+  prescriberId        String?            @map("prescriber")
+  deaRegistration     DeaRegistration?   @relation("Prescription_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId   String?            @map("deaRegistration")
+  vcpr                VcprRecord?        @relation("Prescription_vcpr", fields: [vcprId], references: [id])
+  vcprId              String?            @map("vcpr")
+  issuedAt            DateTime
+  status              String             @default("draft")
+  signedAt            DateTime?
+  licenseEvaluation   LicenseEvaluation? @relation("Prescription_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId String?            @map("licenseEvaluation")
+  policyVersion       PolicyVersion?     @relation("Prescription_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId     String?            @map("policyVersion")
+  lines               PrescriptionLine[] @relation("PrescriptionLine_prescription")
+  version             Int                @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([prescriberId])
+  @@index([deaRegistrationId])
+  @@index([vcprId])
+  @@index([licenseEvaluationId])
+  @@index([policyVersionId])
+}
+
+model PrescriptionLine {
+  id                  String        @id @default(cuid())
+  prescription        Prescription? @relation("PrescriptionLine_prescription", fields: [prescriptionId], references: [id])
+  prescriptionId      String?       @map("prescription")
+  product             DrugProduct?  @relation("PrescriptionLine_product", fields: [productId], references: [id])
+  productId           String?       @map("product")
+  csSchedule          String
+  directions          String        @default("")
+  route               String        @default("")
+  frequency           String        @default("")
+  quantity            Decimal       @postgresql.Decimal(18, 6)
+  quantityUnit        String?
+  refillsAuthorised   Int           @default(0)
+  expiresAt           DateTime
+  extralabel          Boolean       @default(false)
+  substitutionAllowed Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @default(now()) @updatedAt
+
+  @@index([prescriptionId])
+  @@index([productId])
+}
+
+model CsContainer {
+  id                String           @id @default(cuid())
+  ref               String           @unique @default("")
+  product           DrugProduct?     @relation("CsContainer_product", fields: [productId], references: [id])
+  productId         String?          @map("product")
+  location          Location?        @relation("CsContainer_location", fields: [locationId], references: [id])
+  locationId        String?          @map("location")
+  deaRegistration   DeaRegistration? @relation("CsContainer_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId String?          @map("deaRegistration")
+  lotNumber         String           @default("")
+  lotExpiresOn      DateTime?        @postgresql.Date
+  status            String           @default("sealed")
+  labelQty          Decimal          @postgresql.Decimal(18, 6)
+  labelUnit         String?
+  openedAt          DateTime?
+  openedBy          StaffMember?     @relation("CsContainer_openedBy", fields: [openedById], references: [id])
+  openedById        String?          @map("openedBy")
+  budAt             DateTime?
+  entries           CsLogEntry[]     @relation("CsLogEntry_container")
+  version           Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @default(now()) @updatedAt
+
+  @@index([productId])
+  @@index([locationId])
+  @@index([deaRegistrationId])
+  @@index([openedById])
+}
+
+model CsLogEntry {
+  id                       String           @id @default(cuid())
+  ref                      String           @unique @default("")
+  ciiRef                   String?          @unique
+  container                CsContainer?     @relation("CsLogEntry_container", fields: [containerId], references: [id])
+  containerId              String?          @map("container")
+  deaRegistration          DeaRegistration? @relation("CsLogEntry_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId        String?          @map("deaRegistration")
+  schedule                 String
+  type                     String
+  qtySigned                Decimal          @postgresql.Decimal(18, 6)
+  unit                     String?
+  occurredAt               DateTime
+  recordedAt               DateTime
+  actor                    StaffMember?     @relation("CsLogEntry_actor", fields: [actorId], references: [id])
+  actorId                  String?          @map("actor")
+  patient                  Patient?         @relation("CsLogEntry_patient", fields: [patientId], references: [id])
+  patientId                String?          @map("patient")
+  client                   Client?          @relation("CsLogEntry_client", fields: [clientId], references: [id])
+  clientId                 String?          @map("client")
+  clientSnapshot           Json?
+  reverses                 CsLogEntry?      @relation("CsLogEntry_reverses", fields: [reversesId], references: [id])
+  reversesId               String?          @map("reverses")
+  reason                   String           @default("")
+  prevHash                 String           @default("")
+  hash                     String           @default("")
+  from_CsLogEntry_reverses CsLogEntry[]     @relation("CsLogEntry_reverses")
+
+  @@index([containerId])
+  @@index([deaRegistrationId])
+  @@index([actorId])
+  @@index([patientId])
+  @@index([clientId])
+  @@index([reversesId])
+}
+
 model AgentToolGrant {
   id          String           @id @default(cuid())
   agent       AgentIdentity?   @relation("AgentToolGrant_agent", fields: [agentId], references: [id])
@@ -941,21 +2189,22 @@ model AgentToolGrant {
 }
 
 model AgentRun {
-  id                   String         @id @default(cuid())
-  agent                AgentIdentity? @relation("AgentRun_agent", fields: [agentId], references: [id])
-  agentId              String?        @map("agent")
-  startedAt            DateTime?      @default(now())
-  endedAt              DateTime?
-  status               String         @default("started")
-  promptHash           String         @default("")
-  toolCalls            Json?
-  costMeta             Json?
-  callRecordId         String         @default("")
-  proposals            Proposal[]     @relation("Proposal_agentRun")
-  version              Int            @default(0)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @default(now()) @updatedAt
-  from_AgentAction_run AgentAction[]  @relation("AgentAction_run")
+  id                       String         @id @default(cuid())
+  agent                    AgentIdentity? @relation("AgentRun_agent", fields: [agentId], references: [id])
+  agentId                  String?        @map("agent")
+  startedAt                DateTime?      @default(now())
+  endedAt                  DateTime?
+  status                   String         @default("started")
+  promptHash               String         @default("")
+  toolCalls                Json?
+  costMeta                 Json?
+  callRecordId             String         @default("")
+  proposals                Proposal[]     @relation("Proposal_agentRun")
+  version                  Int            @default(0)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @default(now()) @updatedAt
+  from_CallRecord_agentRun CallRecord[]   @relation("CallRecord_agentRun")
+  from_AgentAction_run     AgentAction[]  @relation("AgentAction_run")
 
   @@index([agentId])
   @@index([callRecordId])

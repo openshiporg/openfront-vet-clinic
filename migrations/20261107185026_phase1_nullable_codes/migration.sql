@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "Client" ALTER COLUMN "publicCode" DROP NOT NULL,
+ALTER COLUMN "publicCode" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "ComplianceTask" ALTER COLUMN "dedupeKey" DROP NOT NULL,
+ALTER COLUMN "dedupeKey" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "CsLogEntry" ALTER COLUMN "ciiRef" DROP NOT NULL,
+ALTER COLUMN "ciiRef" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "Task" ALTER COLUMN "ref" DROP NOT NULL,
+ALTER COLUMN "ref" DROP DEFAULT;

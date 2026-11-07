@@ -54,7 +54,7 @@ export default async function SettingsPage() {
       <Section title="Locations">
         {data.locations.length ? data.locations.map(l => (
           <Row key={l.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{l.name}</span><span className="font-mono text-xs text-muted-foreground">{l.code}</span></div>
               <Meta>{label(l.kind)} · {l.city}, {l.stateCode.replace('US-', '')} · {l.timeZone} · emergencies: {label(l.emergencyCoverage)}{l.calendar ? ` · calendar ${l.calendar.code}` : ''}</Meta>
             </div>
@@ -65,7 +65,7 @@ export default async function SettingsPage() {
       <Section title="Business calendars">
         {data.businessCalendars.map(c => (
           <Row key={c.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <span className="font-medium">{c.name}</span>
               <Meta>{c.code} · {label(c.kind)} · {c.regularOpen}–{c.regularClose} {c.timeZone} · {c.exceptionsCount} holidays/closures · covered through {c.coverageThrough ?? '—'}</Meta>
               {c.source ? <p className="break-words text-xs text-muted-foreground">{c.source}</p> : null}
@@ -76,7 +76,7 @@ export default async function SettingsPage() {
       <Section title="Approval policies (maker-checker)">
         {data.approvalPolicies.map(p => (
           <Row key={p.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <span className="font-medium">{label(p.action.replace('.', ' · '))}</span>
               <Meta>{p.description}</Meta>
             </div>

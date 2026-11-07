@@ -24,6 +24,10 @@ export const AUDITED_TYPES = new Set<string>([
   'Prescription', 'PrescriptionLine', 'Dispense', 'RefillRequest', 'VaccinationRecord', 'RabiesCertificate', 'LabOrder', 'LabResult',
   'AnaesthesiaRecord', 'SurgeryRecord', 'EuthanasiaConsent', 'TreatmentSheet', 'Treatment', 'Estimate', 'Invoice', 'Payment',
   'Appointment', 'Boarding', 'Hospitalization', 'ClinicalDocument', 'ScribeDraft', 'Referral',
+  // Phase 1 lists that carry PHI-grade detail: ownership, weights, chips, VCPR, insurance, schedule, triage, board
+  'PatientOwnership', 'WeightMeasurement', 'AlertAcknowledgement', 'Microchip', 'VcprRecord', 'PetInsurancePolicy',
+  'AppointmentPatient', 'AppointmentSegment', 'WaitlistEntry', 'TriageAssessment', 'WhiteboardEntry', 'Suppression',
+  'CsContainer', 'CsLogEntry',
 ])
 
 type Ref = { resourceType: string; resourceId: string | null; fields: Set<string> }
@@ -103,16 +107,16 @@ export function actorFromSession(session: any): ReadAuditActor | null {
 
 /** Patient or client the row belongs to, when the resource is one of those. */
 const subjectOf = (ref: Ref) => ({
-  patientId: ref.resourceType === 'Patient' ? ref.resourceId : null,
-  clientId: ref.resourceType === 'Client' ? ref.resourceId : null,
+  patientId: ref.resourceType === 'Patient' ? ref.resourceId ?? '' : '',
+  clientId: ref.resourceType === 'Client' ? ref.resourceId ?? '' : '',
 })
 
 export async function writeReadAudit(prisma: any, actor: ReadAuditActor, refs: Ref[], purpose: string, requestId: string | null) {
   if (!refs.length) return 0
   await prisma.readAudit.createMany({
     data: refs.slice(0, 5_000).map(ref => ({
-      actorKind: actor.actorKind, actorId: actor.actorId, actorLabel: actor.actorLabel ?? null, resourceType: ref.resourceType, resourceId: ref.resourceId,
-      ...subjectOf(ref), purpose, fields: [...ref.fields].sort(), requestId,
+      actorKind: actor.actorKind, actorId: actor.actorId, actorLabel: actor.actorLabel ?? '', resourceType: ref.resourceType, resourceId: ref.resourceId ?? '',
+      ...subjectOf(ref), purpose, fields: [...ref.fields].sort(), requestId: requestId ?? '',
     })),
   })
   return refs.length

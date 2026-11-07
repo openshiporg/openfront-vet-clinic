@@ -11,6 +11,18 @@ const OPS: Record<string, Record<string, string>> = {
   decideApprovalRequest: { requestId: 'ID!', decision: 'String!', reason: 'String', expectedVersion: 'Int!' },
   cancelApprovalRequest: { requestId: 'ID!', expectedVersion: 'Int!', reason: 'String' },
   requestPracticeControls: { changes: 'JSON!', reason: 'String!' },
+  setAgentKillSwitch: { agentId: 'ID!', killSwitch: 'Boolean!', reason: 'String', expectedVersion: 'Int!' },
+  confirmRegistration: { clientId: 'ID!', expectedVersion: 'Int!' },
+  confirmAppointment: { appointmentId: 'ID!', expectedVersion: 'Int' },
+  checkInAppointment: { appointmentId: 'ID!', acknowledgedAlertIds: '[ID!]', expectedVersion: 'Int!' },
+  markNoShow: { appointmentId: 'ID!', expectedVersion: 'Int!' },
+  cancelAppointment: { appointmentId: 'ID!', reason: 'String!', expectedVersion: 'Int!' },
+  acceptAppointmentRequest: { appointmentId: 'ID!', expectedVersion: 'Int!' },
+  moveWhiteboardEntry: { entryId: 'ID!', to: 'String!', expectedVersion: 'Int!' },
+  bookAppointment: { input: 'JSON!' },
+  registerClient: { input: 'JSON!' },
+  recordWeight: { patientId: 'ID!', value: 'String!', unit: 'String!', method: 'String', bodyConditionScore: 'Int' },
+  addPatientAlert: { patientId: 'ID!', kind: 'String!', severity: 'String!', text: 'String!' },
 };
 
 const KEY = /^[A-Za-z0-9._:-]{8,200}$/;

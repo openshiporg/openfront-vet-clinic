@@ -41,7 +41,7 @@ export default async function CompliancePage({ searchParams }: { searchParams?: 
           const late = c.status !== 'done' && Date.parse(c.dueAt) < now;
           return (
             <Row key={c.id}>
-              <div className="min-w-0 flex-1 space-y-1">
+              <div className="min-w-0 flex-1 basis-64 space-y-1">
                 <span className="font-medium">{c.title}</span>
                 <Meta>{label(c.kind)}{c.location ? ` · ${c.location.code}` : ''}{c.startedAt ? ` · started ${when(c.startedAt, tz)}` : ''}</Meta>
               </div>

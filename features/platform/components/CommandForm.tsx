@@ -111,4 +111,32 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     if (!Object.keys(changes).length) throw new Error('Change at least one control.');
     return { changes, reason: v.reason.trim() };
   },
+  /** Front-desk registration: one person, a mobile and/or email, and the first pet (I-C1 duplicate check runs on the server). */
+  registerClient: (v) => {
+    required(v, 'firstName', 'lastName', 'petName', 'species', 'locationId');
+    const contacts = [
+      ...(v.phone?.trim() ? [{ kind: 'mobile', value: v.phone.trim() }] : []),
+      ...(v.email?.trim() ? [{ kind: 'email', value: v.email.trim() }] : []),
+    ];
+    if (!contacts.length) throw new Error('Add a mobile number or an email.');
+    if (v.dateOfBirth?.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(v.dateOfBirth.trim())) throw new Error('Born: use YYYY-MM-DD.');
+    return {
+      input: {
+        locationId: v.locationId,
+        people: [{ firstName: v.firstName.trim(), lastName: v.lastName.trim(), contacts }],
+        patients: [{ name: v.petName.trim(), speciesCode: v.species, sex: v.sex || 'unknown', dateOfBirth: v.dateOfBirth?.trim() || null }],
+      },
+    };
+  },
+  /** A weight as typed (exact decimal string, never a float). */
+  recordWeight: (v) => {
+    required(v, 'patientId', 'value', 'unit');
+    if (!/^\d{1,4}(\.\d{1,4})?$/.test(v.value.trim())) throw new Error('Weight: a number like 4.2');
+    return { patientId: v.patientId, value: v.value.trim(), unit: v.unit, method: 'scale' };
+  },
+  addPatientAlert: (v) => {
+    required(v, 'patientId', 'kind', 'severity', 'text');
+    return { patientId: v.patientId, kind: v.kind, severity: v.severity, text: v.text.trim() };
+  },
+  killSwitch: (v) => ({ agentId: v.agentId, killSwitch: v.killSwitch === 'on', reason: v.reason?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }),
 };

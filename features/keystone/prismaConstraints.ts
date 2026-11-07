@@ -15,6 +15,12 @@ export const COMPOUND_UNIQUES: Record<string, string[]> = {
   PolicyVersion: ['@@unique([packId, versionNumber], map: "PolicyVersion_pack_number_key")'],
   PolicyBinding: ['@@unique([packId, scope, locationId], map: "PolicyBinding_pack_scope_location_key")'],
   ProfessionalLicense: ['@@unique([stateCode, kind, licenseNumber], map: "ProfessionalLicense_state_kind_number_key")'],
+  // Phase 1
+  ContactPoint: ['@@unique([personId, valueHash], map: "ContactPoint_person_value_key")'],
+  AppointmentPatient: ['@@unique([appointmentId, patientId], map: "AppointmentPatient_appointment_patient_key")'],
+  TriageProtocolVersion: ['@@unique([protocolId, versionNumber], map: "TriageProtocolVersion_protocol_number_key")'],
+  MessageTemplate: ['@@unique([code, channel, locale, templateVersion], map: "MessageTemplate_code_channel_locale_version_key")'],
+  Breed: ['@@unique([speciesId, name], map: "Breed_species_name_key")'],
 }
 
 export function addDatabaseConstraints(schema: string): string {

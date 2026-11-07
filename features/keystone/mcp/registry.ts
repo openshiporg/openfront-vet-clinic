@@ -68,6 +68,14 @@ export const DOMAIN_TOOLS: DomainTool[] = [
     field: 'loadPracticeSetup',
     writes: true,
   },
+  {
+    name: 'loadClinicSetup',
+    description: 'Load the Cedar Creek clinic data after the practice spine: species and breeds, rooms, appointment types, staff schedules, the published phone-triage protocol, templates, knowledge base, the AI receptionist (paused), fictional households and patients, the day sheet and the first CS containers. Idempotent. Needs canManageOnboarding.',
+    inputSchema: { type: 'object', properties: { idempotencyKey }, required: ['idempotencyKey'], additionalProperties: false },
+    document: 'mutation LoadClinicSetup($idempotencyKey: String!) { loadClinicSetup(idempotencyKey: $idempotencyKey) }',
+    field: 'loadClinicSetup',
+    writes: true,
+  },
 ]
 
 export function registerDomainTools(tools: DomainTool[]) {

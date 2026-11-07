@@ -16,3 +16,20 @@ export async function practiceTimeZone(): Promise<string> {
     return 'America/Los_Angeles'
   }
 }
+
+type Loc = { id: string; kind?: string | null }
+
+/**
+ * The location a screen opens on when none is chosen: the signed-in staff member's home location,
+ * else the first general practice, else the first active location.
+ */
+export async function defaultLocation<T extends Loc>(locations: T[], chosen?: string | null): Promise<T | undefined> {
+  const picked = locations.find(l => l.id === chosen)
+  if (picked) return picked
+  let home: string | null = null
+  try {
+    const r = await keystoneClient<{ authenticatedItem: { staffMember?: { homeLocation: { id: string } | null } | null } | null }>(`{ authenticatedItem { ... on User { staffMember { homeLocation { id } } } } }`)
+    home = r.success ? r.data.authenticatedItem?.staffMember?.homeLocation?.id ?? null : null
+  } catch { home = null }
+  return locations.find(l => l.id === home) ?? locations.find(l => l.kind === 'general_practice') ?? locations[0]
+}

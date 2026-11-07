@@ -15,12 +15,17 @@ const listTypes = Object.values(schema.getTypeMap())
   .filter(name => !name.startsWith('_') && !name.startsWith('Keystone') && !/(Query|Mutation|Subscription|Input|Output|Result|Meta|RelateTo)/.test(name))
 
 /** Clinical or client data by name. A list matching this is audited unless it is listed below. */
-const CLINICAL = /^(Client|Patient|Encounter|Prescription|Dispense|Refill|Vaccination|Rabies|Lab|Anaesthesia|Surgery|Euthanasia|Treatment|Estimate|Invoice|Payment|Appointment|Boarding|Hospitali[sz]ation|Clinical|Scribe|Referral|Comms|Call|Consent|ContactPoint|Records|Vitals|Addendum)/
+const CLINICAL = /^(Client|Patient|Encounter|Prescription|Dispense|Refill|Vaccination|Rabies|Lab|Anaesthesia|Surgery|Euthanasia|Treatment|Estimate|Invoice|Payment|Appointment|Boarding|Hospitali[sz]ation|Clinical|Scribe|Referral|Comms|Weight|Microchip|Vcpr|Triage|Whiteboard|Waitlist|Suppression|Cs[A-Z]|PetInsurance|AlertAck|Call|Consent|ContactPoint|Records|Vitals|Addendum)/
 
 /** Lists that match the pattern but hold no client or clinical data (reasons alongside). */
 const NOT_CLINICAL: Record<string, string> = {
   CalendarException: 'business calendar closures',
   PaymentProviderConfig: 'processor settings, no client data',
+  AppointmentType: 'catalogue of visit types, no client data',
+  ReferralHospital: 'directory of emergency and specialty hospitals',
+  ReferringVet: 'directory of referring clinics and vets',
+  TriageProtocol: 'the published phone-triage protocol, no client data',
+  TriageProtocolVersion: 'versions of the triage protocol questions and scripts',
 }
 
 describe('read audit contract', () => {

@@ -36,7 +36,7 @@ export default async function PoliciesPage() {
         <Section key={code} title={`In force today · ${rows.find(r => r.location === code)?.locationName ?? code}`}>
           {rows.filter(r => r.location === code).map(r => (
             <Row key={`${code}-${r.kind}`}>
-              <div className="min-w-0 flex-1 space-y-1">
+              <div className="min-w-0 flex-1 basis-64 space-y-1">
                 <p className="font-medium">{label(r.kind)}</p>
                 <Meta>{r.ok ? (r.versions ?? []).map(v => `${v.packCode} (${v.layer})`).join(' → ') : `${r.code}: ${r.message}`}</Meta>
                 {r.ok && r.unverifiedRules?.length ? <p className="break-words text-xs text-amber-700">verify: {r.unverifiedRules.join('; ')}</p> : null}
@@ -49,7 +49,7 @@ export default async function PoliciesPage() {
       <Section title="Versions and sources">
         {data.policyVersions.length ? data.policyVersions.map(v => (
           <Row key={v.id}>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{v.pack?.name ?? v.label}</span><span className="font-mono text-xs text-muted-foreground">{v.pack?.code}</span></div>
               <Meta>from {v.effectiveFrom}{v.effectiveTo ? ` to ${v.effectiveTo}` : ''} · hash {v.rulesHash.slice(0, 12)}</Meta>
               <ul className="space-y-0.5 text-xs">
