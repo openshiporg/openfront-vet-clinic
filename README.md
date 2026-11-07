@@ -2,7 +2,7 @@
 
 The open-source alternative to Avimark.
 
-Openfront Vet Clinic runs a veterinary practice on one system: clients and patients with species, breed and weight history, appointments, boarding and grooming, SOAP medical records, vaccines and reminders, treatment plans and estimates, in-house and reference lab results, inventory, prescriptions and controlled-substance logs, payments, deposits and wellness plans, end-of-life care, the clinic's public website with online booking, and the client portal. AI agents work through the same records over MCP.
+Openfront Vet Clinic runs a veterinary practice on one system: clients and patients with species, breed and weight history, appointments, boarding and grooming, SOAP medical records, vaccines and reminders, treatment plans and estimates, in-house and reference lab results, inventory, prescriptions and controlled-substance logs, payments, deposits and wellness plans, end-of-life care, and public booking and client-portal APIs. AI agents work through the same records over MCP.
 
 Built on Next.js and KeystoneJS 6 with PostgreSQL.
 
