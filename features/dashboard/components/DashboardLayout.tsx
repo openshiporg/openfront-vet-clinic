@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useState } from 'react'
 import { AdminMetaProvider } from '../hooks/useAdminMeta'
 import { SidebarProvider, SidebarInset, useSidebarWithSide } from '@/components/ui/sidebar'
+import OnboardingDialog from '@/features/platform/onboarding/components/OnboardingDialog'
 import { Sidebar } from './Sidebar'
 import { ErrorBoundary } from './ErrorBoundary'
 import { DashboardProvider } from '../context/DashboardProvider'
@@ -84,9 +85,11 @@ function FloatingChatButton() {
 }
 
 function DashboardLayoutContent({ children, adminMeta, authenticatedItem }: DashboardLayoutProps) {
+  const [isOnboardingDialogOpen, setIsOnboardingDialogOpen] = useState(false)
   return (
     <>
-      <Sidebar adminMeta={adminMeta} user={authenticatedItem} />
+      <Sidebar adminMeta={adminMeta} user={authenticatedItem} onOpenDialog={() => setIsOnboardingDialogOpen(true)} />
+      <OnboardingDialog isOpen={isOnboardingDialogOpen} onClose={() => setIsOnboardingDialogOpen(false)} />
       {/* pb-20 keeps the last rows and fields clear of the floating assistant button */}
       <SidebarInset className="min-w-0 pb-20">
         {children}

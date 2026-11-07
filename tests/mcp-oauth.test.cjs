@@ -18,8 +18,8 @@ function sandbox({ env = { SESSION_SECRET: 'unit-test-secret-unit-test-secret-01
     const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
     } }).outputText;
-    const module = { exports: {} };
-    cache.set(filename, module);
+    const loaded = { exports: {} };
+    cache.set(filename, loaded);
     function localRequire(specifier) {
       if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
       if (REAL.has(specifier)) return require(specifier);
@@ -27,13 +27,13 @@ function sandbox({ env = { SESSION_SECRET: 'unit-test-secret-unit-test-secret-01
       throw new Error(`Unmocked dependency: ${specifier}`);
     }
     vm.runInNewContext(output, {
-      module, exports: module.exports, require: localRequire, Buffer,
+      module: loaded, exports: loaded.exports, require: localRequire, Buffer,
       process: { env }, console: Object.fromEntries(['error', 'warn', 'log', 'info'].map(level =>
         [level, (...args) => logs.push(args)])),
       URL, URLSearchParams, Request, Response, Headers, FormData, Date, JSON, Math, Promise, Map, Set,
       Array, Object, Error, TypeError, String, Number, Boolean, RegExp, setTimeout,
     }, { filename });
-    return module.exports;
+    return loaded.exports;
   }
   return { load, logs };
 }
@@ -71,7 +71,7 @@ function fakePrisma() {
   return prisma;
 }
 
-const STAFF_ROLE = { id: 'r1', name: 'Admin', canCreateTodos: true, canManageAllTodos: true, canSeeOtherPeople: true,
+const STAFF_ROLE = { id: 'r1', name: 'Admin', canManageClients: true, canManageSchedules: true, canSeeOtherPeople: true,
   canEditOtherPeople: true, canManagePeople: true, canManageRoles: true, canAccessDashboard: true };
 const USERS = {
   customer: { id: 'customer', name: 'Cass Customer', email: 'cass@example.invalid', role: null },
@@ -264,9 +264,9 @@ test('a customer token is the customer: no staff role, and staff mutations are r
   const { Role } = { Role: { create: permissions.canManageRoles, update: permissions.canManageRoles } };
   assert.equal(Role.create({ session }), false);
   assert.equal(permissions.canManagePeople({ session }), false);
-  assert.equal(permissions.canManageAllTodos({ session }), false);
+  assert.equal(permissions.canPrescribe({ session }), false);
   assert.deepEqual(plain(rules.canUpdatePeople({ session })), { id: { equals: 'customer' } });
-  assert.deepEqual(plain(rules.canManageTodos({ session })), { assignedTo: { id: { equals: 'customer' } } });
+  assert.deepEqual(plain(rules.canReadPeople({ session })), { id: { equals: 'customer' } });
 
   const staff = await connect(h, 'staff');
   const staffSession = await sessionFor(h, staff.tokens.access_token);
@@ -280,9 +280,9 @@ test('scopes only narrow: read-only tokens cannot mutate; no token can touch cre
   const { parse } = require('graphql');
   const problem = (source, scopes, variables) => h.guard.mcpOperationProblem({ document: parse(source), variables, scopes });
   const write = ['mcp:read', 'mcp:write'];
-  assert.equal(problem('{ todos { id } }', ['mcp:read']), null);
-  assert.equal(problem('mutation { createTodo(data: { label: "x" }) { id } }', ['mcp:read']), h.guard.READ_ONLY_MESSAGE);
-  assert.equal(problem('mutation { createTodo(data: { label: "x" }) { id } }', write), null);
+  assert.equal(problem('{ patients { id } }', ['mcp:read']), null);
+  assert.equal(problem('mutation { createResearchNote(data: { title: "x" }) { id } }', ['mcp:read']), h.guard.READ_ONLY_MESSAGE);
+  assert.equal(problem('mutation { createResearchNote(data: { title: "x" }) { id } }', write), null);
   for (const source of [
     'mutation { endSession }',
     'mutation { authenticateUserWithPassword(email: "a", password: "b") { __typename } }',
@@ -306,7 +306,7 @@ test('scopes only narrow: read-only tokens cannot mutate; no token can touch cre
     return stopped;
   };
   assert.equal(run({ itemId: 'staff' }, 'mutation { endSession }'), null);
-  assert.match(run({ itemId: 'customer', mcp: { clientId: 'c', scopes: ['mcp:read'] } }, 'mutation { createTodo(data: {}) { id } }').errors[0].message, /read-only/);
+  assert.match(run({ itemId: 'customer', mcp: { clientId: 'c', scopes: ['mcp:read'] } }, 'mutation { createResearchNote(data: {}) { id } }').errors[0].message, /read-only/);
 });
 
 test('unticking "Allow changes" grants mcp:read only', async () => {

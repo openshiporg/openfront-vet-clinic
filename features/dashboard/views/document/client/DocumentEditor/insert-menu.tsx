@@ -157,6 +157,10 @@ export function InsertMenu({ children, text }: { children: ReactNode; text: Text
     return <span>{text.text}</span>
   }
 
+  return <InsertMenuBody text={text}>{children}</InsertMenuBody>
+}
+
+function InsertMenuBody({ children, text }: { children: ReactNode; text: Text }) {
   const editor = useSlate()
   const componentBlocks = useContext(ComponentBlockContext)
   const relationships = useDocumentFieldRelationships()

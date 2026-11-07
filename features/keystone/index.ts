@@ -6,6 +6,8 @@ import { statelessSessions } from "@keystone-6/core/session";
 import { extendGraphqlSchema } from "./mutations";
 import { sendPasswordResetEmail } from "./lib/mail";
 import { withMcpBearerSessions } from "./mcp-oauth/session";
+import { isSignedIn, permissionNames, type Session } from "./access";
+import { addDatabaseConstraints } from "./prismaConstraints";
 
 const databaseURL = process.env.DATABASE_URL || "file:./keystone.db";
 
@@ -32,14 +34,9 @@ const { withAuth } = createAuth({
     itemData: {
       role: {
         create: {
-          name: "Admin",
-          canCreateTodos: true,
-          canManageAllTodos: true,
-          canSeeOtherPeople: true,
-          canEditOtherPeople: true,
-          canManagePeople: true,
-          canManageRoles: true,
-          canAccessDashboard: true,
+          name: "Owner / Admin",
+          // Every permission except break-glass, which is never granted by default.
+          ...Object.fromEntries(permissionNames.filter((name) => name !== "canBreakGlass").map((name) => [name, true])),
         },
       },
     },
@@ -53,16 +50,12 @@ const { withAuth } = createAuth({
   sessionData: `
     name
     email
+    kind
+    accessExpiresAt
     role {
       id
       name
-      canCreateTodos
-      canManageAllTodos
-      canSeeOtherPeople
-      canEditOtherPeople
-      canManagePeople
-      canManageRoles
-      canAccessDashboard
+      ${permissionNames.join("\n      ")}
     }
   `,
 });
@@ -72,6 +65,7 @@ export default withAuth(
     db: {
       provider: "postgresql",
       url: databaseURL,
+      extendPrismaSchema: addDatabaseConstraints,
     },
     lists: models,
     storage: {
@@ -88,7 +82,8 @@ export default withAuth(
       },
     },
     ui: {
-      isAccessAllowed: ({ session }) => session?.data.role?.canAccessDashboard ?? false,
+      isAccessAllowed: ({ session }) =>
+        isSignedIn({ session: session as Session | undefined }) && (session as Session | undefined)?.data.role?.canAccessDashboard === true,
     },
     // MCP OAuth bearer tokens resolve to the approving user; everything else is unchanged.
     session: withMcpBearerSessions(statelessSessions(sessionConfig)),

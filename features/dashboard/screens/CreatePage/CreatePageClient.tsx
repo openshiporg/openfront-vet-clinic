@@ -56,6 +56,19 @@ export function CreatePageClient({ listKey, list }: CreatePageClientProps) {
   // Use the create item hook with enhanced fields
   const createItem = useCreateItem(list, enhancedFields)
 
+  // Split fields by position for sidebar/main layout (same pattern as ItemPage)
+  const fieldsSplit = useMemo(() => {
+    const sidebarFields: Record<string, any> = {}
+    const mainFields: Record<string, any> = {}
+    
+    Object.entries(enhancedFields).forEach(([key, field]) => {
+      // For now, put all fields in main - same as ItemPage logic
+      mainFields[key] = field
+    })
+    
+    return { sidebarFields, mainFields }
+  }, [enhancedFields])
+
   const handleSave = useCallback(async () => {
     if (!createItem) return
     
@@ -107,18 +120,6 @@ export function CreatePageClient({ listKey, list }: CreatePageClientProps) {
     { type: 'page' as const, label: 'Create' }
   ]
 
-  // Split fields by position for sidebar/main layout (same pattern as ItemPage)
-  const fieldsSplit = useMemo(() => {
-    const sidebarFields: Record<string, any> = {}
-    const mainFields: Record<string, any> = {}
-    
-    Object.entries(enhancedFields).forEach(([key, field]) => {
-      // For now, put all fields in main - same as ItemPage logic
-      mainFields[key] = field
-    })
-    
-    return { sidebarFields, mainFields }
-  }, [enhancedFields])
 
   return (
     <>
@@ -139,7 +140,7 @@ export function CreatePageClient({ listKey, list }: CreatePageClientProps) {
       />
       
       <div className="w-full max-w-5xl p-4 md:p-6">
-        <div className="grid lg:grid-cols-[minmax(240px,2fr)_3fr] gap-6 gap-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(240px,2fr)_3fr] gap-6 gap-y-8">
           {/* Sidebar */}
           <aside className="lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7.5rem)] flex flex-col h-full">
             <div className="space-y-6 flex-grow overflow-y-auto pb-2">

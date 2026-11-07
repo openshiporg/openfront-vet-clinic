@@ -1,0 +1,47 @@
+/** A business-rule failure with a stable code. Messages reach the caller; database detail never does. */
+export class DomainError extends Error {
+  readonly code: string
+  readonly details: Record<string, unknown>
+  constructor(code: string, message: string, details: Record<string, unknown> = {}) {
+    super(message)
+    this.name = 'DomainError'
+    this.code = code
+    this.details = details
+  }
+}
+
+export const isDomainError = (error: unknown): error is DomainError => error instanceof DomainError
+
+export const Codes = {
+  NOT_AUTHORIZED: 'NOT_AUTHORIZED',
+  NOT_FOUND: 'NOT_FOUND',
+  INVALID_INPUT: 'INVALID_INPUT',
+  INVALID_TRANSITION: 'INVALID_TRANSITION',
+  STALE_STATE: 'STALE_STATE',
+  GUARD_FAILED: 'GUARD_FAILED',
+  IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  APPROVAL_REQUIRED: 'APPROVAL_REQUIRED',
+  SELF_APPROVAL: 'SELF_APPROVAL',
+  AGENT_CANNOT_APPROVE: 'AGENT_CANNOT_APPROVE',
+  APPROVAL_MISMATCH: 'APPROVAL_MISMATCH',
+  LEASE_LOST: 'LEASE_LOST',
+  STALE_FENCING_TOKEN: 'STALE_FENCING_TOKEN',
+  AUDIT_CHAIN_BROKEN: 'AUDIT_CHAIN_BROKEN',
+  // Vet clinic (STATE-MACHINES §0 error codes)
+  POLICY_UNRESOLVED: 'POLICY_UNRESOLVED',
+  POLICY_AMBIGUOUS: 'POLICY_AMBIGUOUS',
+  LICENSE_INACTIVE: 'LICENSE_INACTIVE',
+  DEA_REGISTRATION_INVALID: 'DEA_REGISTRATION_INVALID',
+  VCPR_REQUIRED: 'VCPR_REQUIRED',
+  SLOT_TAKEN: 'SLOT_TAKEN',
+  SLOT_TOKEN_INVALID: 'SLOT_TOKEN_INVALID',
+  CONSENT_REQUIRED: 'CONSENT_REQUIRED',
+  PATIENT_DECEASED: 'PATIENT_DECEASED',
+  SCOPE_DENIED: 'SCOPE_DENIED',
+  NEVER_ALLOWED_FOR_AGENTS: 'NEVER_ALLOWED_FOR_AGENTS',
+  CALLER_NOT_VERIFIED: 'CALLER_NOT_VERIFIED',
+  FEATURE_DISABLED: 'FEATURE_DISABLED',
+  DUPLICATE_SUSPECTED: 'DUPLICATE_SUSPECTED',
+} as const

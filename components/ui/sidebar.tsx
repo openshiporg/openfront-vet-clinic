@@ -207,6 +207,8 @@ function SidebarProvider({
       right: rightState,
       isMobile,
     }),
+    // leftState/rightState are rebuilt every render; their fields and setters are the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       leftState.state,
       leftState.open,

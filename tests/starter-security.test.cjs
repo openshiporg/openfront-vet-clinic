@@ -18,8 +18,8 @@ function sandbox({ env = {}, mocks = {}, fetch: fetchImpl, logs = [] } = {}) {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX,
     } }).outputText;
-    const module = { exports: {} };
-    cache.set(filename, module);
+    const loaded = { exports: {} };
+    cache.set(filename, loaded);
     function localRequire(specifier) {
       if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
       const resolved = specifier.startsWith('@/') ? path.join(root, specifier.slice(2))
@@ -28,13 +28,13 @@ function sandbox({ env = {}, mocks = {}, fetch: fetchImpl, logs = [] } = {}) {
       throw new Error(`Unmocked dependency: ${specifier}`);
     }
     vm.runInNewContext(output, {
-      module, exports: module.exports, require: localRequire,
+      module: loaded, exports: loaded.exports, require: localRequire,
       process: { env }, console: Object.fromEntries(['error', 'warn', 'log'].map(level =>
         [level, (...args) => logs.push(args)])),
       URL, Request, Response, Headers, FormData, File, Blob, TextDecoder,
       structuredClone, fetch: fetchImpl || (() => { throw new Error('Unexpected network request'); }),
     }, { filename });
-    return module.exports;
+    return loaded.exports;
   }
   return { load, logs };
 }
@@ -92,7 +92,7 @@ test('GraphQL errors log only a fixed message and admitted codes; no request/var
   });
   const instance = sandbox({ mocks: {
     '@/features/dashboard/lib/cookies': { getAuthHeaders: async () => ({}) },
-    '@/features/dashboard/lib/getBaseUrl': { getGraphQLEndpoint: async () => 'https://test.invalid/api/graphql' },
+    '@/features/dashboard/lib/getBaseUrl': { getServerGraphQLTarget: async () => ({ endpoint: 'https://test.invalid/api/graphql' }) },
     'graphql-request': { GraphQLClient: class { async request() { throw error; } } },
   } });
   const result = await instance.load('features/dashboard/lib/keystoneClient.ts').keystoneClient('query', { password: 'synthetic-password' });
@@ -108,7 +108,7 @@ test('multipart GraphQL failures and thrown fetch errors are also sanitized', as
       return Response.json({ errors: [{ message: 'synthetic-password', extensions: { code: 'FORBIDDEN' } }] });
     }, mocks: {
       '@/features/dashboard/lib/cookies': { getAuthHeaders: async () => ({}) },
-      '@/features/dashboard/lib/getBaseUrl': { getGraphQLEndpoint: async () => 'https://test.invalid/api/graphql' },
+      '@/features/dashboard/lib/getBaseUrl': { getServerGraphQLTarget: async () => ({ endpoint: 'https://test.invalid/api/graphql' }) },
       'graphql-request': { GraphQLClient: class {} },
     } });
     const result = await instance.load('features/dashboard/lib/keystoneClient.ts').keystoneClient('mutation', { upload: new File(['test'], 'test.txt') });

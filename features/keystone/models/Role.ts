@@ -2,7 +2,8 @@ import { list } from '@keystone-6/core'
 import { allOperations } from '@keystone-6/core/access'
 import { checkbox, relationship, text } from '@keystone-6/core/fields'
 
-import { isSignedIn, permissions } from '../access'
+import { isSignedIn, permissions, permissionNames } from '../access'
+import { trackingFields } from './trackingFields'
 
 export const Role = list({
   access: {
@@ -23,13 +24,9 @@ export const Role = list({
   },
   fields: {
     name: text({ validation: { isRequired: true } }),
-    canCreateTodos: checkbox({ defaultValue: false }),
-    canManageAllTodos: checkbox({ defaultValue: false }),
-    canSeeOtherPeople: checkbox({ defaultValue: false }),
-    canEditOtherPeople: checkbox({ defaultValue: false }),
-    canManagePeople: checkbox({ defaultValue: false }),
-    canManageRoles: checkbox({ defaultValue: false }),
-    canAccessDashboard: checkbox({ defaultValue: false }),
+    description: text({ ui: { displayMode: 'textarea' } }),
+    ...Object.fromEntries(permissionNames.map(name => [name, checkbox({ defaultValue: false })])),
+    ...trackingFields,
     assignedTo: relationship({
       ref: 'User.role',
       many: true,

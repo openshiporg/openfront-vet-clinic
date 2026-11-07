@@ -156,11 +156,15 @@ export async function getAuthenticatedUser() {
           id
           email
           name
+          onboardingStatus
           role {
             canAccessDashboard
+            canManageOnboarding
           }
         }
       }
+      usersCount
+      practiceSettings { displayName }
     }
   `;
 

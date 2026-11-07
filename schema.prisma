@@ -12,94 +12,136 @@ generator client {
 }
 
 model User {
-  id                      String       @id @default(cuid())
-  name                    String       @default("")
-  email                   String       @unique @default("")
-  password                String
-  role                    Role?        @relation("User_role", fields: [roleId], references: [id])
-  roleId                  String?      @map("role")
-  tasks                   Todo[]       @relation("Todo_assignedTo")
-  passwordResetToken      String?
-  passwordResetIssuedAt   DateTime?
-  passwordResetRedeemedAt DateTime?
-  from_OAuthToken_user    OAuthToken[] @relation("OAuthToken_user")
+  id                                  String                @id @default(cuid())
+  name                                String                @default("")
+  email                               String                @unique @default("")
+  password                            String
+  role                                Role?                 @relation("User_role", fields: [roleId], references: [id])
+  roleId                              String?               @map("role")
+  kind                                UserKindType?         @default(staff)
+  title                               String                @default("")
+  staffMember                         StaffMember?          @relation("StaffMember_user")
+  mfaEnrolled                         Boolean               @default(false)
+  accessExpiresAt                     DateTime?
+  onboardingStatus                    String?               @default("not_started")
+  createdAt                           DateTime              @default(now())
+  updatedAt                           DateTime              @default(now()) @updatedAt
+  passwordResetToken                  String?
+  passwordResetIssuedAt               DateTime?
+  passwordResetRedeemedAt             DateTime?
+  from_OAuthToken_user                OAuthToken[]          @relation("OAuthToken_user")
+  from_AgentIdentity_owner            AgentIdentity[]       @relation("AgentIdentity_owner")
+  from_ApprovalDecision_decidedBy     ApprovalDecision[]    @relation("ApprovalDecision_decidedBy")
+  from_ApprovalRequest_requestedBy    ApprovalRequest[]     @relation("ApprovalRequest_requestedBy")
+  from_AuditEvent_actorUser           AuditEvent[]          @relation("AuditEvent_actorUser")
+  from_AuditEvent_approver            AuditEvent[]          @relation("AuditEvent_approver")
+  from_BreakGlassEvent_user           BreakGlassEvent[]     @relation("BreakGlassEvent_user")
+  from_BreakGlassEvent_reviewedBy     BreakGlassEvent[]     @relation("BreakGlassEvent_reviewedBy")
+  from_Notification_recipient         Notification[]        @relation("Notification_recipient")
+  from_ProfessionalLicense_verifiedBy ProfessionalLicense[] @relation("ProfessionalLicense_verifiedBy")
+  from_ComplianceTask_completedBy     ComplianceTask[]      @relation("ComplianceTask_completedBy")
+  from_LegalHold_placedBy             LegalHold[]           @relation("LegalHold_placedBy")
+  from_LegalHold_releasedBy           LegalHold[]           @relation("LegalHold_releasedBy")
+  from_Note_author                    Note[]                @relation("Note_author")
+  from_PolicyVersion_publishedBy      PolicyVersion[]       @relation("PolicyVersion_publishedBy")
+  from_Task_createdByUser             Task[]                @relation("Task_createdByUser")
+  from_Proposal_proposedByUser        Proposal[]            @relation("Proposal_proposedByUser")
 
   @@index([roleId])
 }
 
 model Role {
-  id                 String  @id @default(cuid())
-  name               String  @default("")
-  canCreateTodos     Boolean @default(false)
-  canManageAllTodos  Boolean @default(false)
-  canSeeOtherPeople  Boolean @default(false)
-  canEditOtherPeople Boolean @default(false)
-  canManagePeople    Boolean @default(false)
-  canManageRoles     Boolean @default(false)
-  canAccessDashboard Boolean @default(false)
-  assignedTo         User[]  @relation("User_role")
-}
-
-model Todo {
-  id                   String      @id @default(cuid())
-  label                String      @default("")
-  description          Json        @default("[{\"type\":\"paragraph\",\"children\":[{\"text\":\"\"}]}]")
-  isComplete           Boolean     @default(false)
-  status               String?     @default("todo")
-  priority             Int?        @default(1)
-  tags                 Json        @default("[]")
-  dueDate              DateTime?
-  weight               Float?      @default(1)
-  budget               Decimal?    @default("0.00") @postgresql.Decimal(10, 2)
-  isPrivate            Boolean     @default(false)
-  largeNumber          BigInt?
-  metadata             Json?
-  secretNote           String?
-  coverImage_id        String?
-  coverImage_filesize  Int?
-  coverImage_width     Int?
-  coverImage_height    Int?
-  coverImage_extension String?
-  todoImages           TodoImage[] @relation("Todo_todoImages")
-  assignedTo           User?       @relation("Todo_assignedTo", fields: [assignedToId], references: [id])
-  assignedToId         String?     @map("assignedTo")
-
-  @@index([assignedToId])
-}
-
-model TodoImage {
-  id              String  @id @default(cuid())
-  image_id        String?
-  image_filesize  Int?
-  image_width     Int?
-  image_height    Int?
-  image_extension String?
-  imagePath       String  @default("")
-  altText         String  @default("")
-  todos           Todo[]  @relation("Todo_todoImages")
-  metadata        Json?
+  id                        String   @id @default(cuid())
+  name                      String   @default("")
+  description               String   @default("")
+  canSeeOtherPeople         Boolean  @default(false)
+  canEditOtherPeople        Boolean  @default(false)
+  canManagePeople           Boolean  @default(false)
+  canManageRoles            Boolean  @default(false)
+  canAccessDashboard        Boolean  @default(false)
+  canManageOnboarding       Boolean  @default(false)
+  canManagePayments         Boolean  @default(false)
+  canIssueRefunds           Boolean  @default(false)
+  canReadAudit              Boolean  @default(false)
+  canManagePractice         Boolean  @default(false)
+  canManageIntegrations     Boolean  @default(false)
+  canManagePolicies         Boolean  @default(false)
+  canManageFees             Boolean  @default(false)
+  canApprovePolicies        Boolean  @default(false)
+  canApproveFees            Boolean  @default(false)
+  canManageClients          Boolean  @default(false)
+  canManagePatients         Boolean  @default(false)
+  canMergeRecords           Boolean  @default(false)
+  canApproveMerges          Boolean  @default(false)
+  canReadClinical           Boolean  @default(false)
+  canReadClientPII          Boolean  @default(false)
+  canBook                   Boolean  @default(false)
+  canOverbook               Boolean  @default(false)
+  canCheckIn                Boolean  @default(false)
+  canManageSchedules        Boolean  @default(false)
+  canWriteRecord            Boolean  @default(false)
+  canSignRecord             Boolean  @default(false)
+  canOrder                  Boolean  @default(false)
+  canAdminister             Boolean  @default(false)
+  canPrescribe              Boolean  @default(false)
+  canPerformSurgery         Boolean  @default(false)
+  canAuthoriseEuthanasia    Boolean  @default(false)
+  canDispense               Boolean  @default(false)
+  canFulfilRefill           Boolean  @default(false)
+  canManageRefills          Boolean  @default(false)
+  canAdministerControlled   Boolean  @default(false)
+  canWitnessControlled      Boolean  @default(false)
+  canCountControlled        Boolean  @default(false)
+  canReceiveControlled      Boolean  @default(false)
+  canManageControlled       Boolean  @default(false)
+  canViewControlled         Boolean  @default(false)
+  canManageInventory        Boolean  @default(false)
+  canReceiveStock           Boolean  @default(false)
+  canOrderStock             Boolean  @default(false)
+  canApprovePurchase        Boolean  @default(false)
+  canReleaseQuarantine      Boolean  @default(false)
+  canTakePayments           Boolean  @default(false)
+  canPostInvoices           Boolean  @default(false)
+  canAddManualCharge        Boolean  @default(false)
+  canDiscount               Boolean  @default(false)
+  canApproveDiscount        Boolean  @default(false)
+  canApproveWriteOff        Boolean  @default(false)
+  canViewFinance            Boolean  @default(false)
+  canProcessRecordsRequests Boolean  @default(false)
+  canApproveRecordsRelease  Boolean  @default(false)
+  canManageBoarding         Boolean  @default(false)
+  canGroom                  Boolean  @default(false)
+  canMessageClients         Boolean  @default(false)
+  canManageTemplates        Boolean  @default(false)
+  canManageAgents           Boolean  @default(false)
+  canApproveAgentScopes     Boolean  @default(false)
+  canBreakGlass             Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @default(now()) @updatedAt
+  assignedTo                User[]   @relation("User_role")
 }
 
 model OAuthApp {
-  id                      String   @id @default(cuid())
-  name                    String   @default("")
-  clientId                String   @unique @default("")
-  clientSecret            String   @default("")
-  tokenEndpointAuthMethod String?  @default("client_secret_post")
-  redirectUris            Json?    @default("[]")
-  scopes                  Json?    @default("[\"mcp:read\",\"mcp:write\"]")
-  webhookUrl              String   @default("")
-  status                  String?  @default("active")
-  installUrl              String   @default("")
-  uninstallUrl            String   @default("")
-  description             String   @default("")
-  metadata                Json?    @default("{}")
-  developerEmail          String   @default("")
-  privacyPolicyUrl        String   @default("")
-  termsOfServiceUrl       String   @default("")
-  supportUrl              String   @default("")
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @default(now()) @updatedAt
+  id                          String          @id @default(cuid())
+  name                        String          @default("")
+  clientId                    String          @unique @default("")
+  clientSecret                String          @default("")
+  tokenEndpointAuthMethod     String?         @default("client_secret_post")
+  redirectUris                Json?           @default("[]")
+  scopes                      Json?           @default("[\"mcp:read\",\"mcp:write\"]")
+  webhookUrl                  String          @default("")
+  status                      String?         @default("active")
+  installUrl                  String          @default("")
+  uninstallUrl                String          @default("")
+  description                 String          @default("")
+  metadata                    Json?           @default("{}")
+  developerEmail              String          @default("")
+  privacyPolicyUrl            String          @default("")
+  termsOfServiceUrl           String          @default("")
+  supportUrl                  String          @default("")
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @default(now()) @updatedAt
+  from_AgentIdentity_oauthApp AgentIdentity[] @relation("AgentIdentity_oauthApp")
 }
 
 model OAuthToken {
@@ -125,4 +167,849 @@ model OAuthToken {
 
   @@index([clientId])
   @@index([userId])
+}
+
+model AgentIdentity {
+  id                                    String            @id @default(cuid())
+  name                                  String            @unique @default("")
+  kind                                  String            @default("voice_receptionist")
+  model                                 String            @default("")
+  provider                              String            @default("")
+  owner                                 User?             @relation("AgentIdentity_owner", fields: [ownerId], references: [id])
+  ownerId                               String?           @map("owner")
+  status                                String            @default("active")
+  killSwitch                            Boolean           @default(false)
+  limits                                Json?             @default("{\"toolCallsPerRun\":40}")
+  oauthApp                              OAuthApp?         @relation("AgentIdentity_oauthApp", fields: [oauthAppId], references: [id])
+  oauthAppId                            String?           @map("oauthApp")
+  grants                                AgentToolGrant[]  @relation("AgentToolGrant_agent")
+  runs                                  AgentRun[]        @relation("AgentRun_agent")
+  version                               Int               @default(0)
+  createdAt                             DateTime          @default(now())
+  updatedAt                             DateTime          @default(now()) @updatedAt
+  from_ApprovalRequest_requestedByAgent ApprovalRequest[] @relation("ApprovalRequest_requestedByAgent")
+  from_AuditEvent_actorAgent            AuditEvent[]      @relation("AuditEvent_actorAgent")
+  from_Note_authorAgent                 Note[]            @relation("Note_authorAgent")
+  from_Task_createdByAgent              Task[]            @relation("Task_createdByAgent")
+  from_AgentAction_agent                AgentAction[]     @relation("AgentAction_agent")
+  from_Proposal_proposedByAgent         Proposal[]        @relation("Proposal_proposedByAgent")
+
+  @@index([ownerId])
+  @@index([oauthAppId])
+}
+
+model ApprovalDecision {
+  id          String           @id @default(cuid())
+  request     ApprovalRequest? @relation("ApprovalDecision_request", fields: [requestId], references: [id])
+  requestId   String?          @map("request")
+  decidedBy   User?            @relation("ApprovalDecision_decidedBy", fields: [decidedById], references: [id])
+  decidedById String?          @map("decidedBy")
+  decision    String
+  reason      String           @default("")
+  at          DateTime?        @default(now())
+
+  @@index([requestId])
+  @@index([decidedById])
+}
+
+model ApprovalPolicy {
+  id                  String   @id @default(cuid())
+  action              String   @unique @default("")
+  description         String   @default("")
+  requiredPermission  String   @default("")
+  minApprovals        Int?     @default(1)
+  thresholdMinor      BigInt?
+  expiresAfterMinutes Int?     @default(1440)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
+}
+
+model ApprovalRequest {
+  id                           String             @id @default(cuid())
+  action                       String             @default("")
+  summary                      String             @default("")
+  targetList                   String             @default("")
+  targetId                     String             @default("")
+  payload                      Json?
+  payloadHash                  String             @default("")
+  requiredPermission           String             @default("")
+  requestedBy                  User?              @relation("ApprovalRequest_requestedBy", fields: [requestedById], references: [id])
+  requestedById                String?            @map("requestedBy")
+  requestedByAgent             AgentIdentity?     @relation("ApprovalRequest_requestedByAgent", fields: [requestedByAgentId], references: [id])
+  requestedByAgentId           String?            @map("requestedByAgent")
+  status                       String             @default("pending")
+  expiresAt                    DateTime?
+  consumedAt                   DateTime?
+  decisions                    ApprovalDecision[] @relation("ApprovalDecision_request")
+  version                      Int                @default(0)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @default(now()) @updatedAt
+  from_PolicyVersion_approval  PolicyVersion[]    @relation("PolicyVersion_approval")
+  from_AgentToolGrant_approval AgentToolGrant[]   @relation("AgentToolGrant_approval")
+  from_Proposal_approval       Proposal[]         @relation("Proposal_approval")
+
+  @@index([action])
+  @@index([targetId])
+  @@index([requestedById])
+  @@index([requestedByAgentId])
+}
+
+model AuditEvent {
+  id           String         @id @default(cuid())
+  seq          Int            @unique
+  eventKey     String         @unique @default("")
+  eventType    String         @default("")
+  entityType   String         @default("")
+  entityId     String         @default("")
+  actorUser    User?          @relation("AuditEvent_actorUser", fields: [actorUserId], references: [id])
+  actorUserId  String?        @map("actorUser")
+  actorAgent   AgentIdentity? @relation("AuditEvent_actorAgent", fields: [actorAgentId], references: [id])
+  actorAgentId String?        @map("actorAgent")
+  approver     User?          @relation("AuditEvent_approver", fields: [approverId], references: [id])
+  approverId   String?        @map("approver")
+  reason       String         @default("")
+  before       Json?
+  after        Json?
+  metadata     Json?
+  requestId    String         @default("")
+  prevHash     String         @default("")
+  hash         String         @unique @default("")
+  at           DateTime       @default(now())
+
+  @@index([eventType])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([actorUserId])
+  @@index([actorAgentId])
+  @@index([approverId])
+}
+
+model BreakGlassEvent {
+  id           String    @id @default(cuid())
+  user         User?     @relation("BreakGlassEvent_user", fields: [userId], references: [id])
+  userId       String?   @map("user")
+  resourceType String    @default("")
+  resourceId   String    @default("")
+  reason       String    @default("")
+  status       String    @default("open")
+  reviewedBy   User?     @relation("BreakGlassEvent_reviewedBy", fields: [reviewedById], references: [id])
+  reviewedById String?   @map("reviewedBy")
+  reviewedAt   DateTime?
+  version      Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([reviewedById])
+}
+
+model BusinessCalendar {
+  id                               String              @id @default(cuid())
+  code                             String              @unique @default("")
+  name                             String              @default("")
+  timeZone                         String              @default("America/Los_Angeles")
+  kind                             String              @default("location")
+  weekendDays                      Json?               @default("[0,6]")
+  regularOpen                      String              @default("08:00")
+  regularClose                     String              @default("18:00")
+  composedOf                       BusinessCalendar[]  @relation("BusinessCalendar_composedOf")
+  exceptions                       CalendarException[] @relation("CalendarException_calendar")
+  coverageThrough                  DateTime?           @postgresql.Date
+  source                           String              @default("")
+  createdAt                        DateTime            @default(now())
+  updatedAt                        DateTime            @default(now()) @updatedAt
+  from_BusinessCalendar_composedOf BusinessCalendar[]  @relation("BusinessCalendar_composedOf")
+  from_Location_calendar           Location[]          @relation("Location_calendar")
+}
+
+model CalendarException {
+  id         String            @id @default(cuid())
+  calendar   BusinessCalendar? @relation("CalendarException_calendar", fields: [calendarId], references: [id])
+  calendarId String?           @map("calendar")
+  date       DateTime          @postgresql.Date
+  kind       String            @default("holiday")
+  openAt     String            @default("")
+  closeAt    String            @default("")
+  note       String            @default("")
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @default(now()) @updatedAt
+
+  @@unique([calendarId, date], map: "CalendarException_calendar_date_key")
+  @@index([calendarId])
+}
+
+model CommandReceipt {
+  id             String    @id @default(cuid())
+  idempotencyKey String    @unique @default("")
+  command        String    @default("")
+  principalKey   String    @default("")
+  requestHash    String    @default("")
+  requestParams  Json?
+  responseCode   String    @default("")
+  responseBody   Json?
+  recoveryPoint  String    @default("completed")
+  completedAt    DateTime? @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+}
+
+model Document {
+  id                               String               @id @default(cuid())
+  title                            String               @default("")
+  kind                             String               @default("other")
+  storageKey                       String               @default("")
+  sha256                           String               @default("")
+  mimeType                         String               @default("")
+  sizeBytes                        Int?
+  documentVersion                  Int?                 @default(1)
+  supersedes                       Document?            @relation("Document_supersedes", fields: [supersedesId], references: [id])
+  supersedesId                     String?              @map("supersedes")
+  visibility                       String               @default("internal")
+  retentionUntil                   DateTime?            @postgresql.Date
+  signedAt                         DateTime?
+  esignEnvelopeId                  String               @default("")
+  createdAt                        DateTime             @default(now())
+  updatedAt                        DateTime             @default(now()) @updatedAt
+  from_Document_supersedes         Document[]           @relation("Document_supersedes")
+  from_DeaPowerOfAttorney_document DeaPowerOfAttorney[] @relation("DeaPowerOfAttorney_document")
+
+  @@index([supersedesId])
+}
+
+model ExternalId {
+  id         String   @id @default(cuid())
+  system     String   @default("")
+  recordType String   @default("")
+  recordId   String   @default("")
+  value      String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@unique([system, value], map: "ExternalId_system_value_key")
+  @@unique([system, recordType, recordId], map: "ExternalId_system_record_key")
+  @@index([system])
+  @@index([recordId])
+}
+
+model IntegrationConnection {
+  id                String    @id @default(cuid())
+  name              String    @default("")
+  area              String
+  providerKey       String    @default("")
+  mode              String
+  location          Location? @relation("IntegrationConnection_location", fields: [locationId], references: [id])
+  locationId        String?   @map("location")
+  secretRef         String    @default("")
+  capabilityProfile Json?
+  status            String    @default("active")
+  lastHealthAt      DateTime?
+  lastError         String    @default("")
+  version           Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+
+  @@index([locationId])
+}
+
+model Lease {
+  id           String   @id @default(cuid())
+  key          String   @unique @default("")
+  owner        String   @default("")
+  fencingToken Int      @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipient   User?     @relation("Notification_recipient", fields: [recipientId], references: [id])
+  recipientId String?   @map("recipient")
+  channel     String    @default("in_app")
+  template    String    @default("")
+  payload     Json?
+  status      String    @default("pending")
+  sentAt      DateTime?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([recipientId])
+}
+
+model OutboxEvent {
+  id             String    @id @default(cuid())
+  topic          String    @default("")
+  aggregateType  String    @default("")
+  aggregateId    String    @default("")
+  dedupeKey      String    @unique @default("")
+  payload        Json?
+  status         String    @default("pending")
+  attempts       Int?      @default(0)
+  nextAttemptAt  DateTime? @default(now())
+  leaseOwner     String    @default("")
+  leaseExpiresAt DateTime?
+  fencingToken   Int?      @default(0)
+  lastError      String    @default("")
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@index([topic])
+  @@index([aggregateId])
+}
+
+model ProviderObservation {
+  id           String    @id @default(cuid())
+  source       String    @default("")
+  connectionId String    @default("")
+  externalId   String    @default("")
+  contentHash  String    @default("")
+  payload      Json?
+  receivedAt   DateTime? @default(now())
+  processedAt  DateTime?
+  status       String    @default("received")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@unique([source, connectionId, externalId], map: "ProviderObservation_source_external_key")
+  @@unique([source, contentHash], map: "ProviderObservation_source_hash_key")
+  @@index([source])
+  @@index([externalId])
+}
+
+model ReadAudit {
+  id           String    @id @default(cuid())
+  actorKind    String
+  actorId      String    @default("")
+  actorLabel   String    @default("")
+  patientId    String    @default("")
+  clientId     String    @default("")
+  resourceType String    @default("")
+  resourceId   String    @default("")
+  purpose      String
+  fields       Json?
+  requestId    String    @default("")
+  at           DateTime? @default(now())
+
+  @@index([actorId])
+  @@index([patientId])
+  @@index([clientId])
+  @@index([resourceType])
+  @@index([resourceId])
+}
+
+model ScheduledJob {
+  id              String    @id @default(cuid())
+  kind            String    @unique @default("")
+  intervalSeconds Int?
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  status          String    @default("idle")
+  leaseKey        String    @default("")
+  lastError       String    @default("")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+}
+
+model SecretBox {
+  id         String   @id @default(cuid())
+  purpose    String   @default("")
+  ciphertext String   @default("")
+  iv         String   @default("")
+  authTag    String   @default("")
+  keyVersion Int?     @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+}
+
+model Sequence {
+  id        String @id @default(cuid())
+  key       String @unique @default("")
+  nextValue Int    @default(1)
+}
+
+model DeaPowerOfAttorney {
+  id             String           @id @default(cuid())
+  registration   DeaRegistration? @relation("DeaPowerOfAttorney_registration", fields: [registrationId], references: [id])
+  registrationId String?          @map("registration")
+  grantee        StaffMember?     @relation("DeaPowerOfAttorney_grantee", fields: [granteeId], references: [id])
+  granteeId      String?          @map("grantee")
+  signedOn       DateTime?        @postgresql.Date
+  revokedOn      DateTime?        @postgresql.Date
+  document       Document?        @relation("DeaPowerOfAttorney_document", fields: [documentId], references: [id])
+  documentId     String?          @map("document")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
+
+  @@index([registrationId])
+  @@index([granteeId])
+  @@index([documentId])
+}
+
+model DeaRegistration {
+  id                                     String               @id @default(cuid())
+  registrationNumber                     String               @unique @default("")
+  registrantName                         String               @default("")
+  registrantKind                         String
+  staffMember                            StaffMember?         @relation("DeaRegistration_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId                          String?              @map("staffMember")
+  location                               Location?            @relation("DeaRegistration_location", fields: [locationId], references: [id])
+  locationId                             String?              @map("location")
+  schedules                              Json?
+  issuedOn                               DateTime?            @postgresql.Date
+  expiresOn                              DateTime             @postgresql.Date
+  stateCsRegistration                    String               @default("")
+  csosCertificateRef                     String               @default("")
+  powersOfAttorney                       DeaPowerOfAttorney[] @relation("DeaPowerOfAttorney_registration")
+  status                                 String               @default("active")
+  version                                Int                  @default(0)
+  createdAt                              DateTime             @default(now())
+  updatedAt                              DateTime             @default(now()) @updatedAt
+  from_LicenseEvaluation_deaRegistration LicenseEvaluation[]  @relation("LicenseEvaluation_deaRegistration")
+
+  @@index([staffMemberId])
+  @@index([locationId])
+}
+
+model LicenseEvaluation {
+  id                String               @id @default(cuid())
+  action            String               @default("")
+  staffMember       StaffMember?         @relation("LicenseEvaluation_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId     String?              @map("staffMember")
+  location          Location?            @relation("LicenseEvaluation_location", fields: [locationId], references: [id])
+  locationId        String?              @map("location")
+  at                DateTime
+  onDate            DateTime?            @postgresql.Date
+  license           ProfessionalLicense? @relation("LicenseEvaluation_license", fields: [licenseId], references: [id])
+  licenseId         String?              @map("license")
+  deaRegistration   DeaRegistration?     @relation("LicenseEvaluation_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId String?              @map("deaRegistration")
+  policyVersions    Json?
+  result            String
+  findings          Json?
+
+  @@index([action])
+  @@index([staffMemberId])
+  @@index([locationId])
+  @@index([licenseId])
+  @@index([deaRegistrationId])
+}
+
+model Location {
+  id                                  String                  @id @default(cuid())
+  name                                String                  @default("")
+  code                                String                  @unique @default("")
+  kind                                String                  @default("general_practice")
+  addressLine1                        String                  @default("")
+  addressLine2                        String                  @default("")
+  city                                String                  @default("")
+  postalCode                          String                  @default("")
+  stateCode                           String                  @default("")
+  lat                                 Decimal?                @postgresql.Decimal(9, 6)
+  lng                                 Decimal?                @postgresql.Decimal(9, 6)
+  timeZone                            String                  @default("America/Los_Angeles")
+  phone                               String                  @default("")
+  email                               String                  @default("")
+  calendar                            BusinessCalendar?       @relation("Location_calendar", fields: [calendarId], references: [id])
+  calendarId                          String?                 @map("calendar")
+  openHours                           Json?
+  emergencyCoverage                   String                  @default("referral")
+  deaRegistrations                    DeaRegistration[]       @relation("DeaRegistration_location")
+  active                              Boolean                 @default(true)
+  createdAt                           DateTime                @default(now())
+  updatedAt                           DateTime                @default(now()) @updatedAt
+  from_IntegrationConnection_location IntegrationConnection[] @relation("IntegrationConnection_location")
+  from_LicenseEvaluation_location     LicenseEvaluation[]     @relation("LicenseEvaluation_location")
+  from_StaffMember_homeLocation       StaffMember[]           @relation("StaffMember_homeLocation")
+  from_StaffMember_locations          StaffMember[]           @relation("StaffMember_locations")
+  from_ComplianceTask_location        ComplianceTask[]        @relation("ComplianceTask_location")
+  from_Incident_location              Incident[]              @relation("Incident_location")
+  from_PolicyBinding_location         PolicyBinding[]         @relation("PolicyBinding_location")
+  from_Task_location                  Task[]                  @relation("Task_location")
+
+  @@index([calendarId])
+}
+
+model PracticeSettings {
+  id                           Int          @id
+  legalName                    String       @default("Openfront Vet Clinic")
+  displayName                  String       @default("Openfront Vet Clinic")
+  homeTimeZone                 String       @default("America/Los_Angeles")
+  currencyCode                 String       @default("USD")
+  medicalDirector              StaffMember? @relation("PracticeSettings_medicalDirector", fields: [medicalDirectorId], references: [id])
+  medicalDirectorId            String?      @map("medicalDirector")
+  estimateValidityDays         Int?         @default(30)
+  estimateOverageToleranceBps  Int?         @default(0)
+  electiveDepositPct           Decimal?     @postgresql.Decimal(12, 6)
+  depositBasis                 String       @default("low")
+  noShowGraceMinutes           Int?         @default(15)
+  unsignedRecordTaskHours      Int?         @default(24)
+  unsignedRecordEscalateHours  Int?         @default(72)
+  refundApprovalThresholdMinor BigInt       @default(25000)
+  discountApprovalThresholdBps Int?         @default(1000)
+  writeOffRequiresApproval     Boolean      @default(true)
+  weightMaxAgeHours            Json?        @default("{\"anaesthesia\":24,\"inpatient\":72,\"outpatient\":720}")
+  features                     Json?        @default("{\"boarding\":true,\"grooming\":true,\"wellnessPlans\":true,\"insurance\":true,\"aiVoice\":false,\"scribe\":false,\"multiLocation\":true,\"pdmp\":true,\"csos\":false,\"drugCabinet\":false}")
+  strictAgentOwnerSoD          Boolean      @default(true)
+  onboardingStatus             String       @default("not_started")
+  version                      Int          @default(0)
+  createdAt                    DateTime     @default(now())
+  updatedAt                    DateTime     @default(now()) @updatedAt
+
+  @@index([medicalDirectorId])
+}
+
+model ProfessionalLicense {
+  id                             String              @id @default(cuid())
+  staffMember                    StaffMember?        @relation("ProfessionalLicense_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId                  String?             @map("staffMember")
+  kind                           String
+  stateCode                      String              @default("")
+  licenseNumber                  String              @default("")
+  issuedOn                       DateTime?           @postgresql.Date
+  expiresOn                      DateTime            @postgresql.Date
+  status                         String              @default("active")
+  verifiedAt                     DateTime?
+  verifiedBy                     User?               @relation("ProfessionalLicense_verifiedBy", fields: [verifiedById], references: [id])
+  verifiedById                   String?             @map("verifiedBy")
+  verificationSource             String              @default("")
+  version                        Int                 @default(0)
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @default(now()) @updatedAt
+  from_LicenseEvaluation_license LicenseEvaluation[] @relation("LicenseEvaluation_license")
+
+  @@unique([stateCode, kind, licenseNumber], map: "ProfessionalLicense_state_kind_number_key")
+  @@index([staffMemberId])
+  @@index([verifiedById])
+}
+
+model StaffMember {
+  id                                    String                @id @default(cuid())
+  user                                  User?                 @relation("StaffMember_user", fields: [userId], references: [id])
+  userId                                String?               @unique @map("user")
+  displayName                           String                @default("")
+  kind                                  String                @default("dvm")
+  credentials                           String                @default("")
+  employment                            String                @default("employee")
+  homeLocation                          Location?             @relation("StaffMember_homeLocation", fields: [homeLocationId], references: [id])
+  homeLocationId                        String?               @map("homeLocation")
+  locations                             Location[]            @relation("StaffMember_locations")
+  colour                                String                @default("")
+  licenses                              ProfessionalLicense[] @relation("ProfessionalLicense_staffMember")
+  active                                Boolean               @default(true)
+  createdAt                             DateTime              @default(now())
+  updatedAt                             DateTime              @default(now()) @updatedAt
+  from_DeaPowerOfAttorney_grantee       DeaPowerOfAttorney[]  @relation("DeaPowerOfAttorney_grantee")
+  from_DeaRegistration_staffMember      DeaRegistration[]     @relation("DeaRegistration_staffMember")
+  from_LicenseEvaluation_staffMember    LicenseEvaluation[]   @relation("LicenseEvaluation_staffMember")
+  from_PracticeSettings_medicalDirector PracticeSettings[]    @relation("PracticeSettings_medicalDirector")
+  from_Task_assignee                    Task[]                @relation("Task_assignee")
+
+  @@index([homeLocationId])
+}
+
+model ComplianceTask {
+  id              String         @id @default(cuid())
+  kind            String
+  title           String         @default("")
+  subjectType     String         @default("")
+  subjectId       String         @default("")
+  location        Location?      @relation("ComplianceTask_location", fields: [locationId], references: [id])
+  locationId      String?        @map("location")
+  startedAt       DateTime?
+  dueAt           DateTime
+  dedupeKey       String         @unique @default("")
+  escalations     Json?
+  status          String         @default("open")
+  evidence        Json?
+  policyVersion   PolicyVersion? @relation("ComplianceTask_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId String?        @map("policyVersion")
+  completedAt     DateTime?
+  completedBy     User?          @relation("ComplianceTask_completedBy", fields: [completedById], references: [id])
+  completedById   String?        @map("completedBy")
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
+
+  @@index([subjectId])
+  @@index([locationId])
+  @@index([policyVersionId])
+  @@index([completedById])
+}
+
+model Incident {
+  id           String    @id @default(cuid())
+  ref          String    @unique @default("")
+  kind         String
+  title        String    @default("")
+  detail       String    @default("")
+  location     Location? @relation("Incident_location", fields: [locationId], references: [id])
+  locationId   String?   @map("location")
+  discoveredAt DateTime?
+  status       String    @default("open")
+  version      Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([locationId])
+}
+
+model LegalHold {
+  id           String    @id @default(cuid())
+  ref          String    @unique @default("")
+  reason       String    @default("")
+  subjectType  String    @default("")
+  subjectId    String    @default("")
+  placedBy     User?     @relation("LegalHold_placedBy", fields: [placedById], references: [id])
+  placedById   String?   @map("placedBy")
+  placedAt     DateTime?
+  releasedBy   User?     @relation("LegalHold_releasedBy", fields: [releasedById], references: [id])
+  releasedById String?   @map("releasedBy")
+  releasedAt   DateTime?
+  status       String    @default("active")
+  version      Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([subjectId])
+  @@index([placedById])
+  @@index([releasedById])
+}
+
+model MachineCredential {
+  id         String    @id @default(cuid())
+  name       String    @unique @default("")
+  purpose    String    @default("")
+  secretHash String    @default("")
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+}
+
+model Note {
+  id            String         @id @default(cuid())
+  subjectType   String         @default("")
+  subjectId     String         @default("")
+  body          String         @default("")
+  visibility    String
+  author        User?          @relation("Note_author", fields: [authorId], references: [id])
+  authorId      String?        @map("author")
+  authorAgent   AgentIdentity? @relation("Note_authorAgent", fields: [authorAgentId], references: [id])
+  authorAgentId String?        @map("authorAgent")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
+
+  @@index([subjectId])
+  @@index([authorId])
+  @@index([authorAgentId])
+}
+
+model PolicyBinding {
+  id         String      @id @default(cuid())
+  pack       PolicyPack? @relation("PolicyBinding_pack", fields: [packId], references: [id])
+  packId     String?     @map("pack")
+  scope      String
+  location   Location?   @relation("PolicyBinding_location", fields: [locationId], references: [id])
+  locationId String?     @map("location")
+  layer      String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now()) @updatedAt
+
+  @@unique([packId, scope, locationId], map: "PolicyBinding_pack_scope_location_key")
+  @@index([packId])
+  @@index([locationId])
+}
+
+model PolicyPack {
+  id                      String          @id @default(cuid())
+  code                    String          @unique @default("")
+  name                    String          @default("")
+  kind                    String
+  jurisdiction            String          @default("")
+  versions                PolicyVersion[] @relation("PolicyVersion_pack")
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @default(now()) @updatedAt
+  from_PolicyBinding_pack PolicyBinding[] @relation("PolicyBinding_pack")
+
+  @@index([jurisdiction])
+}
+
+model PolicyVersion {
+  id                                 String            @id @default(cuid())
+  pack                               PolicyPack?       @relation("PolicyVersion_pack", fields: [packId], references: [id])
+  packId                             String?           @map("pack")
+  label                              String            @default("")
+  versionNumber                      Int
+  rules                              Json?
+  rulesHash                          String            @default("")
+  sourceRefs                         Json?
+  verified                           Boolean           @default(false)
+  unverifiedRules                    Json?
+  verifiedAt                         DateTime?
+  effectiveFrom                      DateTime          @postgresql.Date
+  effectiveTo                        DateTime?         @postgresql.Date
+  status                             String            @default("draft")
+  approval                           ApprovalRequest?  @relation("PolicyVersion_approval", fields: [approvalId], references: [id])
+  approvalId                         String?           @map("approval")
+  publishedAt                        DateTime?
+  publishedBy                        User?             @relation("PolicyVersion_publishedBy", fields: [publishedById], references: [id])
+  publishedById                      String?           @map("publishedBy")
+  version                            Int               @default(0)
+  createdAt                          DateTime          @default(now())
+  updatedAt                          DateTime          @default(now()) @updatedAt
+  from_ComplianceTask_policyVersion  ComplianceTask[]  @relation("ComplianceTask_policyVersion")
+  from_RetentionPolicy_policyVersion RetentionPolicy[] @relation("RetentionPolicy_policyVersion")
+
+  @@unique([packId, versionNumber], map: "PolicyVersion_pack_number_key")
+  @@index([packId])
+  @@index([approvalId])
+  @@index([publishedById])
+}
+
+model RetentionPolicy {
+  id              String         @id @default(cuid())
+  recordClass     String         @unique @default("")
+  retainYears     Int
+  from            String
+  policyVersion   PolicyVersion? @relation("RetentionPolicy_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId String?        @map("policyVersion")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
+
+  @@index([policyVersionId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique @default("")
+  colour    String   @default("")
+  appliesTo String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Task {
+  id               String         @id @default(cuid())
+  ref              String         @unique @default("")
+  kind             String
+  title            String         @default("")
+  detail           String         @default("")
+  subjectType      String         @default("")
+  subjectId        String         @default("")
+  location         Location?      @relation("Task_location", fields: [locationId], references: [id])
+  locationId       String?        @map("location")
+  assignee         StaffMember?   @relation("Task_assignee", fields: [assigneeId], references: [id])
+  assigneeId       String?        @map("assignee")
+  roleName         String         @default("")
+  priority         String
+  dueAt            DateTime?
+  status           String         @default("open")
+  createdByAgent   AgentIdentity? @relation("Task_createdByAgent", fields: [createdByAgentId], references: [id])
+  createdByAgentId String?        @map("createdByAgent")
+  createdByUser    User?          @relation("Task_createdByUser", fields: [createdByUserId], references: [id])
+  createdByUserId  String?        @map("createdByUser")
+  completedAt      DateTime?
+  version          Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now()) @updatedAt
+
+  @@index([subjectId])
+  @@index([locationId])
+  @@index([assigneeId])
+  @@index([createdByAgentId])
+  @@index([createdByUserId])
+}
+
+model AgentToolGrant {
+  id          String           @id @default(cuid())
+  agent       AgentIdentity?   @relation("AgentToolGrant_agent", fields: [agentId], references: [id])
+  agentId     String?          @map("agent")
+  scope       String
+  constraints Json?
+  status      String           @default("requested")
+  approval    ApprovalRequest? @relation("AgentToolGrant_approval", fields: [approvalId], references: [id])
+  approvalId  String?          @map("approval")
+  revokedAt   DateTime?
+  version     Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+
+  @@index([agentId])
+  @@index([approvalId])
+}
+
+model AgentRun {
+  id                   String         @id @default(cuid())
+  agent                AgentIdentity? @relation("AgentRun_agent", fields: [agentId], references: [id])
+  agentId              String?        @map("agent")
+  startedAt            DateTime?      @default(now())
+  endedAt              DateTime?
+  status               String         @default("started")
+  promptHash           String         @default("")
+  toolCalls            Json?
+  costMeta             Json?
+  callRecordId         String         @default("")
+  proposals            Proposal[]     @relation("Proposal_agentRun")
+  version              Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @default(now()) @updatedAt
+  from_AgentAction_run AgentAction[]  @relation("AgentAction_run")
+
+  @@index([agentId])
+  @@index([callRecordId])
+}
+
+model AgentAction {
+  id           String         @id @default(cuid())
+  agent        AgentIdentity? @relation("AgentAction_agent", fields: [agentId], references: [id])
+  agentId      String?        @map("agent")
+  run          AgentRun?      @relation("AgentAction_run", fields: [runId], references: [id])
+  runId        String?        @map("run")
+  tool         String         @default("")
+  argsHash     String         @default("")
+  outcome      String
+  errorCode    String         @default("")
+  auditEventId String         @default("")
+  at           DateTime?      @default(now())
+
+  @@index([agentId])
+  @@index([runId])
+  @@index([tool])
+}
+
+model Proposal {
+  id                String           @id @default(cuid())
+  kind              String
+  payload           Json?
+  payloadHash       String           @default("")
+  status            String           @default("proposed")
+  agentRun          AgentRun?        @relation("Proposal_agentRun", fields: [agentRunId], references: [id])
+  agentRunId        String?          @map("agentRun")
+  proposedByAgent   AgentIdentity?   @relation("Proposal_proposedByAgent", fields: [proposedByAgentId], references: [id])
+  proposedByAgentId String?          @map("proposedByAgent")
+  proposedByUser    User?            @relation("Proposal_proposedByUser", fields: [proposedByUserId], references: [id])
+  proposedByUserId  String?          @map("proposedByUser")
+  targetList        String           @default("")
+  targetId          String           @default("")
+  approval          ApprovalRequest? @relation("Proposal_approval", fields: [approvalId], references: [id])
+  approvalId        String?          @map("approval")
+  validation        Json?
+  version           Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @default(now()) @updatedAt
+
+  @@index([agentRunId])
+  @@index([proposedByAgentId])
+  @@index([proposedByUserId])
+  @@index([targetId])
+  @@index([approvalId])
+}
+
+enum UserKindType {
+  staff
+  relief
+  auditor
+  administrator
 }

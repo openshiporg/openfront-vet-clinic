@@ -266,9 +266,9 @@ const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(function MarkB
     marks
   } = useToolbarState()
   const mark = marks[props.markType as keyof typeof marks]
-  if (!mark) return null
 
-  return useMemo(() => {
+  const button = useMemo(() => {
+    if (!mark) return null
     const { markType, ...restProps } = props
     return (
       <ToolbarButton
@@ -286,7 +286,8 @@ const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(function MarkB
         {...restProps}
       />
     )
-  }, [editor, mark.isDisabled, mark.isSelected, props, ref])
+  }, [editor, mark, props, ref])
+  return button
 })
 
 const ToolbarContainer = ({ children }: { children: ReactNode }) => {

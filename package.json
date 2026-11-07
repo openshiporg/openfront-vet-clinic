@@ -1,18 +1,21 @@
 {
-  "name": "weekday-keystone",
+  "name": "openfront-vet-clinic",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "keystone build --no-ui && npm run migrate && next dev",
     "build": "keystone build --no-ui && npm run migrate && next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "migrate:gen": "keystone build --no-ui && tsx features/keystone/view-order/generate-view-order.ts && keystone prisma migrate dev",
-    "migrate": "prisma migrate deploy"
+    "migrate": "prisma migrate deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:node": "node --test tests/*.test.cjs && node --import tsx --test features/keystone/lib/internal-origin.node-test.ts",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:node"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^1.0.13",
-    "@openrouter/ai-sdk-provider": "^2.0.2",
     "@ai-sdk/react": "^3.0.51",
     "@graphql-tools/schema": "^10.0.23",
     "@keystone-6/auth": "^8.1.0",
@@ -20,6 +23,7 @@
     "@keystone-6/document-renderer": "^1.1.2",
     "@keystone-6/fields-document": "^9.1.1",
     "@modelcontextprotocol/sdk": "^1.15.1",
+    "@openrouter/ai-sdk-provider": "^2.0.2",
     "@prisma/client": "6.5.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -60,6 +64,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "decimal.js": "^10.6.0",
     "dotenv": "^16.4.7",
     "dumb-passwords": "^0.2.1",
     "embla-carousel-react": "^8.6.0",
@@ -104,12 +109,14 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "fast-check": "^3.23.2",
     "node-fetch": "^3.3.2",
     "prisma": "6.5.0",
     "tailwindcss": "^4",
     "tsx": "^4.19.4",
     "tw-animate-css": "^1.3.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=20.0.0"

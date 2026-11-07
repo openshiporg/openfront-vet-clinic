@@ -36,31 +36,47 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { AdminMeta } from '../hooks/useAdminMeta'
-import { Home, Database, ChevronRight, Package } from 'lucide-react'
+import { Home, ChevronRight, Package } from 'lucide-react'
 import { Logo, LogoIcon } from '@/features/dashboard/components/Logo'
 import { UserProfileClient } from './UserProfileClient'
-import { visibleSidebarLists } from '../lib/sidebarAccess'
+import { useDashboard } from '../context/DashboardProvider'
+import { visiblePlatformItems, visibleSidebarLists } from '../lib/sidebarAccess'
+import { OnboardingCards } from '@/features/platform/onboarding/components/OnboardingCards'
+import { dismissOnboarding } from '@/features/platform/onboarding/actions/onboarding'
+import {
+  platformNavGroups,
+  platformStandaloneItems,
+  getPlatformNavItemsWithBasePath,
+} from '@/features/platform/lib/navigation'
 
 interface User {
   id: string;
   email: string;
   name?: string;
+  onboardingStatus?: string;
+  menuItemsCount?: number | null;
+  brandName?: string | null;
   role?: {
     canAccessDashboard?: boolean;
+    canManageOnboarding?: boolean;
   };
 }
 
 interface SidebarProps {
   adminMeta: AdminMeta | null
   user?: User | null
+  onOpenDialog?: () => void
 }
 
-export function Sidebar({ adminMeta, user }: SidebarProps) {
+export function Sidebar({ adminMeta, user, onOpenDialog }: SidebarProps) {
   const { isMobile, setOpenMobile } = useSidebar()
   const pathname = usePathname()
+  const { basePath } = useDashboard()
+  const [mounted, setMounted] = React.useState(false)
 
-  const lists = adminMeta?.lists || {}
-  const listsArray = Object.values(lists)
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Function to check if a link is active
   const isLinkActive = React.useCallback(
@@ -82,28 +98,59 @@ export function Sidebar({ adminMeta, user }: SidebarProps) {
     [pathname]
   )
 
+  const lists = adminMeta?.lists || {}
+  const listsArray = Object.values(lists)
+
   // Convert lists to sidebar links format
-  const sidebarLinks = visibleSidebarLists(listsArray as any[], user).map((list: any) => ({
+  const modelLinks = visibleSidebarLists(listsArray as any[], user).map((list: any) => ({
     title: list.label,
     href: `/dashboard/${list.path}`
   }))
 
-  // Dashboard items for the collapsible menu
-  const dashboardItems = [
-    {
-      title: "Models",
-      items: sidebarLinks,
-      isActive: false,
-      icon: Package,
-    },
-  ].filter((group) => group.items.length > 0)
+  const platformItemsWithBasePath = visiblePlatformItems(
+    getPlatformNavItemsWithBasePath(basePath),
+    listsArray as any[],
+    user
+  )
+  const platformItems = platformNavGroups.map((group) => ({
+    title: group.title,
+    items: platformItemsWithBasePath
+      .filter((item) => item.group === group.id)
+      .map((item) => ({
+        title: item.title,
+        href: item.href,
+        icon: item.icon,
+      })),
+    isActive: platformItemsWithBasePath
+      .filter((item) => item.group === group.id)
+      .some((item) => isLinkActive(item.href)),
+    icon: group.icon,
+  })).filter((group) => group.items.length > 0)
+
+  const standaloneItemsWithBasePath = visiblePlatformItems(platformStandaloneItems, listsArray as any[], user).map((item) => ({
+    ...item,
+    href: `${basePath}${item.href}`,
+  }))
+
+  // Prevent hydration errors by not rendering Radix components until mounted
+  if (!mounted) {
+    return (
+      <SidebarComponent collapsible="icon">
+        <SidebarHeader>
+           <div className="p-1.5 opacity-0"><Logo name={user?.brandName} /></div>
+        </SidebarHeader>
+        <SidebarContent />
+        <SidebarFooter />
+      </SidebarComponent>
+    )
+  }
 
   return (
     <SidebarComponent collapsible="icon">
       <SidebarHeader>
         <SidebarMenuButton asChild>
-          <div className="group-has-[[data-collapsible=icon]]/sidebar-wrapper:hidden p-2">
-            <Logo />
+          <div className="group-has-[[data-collapsible=icon]]/sidebar-wrapper:hidden p-1.5">
+            <Logo name={user?.brandName} />
           </div>
         </SidebarMenuButton>
         <SidebarMenuButton asChild>
@@ -113,7 +160,7 @@ export function Sidebar({ adminMeta, user }: SidebarProps) {
         </SidebarMenuButton>
       </SidebarHeader>
 
-      <SidebarContent className="no-scrollbar">
+      <SidebarContent className="no-scrollbar gap-0.5">
         {/* Dashboard Home Link */}
         <SidebarGroup>
           <SidebarMenu>
@@ -128,102 +175,215 @@ export function Sidebar({ adminMeta, user }: SidebarProps) {
           </SidebarMenu>
         </SidebarGroup>
 
-        {/* Models Dropdown - Collapsible */}
-        {dashboardItems.map((dashboardItem) => (
-        <SidebarGroup key={dashboardItem.title}>
-          <SidebarMenu>
-            <SidebarGroupLabel>{dashboardItem.title}</SidebarGroupLabel>
-            <div className="max-h-full overflow-y-auto group-has-[[data-collapsible=icon]]/sidebar-wrapper:hidden">
+        {/* Platform Routes */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          <SidebarMenu className="group-has-[[data-collapsible=icon]]/sidebar-wrapper:hidden gap-0">
+            {/* Standalone Items in Expanded Mode */}
+            {standaloneItemsWithBasePath.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton asChild isActive={isLinkActive(item.href)}>
+                  <Link href={item.href} onClick={() => setOpenMobile(false)}>
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+
+            {/* Platform Groups */}
+            {platformItems.map((platformItem) => (
               <Collapsible
-                key={dashboardItem.title}
+                key={platformItem.title}
                 asChild
-                defaultOpen={dashboardItem.isActive}
+                defaultOpen={platformItem.isActive}
                 className="group/collapsible"
               >
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton>
-                      <dashboardItem.icon className="h-4 w-4" />
-                      <span>{dashboardItem.title}</span>
-                      <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      <platformItem.icon className="h-4 w-4" />
+                      <span>{platformItem.title}</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {dashboardItem.items.map((link) => {
-                        const handleClick = (e: React.MouseEvent) => {
-                          setOpenMobile(false)
-                        }
-
-                        return (
-                          <SidebarMenuSubItem key={link.href}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={isLinkActive(link.href)}
-                            >
-                              <Link href={link.href} onClick={handleClick}>
-                                <span>{link.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        )
-                      })}
+                      {platformItem.items.map((link) => (
+                        <SidebarMenuSubItem key={link.href}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isLinkActive(link.href)}
+                          >
+                            <Link href={link.href} onClick={() => setOpenMobile(false)}>
+                              <span>{link.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
               </Collapsible>
-            </div>
+            ))}
+          </SidebarMenu>
 
-            {/* Models Dropdown - Icon Mode */}
-            <div className="hidden group-has-[[data-collapsible=icon]]/sidebar-wrapper:block">
-              <DropdownMenu>
+          {/* Platform Items - Icon Mode */}
+          <SidebarMenu className="hidden group-has-[[data-collapsible=icon]]/sidebar-wrapper:block">
+            {/* Standalone Items in Icon Mode */}
+            {standaloneItemsWithBasePath.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton asChild isActive={isLinkActive(item.href)}>
+                  <Link href={item.href} onClick={() => setOpenMobile(false)}>
+                    <item.icon className="h-4 w-4" />
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+            
+            {/* Grouped Items in Icon Mode */}
+
+            {platformItems.map((platformItem) => (
+              <DropdownMenu key={platformItem.title}>
                 <SidebarMenuItem>
                   <DropdownMenuTrigger asChild>
                     <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                      <dashboardItem.icon className="h-4 w-4" />
+                      <platformItem.icon className="h-4 w-4" />
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    side={isMobile ? "bottom" : "right"}
-                    align={isMobile ? "end" : "start"}
+                    side={isMobile ? 'bottom' : 'right'}
+                    align={isMobile ? 'end' : 'start'}
                     className="min-w-56"
                   >
                     <div className="max-h-[calc(100vh-16rem)] overflow-y-auto py-1">
-                      {dashboardItem.items.map((link) => {
-                        const handleClick = (e: React.MouseEvent) => {
-                          setOpenMobile(false)
-                        }
-
-                        return (
-                          <DropdownMenuItem
-                            asChild
-                            key={link.href}
-                            className={
-                              isLinkActive(link.href)
-                                ? "bg-blue-50 text-blue-600"
-                                : ""
-                            }
-                          >
-                            <Link href={link.href} onClick={handleClick}>
-                              <span>{link.title}</span>
-                              {isLinkActive(link.href) && (
-                                <div className="ml-auto h-2 w-2 rounded-full bg-blue-600" />
-                              )}
-                            </Link>
-                          </DropdownMenuItem>
-                        )
-                      })}
+                      {platformItem.items.map((link) => (
+                        <DropdownMenuItem
+                          asChild
+                          key={link.href}
+                          className={
+                            isLinkActive(link.href)
+                              ? 'bg-primary/10 text-primary font-medium'
+                              : ''
+                          }
+                        >
+                          <Link href={link.href} onClick={() => setOpenMobile(false)}>
+                            <span>{link.title}</span>
+                            {isLinkActive(link.href) && (
+                              <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+                            )}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
                     </div>
                   </DropdownMenuContent>
                 </SidebarMenuItem>
               </DropdownMenu>
-            </div>
-           </SidebarMenu>
-          </SidebarGroup>
-        ))}
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        {/* Models */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Models</SidebarGroupLabel>
+          <SidebarMenu className="group-has-[[data-collapsible=icon]]/sidebar-wrapper:hidden">
+            <Collapsible
+              asChild
+              defaultOpen={modelLinks.some((link) => isLinkActive(link.href))}
+              className="group/collapsible"
+            >
+              <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton>
+                    <Package className="h-4 w-4" />
+                    <span>Models</span>
+                    <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <SidebarMenuSub>
+                    {modelLinks.map((link) => (
+                      <SidebarMenuSubItem key={link.href}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={isLinkActive(link.href)}
+                        >
+                          <Link href={link.href} onClick={() => setOpenMobile(false)}>
+                            <span>{link.title}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </SidebarMenuItem>
+            </Collapsible>
+          </SidebarMenu>
+
+          <SidebarMenu className="hidden group-has-[[data-collapsible=icon]]/sidebar-wrapper:block">
+            <DropdownMenu>
+              <SidebarMenuItem>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                    <Package className="h-4 w-4" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side={isMobile ? 'bottom' : 'right'}
+                  align={isMobile ? 'end' : 'start'}
+                  className="min-w-56"
+                >
+                  <div className="max-h-[calc(100vh-16rem)] overflow-y-auto py-1">
+                    {modelLinks.map((link) => (
+                      <DropdownMenuItem
+                        asChild
+                        key={link.href}
+                        className={
+                          isLinkActive(link.href)
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : ''
+                        }
+                      >
+                        <Link href={link.href} onClick={() => setOpenMobile(false)}>
+                          <span>{link.title}</span>
+                          {isLinkActive(link.href) && (
+                            <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+                          )}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </SidebarMenuItem>
+            </DropdownMenu>
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
       
       <SidebarFooter>
+        {/* Onboarding Cards */}
+        <div className="w-full mb-2 overflow-visible">
+          <OnboardingCards
+            steps={[{
+              href: '#onboarding',
+              title: 'Set up your practice',
+              description: 'Load Cedar Creek Animal Hospital: locations, team, licences, DEA registrations, federal and California policy packs.',
+            }]}
+            onboardingStatus={user?.onboardingStatus}
+            menuItemsCount={user?.menuItemsCount}
+            userRole={user?.role}
+            onDismiss={async () => {
+              try {
+                await dismissOnboarding();
+              } catch {
+                console.error('Error dismissing onboarding');
+              }
+            }}
+            onOpenDialog={onOpenDialog}
+          />
+        </div>
+        
+        {/* User Profile */}
         {user && <UserProfileClient user={user} />}
       </SidebarFooter>
       

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    name: typecheck, lint, tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vet
+          POSTGRES_PASSWORD: vet
+          POSTGRES_DB: vet_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U vet" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Throwaway CI-only database; not a secret.
+      DATABASE_URL: postgresql://vet:vet@localhost:5432/vet_ci?schema=public
+      VC_TEST_DATABASE_URL: postgresql://vet:vet@localhost:5432/vet_ci?schema=vitest
+      SESSION_SECRET: ci-only-session-secret-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx keystone build --no-ui
+      - name: Apply migrations to the test schema
+        run: DATABASE_URL="$VC_TEST_DATABASE_URL" npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:node

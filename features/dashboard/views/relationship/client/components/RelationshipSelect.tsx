@@ -181,7 +181,7 @@ export function RelationshipSelect({
       console.error("Error fetching relationship options (handleSearch):", PUBLIC_REQUEST_ERROR);
       return []; // Return empty array on error
     }
-  }, [listData, labelField, extraSelection, searchFields, PAGE_SIZE]);
+  }, [list.key, listData, labelField, extraSelection, searchFields, PAGE_SIZE]);
 
 
   if (state.kind === "many") {

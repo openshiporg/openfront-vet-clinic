@@ -15,6 +15,8 @@ import {
 import { getBaseUrl } from '@/features/dashboard/lib/getBaseUrl';
 import { keystoneContext } from '@/features/keystone/context';
 import { authorizeMcpRequest } from '@/features/keystone/mcp-oauth/http';
+import { internalGraphqlEndpoint } from '@/features/keystone/lib/internal-origin';
+import { DOMAIN_TOOLS, runDomainTool } from '@/features/keystone/mcp/registry';
 
 // Get simple type name for display
 function getSimpleTypeName(type: any): string {
@@ -69,15 +71,11 @@ async function getGraphQLSchema(graphqlEndpoint: string, auth: Record<string, st
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ transport: string }> }) {
-  // Track if any CRUD operations occurred during this request
-  let dataHasChanged = false;
-  
   try {
     const { transport } = await params;
     
     // Construct GraphQL endpoint
-    const baseUrl = await getBaseUrl();
-    const graphqlEndpoint = `${baseUrl}/api/graphql`;
+    const graphqlEndpoint = internalGraphqlEndpoint() ?? `${await getBaseUrl()}/api/graphql`;
     
     // Parse the JSON-RPC request
     const body = await request.json();
@@ -107,8 +105,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
             tools: { listChanged: true },
           },
           serverInfo: {
-            name: 'simple-mcp-server',
-            version: '1.0.0'
+            name: 'openfront-vet-clinic',
+            version: '0.1.0'
           }
         }
       }), {
@@ -142,7 +140,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           properties: {
             operation: {
               type: 'string',
-              description: 'The GraphQL operation name (e.g., "users", "todos", "roles")'
+              description: 'The GraphQL operation name (e.g., "users", "patients", "roles")'
             },
             fields: {
               type: 'string',
@@ -159,7 +157,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           properties: {
             searchTerm: {
               type: 'string',
-              description: 'The search term to find models (e.g., "User", "Todo", "Role")'
+              description: 'The search term to find models (e.g., "User", "Patient", "Role")'
             }
           },
           required: ['searchTerm']
@@ -172,7 +170,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           properties: {
             typeName: {
               type: 'string',
-              description: 'The GraphQL type name to get fields for (e.g., "User", "Todo", "Role")'
+              description: 'The GraphQL type name to get fields for (e.g., "User", "Patient", "Role")'
             }
           },
           required: ['typeName']
@@ -185,77 +183,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           properties: {
             inputTypeName: {
               type: 'string',
-              description: 'The GraphQL input type name (e.g., "UserCreateInput", "TodoUpdateInput")'
+              description: 'The GraphQL input type name (e.g., "UserCreateInput", "ClientUpdateInput")'
             }
           },
           required: ['inputTypeName']
-        }
-      }, {
-        name: 'createData',
-        description: 'Execute a GraphQL mutation to create new data',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            operation: {
-              type: 'string',
-              description: 'The GraphQL create mutation name (e.g., "createUser", "createTodo")'
-            },
-            data: {
-              type: 'string',
-              description: 'JSON string of the data object to create'
-            },
-            fields: {
-              type: 'string',
-              description: 'The fields to return from the created item'
-            }
-          },
-          required: ['operation', 'data', 'fields']
-        }
-      }, {
-        name: 'updateData',
-        description: 'Execute a GraphQL mutation to update existing data',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            operation: {
-              type: 'string',
-              description: 'The GraphQL update mutation name (e.g., "updateUser", "updateTodo")'
-            },
-            where: {
-              type: 'string',
-              description: 'JSON string of the where clause to identify the item to update'
-            },
-            data: {
-              type: 'string',
-              description: 'JSON string of the data object with fields to update'
-            },
-            fields: {
-              type: 'string',
-              description: 'The fields to return from the updated item'
-            }
-          },
-          required: ['operation', 'where', 'data', 'fields']
-        }
-      }, {
-        name: 'deleteData',
-        description: 'Execute a GraphQL mutation to delete data',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            operation: {
-              type: 'string',
-              description: 'The GraphQL delete mutation name (e.g., "deleteUser", "deleteTodo")'
-            },
-            where: {
-              type: 'string',
-              description: 'JSON string of the where clause to identify the item to delete'
-            },
-            fields: {
-              type: 'string',
-              description: 'The fields to return from the deleted item'
-            }
-          },
-          required: ['operation', 'where', 'fields']
         }
       }, {
         name: 'modelSpecificSearch',
@@ -265,7 +196,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           properties: {
             modelName: {
               type: 'string',
-              description: 'The model name to search (e.g., "Product", "User", "Todo"). Will be automatically converted to the correct GraphQL operation name.'
+              description: 'The model name to search (e.g., "Client", "User", "Patient"). Will be automatically converted to the correct GraphQL operation name.'
             },
             searchQuery: {
               type: 'string',
@@ -280,6 +211,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
         }
       }];
       
+      // Generic reads above; every write is a domain tool that runs one audited command.
+      tools.push(...DOMAIN_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })));
       return new Response(JSON.stringify({
         jsonrpc: '2.0',
         id: body.id,
@@ -612,121 +545,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           });
         }
         
-        if (name === 'createData') {
-          const { operation, data, fields } = args;
-          
-          // Parse the data JSON string
-          const dataObject = JSON.parse(data);
-          
-          const mutationString = `
-            mutation Create${operation.charAt(0).toUpperCase() + operation.slice(1)} {
-              ${operation}(data: ${JSON.stringify(dataObject).replace(/\"([^\"]+)\":/g, '$1:')}) {
-                ${fields}
-              }
-            }
-          `.trim();
-          
-          // Execute the mutation
-          const result = await executeGraphQL(mutationString, graphqlEndpoint, auth);
-          
-          // Mark that data has changed
-          dataHasChanged = true;
-          
-          return new Response(JSON.stringify({
-            jsonrpc: '2.0',
-            id: body.id,
-            result: {
-              content: [{
-                type: 'text',
-                text: JSON.stringify(result, null, 2),
-              }],
-            }
-          }), {
-            status: 200,
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-Data-Changed': 'true'
-            },
-          });
-        }
-        
-        if (name === 'updateData') {
-          const { operation, where, data, fields } = args;
-          
-          // Parse the JSON strings
-          const whereObject = JSON.parse(where);
-          const dataObject = JSON.parse(data);
-          
-          const mutationString = `
-            mutation Update${operation.charAt(0).toUpperCase() + operation.slice(1)} {
-              ${operation}(where: ${JSON.stringify(whereObject).replace(/\"([^\"]+)\":/g, '$1:')}, data: ${JSON.stringify(dataObject).replace(/\"([^\"]+)\":/g, '$1:')}) {
-                ${fields}
-              }
-            }
-          `.trim();
-          
-          // Execute the mutation
-          const result = await executeGraphQL(mutationString, graphqlEndpoint, auth);
-          
-          // Mark that data has changed
-          dataHasChanged = true;
-          
-          return new Response(JSON.stringify({
-            jsonrpc: '2.0',
-            id: body.id,
-            result: {
-              content: [{
-                type: 'text',
-                text: JSON.stringify(result, null, 2),
-              }],
-            }
-          }), {
-            status: 200,
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-Data-Changed': 'true'
-            },
-          });
-        }
-        
-        if (name === 'deleteData') {
-          const { operation, where, fields } = args;
-          
-          // Parse the where JSON string
-          const whereObject = JSON.parse(where);
-          
-          const mutationString = `
-            mutation Delete${operation.charAt(0).toUpperCase() + operation.slice(1)} {
-              ${operation}(where: ${JSON.stringify(whereObject).replace(/\"([^\"]+)\":/g, '$1:')}) {
-                ${fields}
-              }
-            }
-          `.trim();
-          
-          // Execute the mutation
-          const result = await executeGraphQL(mutationString, graphqlEndpoint, auth);
-          
-          // Mark that data has changed
-          dataHasChanged = true;
-          
-          return new Response(JSON.stringify({
-            jsonrpc: '2.0',
-            id: body.id,
-            result: {
-              content: [{
-                type: 'text',
-                text: JSON.stringify(result, null, 2),
-              }],
-            }
-          }), {
-            status: 200,
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-Data-Changed': 'true'
-            },
-          });
-        }
-        
         if (name === 'modelSpecificSearch') {
           const { modelName, searchQuery, fields, limit = 10 } = args;
           
@@ -883,6 +701,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           });
         }
         
+        const domain = DOMAIN_TOOLS.find((tool) => tool.name === name);
+        if (domain) {
+          const output = await runDomainTool(domain, args ?? {}, { graphqlEndpoint, auth });
+          return new Response(JSON.stringify({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] },
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...(domain.writes ? { 'X-Data-Changed': 'true' } : {}) },
+          });
+        }
+
         throw new Error(`Tool ${name} not found`);
       } catch (error) {
         return new Response(JSON.stringify({

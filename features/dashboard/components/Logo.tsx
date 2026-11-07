@@ -57,16 +57,17 @@ export const LogoIcon = ({ className, suffix = "" }: LogoIconProps) => {
 
 interface LogoProps {
   className?: string;
+  name?: string | null;
 }
 
-export const Logo = ({ className }: LogoProps) => {
+export const BRAND_FALLBACK = "Openfront Vet Clinic";
+
+export const Logo = ({ className, name }: LogoProps) => {
   return (
     <div className={cn(spaceGrotesk.className, className)}>
       <div className="flex items-center gap-2 text-zinc-700 dark:text-white">
         <LogoIcon className="size-5 mb-1" suffix="-full" />
-          <h1 className="mb-1 font-bold tracking-tight text-xl">
-          keystone<span className="font-semibold opacity-60 mx-1">x</span>next
-        </h1>
+          <h1 className="mb-1 min-w-0 truncate font-bold tracking-tight text-xl">{name || BRAND_FALLBACK}</h1>
       </div>
     </div>
   );

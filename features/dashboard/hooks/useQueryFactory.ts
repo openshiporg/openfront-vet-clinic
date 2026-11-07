@@ -70,7 +70,7 @@ export function createQueryHook<TData, TParams = void>(
         // Always use the latest params from the ref, not the closure
         return unwrapResponse(await queryFn(paramsRef.current))
       },
-      [queryFn] // queryFn is stable (defined at module level), only recreate if it changes
+      [] // queryFn is defined at module level, so the callback never needs recreating
     )
 
     return useQuery({

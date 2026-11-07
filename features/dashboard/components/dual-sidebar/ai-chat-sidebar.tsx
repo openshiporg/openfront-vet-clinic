@@ -47,7 +47,8 @@ function ChatMessage({
   );
 }
 
-const CRUD_TOOLS = new Set(["createData", "updateData", "deleteData"]);
+// Domain commands that change data (refresh the page after they run).
+const CRUD_TOOLS = new Set(["loadPracticeSetup"]);
 
 function getMessageText(message: UIMessage) {
   return message.parts

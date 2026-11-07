@@ -245,6 +245,8 @@ export function DocumentEditorProvider({
     // Update the editor through Slate transforms instead of remounting.
     replaceEditorValue(editor, safeValue)
     lastOnChangeValueRef.current = value
+    // safeValue is derived from value; value is the change signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, value])
   
   // ═══════════════════════════════════════════════════════════════════
@@ -252,6 +254,7 @@ export function DocumentEditorProvider({
   // ═══════════════════════════════════════════════════════════════════
   
   // Identity only needs to change when editor instance changes (fast refresh).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const identity = useMemo(() => Math.random().toString(36), [editor])
 
   // Ensure value is valid before passing to Slate

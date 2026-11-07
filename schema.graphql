@@ -7,8 +7,14 @@ type User {
   email: String
   password: PasswordState
   role: Role
-  tasks(where: TodoWhereInput! = {}, orderBy: [TodoOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TodoWhereUniqueInput): [Todo!]
-  tasksCount(where: TodoWhereInput! = {}): Int
+  kind: UserKindType
+  title: String
+  staffMember: StaffMember
+  mfaEnrolled: Boolean
+  accessExpiresAt: DateTime
+  onboardingStatus: String
+  createdAt: DateTime
+  updatedAt: DateTime
   passwordResetToken: PasswordState
   passwordResetIssuedAt: DateTime
   passwordResetRedeemedAt: DateTime
@@ -18,10 +24,18 @@ type PasswordState {
   isSet: Boolean!
 }
 
+enum UserKindType {
+  staff
+  relief
+  auditor
+  administrator
+}
+
 scalar DateTime @specifiedBy(url: "https://datatracker.ietf.org/doc/html/rfc3339#section-5.6")
 
 input UserWhereUniqueInput {
   id: ID
+  staffMember: StaffMemberWhereUniqueInput
 }
 
 input UserWhereInput {
@@ -31,7 +45,14 @@ input UserWhereInput {
   id: IDFilter
   name: StringFilter
   role: RoleWhereInput
-  tasks: TodoManyRelationFilter
+  kind: UserKindTypeNullableFilter
+  title: StringFilter
+  staffMember: StaffMemberWhereInput
+  mfaEnrolled: BooleanFilter
+  accessExpiresAt: DateTimeNullableFilter
+  onboardingStatus: StringNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
   passwordResetToken: PasswordFilter
   passwordResetIssuedAt: DateTimeNullableFilter
   passwordResetRedeemedAt: DateTimeNullableFilter
@@ -82,14 +103,16 @@ input NestedStringFilter {
   not: NestedStringFilter
 }
 
-input TodoManyRelationFilter {
-  every: TodoWhereInput
-  some: TodoWhereInput
-  none: TodoWhereInput
+input UserKindTypeNullableFilter {
+  equals: UserKindType
+  in: [UserKindType!]
+  notIn: [UserKindType!]
+  not: UserKindTypeNullableFilter
 }
 
-input PasswordFilter {
-  isSet: Boolean!
+input BooleanFilter {
+  equals: Boolean
+  not: BooleanFilter
 }
 
 input DateTimeNullableFilter {
@@ -101,234 +124,6 @@ input DateTimeNullableFilter {
   gt: DateTime
   gte: DateTime
   not: DateTimeNullableFilter
-}
-
-input UserOrderByInput {
-  id: OrderDirection
-  name: OrderDirection
-  passwordResetIssuedAt: OrderDirection
-  passwordResetRedeemedAt: OrderDirection
-}
-
-enum OrderDirection {
-  asc
-  desc
-}
-
-input UserUpdateInput {
-  name: String
-  email: String
-  password: String
-  role: RoleRelateToOneForUpdateInput
-  tasks: TodoRelateToManyForUpdateInput
-  passwordResetToken: String
-  passwordResetIssuedAt: DateTime
-  passwordResetRedeemedAt: DateTime
-}
-
-input RoleRelateToOneForUpdateInput {
-  create: RoleCreateInput
-  connect: RoleWhereUniqueInput
-  disconnect: Boolean
-}
-
-input TodoRelateToManyForUpdateInput {
-  disconnect: [TodoWhereUniqueInput!]
-  set: [TodoWhereUniqueInput!]
-  create: [TodoCreateInput!]
-  connect: [TodoWhereUniqueInput!]
-}
-
-input UserUpdateArgs {
-  where: UserWhereUniqueInput!
-  data: UserUpdateInput!
-}
-
-input UserCreateInput {
-  name: String
-  email: String
-  password: String
-  role: RoleRelateToOneForCreateInput
-  tasks: TodoRelateToManyForCreateInput
-  passwordResetToken: String
-  passwordResetIssuedAt: DateTime
-  passwordResetRedeemedAt: DateTime
-}
-
-input RoleRelateToOneForCreateInput {
-  create: RoleCreateInput
-  connect: RoleWhereUniqueInput
-}
-
-input TodoRelateToManyForCreateInput {
-  create: [TodoCreateInput!]
-  connect: [TodoWhereUniqueInput!]
-}
-
-type Role {
-  id: ID!
-  name: String
-  canCreateTodos: Boolean
-  canManageAllTodos: Boolean
-  canSeeOtherPeople: Boolean
-  canEditOtherPeople: Boolean
-  canManagePeople: Boolean
-  canManageRoles: Boolean
-  canAccessDashboard: Boolean
-  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
-  assignedToCount(where: UserWhereInput! = {}): Int
-}
-
-input RoleWhereUniqueInput {
-  id: ID
-}
-
-input RoleWhereInput {
-  AND: [RoleWhereInput!]
-  OR: [RoleWhereInput!]
-  NOT: [RoleWhereInput!]
-  id: IDFilter
-  name: StringFilter
-  canCreateTodos: BooleanFilter
-  canManageAllTodos: BooleanFilter
-  canSeeOtherPeople: BooleanFilter
-  canEditOtherPeople: BooleanFilter
-  canManagePeople: BooleanFilter
-  canManageRoles: BooleanFilter
-  canAccessDashboard: BooleanFilter
-  assignedTo: UserManyRelationFilter
-}
-
-input BooleanFilter {
-  equals: Boolean
-  not: BooleanFilter
-}
-
-input UserManyRelationFilter {
-  every: UserWhereInput
-  some: UserWhereInput
-  none: UserWhereInput
-}
-
-input RoleOrderByInput {
-  id: OrderDirection
-  name: OrderDirection
-  canCreateTodos: OrderDirection
-  canManageAllTodos: OrderDirection
-  canSeeOtherPeople: OrderDirection
-  canEditOtherPeople: OrderDirection
-  canManagePeople: OrderDirection
-  canManageRoles: OrderDirection
-  canAccessDashboard: OrderDirection
-}
-
-input RoleUpdateInput {
-  name: String
-  canCreateTodos: Boolean
-  canManageAllTodos: Boolean
-  canSeeOtherPeople: Boolean
-  canEditOtherPeople: Boolean
-  canManagePeople: Boolean
-  canManageRoles: Boolean
-  canAccessDashboard: Boolean
-  assignedTo: UserRelateToManyForUpdateInput
-}
-
-input UserRelateToManyForUpdateInput {
-  disconnect: [UserWhereUniqueInput!]
-  set: [UserWhereUniqueInput!]
-  create: [UserCreateInput!]
-  connect: [UserWhereUniqueInput!]
-}
-
-input RoleUpdateArgs {
-  where: RoleWhereUniqueInput!
-  data: RoleUpdateInput!
-}
-
-input RoleCreateInput {
-  name: String
-  canCreateTodos: Boolean
-  canManageAllTodos: Boolean
-  canSeeOtherPeople: Boolean
-  canEditOtherPeople: Boolean
-  canManagePeople: Boolean
-  canManageRoles: Boolean
-  canAccessDashboard: Boolean
-  assignedTo: UserRelateToManyForCreateInput
-}
-
-input UserRelateToManyForCreateInput {
-  create: [UserCreateInput!]
-  connect: [UserWhereUniqueInput!]
-}
-
-type Todo {
-  id: ID!
-  label: String
-  description: Todo_description_Document
-  isComplete: Boolean
-  status: String
-  priority: Int
-  tags: [String!]
-  dueDate: DateTime
-  weight: Float
-  budget: Decimal
-  isPrivate: Boolean
-  largeNumber: BigInt
-  metadata: JSON
-  secretNote: PasswordState
-  coverImage: ImageFieldOutput
-  todoImages(where: TodoImageWhereInput! = {}, orderBy: [TodoImageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TodoImageWhereUniqueInput): [TodoImage!]
-  todoImagesCount(where: TodoImageWhereInput! = {}): Int
-  assignedTo: User
-}
-
-type Todo_description_Document {
-  document(hydrateRelationships: Boolean! = false): JSON!
-}
-
-scalar Decimal
-
-scalar BigInt
-
-type ImageFieldOutput {
-  id: ID!
-  filesize: Int!
-  width: Int!
-  height: Int!
-  extension: ImageExtension!
-  url: String!
-}
-
-enum ImageExtension {
-  jpg
-  png
-  webp
-  gif
-}
-
-input TodoWhereUniqueInput {
-  id: ID
-}
-
-input TodoWhereInput {
-  AND: [TodoWhereInput!]
-  OR: [TodoWhereInput!]
-  NOT: [TodoWhereInput!]
-  id: IDFilter
-  label: StringFilter
-  isComplete: BooleanFilter
-  status: StringNullableFilter
-  priority: IntNullableFilter
-  dueDate: DateTimeNullableFilter
-  weight: FloatNullableFilter
-  budget: DecimalNullableFilter
-  isPrivate: BooleanFilter
-  largeNumber: BigIntNullableFilter
-  secretNote: PasswordFilter
-  todoImages: TodoImageManyRelationFilter
-  assignedTo: UserWhereInput
 }
 
 input StringNullableFilter {
@@ -346,191 +141,484 @@ input StringNullableFilter {
   not: StringNullableFilter
 }
 
-input IntNullableFilter {
-  equals: Int
-  in: [Int!]
-  notIn: [Int!]
-  lt: Int
-  lte: Int
-  gt: Int
-  gte: Int
-  not: IntNullableFilter
+input DateTimeFilter {
+  equals: DateTime
+  in: [DateTime!]
+  notIn: [DateTime!]
+  lt: DateTime
+  lte: DateTime
+  gt: DateTime
+  gte: DateTime
+  not: DateTimeFilter
 }
 
-input FloatNullableFilter {
-  equals: Float
-  in: [Float!]
-  notIn: [Float!]
-  lt: Float
-  lte: Float
-  gt: Float
-  gte: Float
-  not: FloatNullableFilter
+input PasswordFilter {
+  isSet: Boolean!
 }
 
-input DecimalNullableFilter {
-  equals: Decimal
-  in: [Decimal!]
-  notIn: [Decimal!]
-  lt: Decimal
-  lte: Decimal
-  gt: Decimal
-  gte: Decimal
-  not: DecimalNullableFilter
-}
-
-input BigIntNullableFilter {
-  equals: BigInt
-  in: [BigInt!]
-  notIn: [BigInt!]
-  lt: BigInt
-  lte: BigInt
-  gt: BigInt
-  gte: BigInt
-  not: BigIntNullableFilter
-}
-
-input TodoImageManyRelationFilter {
-  every: TodoImageWhereInput
-  some: TodoImageWhereInput
-  none: TodoImageWhereInput
-}
-
-input TodoOrderByInput {
+input UserOrderByInput {
   id: OrderDirection
-  label: OrderDirection
-  isComplete: OrderDirection
-  status: OrderDirection
-  priority: OrderDirection
-  dueDate: OrderDirection
-  weight: OrderDirection
-  budget: OrderDirection
-  isPrivate: OrderDirection
-  largeNumber: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  title: OrderDirection
+  mfaEnrolled: OrderDirection
+  accessExpiresAt: OrderDirection
+  onboardingStatus: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+  passwordResetIssuedAt: OrderDirection
+  passwordResetRedeemedAt: OrderDirection
 }
 
-input TodoUpdateInput {
-  label: String
-  description: JSON
-  isComplete: Boolean
-  status: String
-  priority: Int
-  tags: [String!]
-  dueDate: DateTime
-  weight: Float
-  budget: Decimal
-  isPrivate: Boolean
-  largeNumber: BigInt
-  metadata: JSON
-  secretNote: String
-  coverImage: ImageFieldInput
-  todoImages: TodoImageRelateToManyForUpdateInput
-  assignedTo: UserRelateToOneForUpdateInput
+enum OrderDirection {
+  asc
+  desc
 }
 
-input ImageFieldInput {
-  upload: Upload!
+input UserUpdateInput {
+  name: String
+  email: String
+  password: String
+  role: RoleRelateToOneForUpdateInput
+  kind: UserKindType
+  title: String
+  staffMember: StaffMemberRelateToOneForUpdateInput
+  mfaEnrolled: Boolean
+  accessExpiresAt: DateTime
+  onboardingStatus: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  passwordResetToken: String
+  passwordResetIssuedAt: DateTime
+  passwordResetRedeemedAt: DateTime
 }
 
-"""The `Upload` scalar type represents a file upload."""
-scalar Upload
-
-input TodoImageRelateToManyForUpdateInput {
-  disconnect: [TodoImageWhereUniqueInput!]
-  set: [TodoImageWhereUniqueInput!]
-  create: [TodoImageCreateInput!]
-  connect: [TodoImageWhereUniqueInput!]
-}
-
-input UserRelateToOneForUpdateInput {
-  create: UserCreateInput
-  connect: UserWhereUniqueInput
+input RoleRelateToOneForUpdateInput {
+  create: RoleCreateInput
+  connect: RoleWhereUniqueInput
   disconnect: Boolean
 }
 
-input TodoUpdateArgs {
-  where: TodoWhereUniqueInput!
-  data: TodoUpdateInput!
+input StaffMemberRelateToOneForUpdateInput {
+  create: StaffMemberCreateInput
+  connect: StaffMemberWhereUniqueInput
+  disconnect: Boolean
 }
 
-input TodoCreateInput {
-  label: String
-  description: JSON
-  isComplete: Boolean
-  status: String
-  priority: Int
-  tags: [String!]
-  dueDate: DateTime
-  weight: Float
-  budget: Decimal
-  isPrivate: Boolean
-  largeNumber: BigInt
-  metadata: JSON
-  secretNote: String
-  coverImage: ImageFieldInput
-  todoImages: TodoImageRelateToManyForCreateInput
-  assignedTo: UserRelateToOneForCreateInput
+input UserUpdateArgs {
+  where: UserWhereUniqueInput!
+  data: UserUpdateInput!
 }
 
-input TodoImageRelateToManyForCreateInput {
-  create: [TodoImageCreateInput!]
-  connect: [TodoImageWhereUniqueInput!]
+input UserCreateInput {
+  name: String
+  email: String
+  password: String
+  role: RoleRelateToOneForCreateInput
+  kind: UserKindType
+  title: String
+  staffMember: StaffMemberRelateToOneForCreateInput
+  mfaEnrolled: Boolean
+  accessExpiresAt: DateTime
+  onboardingStatus: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  passwordResetToken: String
+  passwordResetIssuedAt: DateTime
+  passwordResetRedeemedAt: DateTime
 }
 
-input UserRelateToOneForCreateInput {
-  create: UserCreateInput
-  connect: UserWhereUniqueInput
+input RoleRelateToOneForCreateInput {
+  create: RoleCreateInput
+  connect: RoleWhereUniqueInput
 }
 
-type TodoImage {
+input StaffMemberRelateToOneForCreateInput {
+  create: StaffMemberCreateInput
+  connect: StaffMemberWhereUniqueInput
+}
+
+type Role {
   id: ID!
-  image: ImageFieldOutput
-  imagePath: String
-  altText: String
-  todos(where: TodoWhereInput! = {}, orderBy: [TodoOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TodoWhereUniqueInput): [Todo!]
-  todosCount(where: TodoWhereInput! = {}): Int
-  metadata: JSON
+  name: String
+  description: String
+  canSeeOtherPeople: Boolean
+  canEditOtherPeople: Boolean
+  canManagePeople: Boolean
+  canManageRoles: Boolean
+  canAccessDashboard: Boolean
+  canManageOnboarding: Boolean
+  canManagePayments: Boolean
+  canIssueRefunds: Boolean
+  canReadAudit: Boolean
+  canManagePractice: Boolean
+  canManageIntegrations: Boolean
+  canManagePolicies: Boolean
+  canManageFees: Boolean
+  canApprovePolicies: Boolean
+  canApproveFees: Boolean
+  canManageClients: Boolean
+  canManagePatients: Boolean
+  canMergeRecords: Boolean
+  canApproveMerges: Boolean
+  canReadClinical: Boolean
+  canReadClientPII: Boolean
+  canBook: Boolean
+  canOverbook: Boolean
+  canCheckIn: Boolean
+  canManageSchedules: Boolean
+  canWriteRecord: Boolean
+  canSignRecord: Boolean
+  canOrder: Boolean
+  canAdminister: Boolean
+  canPrescribe: Boolean
+  canPerformSurgery: Boolean
+  canAuthoriseEuthanasia: Boolean
+  canDispense: Boolean
+  canFulfilRefill: Boolean
+  canManageRefills: Boolean
+  canAdministerControlled: Boolean
+  canWitnessControlled: Boolean
+  canCountControlled: Boolean
+  canReceiveControlled: Boolean
+  canManageControlled: Boolean
+  canViewControlled: Boolean
+  canManageInventory: Boolean
+  canReceiveStock: Boolean
+  canOrderStock: Boolean
+  canApprovePurchase: Boolean
+  canReleaseQuarantine: Boolean
+  canTakePayments: Boolean
+  canPostInvoices: Boolean
+  canAddManualCharge: Boolean
+  canDiscount: Boolean
+  canApproveDiscount: Boolean
+  canApproveWriteOff: Boolean
+  canViewFinance: Boolean
+  canProcessRecordsRequests: Boolean
+  canApproveRecordsRelease: Boolean
+  canManageBoarding: Boolean
+  canGroom: Boolean
+  canMessageClients: Boolean
+  canManageTemplates: Boolean
+  canManageAgents: Boolean
+  canApproveAgentScopes: Boolean
+  canBreakGlass: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
+  assignedToCount(where: UserWhereInput! = {}): Int
 }
 
-input TodoImageWhereUniqueInput {
+input RoleWhereUniqueInput {
   id: ID
 }
 
-input TodoImageWhereInput {
-  AND: [TodoImageWhereInput!]
-  OR: [TodoImageWhereInput!]
-  NOT: [TodoImageWhereInput!]
+input RoleWhereInput {
+  AND: [RoleWhereInput!]
+  OR: [RoleWhereInput!]
+  NOT: [RoleWhereInput!]
   id: IDFilter
-  imagePath: StringFilter
-  altText: StringFilter
-  todos: TodoManyRelationFilter
+  name: StringFilter
+  description: StringFilter
+  canSeeOtherPeople: BooleanFilter
+  canEditOtherPeople: BooleanFilter
+  canManagePeople: BooleanFilter
+  canManageRoles: BooleanFilter
+  canAccessDashboard: BooleanFilter
+  canManageOnboarding: BooleanFilter
+  canManagePayments: BooleanFilter
+  canIssueRefunds: BooleanFilter
+  canReadAudit: BooleanFilter
+  canManagePractice: BooleanFilter
+  canManageIntegrations: BooleanFilter
+  canManagePolicies: BooleanFilter
+  canManageFees: BooleanFilter
+  canApprovePolicies: BooleanFilter
+  canApproveFees: BooleanFilter
+  canManageClients: BooleanFilter
+  canManagePatients: BooleanFilter
+  canMergeRecords: BooleanFilter
+  canApproveMerges: BooleanFilter
+  canReadClinical: BooleanFilter
+  canReadClientPII: BooleanFilter
+  canBook: BooleanFilter
+  canOverbook: BooleanFilter
+  canCheckIn: BooleanFilter
+  canManageSchedules: BooleanFilter
+  canWriteRecord: BooleanFilter
+  canSignRecord: BooleanFilter
+  canOrder: BooleanFilter
+  canAdminister: BooleanFilter
+  canPrescribe: BooleanFilter
+  canPerformSurgery: BooleanFilter
+  canAuthoriseEuthanasia: BooleanFilter
+  canDispense: BooleanFilter
+  canFulfilRefill: BooleanFilter
+  canManageRefills: BooleanFilter
+  canAdministerControlled: BooleanFilter
+  canWitnessControlled: BooleanFilter
+  canCountControlled: BooleanFilter
+  canReceiveControlled: BooleanFilter
+  canManageControlled: BooleanFilter
+  canViewControlled: BooleanFilter
+  canManageInventory: BooleanFilter
+  canReceiveStock: BooleanFilter
+  canOrderStock: BooleanFilter
+  canApprovePurchase: BooleanFilter
+  canReleaseQuarantine: BooleanFilter
+  canTakePayments: BooleanFilter
+  canPostInvoices: BooleanFilter
+  canAddManualCharge: BooleanFilter
+  canDiscount: BooleanFilter
+  canApproveDiscount: BooleanFilter
+  canApproveWriteOff: BooleanFilter
+  canViewFinance: BooleanFilter
+  canProcessRecordsRequests: BooleanFilter
+  canApproveRecordsRelease: BooleanFilter
+  canManageBoarding: BooleanFilter
+  canGroom: BooleanFilter
+  canMessageClients: BooleanFilter
+  canManageTemplates: BooleanFilter
+  canManageAgents: BooleanFilter
+  canApproveAgentScopes: BooleanFilter
+  canBreakGlass: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+  assignedTo: UserManyRelationFilter
 }
 
-input TodoImageOrderByInput {
+input UserManyRelationFilter {
+  every: UserWhereInput
+  some: UserWhereInput
+  none: UserWhereInput
+}
+
+input RoleOrderByInput {
   id: OrderDirection
-  imagePath: OrderDirection
-  altText: OrderDirection
+  name: OrderDirection
+  description: OrderDirection
+  canSeeOtherPeople: OrderDirection
+  canEditOtherPeople: OrderDirection
+  canManagePeople: OrderDirection
+  canManageRoles: OrderDirection
+  canAccessDashboard: OrderDirection
+  canManageOnboarding: OrderDirection
+  canManagePayments: OrderDirection
+  canIssueRefunds: OrderDirection
+  canReadAudit: OrderDirection
+  canManagePractice: OrderDirection
+  canManageIntegrations: OrderDirection
+  canManagePolicies: OrderDirection
+  canManageFees: OrderDirection
+  canApprovePolicies: OrderDirection
+  canApproveFees: OrderDirection
+  canManageClients: OrderDirection
+  canManagePatients: OrderDirection
+  canMergeRecords: OrderDirection
+  canApproveMerges: OrderDirection
+  canReadClinical: OrderDirection
+  canReadClientPII: OrderDirection
+  canBook: OrderDirection
+  canOverbook: OrderDirection
+  canCheckIn: OrderDirection
+  canManageSchedules: OrderDirection
+  canWriteRecord: OrderDirection
+  canSignRecord: OrderDirection
+  canOrder: OrderDirection
+  canAdminister: OrderDirection
+  canPrescribe: OrderDirection
+  canPerformSurgery: OrderDirection
+  canAuthoriseEuthanasia: OrderDirection
+  canDispense: OrderDirection
+  canFulfilRefill: OrderDirection
+  canManageRefills: OrderDirection
+  canAdministerControlled: OrderDirection
+  canWitnessControlled: OrderDirection
+  canCountControlled: OrderDirection
+  canReceiveControlled: OrderDirection
+  canManageControlled: OrderDirection
+  canViewControlled: OrderDirection
+  canManageInventory: OrderDirection
+  canReceiveStock: OrderDirection
+  canOrderStock: OrderDirection
+  canApprovePurchase: OrderDirection
+  canReleaseQuarantine: OrderDirection
+  canTakePayments: OrderDirection
+  canPostInvoices: OrderDirection
+  canAddManualCharge: OrderDirection
+  canDiscount: OrderDirection
+  canApproveDiscount: OrderDirection
+  canApproveWriteOff: OrderDirection
+  canViewFinance: OrderDirection
+  canProcessRecordsRequests: OrderDirection
+  canApproveRecordsRelease: OrderDirection
+  canManageBoarding: OrderDirection
+  canGroom: OrderDirection
+  canMessageClients: OrderDirection
+  canManageTemplates: OrderDirection
+  canManageAgents: OrderDirection
+  canApproveAgentScopes: OrderDirection
+  canBreakGlass: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
 }
 
-input TodoImageUpdateInput {
-  image: ImageFieldInput
-  imagePath: String
-  altText: String
-  todos: TodoRelateToManyForUpdateInput
-  metadata: JSON
+input RoleUpdateInput {
+  name: String
+  description: String
+  canSeeOtherPeople: Boolean
+  canEditOtherPeople: Boolean
+  canManagePeople: Boolean
+  canManageRoles: Boolean
+  canAccessDashboard: Boolean
+  canManageOnboarding: Boolean
+  canManagePayments: Boolean
+  canIssueRefunds: Boolean
+  canReadAudit: Boolean
+  canManagePractice: Boolean
+  canManageIntegrations: Boolean
+  canManagePolicies: Boolean
+  canManageFees: Boolean
+  canApprovePolicies: Boolean
+  canApproveFees: Boolean
+  canManageClients: Boolean
+  canManagePatients: Boolean
+  canMergeRecords: Boolean
+  canApproveMerges: Boolean
+  canReadClinical: Boolean
+  canReadClientPII: Boolean
+  canBook: Boolean
+  canOverbook: Boolean
+  canCheckIn: Boolean
+  canManageSchedules: Boolean
+  canWriteRecord: Boolean
+  canSignRecord: Boolean
+  canOrder: Boolean
+  canAdminister: Boolean
+  canPrescribe: Boolean
+  canPerformSurgery: Boolean
+  canAuthoriseEuthanasia: Boolean
+  canDispense: Boolean
+  canFulfilRefill: Boolean
+  canManageRefills: Boolean
+  canAdministerControlled: Boolean
+  canWitnessControlled: Boolean
+  canCountControlled: Boolean
+  canReceiveControlled: Boolean
+  canManageControlled: Boolean
+  canViewControlled: Boolean
+  canManageInventory: Boolean
+  canReceiveStock: Boolean
+  canOrderStock: Boolean
+  canApprovePurchase: Boolean
+  canReleaseQuarantine: Boolean
+  canTakePayments: Boolean
+  canPostInvoices: Boolean
+  canAddManualCharge: Boolean
+  canDiscount: Boolean
+  canApproveDiscount: Boolean
+  canApproveWriteOff: Boolean
+  canViewFinance: Boolean
+  canProcessRecordsRequests: Boolean
+  canApproveRecordsRelease: Boolean
+  canManageBoarding: Boolean
+  canGroom: Boolean
+  canMessageClients: Boolean
+  canManageTemplates: Boolean
+  canManageAgents: Boolean
+  canApproveAgentScopes: Boolean
+  canBreakGlass: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+  assignedTo: UserRelateToManyForUpdateInput
 }
 
-input TodoImageUpdateArgs {
-  where: TodoImageWhereUniqueInput!
-  data: TodoImageUpdateInput!
+input UserRelateToManyForUpdateInput {
+  disconnect: [UserWhereUniqueInput!]
+  set: [UserWhereUniqueInput!]
+  create: [UserCreateInput!]
+  connect: [UserWhereUniqueInput!]
 }
 
-input TodoImageCreateInput {
-  image: ImageFieldInput
-  imagePath: String
-  altText: String
-  todos: TodoRelateToManyForCreateInput
-  metadata: JSON
+input RoleUpdateArgs {
+  where: RoleWhereUniqueInput!
+  data: RoleUpdateInput!
+}
+
+input RoleCreateInput {
+  name: String
+  description: String
+  canSeeOtherPeople: Boolean
+  canEditOtherPeople: Boolean
+  canManagePeople: Boolean
+  canManageRoles: Boolean
+  canAccessDashboard: Boolean
+  canManageOnboarding: Boolean
+  canManagePayments: Boolean
+  canIssueRefunds: Boolean
+  canReadAudit: Boolean
+  canManagePractice: Boolean
+  canManageIntegrations: Boolean
+  canManagePolicies: Boolean
+  canManageFees: Boolean
+  canApprovePolicies: Boolean
+  canApproveFees: Boolean
+  canManageClients: Boolean
+  canManagePatients: Boolean
+  canMergeRecords: Boolean
+  canApproveMerges: Boolean
+  canReadClinical: Boolean
+  canReadClientPII: Boolean
+  canBook: Boolean
+  canOverbook: Boolean
+  canCheckIn: Boolean
+  canManageSchedules: Boolean
+  canWriteRecord: Boolean
+  canSignRecord: Boolean
+  canOrder: Boolean
+  canAdminister: Boolean
+  canPrescribe: Boolean
+  canPerformSurgery: Boolean
+  canAuthoriseEuthanasia: Boolean
+  canDispense: Boolean
+  canFulfilRefill: Boolean
+  canManageRefills: Boolean
+  canAdministerControlled: Boolean
+  canWitnessControlled: Boolean
+  canCountControlled: Boolean
+  canReceiveControlled: Boolean
+  canManageControlled: Boolean
+  canViewControlled: Boolean
+  canManageInventory: Boolean
+  canReceiveStock: Boolean
+  canOrderStock: Boolean
+  canApprovePurchase: Boolean
+  canReleaseQuarantine: Boolean
+  canTakePayments: Boolean
+  canPostInvoices: Boolean
+  canAddManualCharge: Boolean
+  canDiscount: Boolean
+  canApproveDiscount: Boolean
+  canApproveWriteOff: Boolean
+  canViewFinance: Boolean
+  canProcessRecordsRequests: Boolean
+  canApproveRecordsRelease: Boolean
+  canManageBoarding: Boolean
+  canGroom: Boolean
+  canMessageClients: Boolean
+  canManageTemplates: Boolean
+  canManageAgents: Boolean
+  canApproveAgentScopes: Boolean
+  canBreakGlass: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+  assignedTo: UserRelateToManyForCreateInput
+}
+
+input UserRelateToManyForCreateInput {
+  create: [UserCreateInput!]
+  connect: [UserWhereUniqueInput!]
 }
 
 type OAuthApp {
@@ -580,17 +668,6 @@ input OAuthAppWhereInput {
   supportUrl: StringFilter
   createdAt: DateTimeFilter
   updatedAt: DateTimeFilter
-}
-
-input DateTimeFilter {
-  equals: DateTime
-  in: [DateTime!]
-  notIn: [DateTime!]
-  lt: DateTime
-  lte: DateTime
-  gt: DateTime
-  gte: DateTime
-  not: DateTimeFilter
 }
 
 input OAuthAppOrderByInput {
@@ -747,6 +824,12 @@ input OAuthTokenUpdateInput {
   updatedAt: DateTime
 }
 
+input UserRelateToOneForUpdateInput {
+  create: UserCreateInput
+  connect: UserWhereUniqueInput
+  disconnect: Boolean
+}
+
 input OAuthTokenUpdateArgs {
   where: OAuthTokenWhereUniqueInput!
   data: OAuthTokenUpdateInput!
@@ -772,6 +855,3560 @@ input OAuthTokenCreateInput {
   updatedAt: DateTime
 }
 
+input UserRelateToOneForCreateInput {
+  create: UserCreateInput
+  connect: UserWhereUniqueInput
+}
+
+type AgentIdentity {
+  id: ID!
+  name: String
+  kind: String
+  model: String
+  provider: String
+  owner: User
+  status: String
+  killSwitch: Boolean
+  limits: JSON
+  oauthApp: OAuthApp
+  grants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
+  grantsCount(where: AgentToolGrantWhereInput! = {}): Int
+  runs(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
+  runsCount(where: AgentRunWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentIdentityWhereUniqueInput {
+  id: ID
+  name: String
+}
+
+input AgentIdentityWhereInput {
+  AND: [AgentIdentityWhereInput!]
+  OR: [AgentIdentityWhereInput!]
+  NOT: [AgentIdentityWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  kind: StringFilter
+  model: StringFilter
+  provider: StringFilter
+  owner: UserWhereInput
+  status: StringFilter
+  killSwitch: BooleanFilter
+  oauthApp: OAuthAppWhereInput
+  grants: AgentToolGrantManyRelationFilter
+  runs: AgentRunManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input AgentToolGrantManyRelationFilter {
+  every: AgentToolGrantWhereInput
+  some: AgentToolGrantWhereInput
+  none: AgentToolGrantWhereInput
+}
+
+input AgentRunManyRelationFilter {
+  every: AgentRunWhereInput
+  some: AgentRunWhereInput
+  none: AgentRunWhereInput
+}
+
+input IntFilter {
+  equals: Int
+  in: [Int!]
+  notIn: [Int!]
+  lt: Int
+  lte: Int
+  gt: Int
+  gte: Int
+  not: IntFilter
+}
+
+input AgentIdentityOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  model: OrderDirection
+  provider: OrderDirection
+  status: OrderDirection
+  killSwitch: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input AgentIdentityUpdateInput {
+  name: String
+  kind: String
+  model: String
+  provider: String
+  owner: UserRelateToOneForUpdateInput
+  status: String
+  killSwitch: Boolean
+  limits: JSON
+  oauthApp: OAuthAppRelateToOneForUpdateInput
+  grants: AgentToolGrantRelateToManyForUpdateInput
+  runs: AgentRunRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input OAuthAppRelateToOneForUpdateInput {
+  create: OAuthAppCreateInput
+  connect: OAuthAppWhereUniqueInput
+  disconnect: Boolean
+}
+
+input AgentToolGrantRelateToManyForUpdateInput {
+  disconnect: [AgentToolGrantWhereUniqueInput!]
+  set: [AgentToolGrantWhereUniqueInput!]
+  create: [AgentToolGrantCreateInput!]
+  connect: [AgentToolGrantWhereUniqueInput!]
+}
+
+input AgentRunRelateToManyForUpdateInput {
+  disconnect: [AgentRunWhereUniqueInput!]
+  set: [AgentRunWhereUniqueInput!]
+  create: [AgentRunCreateInput!]
+  connect: [AgentRunWhereUniqueInput!]
+}
+
+input AgentIdentityUpdateArgs {
+  where: AgentIdentityWhereUniqueInput!
+  data: AgentIdentityUpdateInput!
+}
+
+input AgentIdentityCreateInput {
+  name: String
+  kind: String
+  model: String
+  provider: String
+  owner: UserRelateToOneForCreateInput
+  status: String
+  killSwitch: Boolean
+  limits: JSON
+  oauthApp: OAuthAppRelateToOneForCreateInput
+  grants: AgentToolGrantRelateToManyForCreateInput
+  runs: AgentRunRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input OAuthAppRelateToOneForCreateInput {
+  create: OAuthAppCreateInput
+  connect: OAuthAppWhereUniqueInput
+}
+
+input AgentToolGrantRelateToManyForCreateInput {
+  create: [AgentToolGrantCreateInput!]
+  connect: [AgentToolGrantWhereUniqueInput!]
+}
+
+input AgentRunRelateToManyForCreateInput {
+  create: [AgentRunCreateInput!]
+  connect: [AgentRunWhereUniqueInput!]
+}
+
+type ApprovalDecision {
+  id: ID!
+  request: ApprovalRequest
+  decidedBy: User
+  decision: String
+  reason: String
+  at: DateTime
+}
+
+input ApprovalDecisionWhereUniqueInput {
+  id: ID
+}
+
+input ApprovalDecisionWhereInput {
+  AND: [ApprovalDecisionWhereInput!]
+  OR: [ApprovalDecisionWhereInput!]
+  NOT: [ApprovalDecisionWhereInput!]
+  id: IDFilter
+  request: ApprovalRequestWhereInput
+  decidedBy: UserWhereInput
+  decision: StringFilter
+  reason: StringFilter
+  at: DateTimeNullableFilter
+}
+
+input ApprovalDecisionOrderByInput {
+  id: OrderDirection
+  decision: OrderDirection
+  reason: OrderDirection
+  at: OrderDirection
+}
+
+input ApprovalDecisionUpdateInput {
+  request: ApprovalRequestRelateToOneForUpdateInput
+  decidedBy: UserRelateToOneForUpdateInput
+  decision: String
+  reason: String
+  at: DateTime
+}
+
+input ApprovalRequestRelateToOneForUpdateInput {
+  create: ApprovalRequestCreateInput
+  connect: ApprovalRequestWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ApprovalDecisionUpdateArgs {
+  where: ApprovalDecisionWhereUniqueInput!
+  data: ApprovalDecisionUpdateInput!
+}
+
+input ApprovalDecisionCreateInput {
+  request: ApprovalRequestRelateToOneForCreateInput
+  decidedBy: UserRelateToOneForCreateInput
+  decision: String
+  reason: String
+  at: DateTime
+}
+
+input ApprovalRequestRelateToOneForCreateInput {
+  create: ApprovalRequestCreateInput
+  connect: ApprovalRequestWhereUniqueInput
+}
+
+type ApprovalPolicy {
+  id: ID!
+  action: String
+  description: String
+  requiredPermission: String
+  minApprovals: Int
+  thresholdMinor: BigInt
+  expiresAfterMinutes: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+scalar BigInt
+
+input ApprovalPolicyWhereUniqueInput {
+  id: ID
+  action: String
+}
+
+input ApprovalPolicyWhereInput {
+  AND: [ApprovalPolicyWhereInput!]
+  OR: [ApprovalPolicyWhereInput!]
+  NOT: [ApprovalPolicyWhereInput!]
+  id: IDFilter
+  action: StringFilter
+  description: StringFilter
+  requiredPermission: StringFilter
+  minApprovals: IntNullableFilter
+  thresholdMinor: BigIntNullableFilter
+  expiresAfterMinutes: IntNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input IntNullableFilter {
+  equals: Int
+  in: [Int!]
+  notIn: [Int!]
+  lt: Int
+  lte: Int
+  gt: Int
+  gte: Int
+  not: IntNullableFilter
+}
+
+input BigIntNullableFilter {
+  equals: BigInt
+  in: [BigInt!]
+  notIn: [BigInt!]
+  lt: BigInt
+  lte: BigInt
+  gt: BigInt
+  gte: BigInt
+  not: BigIntNullableFilter
+}
+
+input ApprovalPolicyOrderByInput {
+  id: OrderDirection
+  action: OrderDirection
+  description: OrderDirection
+  requiredPermission: OrderDirection
+  minApprovals: OrderDirection
+  thresholdMinor: OrderDirection
+  expiresAfterMinutes: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ApprovalPolicyUpdateInput {
+  action: String
+  description: String
+  requiredPermission: String
+  minApprovals: Int
+  thresholdMinor: BigInt
+  expiresAfterMinutes: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ApprovalPolicyUpdateArgs {
+  where: ApprovalPolicyWhereUniqueInput!
+  data: ApprovalPolicyUpdateInput!
+}
+
+input ApprovalPolicyCreateInput {
+  action: String
+  description: String
+  requiredPermission: String
+  minApprovals: Int
+  thresholdMinor: BigInt
+  expiresAfterMinutes: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ApprovalRequest {
+  id: ID!
+  action: String
+  summary: String
+  targetList: String
+  targetId: String
+  payload: JSON
+  payloadHash: String
+  requiredPermission: String
+  requestedBy: User
+  requestedByAgent: AgentIdentity
+  status: String
+  expiresAt: DateTime
+  consumedAt: DateTime
+  decisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
+  decisionsCount(where: ApprovalDecisionWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ApprovalRequestWhereUniqueInput {
+  id: ID
+}
+
+input ApprovalRequestWhereInput {
+  AND: [ApprovalRequestWhereInput!]
+  OR: [ApprovalRequestWhereInput!]
+  NOT: [ApprovalRequestWhereInput!]
+  id: IDFilter
+  action: StringFilter
+  summary: StringFilter
+  targetList: StringFilter
+  targetId: StringFilter
+  payloadHash: StringFilter
+  requiredPermission: StringFilter
+  requestedBy: UserWhereInput
+  requestedByAgent: AgentIdentityWhereInput
+  status: StringFilter
+  expiresAt: DateTimeNullableFilter
+  consumedAt: DateTimeNullableFilter
+  decisions: ApprovalDecisionManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ApprovalDecisionManyRelationFilter {
+  every: ApprovalDecisionWhereInput
+  some: ApprovalDecisionWhereInput
+  none: ApprovalDecisionWhereInput
+}
+
+input ApprovalRequestOrderByInput {
+  id: OrderDirection
+  action: OrderDirection
+  summary: OrderDirection
+  targetList: OrderDirection
+  targetId: OrderDirection
+  payloadHash: OrderDirection
+  requiredPermission: OrderDirection
+  status: OrderDirection
+  expiresAt: OrderDirection
+  consumedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ApprovalRequestUpdateInput {
+  action: String
+  summary: String
+  targetList: String
+  targetId: String
+  payload: JSON
+  payloadHash: String
+  requiredPermission: String
+  requestedBy: UserRelateToOneForUpdateInput
+  requestedByAgent: AgentIdentityRelateToOneForUpdateInput
+  status: String
+  expiresAt: DateTime
+  consumedAt: DateTime
+  decisions: ApprovalDecisionRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentIdentityRelateToOneForUpdateInput {
+  create: AgentIdentityCreateInput
+  connect: AgentIdentityWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ApprovalDecisionRelateToManyForUpdateInput {
+  disconnect: [ApprovalDecisionWhereUniqueInput!]
+  set: [ApprovalDecisionWhereUniqueInput!]
+  create: [ApprovalDecisionCreateInput!]
+  connect: [ApprovalDecisionWhereUniqueInput!]
+}
+
+input ApprovalRequestUpdateArgs {
+  where: ApprovalRequestWhereUniqueInput!
+  data: ApprovalRequestUpdateInput!
+}
+
+input ApprovalRequestCreateInput {
+  action: String
+  summary: String
+  targetList: String
+  targetId: String
+  payload: JSON
+  payloadHash: String
+  requiredPermission: String
+  requestedBy: UserRelateToOneForCreateInput
+  requestedByAgent: AgentIdentityRelateToOneForCreateInput
+  status: String
+  expiresAt: DateTime
+  consumedAt: DateTime
+  decisions: ApprovalDecisionRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentIdentityRelateToOneForCreateInput {
+  create: AgentIdentityCreateInput
+  connect: AgentIdentityWhereUniqueInput
+}
+
+input ApprovalDecisionRelateToManyForCreateInput {
+  create: [ApprovalDecisionCreateInput!]
+  connect: [ApprovalDecisionWhereUniqueInput!]
+}
+
+type AuditEvent {
+  id: ID!
+  seq: Int
+  eventKey: String
+  eventType: String
+  entityType: String
+  entityId: String
+  actorUser: User
+  actorAgent: AgentIdentity
+  approver: User
+  reason: String
+  before: JSON
+  after: JSON
+  metadata: JSON
+  requestId: String
+  prevHash: String
+  hash: String
+  at: DateTime
+}
+
+input AuditEventWhereUniqueInput {
+  id: ID
+  seq: Int
+  eventKey: String
+  hash: String
+}
+
+input AuditEventWhereInput {
+  AND: [AuditEventWhereInput!]
+  OR: [AuditEventWhereInput!]
+  NOT: [AuditEventWhereInput!]
+  id: IDFilter
+  seq: IntFilter
+  eventKey: StringFilter
+  eventType: StringFilter
+  entityType: StringFilter
+  entityId: StringFilter
+  actorUser: UserWhereInput
+  actorAgent: AgentIdentityWhereInput
+  approver: UserWhereInput
+  reason: StringFilter
+  requestId: StringFilter
+  prevHash: StringFilter
+  hash: StringFilter
+  at: DateTimeFilter
+}
+
+input AuditEventOrderByInput {
+  id: OrderDirection
+  seq: OrderDirection
+  eventKey: OrderDirection
+  eventType: OrderDirection
+  entityType: OrderDirection
+  entityId: OrderDirection
+  reason: OrderDirection
+  requestId: OrderDirection
+  prevHash: OrderDirection
+  hash: OrderDirection
+  at: OrderDirection
+}
+
+input AuditEventUpdateInput {
+  seq: Int
+  eventKey: String
+  eventType: String
+  entityType: String
+  entityId: String
+  actorUser: UserRelateToOneForUpdateInput
+  actorAgent: AgentIdentityRelateToOneForUpdateInput
+  approver: UserRelateToOneForUpdateInput
+  reason: String
+  before: JSON
+  after: JSON
+  metadata: JSON
+  requestId: String
+  prevHash: String
+  hash: String
+  at: DateTime
+}
+
+input AuditEventUpdateArgs {
+  where: AuditEventWhereUniqueInput!
+  data: AuditEventUpdateInput!
+}
+
+input AuditEventCreateInput {
+  seq: Int
+  eventKey: String
+  eventType: String
+  entityType: String
+  entityId: String
+  actorUser: UserRelateToOneForCreateInput
+  actorAgent: AgentIdentityRelateToOneForCreateInput
+  approver: UserRelateToOneForCreateInput
+  reason: String
+  before: JSON
+  after: JSON
+  metadata: JSON
+  requestId: String
+  prevHash: String
+  hash: String
+  at: DateTime
+}
+
+type BreakGlassEvent {
+  id: ID!
+  user: User
+  resourceType: String
+  resourceId: String
+  reason: String
+  status: String
+  reviewedBy: User
+  reviewedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BreakGlassEventWhereUniqueInput {
+  id: ID
+}
+
+input BreakGlassEventWhereInput {
+  AND: [BreakGlassEventWhereInput!]
+  OR: [BreakGlassEventWhereInput!]
+  NOT: [BreakGlassEventWhereInput!]
+  id: IDFilter
+  user: UserWhereInput
+  resourceType: StringFilter
+  resourceId: StringFilter
+  reason: StringFilter
+  status: StringFilter
+  reviewedBy: UserWhereInput
+  reviewedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BreakGlassEventOrderByInput {
+  id: OrderDirection
+  resourceType: OrderDirection
+  resourceId: OrderDirection
+  reason: OrderDirection
+  status: OrderDirection
+  reviewedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input BreakGlassEventUpdateInput {
+  user: UserRelateToOneForUpdateInput
+  resourceType: String
+  resourceId: String
+  reason: String
+  status: String
+  reviewedBy: UserRelateToOneForUpdateInput
+  reviewedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BreakGlassEventUpdateArgs {
+  where: BreakGlassEventWhereUniqueInput!
+  data: BreakGlassEventUpdateInput!
+}
+
+input BreakGlassEventCreateInput {
+  user: UserRelateToOneForCreateInput
+  resourceType: String
+  resourceId: String
+  reason: String
+  status: String
+  reviewedBy: UserRelateToOneForCreateInput
+  reviewedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type BusinessCalendar {
+  id: ID!
+  code: String
+  name: String
+  timeZone: String
+  kind: String
+  weekendDays: JSON
+  regularOpen: String
+  regularClose: String
+  composedOf(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
+  composedOfCount(where: BusinessCalendarWhereInput! = {}): Int
+  exceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
+  exceptionsCount(where: CalendarExceptionWhereInput! = {}): Int
+  coverageThrough: CalendarDay
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+scalar CalendarDay @specifiedBy(url: "https://datatracker.ietf.org/doc/html/rfc3339#section-5.6")
+
+input BusinessCalendarWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input BusinessCalendarWhereInput {
+  AND: [BusinessCalendarWhereInput!]
+  OR: [BusinessCalendarWhereInput!]
+  NOT: [BusinessCalendarWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  timeZone: StringFilter
+  kind: StringFilter
+  regularOpen: StringFilter
+  regularClose: StringFilter
+  composedOf: BusinessCalendarManyRelationFilter
+  exceptions: CalendarExceptionManyRelationFilter
+  coverageThrough: CalendarDayNullableFilter
+  source: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BusinessCalendarManyRelationFilter {
+  every: BusinessCalendarWhereInput
+  some: BusinessCalendarWhereInput
+  none: BusinessCalendarWhereInput
+}
+
+input CalendarExceptionManyRelationFilter {
+  every: CalendarExceptionWhereInput
+  some: CalendarExceptionWhereInput
+  none: CalendarExceptionWhereInput
+}
+
+input CalendarDayNullableFilter {
+  equals: CalendarDay
+  in: [CalendarDay!]
+  notIn: [CalendarDay!]
+  lt: CalendarDay
+  lte: CalendarDay
+  gt: CalendarDay
+  gte: CalendarDay
+  not: CalendarDayNullableFilter
+}
+
+input BusinessCalendarOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  timeZone: OrderDirection
+  kind: OrderDirection
+  regularOpen: OrderDirection
+  regularClose: OrderDirection
+  coverageThrough: OrderDirection
+  source: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input BusinessCalendarUpdateInput {
+  code: String
+  name: String
+  timeZone: String
+  kind: String
+  weekendDays: JSON
+  regularOpen: String
+  regularClose: String
+  composedOf: BusinessCalendarRelateToManyForUpdateInput
+  exceptions: CalendarExceptionRelateToManyForUpdateInput
+  coverageThrough: CalendarDay
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BusinessCalendarRelateToManyForUpdateInput {
+  disconnect: [BusinessCalendarWhereUniqueInput!]
+  set: [BusinessCalendarWhereUniqueInput!]
+  create: [BusinessCalendarCreateInput!]
+  connect: [BusinessCalendarWhereUniqueInput!]
+}
+
+input CalendarExceptionRelateToManyForUpdateInput {
+  disconnect: [CalendarExceptionWhereUniqueInput!]
+  set: [CalendarExceptionWhereUniqueInput!]
+  create: [CalendarExceptionCreateInput!]
+  connect: [CalendarExceptionWhereUniqueInput!]
+}
+
+input BusinessCalendarUpdateArgs {
+  where: BusinessCalendarWhereUniqueInput!
+  data: BusinessCalendarUpdateInput!
+}
+
+input BusinessCalendarCreateInput {
+  code: String
+  name: String
+  timeZone: String
+  kind: String
+  weekendDays: JSON
+  regularOpen: String
+  regularClose: String
+  composedOf: BusinessCalendarRelateToManyForCreateInput
+  exceptions: CalendarExceptionRelateToManyForCreateInput
+  coverageThrough: CalendarDay
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BusinessCalendarRelateToManyForCreateInput {
+  create: [BusinessCalendarCreateInput!]
+  connect: [BusinessCalendarWhereUniqueInput!]
+}
+
+input CalendarExceptionRelateToManyForCreateInput {
+  create: [CalendarExceptionCreateInput!]
+  connect: [CalendarExceptionWhereUniqueInput!]
+}
+
+type CalendarException {
+  id: ID!
+  calendar: BusinessCalendar
+  date: CalendarDay
+  kind: String
+  openAt: String
+  closeAt: String
+  note: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CalendarExceptionWhereUniqueInput {
+  id: ID
+}
+
+input CalendarExceptionWhereInput {
+  AND: [CalendarExceptionWhereInput!]
+  OR: [CalendarExceptionWhereInput!]
+  NOT: [CalendarExceptionWhereInput!]
+  id: IDFilter
+  calendar: BusinessCalendarWhereInput
+  date: CalendarDayFilter
+  kind: StringFilter
+  openAt: StringFilter
+  closeAt: StringFilter
+  note: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CalendarDayFilter {
+  equals: CalendarDay
+  in: [CalendarDay!]
+  notIn: [CalendarDay!]
+  lt: CalendarDay
+  lte: CalendarDay
+  gt: CalendarDay
+  gte: CalendarDay
+  not: CalendarDayFilter
+}
+
+input CalendarExceptionOrderByInput {
+  id: OrderDirection
+  date: OrderDirection
+  kind: OrderDirection
+  openAt: OrderDirection
+  closeAt: OrderDirection
+  note: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CalendarExceptionUpdateInput {
+  calendar: BusinessCalendarRelateToOneForUpdateInput
+  date: CalendarDay
+  kind: String
+  openAt: String
+  closeAt: String
+  note: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BusinessCalendarRelateToOneForUpdateInput {
+  create: BusinessCalendarCreateInput
+  connect: BusinessCalendarWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CalendarExceptionUpdateArgs {
+  where: CalendarExceptionWhereUniqueInput!
+  data: CalendarExceptionUpdateInput!
+}
+
+input CalendarExceptionCreateInput {
+  calendar: BusinessCalendarRelateToOneForCreateInput
+  date: CalendarDay
+  kind: String
+  openAt: String
+  closeAt: String
+  note: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BusinessCalendarRelateToOneForCreateInput {
+  create: BusinessCalendarCreateInput
+  connect: BusinessCalendarWhereUniqueInput
+}
+
+type Document {
+  id: ID!
+  title: String
+  kind: String
+  storageKey: String
+  sha256: String
+  mimeType: String
+  sizeBytes: Int
+  documentVersion: Int
+  supersedes: Document
+  visibility: String
+  retentionUntil: CalendarDay
+  signedAt: DateTime
+  esignEnvelopeId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DocumentWhereUniqueInput {
+  id: ID
+}
+
+input DocumentWhereInput {
+  AND: [DocumentWhereInput!]
+  OR: [DocumentWhereInput!]
+  NOT: [DocumentWhereInput!]
+  id: IDFilter
+  title: StringFilter
+  kind: StringFilter
+  storageKey: StringFilter
+  sha256: StringFilter
+  mimeType: StringFilter
+  sizeBytes: IntNullableFilter
+  documentVersion: IntNullableFilter
+  supersedes: DocumentWhereInput
+  visibility: StringFilter
+  retentionUntil: CalendarDayNullableFilter
+  signedAt: DateTimeNullableFilter
+  esignEnvelopeId: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DocumentOrderByInput {
+  id: OrderDirection
+  title: OrderDirection
+  kind: OrderDirection
+  storageKey: OrderDirection
+  sha256: OrderDirection
+  mimeType: OrderDirection
+  sizeBytes: OrderDirection
+  documentVersion: OrderDirection
+  visibility: OrderDirection
+  retentionUntil: OrderDirection
+  signedAt: OrderDirection
+  esignEnvelopeId: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DocumentUpdateInput {
+  title: String
+  kind: String
+  storageKey: String
+  sha256: String
+  mimeType: String
+  sizeBytes: Int
+  documentVersion: Int
+  supersedes: DocumentRelateToOneForUpdateInput
+  visibility: String
+  retentionUntil: CalendarDay
+  signedAt: DateTime
+  esignEnvelopeId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DocumentRelateToOneForUpdateInput {
+  create: DocumentCreateInput
+  connect: DocumentWhereUniqueInput
+  disconnect: Boolean
+}
+
+input DocumentUpdateArgs {
+  where: DocumentWhereUniqueInput!
+  data: DocumentUpdateInput!
+}
+
+input DocumentCreateInput {
+  title: String
+  kind: String
+  storageKey: String
+  sha256: String
+  mimeType: String
+  sizeBytes: Int
+  documentVersion: Int
+  supersedes: DocumentRelateToOneForCreateInput
+  visibility: String
+  retentionUntil: CalendarDay
+  signedAt: DateTime
+  esignEnvelopeId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DocumentRelateToOneForCreateInput {
+  create: DocumentCreateInput
+  connect: DocumentWhereUniqueInput
+}
+
+type ExternalId {
+  id: ID!
+  system: String
+  recordType: String
+  recordId: String
+  value: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExternalIdWhereUniqueInput {
+  id: ID
+}
+
+input ExternalIdWhereInput {
+  AND: [ExternalIdWhereInput!]
+  OR: [ExternalIdWhereInput!]
+  NOT: [ExternalIdWhereInput!]
+  id: IDFilter
+  system: StringFilter
+  recordType: StringFilter
+  recordId: StringFilter
+  value: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ExternalIdOrderByInput {
+  id: OrderDirection
+  system: OrderDirection
+  recordType: OrderDirection
+  recordId: OrderDirection
+  value: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ExternalIdUpdateInput {
+  system: String
+  recordType: String
+  recordId: String
+  value: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExternalIdUpdateArgs {
+  where: ExternalIdWhereUniqueInput!
+  data: ExternalIdUpdateInput!
+}
+
+input ExternalIdCreateInput {
+  system: String
+  recordType: String
+  recordId: String
+  value: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type IntegrationConnection {
+  id: ID!
+  name: String
+  area: String
+  providerKey: String
+  mode: String
+  location: Location
+  secretRef: String
+  capabilityProfile: JSON
+  status: String
+  lastHealthAt: DateTime
+  lastError: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input IntegrationConnectionWhereUniqueInput {
+  id: ID
+}
+
+input IntegrationConnectionWhereInput {
+  AND: [IntegrationConnectionWhereInput!]
+  OR: [IntegrationConnectionWhereInput!]
+  NOT: [IntegrationConnectionWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  area: StringFilter
+  providerKey: StringFilter
+  mode: StringFilter
+  location: LocationWhereInput
+  secretRef: StringFilter
+  status: StringFilter
+  lastHealthAt: DateTimeNullableFilter
+  lastError: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input IntegrationConnectionOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  area: OrderDirection
+  providerKey: OrderDirection
+  mode: OrderDirection
+  secretRef: OrderDirection
+  status: OrderDirection
+  lastHealthAt: OrderDirection
+  lastError: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input IntegrationConnectionUpdateInput {
+  name: String
+  area: String
+  providerKey: String
+  mode: String
+  location: LocationRelateToOneForUpdateInput
+  secretRef: String
+  capabilityProfile: JSON
+  status: String
+  lastHealthAt: DateTime
+  lastError: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LocationRelateToOneForUpdateInput {
+  create: LocationCreateInput
+  connect: LocationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input IntegrationConnectionUpdateArgs {
+  where: IntegrationConnectionWhereUniqueInput!
+  data: IntegrationConnectionUpdateInput!
+}
+
+input IntegrationConnectionCreateInput {
+  name: String
+  area: String
+  providerKey: String
+  mode: String
+  location: LocationRelateToOneForCreateInput
+  secretRef: String
+  capabilityProfile: JSON
+  status: String
+  lastHealthAt: DateTime
+  lastError: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LocationRelateToOneForCreateInput {
+  create: LocationCreateInput
+  connect: LocationWhereUniqueInput
+}
+
+type Notification {
+  id: ID!
+  recipient: User
+  channel: String
+  template: String
+  payload: JSON
+  status: String
+  sentAt: DateTime
+  readAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NotificationWhereUniqueInput {
+  id: ID
+}
+
+input NotificationWhereInput {
+  AND: [NotificationWhereInput!]
+  OR: [NotificationWhereInput!]
+  NOT: [NotificationWhereInput!]
+  id: IDFilter
+  recipient: UserWhereInput
+  channel: StringFilter
+  template: StringFilter
+  status: StringFilter
+  sentAt: DateTimeNullableFilter
+  readAt: DateTimeNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input NotificationOrderByInput {
+  id: OrderDirection
+  channel: OrderDirection
+  template: OrderDirection
+  status: OrderDirection
+  sentAt: OrderDirection
+  readAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input NotificationUpdateInput {
+  recipient: UserRelateToOneForUpdateInput
+  channel: String
+  template: String
+  payload: JSON
+  status: String
+  sentAt: DateTime
+  readAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NotificationUpdateArgs {
+  where: NotificationWhereUniqueInput!
+  data: NotificationUpdateInput!
+}
+
+input NotificationCreateInput {
+  recipient: UserRelateToOneForCreateInput
+  channel: String
+  template: String
+  payload: JSON
+  status: String
+  sentAt: DateTime
+  readAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type OutboxEvent {
+  id: ID!
+  topic: String
+  aggregateType: String
+  aggregateId: String
+  dedupeKey: String
+  payload: JSON
+  status: String
+  attempts: Int
+  nextAttemptAt: DateTime
+  leaseOwner: String
+  leaseExpiresAt: DateTime
+  fencingToken: Int
+  lastError: String
+  deliveredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input OutboxEventWhereUniqueInput {
+  id: ID
+  dedupeKey: String
+}
+
+input OutboxEventWhereInput {
+  AND: [OutboxEventWhereInput!]
+  OR: [OutboxEventWhereInput!]
+  NOT: [OutboxEventWhereInput!]
+  id: IDFilter
+  topic: StringFilter
+  aggregateType: StringFilter
+  aggregateId: StringFilter
+  dedupeKey: StringFilter
+  status: StringFilter
+  attempts: IntNullableFilter
+  nextAttemptAt: DateTimeNullableFilter
+  leaseOwner: StringFilter
+  leaseExpiresAt: DateTimeNullableFilter
+  fencingToken: IntNullableFilter
+  lastError: StringFilter
+  deliveredAt: DateTimeNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input OutboxEventOrderByInput {
+  id: OrderDirection
+  topic: OrderDirection
+  aggregateType: OrderDirection
+  aggregateId: OrderDirection
+  dedupeKey: OrderDirection
+  status: OrderDirection
+  attempts: OrderDirection
+  nextAttemptAt: OrderDirection
+  leaseOwner: OrderDirection
+  leaseExpiresAt: OrderDirection
+  fencingToken: OrderDirection
+  lastError: OrderDirection
+  deliveredAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input OutboxEventUpdateInput {
+  topic: String
+  aggregateType: String
+  aggregateId: String
+  dedupeKey: String
+  payload: JSON
+  status: String
+  attempts: Int
+  nextAttemptAt: DateTime
+  leaseOwner: String
+  leaseExpiresAt: DateTime
+  fencingToken: Int
+  lastError: String
+  deliveredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input OutboxEventUpdateArgs {
+  where: OutboxEventWhereUniqueInput!
+  data: OutboxEventUpdateInput!
+}
+
+input OutboxEventCreateInput {
+  topic: String
+  aggregateType: String
+  aggregateId: String
+  dedupeKey: String
+  payload: JSON
+  status: String
+  attempts: Int
+  nextAttemptAt: DateTime
+  leaseOwner: String
+  leaseExpiresAt: DateTime
+  fencingToken: Int
+  lastError: String
+  deliveredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ProviderObservation {
+  id: ID!
+  source: String
+  connectionId: String
+  externalId: String
+  contentHash: String
+  payload: JSON
+  receivedAt: DateTime
+  processedAt: DateTime
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProviderObservationWhereUniqueInput {
+  id: ID
+}
+
+input ProviderObservationWhereInput {
+  AND: [ProviderObservationWhereInput!]
+  OR: [ProviderObservationWhereInput!]
+  NOT: [ProviderObservationWhereInput!]
+  id: IDFilter
+  source: StringFilter
+  connectionId: StringFilter
+  externalId: StringFilter
+  contentHash: StringFilter
+  receivedAt: DateTimeNullableFilter
+  processedAt: DateTimeNullableFilter
+  status: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProviderObservationOrderByInput {
+  id: OrderDirection
+  source: OrderDirection
+  connectionId: OrderDirection
+  externalId: OrderDirection
+  contentHash: OrderDirection
+  receivedAt: OrderDirection
+  processedAt: OrderDirection
+  status: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ProviderObservationUpdateInput {
+  source: String
+  connectionId: String
+  externalId: String
+  contentHash: String
+  payload: JSON
+  receivedAt: DateTime
+  processedAt: DateTime
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProviderObservationUpdateArgs {
+  where: ProviderObservationWhereUniqueInput!
+  data: ProviderObservationUpdateInput!
+}
+
+input ProviderObservationCreateInput {
+  source: String
+  connectionId: String
+  externalId: String
+  contentHash: String
+  payload: JSON
+  receivedAt: DateTime
+  processedAt: DateTime
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ReadAudit {
+  id: ID!
+  actorKind: String
+  actorId: String
+  actorLabel: String
+  patientId: String
+  clientId: String
+  resourceType: String
+  resourceId: String
+  purpose: String
+  fields: JSON
+  requestId: String
+  at: DateTime
+}
+
+input ReadAuditWhereUniqueInput {
+  id: ID
+}
+
+input ReadAuditWhereInput {
+  AND: [ReadAuditWhereInput!]
+  OR: [ReadAuditWhereInput!]
+  NOT: [ReadAuditWhereInput!]
+  id: IDFilter
+  actorKind: StringFilter
+  actorId: StringFilter
+  actorLabel: StringFilter
+  patientId: StringFilter
+  clientId: StringFilter
+  resourceType: StringFilter
+  resourceId: StringFilter
+  purpose: StringFilter
+  requestId: StringFilter
+  at: DateTimeNullableFilter
+}
+
+input ReadAuditOrderByInput {
+  id: OrderDirection
+  actorKind: OrderDirection
+  actorId: OrderDirection
+  actorLabel: OrderDirection
+  patientId: OrderDirection
+  clientId: OrderDirection
+  resourceType: OrderDirection
+  resourceId: OrderDirection
+  purpose: OrderDirection
+  requestId: OrderDirection
+  at: OrderDirection
+}
+
+input ReadAuditUpdateInput {
+  actorKind: String
+  actorId: String
+  actorLabel: String
+  patientId: String
+  clientId: String
+  resourceType: String
+  resourceId: String
+  purpose: String
+  fields: JSON
+  requestId: String
+  at: DateTime
+}
+
+input ReadAuditUpdateArgs {
+  where: ReadAuditWhereUniqueInput!
+  data: ReadAuditUpdateInput!
+}
+
+input ReadAuditCreateInput {
+  actorKind: String
+  actorId: String
+  actorLabel: String
+  patientId: String
+  clientId: String
+  resourceType: String
+  resourceId: String
+  purpose: String
+  fields: JSON
+  requestId: String
+  at: DateTime
+}
+
+type ScheduledJob {
+  id: ID!
+  kind: String
+  intervalSeconds: Int
+  nextRunAt: DateTime
+  lastRunAt: DateTime
+  status: String
+  leaseKey: String
+  lastError: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ScheduledJobWhereUniqueInput {
+  id: ID
+  kind: String
+}
+
+input ScheduledJobWhereInput {
+  AND: [ScheduledJobWhereInput!]
+  OR: [ScheduledJobWhereInput!]
+  NOT: [ScheduledJobWhereInput!]
+  id: IDFilter
+  kind: StringFilter
+  intervalSeconds: IntNullableFilter
+  nextRunAt: DateTimeNullableFilter
+  lastRunAt: DateTimeNullableFilter
+  status: StringFilter
+  leaseKey: StringFilter
+  lastError: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ScheduledJobOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  intervalSeconds: OrderDirection
+  nextRunAt: OrderDirection
+  lastRunAt: OrderDirection
+  status: OrderDirection
+  leaseKey: OrderDirection
+  lastError: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ScheduledJobUpdateInput {
+  kind: String
+  intervalSeconds: Int
+  nextRunAt: DateTime
+  lastRunAt: DateTime
+  status: String
+  leaseKey: String
+  lastError: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ScheduledJobUpdateArgs {
+  where: ScheduledJobWhereUniqueInput!
+  data: ScheduledJobUpdateInput!
+}
+
+input ScheduledJobCreateInput {
+  kind: String
+  intervalSeconds: Int
+  nextRunAt: DateTime
+  lastRunAt: DateTime
+  status: String
+  leaseKey: String
+  lastError: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type DeaPowerOfAttorney {
+  id: ID!
+  registration: DeaRegistration
+  grantee: StaffMember
+  signedOn: CalendarDay
+  revokedOn: CalendarDay
+  document: Document
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaPowerOfAttorneyWhereUniqueInput {
+  id: ID
+}
+
+input DeaPowerOfAttorneyWhereInput {
+  AND: [DeaPowerOfAttorneyWhereInput!]
+  OR: [DeaPowerOfAttorneyWhereInput!]
+  NOT: [DeaPowerOfAttorneyWhereInput!]
+  id: IDFilter
+  registration: DeaRegistrationWhereInput
+  grantee: StaffMemberWhereInput
+  signedOn: CalendarDayNullableFilter
+  revokedOn: CalendarDayNullableFilter
+  document: DocumentWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DeaPowerOfAttorneyOrderByInput {
+  id: OrderDirection
+  signedOn: OrderDirection
+  revokedOn: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DeaPowerOfAttorneyUpdateInput {
+  registration: DeaRegistrationRelateToOneForUpdateInput
+  grantee: StaffMemberRelateToOneForUpdateInput
+  signedOn: CalendarDay
+  revokedOn: CalendarDay
+  document: DocumentRelateToOneForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaRegistrationRelateToOneForUpdateInput {
+  create: DeaRegistrationCreateInput
+  connect: DeaRegistrationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input DeaPowerOfAttorneyUpdateArgs {
+  where: DeaPowerOfAttorneyWhereUniqueInput!
+  data: DeaPowerOfAttorneyUpdateInput!
+}
+
+input DeaPowerOfAttorneyCreateInput {
+  registration: DeaRegistrationRelateToOneForCreateInput
+  grantee: StaffMemberRelateToOneForCreateInput
+  signedOn: CalendarDay
+  revokedOn: CalendarDay
+  document: DocumentRelateToOneForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaRegistrationRelateToOneForCreateInput {
+  create: DeaRegistrationCreateInput
+  connect: DeaRegistrationWhereUniqueInput
+}
+
+type DeaRegistration {
+  id: ID!
+  registrationNumber: String
+  registrantName: String
+  registrantKind: String
+  staffMember: StaffMember
+  location: Location
+  schedules: JSON
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  stateCsRegistration: String
+  csosCertificateRef: String
+  powersOfAttorney(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
+  powersOfAttorneyCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaRegistrationWhereUniqueInput {
+  id: ID
+  registrationNumber: String
+}
+
+input DeaRegistrationWhereInput {
+  AND: [DeaRegistrationWhereInput!]
+  OR: [DeaRegistrationWhereInput!]
+  NOT: [DeaRegistrationWhereInput!]
+  id: IDFilter
+  registrationNumber: StringFilter
+  registrantName: StringFilter
+  registrantKind: StringFilter
+  staffMember: StaffMemberWhereInput
+  location: LocationWhereInput
+  issuedOn: CalendarDayNullableFilter
+  expiresOn: CalendarDayFilter
+  stateCsRegistration: StringFilter
+  csosCertificateRef: StringFilter
+  powersOfAttorney: DeaPowerOfAttorneyManyRelationFilter
+  status: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DeaPowerOfAttorneyManyRelationFilter {
+  every: DeaPowerOfAttorneyWhereInput
+  some: DeaPowerOfAttorneyWhereInput
+  none: DeaPowerOfAttorneyWhereInput
+}
+
+input DeaRegistrationOrderByInput {
+  id: OrderDirection
+  registrationNumber: OrderDirection
+  registrantName: OrderDirection
+  registrantKind: OrderDirection
+  issuedOn: OrderDirection
+  expiresOn: OrderDirection
+  stateCsRegistration: OrderDirection
+  csosCertificateRef: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DeaRegistrationUpdateInput {
+  registrationNumber: String
+  registrantName: String
+  registrantKind: String
+  staffMember: StaffMemberRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  schedules: JSON
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  stateCsRegistration: String
+  csosCertificateRef: String
+  powersOfAttorney: DeaPowerOfAttorneyRelateToManyForUpdateInput
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaPowerOfAttorneyRelateToManyForUpdateInput {
+  disconnect: [DeaPowerOfAttorneyWhereUniqueInput!]
+  set: [DeaPowerOfAttorneyWhereUniqueInput!]
+  create: [DeaPowerOfAttorneyCreateInput!]
+  connect: [DeaPowerOfAttorneyWhereUniqueInput!]
+}
+
+input DeaRegistrationUpdateArgs {
+  where: DeaRegistrationWhereUniqueInput!
+  data: DeaRegistrationUpdateInput!
+}
+
+input DeaRegistrationCreateInput {
+  registrationNumber: String
+  registrantName: String
+  registrantKind: String
+  staffMember: StaffMemberRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  schedules: JSON
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  stateCsRegistration: String
+  csosCertificateRef: String
+  powersOfAttorney: DeaPowerOfAttorneyRelateToManyForCreateInput
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaPowerOfAttorneyRelateToManyForCreateInput {
+  create: [DeaPowerOfAttorneyCreateInput!]
+  connect: [DeaPowerOfAttorneyWhereUniqueInput!]
+}
+
+type LicenseEvaluation {
+  id: ID!
+  action: String
+  staffMember: StaffMember
+  location: Location
+  at: DateTime
+  onDate: CalendarDay
+  license: ProfessionalLicense
+  deaRegistration: DeaRegistration
+  policyVersions: JSON
+  result: String
+  findings: JSON
+}
+
+input LicenseEvaluationWhereUniqueInput {
+  id: ID
+}
+
+input LicenseEvaluationWhereInput {
+  AND: [LicenseEvaluationWhereInput!]
+  OR: [LicenseEvaluationWhereInput!]
+  NOT: [LicenseEvaluationWhereInput!]
+  id: IDFilter
+  action: StringFilter
+  staffMember: StaffMemberWhereInput
+  location: LocationWhereInput
+  at: DateTimeFilter
+  onDate: CalendarDayNullableFilter
+  license: ProfessionalLicenseWhereInput
+  deaRegistration: DeaRegistrationWhereInput
+  result: StringFilter
+}
+
+input LicenseEvaluationOrderByInput {
+  id: OrderDirection
+  action: OrderDirection
+  at: OrderDirection
+  onDate: OrderDirection
+  result: OrderDirection
+}
+
+input LicenseEvaluationUpdateInput {
+  action: String
+  staffMember: StaffMemberRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  at: DateTime
+  onDate: CalendarDay
+  license: ProfessionalLicenseRelateToOneForUpdateInput
+  deaRegistration: DeaRegistrationRelateToOneForUpdateInput
+  policyVersions: JSON
+  result: String
+  findings: JSON
+}
+
+input ProfessionalLicenseRelateToOneForUpdateInput {
+  create: ProfessionalLicenseCreateInput
+  connect: ProfessionalLicenseWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LicenseEvaluationUpdateArgs {
+  where: LicenseEvaluationWhereUniqueInput!
+  data: LicenseEvaluationUpdateInput!
+}
+
+input LicenseEvaluationCreateInput {
+  action: String
+  staffMember: StaffMemberRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  at: DateTime
+  onDate: CalendarDay
+  license: ProfessionalLicenseRelateToOneForCreateInput
+  deaRegistration: DeaRegistrationRelateToOneForCreateInput
+  policyVersions: JSON
+  result: String
+  findings: JSON
+}
+
+input ProfessionalLicenseRelateToOneForCreateInput {
+  create: ProfessionalLicenseCreateInput
+  connect: ProfessionalLicenseWhereUniqueInput
+}
+
+type Location {
+  id: ID!
+  name: String
+  code: String
+  kind: String
+  addressLine1: String
+  addressLine2: String
+  city: String
+  postalCode: String
+  stateCode: String
+  lat: Decimal
+  lng: Decimal
+  timeZone: String
+  phone: String
+  email: String
+  calendar: BusinessCalendar
+  openHours: JSON
+  emergencyCoverage: String
+  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
+  deaRegistrationsCount(where: DeaRegistrationWhereInput! = {}): Int
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+scalar Decimal
+
+input LocationWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input LocationWhereInput {
+  AND: [LocationWhereInput!]
+  OR: [LocationWhereInput!]
+  NOT: [LocationWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  code: StringFilter
+  kind: StringFilter
+  addressLine1: StringFilter
+  addressLine2: StringFilter
+  city: StringFilter
+  postalCode: StringFilter
+  stateCode: StringFilter
+  lat: DecimalNullableFilter
+  lng: DecimalNullableFilter
+  timeZone: StringFilter
+  phone: StringFilter
+  email: StringFilter
+  calendar: BusinessCalendarWhereInput
+  emergencyCoverage: StringFilter
+  deaRegistrations: DeaRegistrationManyRelationFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DecimalNullableFilter {
+  equals: Decimal
+  in: [Decimal!]
+  notIn: [Decimal!]
+  lt: Decimal
+  lte: Decimal
+  gt: Decimal
+  gte: Decimal
+  not: DecimalNullableFilter
+}
+
+input DeaRegistrationManyRelationFilter {
+  every: DeaRegistrationWhereInput
+  some: DeaRegistrationWhereInput
+  none: DeaRegistrationWhereInput
+}
+
+input LocationOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  code: OrderDirection
+  kind: OrderDirection
+  addressLine1: OrderDirection
+  addressLine2: OrderDirection
+  city: OrderDirection
+  postalCode: OrderDirection
+  stateCode: OrderDirection
+  lat: OrderDirection
+  lng: OrderDirection
+  timeZone: OrderDirection
+  phone: OrderDirection
+  email: OrderDirection
+  emergencyCoverage: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LocationUpdateInput {
+  name: String
+  code: String
+  kind: String
+  addressLine1: String
+  addressLine2: String
+  city: String
+  postalCode: String
+  stateCode: String
+  lat: Decimal
+  lng: Decimal
+  timeZone: String
+  phone: String
+  email: String
+  calendar: BusinessCalendarRelateToOneForUpdateInput
+  openHours: JSON
+  emergencyCoverage: String
+  deaRegistrations: DeaRegistrationRelateToManyForUpdateInput
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaRegistrationRelateToManyForUpdateInput {
+  disconnect: [DeaRegistrationWhereUniqueInput!]
+  set: [DeaRegistrationWhereUniqueInput!]
+  create: [DeaRegistrationCreateInput!]
+  connect: [DeaRegistrationWhereUniqueInput!]
+}
+
+input LocationUpdateArgs {
+  where: LocationWhereUniqueInput!
+  data: LocationUpdateInput!
+}
+
+input LocationCreateInput {
+  name: String
+  code: String
+  kind: String
+  addressLine1: String
+  addressLine2: String
+  city: String
+  postalCode: String
+  stateCode: String
+  lat: Decimal
+  lng: Decimal
+  timeZone: String
+  phone: String
+  email: String
+  calendar: BusinessCalendarRelateToOneForCreateInput
+  openHours: JSON
+  emergencyCoverage: String
+  deaRegistrations: DeaRegistrationRelateToManyForCreateInput
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeaRegistrationRelateToManyForCreateInput {
+  create: [DeaRegistrationCreateInput!]
+  connect: [DeaRegistrationWhereUniqueInput!]
+}
+
+type PracticeSettings {
+  id: ID!
+  legalName: String
+  displayName: String
+  homeTimeZone: String
+  currencyCode: String
+  medicalDirector: StaffMember
+  estimateValidityDays: Int
+  estimateOverageToleranceBps: Int
+  electiveDepositPct: Decimal
+  depositBasis: String
+  noShowGraceMinutes: Int
+  unsignedRecordTaskHours: Int
+  unsignedRecordEscalateHours: Int
+  refundApprovalThresholdMinor: BigInt
+  discountApprovalThresholdBps: Int
+  writeOffRequiresApproval: Boolean
+  weightMaxAgeHours: JSON
+  features: JSON
+  strictAgentOwnerSoD: Boolean
+  onboardingStatus: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PracticeSettingsWhereUniqueInput {
+  id: ID
+}
+
+input PracticeSettingsWhereInput {
+  AND: [PracticeSettingsWhereInput!]
+  OR: [PracticeSettingsWhereInput!]
+  NOT: [PracticeSettingsWhereInput!]
+  id: IDFilter
+  legalName: StringFilter
+  displayName: StringFilter
+  homeTimeZone: StringFilter
+  currencyCode: StringFilter
+  medicalDirector: StaffMemberWhereInput
+  estimateValidityDays: IntNullableFilter
+  estimateOverageToleranceBps: IntNullableFilter
+  electiveDepositPct: DecimalNullableFilter
+  depositBasis: StringFilter
+  noShowGraceMinutes: IntNullableFilter
+  unsignedRecordTaskHours: IntNullableFilter
+  unsignedRecordEscalateHours: IntNullableFilter
+  refundApprovalThresholdMinor: BigIntFilter
+  discountApprovalThresholdBps: IntNullableFilter
+  writeOffRequiresApproval: BooleanFilter
+  strictAgentOwnerSoD: BooleanFilter
+  onboardingStatus: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BigIntFilter {
+  equals: BigInt
+  in: [BigInt!]
+  notIn: [BigInt!]
+  lt: BigInt
+  lte: BigInt
+  gt: BigInt
+  gte: BigInt
+  not: BigIntFilter
+}
+
+input PracticeSettingsOrderByInput {
+  id: OrderDirection
+  legalName: OrderDirection
+  displayName: OrderDirection
+  homeTimeZone: OrderDirection
+  currencyCode: OrderDirection
+  estimateValidityDays: OrderDirection
+  estimateOverageToleranceBps: OrderDirection
+  electiveDepositPct: OrderDirection
+  depositBasis: OrderDirection
+  noShowGraceMinutes: OrderDirection
+  unsignedRecordTaskHours: OrderDirection
+  unsignedRecordEscalateHours: OrderDirection
+  refundApprovalThresholdMinor: OrderDirection
+  discountApprovalThresholdBps: OrderDirection
+  writeOffRequiresApproval: OrderDirection
+  strictAgentOwnerSoD: OrderDirection
+  onboardingStatus: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PracticeSettingsUpdateInput {
+  legalName: String
+  displayName: String
+  homeTimeZone: String
+  currencyCode: String
+  medicalDirector: StaffMemberRelateToOneForUpdateInput
+  estimateValidityDays: Int
+  estimateOverageToleranceBps: Int
+  electiveDepositPct: Decimal
+  depositBasis: String
+  noShowGraceMinutes: Int
+  unsignedRecordTaskHours: Int
+  unsignedRecordEscalateHours: Int
+  refundApprovalThresholdMinor: BigInt
+  discountApprovalThresholdBps: Int
+  writeOffRequiresApproval: Boolean
+  weightMaxAgeHours: JSON
+  features: JSON
+  strictAgentOwnerSoD: Boolean
+  onboardingStatus: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PracticeSettingsUpdateArgs {
+  where: PracticeSettingsWhereUniqueInput! = {id: 1}
+  data: PracticeSettingsUpdateInput!
+}
+
+input PracticeSettingsCreateInput {
+  legalName: String
+  displayName: String
+  homeTimeZone: String
+  currencyCode: String
+  medicalDirector: StaffMemberRelateToOneForCreateInput
+  estimateValidityDays: Int
+  estimateOverageToleranceBps: Int
+  electiveDepositPct: Decimal
+  depositBasis: String
+  noShowGraceMinutes: Int
+  unsignedRecordTaskHours: Int
+  unsignedRecordEscalateHours: Int
+  refundApprovalThresholdMinor: BigInt
+  discountApprovalThresholdBps: Int
+  writeOffRequiresApproval: Boolean
+  weightMaxAgeHours: JSON
+  features: JSON
+  strictAgentOwnerSoD: Boolean
+  onboardingStatus: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ProfessionalLicense {
+  id: ID!
+  staffMember: StaffMember
+  kind: String
+  stateCode: String
+  licenseNumber: String
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  verifiedAt: DateTime
+  verifiedBy: User
+  verificationSource: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProfessionalLicenseWhereUniqueInput {
+  id: ID
+}
+
+input ProfessionalLicenseWhereInput {
+  AND: [ProfessionalLicenseWhereInput!]
+  OR: [ProfessionalLicenseWhereInput!]
+  NOT: [ProfessionalLicenseWhereInput!]
+  id: IDFilter
+  staffMember: StaffMemberWhereInput
+  kind: StringFilter
+  stateCode: StringFilter
+  licenseNumber: StringFilter
+  issuedOn: CalendarDayNullableFilter
+  expiresOn: CalendarDayFilter
+  status: StringFilter
+  verifiedAt: DateTimeNullableFilter
+  verifiedBy: UserWhereInput
+  verificationSource: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProfessionalLicenseOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  stateCode: OrderDirection
+  licenseNumber: OrderDirection
+  issuedOn: OrderDirection
+  expiresOn: OrderDirection
+  status: OrderDirection
+  verifiedAt: OrderDirection
+  verificationSource: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ProfessionalLicenseUpdateInput {
+  staffMember: StaffMemberRelateToOneForUpdateInput
+  kind: String
+  stateCode: String
+  licenseNumber: String
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  verifiedAt: DateTime
+  verifiedBy: UserRelateToOneForUpdateInput
+  verificationSource: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProfessionalLicenseUpdateArgs {
+  where: ProfessionalLicenseWhereUniqueInput!
+  data: ProfessionalLicenseUpdateInput!
+}
+
+input ProfessionalLicenseCreateInput {
+  staffMember: StaffMemberRelateToOneForCreateInput
+  kind: String
+  stateCode: String
+  licenseNumber: String
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  verifiedAt: DateTime
+  verifiedBy: UserRelateToOneForCreateInput
+  verificationSource: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type StaffMember {
+  id: ID!
+  user: User
+  displayName: String
+  kind: String
+  credentials: String
+  employment: String
+  homeLocation: Location
+  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
+  locationsCount(where: LocationWhereInput! = {}): Int
+  colour: String
+  licenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
+  licensesCount(where: ProfessionalLicenseWhereInput! = {}): Int
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StaffMemberWhereUniqueInput {
+  id: ID
+  user: UserWhereUniqueInput
+}
+
+input StaffMemberWhereInput {
+  AND: [StaffMemberWhereInput!]
+  OR: [StaffMemberWhereInput!]
+  NOT: [StaffMemberWhereInput!]
+  id: IDFilter
+  user: UserWhereInput
+  displayName: StringFilter
+  kind: StringFilter
+  credentials: StringFilter
+  employment: StringFilter
+  homeLocation: LocationWhereInput
+  locations: LocationManyRelationFilter
+  colour: StringFilter
+  licenses: ProfessionalLicenseManyRelationFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input LocationManyRelationFilter {
+  every: LocationWhereInput
+  some: LocationWhereInput
+  none: LocationWhereInput
+}
+
+input ProfessionalLicenseManyRelationFilter {
+  every: ProfessionalLicenseWhereInput
+  some: ProfessionalLicenseWhereInput
+  none: ProfessionalLicenseWhereInput
+}
+
+input StaffMemberOrderByInput {
+  id: OrderDirection
+  displayName: OrderDirection
+  kind: OrderDirection
+  credentials: OrderDirection
+  employment: OrderDirection
+  colour: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StaffMemberUpdateInput {
+  user: UserRelateToOneForUpdateInput
+  displayName: String
+  kind: String
+  credentials: String
+  employment: String
+  homeLocation: LocationRelateToOneForUpdateInput
+  locations: LocationRelateToManyForUpdateInput
+  colour: String
+  licenses: ProfessionalLicenseRelateToManyForUpdateInput
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LocationRelateToManyForUpdateInput {
+  disconnect: [LocationWhereUniqueInput!]
+  set: [LocationWhereUniqueInput!]
+  create: [LocationCreateInput!]
+  connect: [LocationWhereUniqueInput!]
+}
+
+input ProfessionalLicenseRelateToManyForUpdateInput {
+  disconnect: [ProfessionalLicenseWhereUniqueInput!]
+  set: [ProfessionalLicenseWhereUniqueInput!]
+  create: [ProfessionalLicenseCreateInput!]
+  connect: [ProfessionalLicenseWhereUniqueInput!]
+}
+
+input StaffMemberUpdateArgs {
+  where: StaffMemberWhereUniqueInput!
+  data: StaffMemberUpdateInput!
+}
+
+input StaffMemberCreateInput {
+  user: UserRelateToOneForCreateInput
+  displayName: String
+  kind: String
+  credentials: String
+  employment: String
+  homeLocation: LocationRelateToOneForCreateInput
+  locations: LocationRelateToManyForCreateInput
+  colour: String
+  licenses: ProfessionalLicenseRelateToManyForCreateInput
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LocationRelateToManyForCreateInput {
+  create: [LocationCreateInput!]
+  connect: [LocationWhereUniqueInput!]
+}
+
+input ProfessionalLicenseRelateToManyForCreateInput {
+  create: [ProfessionalLicenseCreateInput!]
+  connect: [ProfessionalLicenseWhereUniqueInput!]
+}
+
+type ComplianceTask {
+  id: ID!
+  kind: String
+  title: String
+  subjectType: String
+  subjectId: String
+  location: Location
+  startedAt: DateTime
+  dueAt: DateTime
+  dedupeKey: String
+  escalations: JSON
+  status: String
+  evidence: JSON
+  policyVersion: PolicyVersion
+  completedAt: DateTime
+  completedBy: User
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ComplianceTaskWhereUniqueInput {
+  id: ID
+  dedupeKey: String
+}
+
+input ComplianceTaskWhereInput {
+  AND: [ComplianceTaskWhereInput!]
+  OR: [ComplianceTaskWhereInput!]
+  NOT: [ComplianceTaskWhereInput!]
+  id: IDFilter
+  kind: StringFilter
+  title: StringFilter
+  subjectType: StringFilter
+  subjectId: StringFilter
+  location: LocationWhereInput
+  startedAt: DateTimeNullableFilter
+  dueAt: DateTimeFilter
+  dedupeKey: StringFilter
+  status: StringFilter
+  policyVersion: PolicyVersionWhereInput
+  completedAt: DateTimeNullableFilter
+  completedBy: UserWhereInput
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ComplianceTaskOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  title: OrderDirection
+  subjectType: OrderDirection
+  subjectId: OrderDirection
+  startedAt: OrderDirection
+  dueAt: OrderDirection
+  dedupeKey: OrderDirection
+  status: OrderDirection
+  completedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ComplianceTaskUpdateInput {
+  kind: String
+  title: String
+  subjectType: String
+  subjectId: String
+  location: LocationRelateToOneForUpdateInput
+  startedAt: DateTime
+  dueAt: DateTime
+  dedupeKey: String
+  escalations: JSON
+  status: String
+  evidence: JSON
+  policyVersion: PolicyVersionRelateToOneForUpdateInput
+  completedAt: DateTime
+  completedBy: UserRelateToOneForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionRelateToOneForUpdateInput {
+  create: PolicyVersionCreateInput
+  connect: PolicyVersionWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ComplianceTaskUpdateArgs {
+  where: ComplianceTaskWhereUniqueInput!
+  data: ComplianceTaskUpdateInput!
+}
+
+input ComplianceTaskCreateInput {
+  kind: String
+  title: String
+  subjectType: String
+  subjectId: String
+  location: LocationRelateToOneForCreateInput
+  startedAt: DateTime
+  dueAt: DateTime
+  dedupeKey: String
+  escalations: JSON
+  status: String
+  evidence: JSON
+  policyVersion: PolicyVersionRelateToOneForCreateInput
+  completedAt: DateTime
+  completedBy: UserRelateToOneForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionRelateToOneForCreateInput {
+  create: PolicyVersionCreateInput
+  connect: PolicyVersionWhereUniqueInput
+}
+
+type Incident {
+  id: ID!
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  location: Location
+  discoveredAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input IncidentWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input IncidentWhereInput {
+  AND: [IncidentWhereInput!]
+  OR: [IncidentWhereInput!]
+  NOT: [IncidentWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  kind: StringFilter
+  title: StringFilter
+  detail: StringFilter
+  location: LocationWhereInput
+  discoveredAt: DateTimeNullableFilter
+  status: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input IncidentOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  kind: OrderDirection
+  title: OrderDirection
+  detail: OrderDirection
+  discoveredAt: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input IncidentUpdateInput {
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  location: LocationRelateToOneForUpdateInput
+  discoveredAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input IncidentUpdateArgs {
+  where: IncidentWhereUniqueInput!
+  data: IncidentUpdateInput!
+}
+
+input IncidentCreateInput {
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  location: LocationRelateToOneForCreateInput
+  discoveredAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type LegalHold {
+  id: ID!
+  ref: String
+  reason: String
+  subjectType: String
+  subjectId: String
+  placedBy: User
+  placedAt: DateTime
+  releasedBy: User
+  releasedAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LegalHoldWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input LegalHoldWhereInput {
+  AND: [LegalHoldWhereInput!]
+  OR: [LegalHoldWhereInput!]
+  NOT: [LegalHoldWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  reason: StringFilter
+  subjectType: StringFilter
+  subjectId: StringFilter
+  placedBy: UserWhereInput
+  placedAt: DateTimeNullableFilter
+  releasedBy: UserWhereInput
+  releasedAt: DateTimeNullableFilter
+  status: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input LegalHoldOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  reason: OrderDirection
+  subjectType: OrderDirection
+  subjectId: OrderDirection
+  placedAt: OrderDirection
+  releasedAt: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LegalHoldUpdateInput {
+  ref: String
+  reason: String
+  subjectType: String
+  subjectId: String
+  placedBy: UserRelateToOneForUpdateInput
+  placedAt: DateTime
+  releasedBy: UserRelateToOneForUpdateInput
+  releasedAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LegalHoldUpdateArgs {
+  where: LegalHoldWhereUniqueInput!
+  data: LegalHoldUpdateInput!
+}
+
+input LegalHoldCreateInput {
+  ref: String
+  reason: String
+  subjectType: String
+  subjectId: String
+  placedBy: UserRelateToOneForCreateInput
+  placedAt: DateTime
+  releasedBy: UserRelateToOneForCreateInput
+  releasedAt: DateTime
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Note {
+  id: ID!
+  subjectType: String
+  subjectId: String
+  body: String
+  visibility: String
+  author: User
+  authorAgent: AgentIdentity
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NoteWhereUniqueInput {
+  id: ID
+}
+
+input NoteWhereInput {
+  AND: [NoteWhereInput!]
+  OR: [NoteWhereInput!]
+  NOT: [NoteWhereInput!]
+  id: IDFilter
+  subjectType: StringFilter
+  subjectId: StringFilter
+  body: StringFilter
+  visibility: StringFilter
+  author: UserWhereInput
+  authorAgent: AgentIdentityWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input NoteOrderByInput {
+  id: OrderDirection
+  subjectType: OrderDirection
+  subjectId: OrderDirection
+  body: OrderDirection
+  visibility: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input NoteUpdateInput {
+  subjectType: String
+  subjectId: String
+  body: String
+  visibility: String
+  author: UserRelateToOneForUpdateInput
+  authorAgent: AgentIdentityRelateToOneForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NoteUpdateArgs {
+  where: NoteWhereUniqueInput!
+  data: NoteUpdateInput!
+}
+
+input NoteCreateInput {
+  subjectType: String
+  subjectId: String
+  body: String
+  visibility: String
+  author: UserRelateToOneForCreateInput
+  authorAgent: AgentIdentityRelateToOneForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type PolicyBinding {
+  id: ID!
+  pack: PolicyPack
+  scope: String
+  location: Location
+  layer: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyBindingWhereUniqueInput {
+  id: ID
+}
+
+input PolicyBindingWhereInput {
+  AND: [PolicyBindingWhereInput!]
+  OR: [PolicyBindingWhereInput!]
+  NOT: [PolicyBindingWhereInput!]
+  id: IDFilter
+  pack: PolicyPackWhereInput
+  scope: StringFilter
+  location: LocationWhereInput
+  layer: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PolicyBindingOrderByInput {
+  id: OrderDirection
+  scope: OrderDirection
+  layer: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PolicyBindingUpdateInput {
+  pack: PolicyPackRelateToOneForUpdateInput
+  scope: String
+  location: LocationRelateToOneForUpdateInput
+  layer: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyPackRelateToOneForUpdateInput {
+  create: PolicyPackCreateInput
+  connect: PolicyPackWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PolicyBindingUpdateArgs {
+  where: PolicyBindingWhereUniqueInput!
+  data: PolicyBindingUpdateInput!
+}
+
+input PolicyBindingCreateInput {
+  pack: PolicyPackRelateToOneForCreateInput
+  scope: String
+  location: LocationRelateToOneForCreateInput
+  layer: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyPackRelateToOneForCreateInput {
+  create: PolicyPackCreateInput
+  connect: PolicyPackWhereUniqueInput
+}
+
+type PolicyPack {
+  id: ID!
+  code: String
+  name: String
+  kind: String
+  jurisdiction: String
+  versions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
+  versionsCount(where: PolicyVersionWhereInput! = {}): Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyPackWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input PolicyPackWhereInput {
+  AND: [PolicyPackWhereInput!]
+  OR: [PolicyPackWhereInput!]
+  NOT: [PolicyPackWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  kind: StringFilter
+  jurisdiction: StringFilter
+  versions: PolicyVersionManyRelationFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PolicyVersionManyRelationFilter {
+  every: PolicyVersionWhereInput
+  some: PolicyVersionWhereInput
+  none: PolicyVersionWhereInput
+}
+
+input PolicyPackOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  jurisdiction: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PolicyPackUpdateInput {
+  code: String
+  name: String
+  kind: String
+  jurisdiction: String
+  versions: PolicyVersionRelateToManyForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionRelateToManyForUpdateInput {
+  disconnect: [PolicyVersionWhereUniqueInput!]
+  set: [PolicyVersionWhereUniqueInput!]
+  create: [PolicyVersionCreateInput!]
+  connect: [PolicyVersionWhereUniqueInput!]
+}
+
+input PolicyPackUpdateArgs {
+  where: PolicyPackWhereUniqueInput!
+  data: PolicyPackUpdateInput!
+}
+
+input PolicyPackCreateInput {
+  code: String
+  name: String
+  kind: String
+  jurisdiction: String
+  versions: PolicyVersionRelateToManyForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionRelateToManyForCreateInput {
+  create: [PolicyVersionCreateInput!]
+  connect: [PolicyVersionWhereUniqueInput!]
+}
+
+type PolicyVersion {
+  id: ID!
+  pack: PolicyPack
+  label: String
+  versionNumber: Int
+  rules: JSON
+  rulesHash: String
+  sourceRefs: JSON
+  verified: Boolean
+  unverifiedRules: JSON
+  verifiedAt: DateTime
+  effectiveFrom: CalendarDay
+  effectiveTo: CalendarDay
+  status: String
+  approval: ApprovalRequest
+  publishedAt: DateTime
+  publishedBy: User
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionWhereUniqueInput {
+  id: ID
+}
+
+input PolicyVersionWhereInput {
+  AND: [PolicyVersionWhereInput!]
+  OR: [PolicyVersionWhereInput!]
+  NOT: [PolicyVersionWhereInput!]
+  id: IDFilter
+  pack: PolicyPackWhereInput
+  label: StringFilter
+  versionNumber: IntFilter
+  rulesHash: StringFilter
+  verified: BooleanFilter
+  verifiedAt: DateTimeNullableFilter
+  effectiveFrom: CalendarDayFilter
+  effectiveTo: CalendarDayNullableFilter
+  status: StringFilter
+  approval: ApprovalRequestWhereInput
+  publishedAt: DateTimeNullableFilter
+  publishedBy: UserWhereInput
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PolicyVersionOrderByInput {
+  id: OrderDirection
+  label: OrderDirection
+  versionNumber: OrderDirection
+  rulesHash: OrderDirection
+  verified: OrderDirection
+  verifiedAt: OrderDirection
+  effectiveFrom: OrderDirection
+  effectiveTo: OrderDirection
+  status: OrderDirection
+  publishedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PolicyVersionUpdateInput {
+  pack: PolicyPackRelateToOneForUpdateInput
+  label: String
+  versionNumber: Int
+  rules: JSON
+  rulesHash: String
+  sourceRefs: JSON
+  verified: Boolean
+  unverifiedRules: JSON
+  verifiedAt: DateTime
+  effectiveFrom: CalendarDay
+  effectiveTo: CalendarDay
+  status: String
+  approval: ApprovalRequestRelateToOneForUpdateInput
+  publishedAt: DateTime
+  publishedBy: UserRelateToOneForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PolicyVersionUpdateArgs {
+  where: PolicyVersionWhereUniqueInput!
+  data: PolicyVersionUpdateInput!
+}
+
+input PolicyVersionCreateInput {
+  pack: PolicyPackRelateToOneForCreateInput
+  label: String
+  versionNumber: Int
+  rules: JSON
+  rulesHash: String
+  sourceRefs: JSON
+  verified: Boolean
+  unverifiedRules: JSON
+  verifiedAt: DateTime
+  effectiveFrom: CalendarDay
+  effectiveTo: CalendarDay
+  status: String
+  approval: ApprovalRequestRelateToOneForCreateInput
+  publishedAt: DateTime
+  publishedBy: UserRelateToOneForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type RetentionPolicy {
+  id: ID!
+  recordClass: String
+  retainYears: Int
+  from: String
+  policyVersion: PolicyVersion
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RetentionPolicyWhereUniqueInput {
+  id: ID
+  recordClass: String
+}
+
+input RetentionPolicyWhereInput {
+  AND: [RetentionPolicyWhereInput!]
+  OR: [RetentionPolicyWhereInput!]
+  NOT: [RetentionPolicyWhereInput!]
+  id: IDFilter
+  recordClass: StringFilter
+  retainYears: IntFilter
+  from: StringFilter
+  policyVersion: PolicyVersionWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RetentionPolicyOrderByInput {
+  id: OrderDirection
+  recordClass: OrderDirection
+  retainYears: OrderDirection
+  from: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RetentionPolicyUpdateInput {
+  recordClass: String
+  retainYears: Int
+  from: String
+  policyVersion: PolicyVersionRelateToOneForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RetentionPolicyUpdateArgs {
+  where: RetentionPolicyWhereUniqueInput!
+  data: RetentionPolicyUpdateInput!
+}
+
+input RetentionPolicyCreateInput {
+  recordClass: String
+  retainYears: Int
+  from: String
+  policyVersion: PolicyVersionRelateToOneForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Tag {
+  id: ID!
+  name: String
+  colour: String
+  appliesTo: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TagWhereUniqueInput {
+  id: ID
+  name: String
+}
+
+input TagWhereInput {
+  AND: [TagWhereInput!]
+  OR: [TagWhereInput!]
+  NOT: [TagWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  colour: StringFilter
+  appliesTo: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input TagOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  colour: OrderDirection
+  appliesTo: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input TagUpdateInput {
+  name: String
+  colour: String
+  appliesTo: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TagUpdateArgs {
+  where: TagWhereUniqueInput!
+  data: TagUpdateInput!
+}
+
+input TagCreateInput {
+  name: String
+  colour: String
+  appliesTo: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Task {
+  id: ID!
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  subjectType: String
+  subjectId: String
+  location: Location
+  assignee: StaffMember
+  roleName: String
+  priority: String
+  dueAt: DateTime
+  status: String
+  createdByAgent: AgentIdentity
+  createdByUser: User
+  completedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TaskWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input TaskWhereInput {
+  AND: [TaskWhereInput!]
+  OR: [TaskWhereInput!]
+  NOT: [TaskWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  kind: StringFilter
+  title: StringFilter
+  detail: StringFilter
+  subjectType: StringFilter
+  subjectId: StringFilter
+  location: LocationWhereInput
+  assignee: StaffMemberWhereInput
+  roleName: StringFilter
+  priority: StringFilter
+  dueAt: DateTimeNullableFilter
+  status: StringFilter
+  createdByAgent: AgentIdentityWhereInput
+  createdByUser: UserWhereInput
+  completedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input TaskOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  kind: OrderDirection
+  title: OrderDirection
+  detail: OrderDirection
+  subjectType: OrderDirection
+  subjectId: OrderDirection
+  roleName: OrderDirection
+  priority: OrderDirection
+  dueAt: OrderDirection
+  status: OrderDirection
+  completedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input TaskUpdateInput {
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  subjectType: String
+  subjectId: String
+  location: LocationRelateToOneForUpdateInput
+  assignee: StaffMemberRelateToOneForUpdateInput
+  roleName: String
+  priority: String
+  dueAt: DateTime
+  status: String
+  createdByAgent: AgentIdentityRelateToOneForUpdateInput
+  createdByUser: UserRelateToOneForUpdateInput
+  completedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TaskUpdateArgs {
+  where: TaskWhereUniqueInput!
+  data: TaskUpdateInput!
+}
+
+input TaskCreateInput {
+  ref: String
+  kind: String
+  title: String
+  detail: String
+  subjectType: String
+  subjectId: String
+  location: LocationRelateToOneForCreateInput
+  assignee: StaffMemberRelateToOneForCreateInput
+  roleName: String
+  priority: String
+  dueAt: DateTime
+  status: String
+  createdByAgent: AgentIdentityRelateToOneForCreateInput
+  createdByUser: UserRelateToOneForCreateInput
+  completedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type AgentToolGrant {
+  id: ID!
+  agent: AgentIdentity
+  scope: String
+  constraints: JSON
+  status: String
+  approval: ApprovalRequest
+  revokedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentToolGrantWhereUniqueInput {
+  id: ID
+}
+
+input AgentToolGrantWhereInput {
+  AND: [AgentToolGrantWhereInput!]
+  OR: [AgentToolGrantWhereInput!]
+  NOT: [AgentToolGrantWhereInput!]
+  id: IDFilter
+  agent: AgentIdentityWhereInput
+  scope: StringFilter
+  status: StringFilter
+  approval: ApprovalRequestWhereInput
+  revokedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input AgentToolGrantOrderByInput {
+  id: OrderDirection
+  scope: OrderDirection
+  status: OrderDirection
+  revokedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input AgentToolGrantUpdateInput {
+  agent: AgentIdentityRelateToOneForUpdateInput
+  scope: String
+  constraints: JSON
+  status: String
+  approval: ApprovalRequestRelateToOneForUpdateInput
+  revokedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentToolGrantUpdateArgs {
+  where: AgentToolGrantWhereUniqueInput!
+  data: AgentToolGrantUpdateInput!
+}
+
+input AgentToolGrantCreateInput {
+  agent: AgentIdentityRelateToOneForCreateInput
+  scope: String
+  constraints: JSON
+  status: String
+  approval: ApprovalRequestRelateToOneForCreateInput
+  revokedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type AgentRun {
+  id: ID!
+  agent: AgentIdentity
+  startedAt: DateTime
+  endedAt: DateTime
+  status: String
+  promptHash: String
+  toolCalls: JSON
+  costMeta: JSON
+  callRecordId: String
+  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
+  proposalsCount(where: ProposalWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AgentRunWhereUniqueInput {
+  id: ID
+}
+
+input AgentRunWhereInput {
+  AND: [AgentRunWhereInput!]
+  OR: [AgentRunWhereInput!]
+  NOT: [AgentRunWhereInput!]
+  id: IDFilter
+  agent: AgentIdentityWhereInput
+  startedAt: DateTimeNullableFilter
+  endedAt: DateTimeNullableFilter
+  status: StringFilter
+  promptHash: StringFilter
+  callRecordId: StringFilter
+  proposals: ProposalManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProposalManyRelationFilter {
+  every: ProposalWhereInput
+  some: ProposalWhereInput
+  none: ProposalWhereInput
+}
+
+input AgentRunOrderByInput {
+  id: OrderDirection
+  startedAt: OrderDirection
+  endedAt: OrderDirection
+  status: OrderDirection
+  promptHash: OrderDirection
+  callRecordId: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input AgentRunUpdateInput {
+  agent: AgentIdentityRelateToOneForUpdateInput
+  startedAt: DateTime
+  endedAt: DateTime
+  status: String
+  promptHash: String
+  toolCalls: JSON
+  costMeta: JSON
+  callRecordId: String
+  proposals: ProposalRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProposalRelateToManyForUpdateInput {
+  disconnect: [ProposalWhereUniqueInput!]
+  set: [ProposalWhereUniqueInput!]
+  create: [ProposalCreateInput!]
+  connect: [ProposalWhereUniqueInput!]
+}
+
+input AgentRunUpdateArgs {
+  where: AgentRunWhereUniqueInput!
+  data: AgentRunUpdateInput!
+}
+
+input AgentRunCreateInput {
+  agent: AgentIdentityRelateToOneForCreateInput
+  startedAt: DateTime
+  endedAt: DateTime
+  status: String
+  promptHash: String
+  toolCalls: JSON
+  costMeta: JSON
+  callRecordId: String
+  proposals: ProposalRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProposalRelateToManyForCreateInput {
+  create: [ProposalCreateInput!]
+  connect: [ProposalWhereUniqueInput!]
+}
+
+type AgentAction {
+  id: ID!
+  agent: AgentIdentity
+  run: AgentRun
+  tool: String
+  argsHash: String
+  outcome: String
+  errorCode: String
+  auditEventId: String
+  at: DateTime
+}
+
+input AgentActionWhereUniqueInput {
+  id: ID
+}
+
+input AgentActionWhereInput {
+  AND: [AgentActionWhereInput!]
+  OR: [AgentActionWhereInput!]
+  NOT: [AgentActionWhereInput!]
+  id: IDFilter
+  agent: AgentIdentityWhereInput
+  run: AgentRunWhereInput
+  tool: StringFilter
+  argsHash: StringFilter
+  outcome: StringFilter
+  errorCode: StringFilter
+  auditEventId: StringFilter
+  at: DateTimeNullableFilter
+}
+
+input AgentActionOrderByInput {
+  id: OrderDirection
+  tool: OrderDirection
+  argsHash: OrderDirection
+  outcome: OrderDirection
+  errorCode: OrderDirection
+  auditEventId: OrderDirection
+  at: OrderDirection
+}
+
+input AgentActionUpdateInput {
+  agent: AgentIdentityRelateToOneForUpdateInput
+  run: AgentRunRelateToOneForUpdateInput
+  tool: String
+  argsHash: String
+  outcome: String
+  errorCode: String
+  auditEventId: String
+  at: DateTime
+}
+
+input AgentRunRelateToOneForUpdateInput {
+  create: AgentRunCreateInput
+  connect: AgentRunWhereUniqueInput
+  disconnect: Boolean
+}
+
+input AgentActionUpdateArgs {
+  where: AgentActionWhereUniqueInput!
+  data: AgentActionUpdateInput!
+}
+
+input AgentActionCreateInput {
+  agent: AgentIdentityRelateToOneForCreateInput
+  run: AgentRunRelateToOneForCreateInput
+  tool: String
+  argsHash: String
+  outcome: String
+  errorCode: String
+  auditEventId: String
+  at: DateTime
+}
+
+input AgentRunRelateToOneForCreateInput {
+  create: AgentRunCreateInput
+  connect: AgentRunWhereUniqueInput
+}
+
+type Proposal {
+  id: ID!
+  kind: String
+  payload: JSON
+  payloadHash: String
+  status: String
+  agentRun: AgentRun
+  proposedByAgent: AgentIdentity
+  proposedByUser: User
+  targetList: String
+  targetId: String
+  approval: ApprovalRequest
+  validation: JSON
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProposalWhereUniqueInput {
+  id: ID
+}
+
+input ProposalWhereInput {
+  AND: [ProposalWhereInput!]
+  OR: [ProposalWhereInput!]
+  NOT: [ProposalWhereInput!]
+  id: IDFilter
+  kind: StringFilter
+  payloadHash: StringFilter
+  status: StringFilter
+  agentRun: AgentRunWhereInput
+  proposedByAgent: AgentIdentityWhereInput
+  proposedByUser: UserWhereInput
+  targetList: StringFilter
+  targetId: StringFilter
+  approval: ApprovalRequestWhereInput
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProposalOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  payloadHash: OrderDirection
+  status: OrderDirection
+  targetList: OrderDirection
+  targetId: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ProposalUpdateInput {
+  kind: String
+  payload: JSON
+  payloadHash: String
+  status: String
+  agentRun: AgentRunRelateToOneForUpdateInput
+  proposedByAgent: AgentIdentityRelateToOneForUpdateInput
+  proposedByUser: UserRelateToOneForUpdateInput
+  targetList: String
+  targetId: String
+  approval: ApprovalRequestRelateToOneForUpdateInput
+  validation: JSON
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProposalUpdateArgs {
+  where: ProposalWhereUniqueInput!
+  data: ProposalUpdateInput!
+}
+
+input ProposalCreateInput {
+  kind: String
+  payload: JSON
+  payloadHash: String
+  status: String
+  agentRun: AgentRunRelateToOneForCreateInput
+  proposedByAgent: AgentIdentityRelateToOneForCreateInput
+  proposedByUser: UserRelateToOneForCreateInput
+  targetList: String
+  targetId: String
+  approval: ApprovalRequestRelateToOneForCreateInput
+  validation: JSON
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
 """
@@ -790,18 +4427,6 @@ type Mutation {
   updateRoles(data: [RoleUpdateArgs!]!): [Role]
   deleteRole(where: RoleWhereUniqueInput!): Role
   deleteRoles(where: [RoleWhereUniqueInput!]!): [Role]
-  createTodo(data: TodoCreateInput!): Todo
-  createTodos(data: [TodoCreateInput!]!): [Todo]
-  updateTodo(where: TodoWhereUniqueInput!, data: TodoUpdateInput!): Todo
-  updateTodos(data: [TodoUpdateArgs!]!): [Todo]
-  deleteTodo(where: TodoWhereUniqueInput!): Todo
-  deleteTodos(where: [TodoWhereUniqueInput!]!): [Todo]
-  createTodoImage(data: TodoImageCreateInput!): TodoImage
-  createTodoImages(data: [TodoImageCreateInput!]!): [TodoImage]
-  updateTodoImage(where: TodoImageWhereUniqueInput!, data: TodoImageUpdateInput!): TodoImage
-  updateTodoImages(data: [TodoImageUpdateArgs!]!): [TodoImage]
-  deleteTodoImage(where: TodoImageWhereUniqueInput!): TodoImage
-  deleteTodoImages(where: [TodoImageWhereUniqueInput!]!): [TodoImage]
   createOAuthApp(data: OAuthAppCreateInput!): OAuthApp
   createOAuthApps(data: [OAuthAppCreateInput!]!): [OAuthApp]
   updateOAuthApp(where: OAuthAppWhereUniqueInput!, data: OAuthAppUpdateInput!): OAuthApp
@@ -814,11 +4439,238 @@ type Mutation {
   updateOAuthTokens(data: [OAuthTokenUpdateArgs!]!): [OAuthToken]
   deleteOAuthToken(where: OAuthTokenWhereUniqueInput!): OAuthToken
   deleteOAuthTokens(where: [OAuthTokenWhereUniqueInput!]!): [OAuthToken]
+  createAgentIdentity(data: AgentIdentityCreateInput!): AgentIdentity
+  createAgentIdentities(data: [AgentIdentityCreateInput!]!): [AgentIdentity]
+  updateAgentIdentity(where: AgentIdentityWhereUniqueInput!, data: AgentIdentityUpdateInput!): AgentIdentity
+  updateAgentIdentities(data: [AgentIdentityUpdateArgs!]!): [AgentIdentity]
+  deleteAgentIdentity(where: AgentIdentityWhereUniqueInput!): AgentIdentity
+  deleteAgentIdentities(where: [AgentIdentityWhereUniqueInput!]!): [AgentIdentity]
+  createApprovalDecision(data: ApprovalDecisionCreateInput!): ApprovalDecision
+  createApprovalDecisions(data: [ApprovalDecisionCreateInput!]!): [ApprovalDecision]
+  updateApprovalDecision(where: ApprovalDecisionWhereUniqueInput!, data: ApprovalDecisionUpdateInput!): ApprovalDecision
+  updateApprovalDecisions(data: [ApprovalDecisionUpdateArgs!]!): [ApprovalDecision]
+  deleteApprovalDecision(where: ApprovalDecisionWhereUniqueInput!): ApprovalDecision
+  deleteApprovalDecisions(where: [ApprovalDecisionWhereUniqueInput!]!): [ApprovalDecision]
+  createApprovalPolicy(data: ApprovalPolicyCreateInput!): ApprovalPolicy
+  createApprovalPolicies(data: [ApprovalPolicyCreateInput!]!): [ApprovalPolicy]
+  updateApprovalPolicy(where: ApprovalPolicyWhereUniqueInput!, data: ApprovalPolicyUpdateInput!): ApprovalPolicy
+  updateApprovalPolicies(data: [ApprovalPolicyUpdateArgs!]!): [ApprovalPolicy]
+  deleteApprovalPolicy(where: ApprovalPolicyWhereUniqueInput!): ApprovalPolicy
+  deleteApprovalPolicies(where: [ApprovalPolicyWhereUniqueInput!]!): [ApprovalPolicy]
+  createApprovalRequest(data: ApprovalRequestCreateInput!): ApprovalRequest
+  createApprovalRequests(data: [ApprovalRequestCreateInput!]!): [ApprovalRequest]
+  updateApprovalRequest(where: ApprovalRequestWhereUniqueInput!, data: ApprovalRequestUpdateInput!): ApprovalRequest
+  updateApprovalRequests(data: [ApprovalRequestUpdateArgs!]!): [ApprovalRequest]
+  deleteApprovalRequest(where: ApprovalRequestWhereUniqueInput!): ApprovalRequest
+  deleteApprovalRequests(where: [ApprovalRequestWhereUniqueInput!]!): [ApprovalRequest]
+  createAuditEvent(data: AuditEventCreateInput!): AuditEvent
+  createAuditEvents(data: [AuditEventCreateInput!]!): [AuditEvent]
+  updateAuditEvent(where: AuditEventWhereUniqueInput!, data: AuditEventUpdateInput!): AuditEvent
+  updateAuditEvents(data: [AuditEventUpdateArgs!]!): [AuditEvent]
+  deleteAuditEvent(where: AuditEventWhereUniqueInput!): AuditEvent
+  deleteAuditEvents(where: [AuditEventWhereUniqueInput!]!): [AuditEvent]
+  createBreakGlassEvent(data: BreakGlassEventCreateInput!): BreakGlassEvent
+  createBreakGlassEvents(data: [BreakGlassEventCreateInput!]!): [BreakGlassEvent]
+  updateBreakGlassEvent(where: BreakGlassEventWhereUniqueInput!, data: BreakGlassEventUpdateInput!): BreakGlassEvent
+  updateBreakGlassEvents(data: [BreakGlassEventUpdateArgs!]!): [BreakGlassEvent]
+  deleteBreakGlassEvent(where: BreakGlassEventWhereUniqueInput!): BreakGlassEvent
+  deleteBreakGlassEvents(where: [BreakGlassEventWhereUniqueInput!]!): [BreakGlassEvent]
+  createBusinessCalendar(data: BusinessCalendarCreateInput!): BusinessCalendar
+  createBusinessCalendars(data: [BusinessCalendarCreateInput!]!): [BusinessCalendar]
+  updateBusinessCalendar(where: BusinessCalendarWhereUniqueInput!, data: BusinessCalendarUpdateInput!): BusinessCalendar
+  updateBusinessCalendars(data: [BusinessCalendarUpdateArgs!]!): [BusinessCalendar]
+  deleteBusinessCalendar(where: BusinessCalendarWhereUniqueInput!): BusinessCalendar
+  deleteBusinessCalendars(where: [BusinessCalendarWhereUniqueInput!]!): [BusinessCalendar]
+  createCalendarException(data: CalendarExceptionCreateInput!): CalendarException
+  createCalendarExceptions(data: [CalendarExceptionCreateInput!]!): [CalendarException]
+  updateCalendarException(where: CalendarExceptionWhereUniqueInput!, data: CalendarExceptionUpdateInput!): CalendarException
+  updateCalendarExceptions(data: [CalendarExceptionUpdateArgs!]!): [CalendarException]
+  deleteCalendarException(where: CalendarExceptionWhereUniqueInput!): CalendarException
+  deleteCalendarExceptions(where: [CalendarExceptionWhereUniqueInput!]!): [CalendarException]
+  createDocument(data: DocumentCreateInput!): Document
+  createDocuments(data: [DocumentCreateInput!]!): [Document]
+  updateDocument(where: DocumentWhereUniqueInput!, data: DocumentUpdateInput!): Document
+  updateDocuments(data: [DocumentUpdateArgs!]!): [Document]
+  deleteDocument(where: DocumentWhereUniqueInput!): Document
+  deleteDocuments(where: [DocumentWhereUniqueInput!]!): [Document]
+  createExternalId(data: ExternalIdCreateInput!): ExternalId
+  createExternalIds(data: [ExternalIdCreateInput!]!): [ExternalId]
+  updateExternalId(where: ExternalIdWhereUniqueInput!, data: ExternalIdUpdateInput!): ExternalId
+  updateExternalIds(data: [ExternalIdUpdateArgs!]!): [ExternalId]
+  deleteExternalId(where: ExternalIdWhereUniqueInput!): ExternalId
+  deleteExternalIds(where: [ExternalIdWhereUniqueInput!]!): [ExternalId]
+  createIntegrationConnection(data: IntegrationConnectionCreateInput!): IntegrationConnection
+  createIntegrationConnections(data: [IntegrationConnectionCreateInput!]!): [IntegrationConnection]
+  updateIntegrationConnection(where: IntegrationConnectionWhereUniqueInput!, data: IntegrationConnectionUpdateInput!): IntegrationConnection
+  updateIntegrationConnections(data: [IntegrationConnectionUpdateArgs!]!): [IntegrationConnection]
+  deleteIntegrationConnection(where: IntegrationConnectionWhereUniqueInput!): IntegrationConnection
+  deleteIntegrationConnections(where: [IntegrationConnectionWhereUniqueInput!]!): [IntegrationConnection]
+  createNotification(data: NotificationCreateInput!): Notification
+  createNotifications(data: [NotificationCreateInput!]!): [Notification]
+  updateNotification(where: NotificationWhereUniqueInput!, data: NotificationUpdateInput!): Notification
+  updateNotifications(data: [NotificationUpdateArgs!]!): [Notification]
+  deleteNotification(where: NotificationWhereUniqueInput!): Notification
+  deleteNotifications(where: [NotificationWhereUniqueInput!]!): [Notification]
+  createOutboxEvent(data: OutboxEventCreateInput!): OutboxEvent
+  createOutboxEvents(data: [OutboxEventCreateInput!]!): [OutboxEvent]
+  updateOutboxEvent(where: OutboxEventWhereUniqueInput!, data: OutboxEventUpdateInput!): OutboxEvent
+  updateOutboxEvents(data: [OutboxEventUpdateArgs!]!): [OutboxEvent]
+  deleteOutboxEvent(where: OutboxEventWhereUniqueInput!): OutboxEvent
+  deleteOutboxEvents(where: [OutboxEventWhereUniqueInput!]!): [OutboxEvent]
+  createProviderObservation(data: ProviderObservationCreateInput!): ProviderObservation
+  createProviderObservations(data: [ProviderObservationCreateInput!]!): [ProviderObservation]
+  updateProviderObservation(where: ProviderObservationWhereUniqueInput!, data: ProviderObservationUpdateInput!): ProviderObservation
+  updateProviderObservations(data: [ProviderObservationUpdateArgs!]!): [ProviderObservation]
+  deleteProviderObservation(where: ProviderObservationWhereUniqueInput!): ProviderObservation
+  deleteProviderObservations(where: [ProviderObservationWhereUniqueInput!]!): [ProviderObservation]
+  createReadAudit(data: ReadAuditCreateInput!): ReadAudit
+  createReadAudits(data: [ReadAuditCreateInput!]!): [ReadAudit]
+  updateReadAudit(where: ReadAuditWhereUniqueInput!, data: ReadAuditUpdateInput!): ReadAudit
+  updateReadAudits(data: [ReadAuditUpdateArgs!]!): [ReadAudit]
+  deleteReadAudit(where: ReadAuditWhereUniqueInput!): ReadAudit
+  deleteReadAudits(where: [ReadAuditWhereUniqueInput!]!): [ReadAudit]
+  createScheduledJob(data: ScheduledJobCreateInput!): ScheduledJob
+  createScheduledJobs(data: [ScheduledJobCreateInput!]!): [ScheduledJob]
+  updateScheduledJob(where: ScheduledJobWhereUniqueInput!, data: ScheduledJobUpdateInput!): ScheduledJob
+  updateScheduledJobs(data: [ScheduledJobUpdateArgs!]!): [ScheduledJob]
+  deleteScheduledJob(where: ScheduledJobWhereUniqueInput!): ScheduledJob
+  deleteScheduledJobs(where: [ScheduledJobWhereUniqueInput!]!): [ScheduledJob]
+  createDeaPowerOfAttorney(data: DeaPowerOfAttorneyCreateInput!): DeaPowerOfAttorney
+  createDeaPowerOfAttorneys(data: [DeaPowerOfAttorneyCreateInput!]!): [DeaPowerOfAttorney]
+  updateDeaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!, data: DeaPowerOfAttorneyUpdateInput!): DeaPowerOfAttorney
+  updateDeaPowerOfAttorneys(data: [DeaPowerOfAttorneyUpdateArgs!]!): [DeaPowerOfAttorney]
+  deleteDeaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!): DeaPowerOfAttorney
+  deleteDeaPowerOfAttorneys(where: [DeaPowerOfAttorneyWhereUniqueInput!]!): [DeaPowerOfAttorney]
+  createDeaRegistration(data: DeaRegistrationCreateInput!): DeaRegistration
+  createDeaRegistrations(data: [DeaRegistrationCreateInput!]!): [DeaRegistration]
+  updateDeaRegistration(where: DeaRegistrationWhereUniqueInput!, data: DeaRegistrationUpdateInput!): DeaRegistration
+  updateDeaRegistrations(data: [DeaRegistrationUpdateArgs!]!): [DeaRegistration]
+  deleteDeaRegistration(where: DeaRegistrationWhereUniqueInput!): DeaRegistration
+  deleteDeaRegistrations(where: [DeaRegistrationWhereUniqueInput!]!): [DeaRegistration]
+  createLicenseEvaluation(data: LicenseEvaluationCreateInput!): LicenseEvaluation
+  createLicenseEvaluations(data: [LicenseEvaluationCreateInput!]!): [LicenseEvaluation]
+  updateLicenseEvaluation(where: LicenseEvaluationWhereUniqueInput!, data: LicenseEvaluationUpdateInput!): LicenseEvaluation
+  updateLicenseEvaluations(data: [LicenseEvaluationUpdateArgs!]!): [LicenseEvaluation]
+  deleteLicenseEvaluation(where: LicenseEvaluationWhereUniqueInput!): LicenseEvaluation
+  deleteLicenseEvaluations(where: [LicenseEvaluationWhereUniqueInput!]!): [LicenseEvaluation]
+  createLocation(data: LocationCreateInput!): Location
+  createLocations(data: [LocationCreateInput!]!): [Location]
+  updateLocation(where: LocationWhereUniqueInput!, data: LocationUpdateInput!): Location
+  updateLocations(data: [LocationUpdateArgs!]!): [Location]
+  deleteLocation(where: LocationWhereUniqueInput!): Location
+  deleteLocations(where: [LocationWhereUniqueInput!]!): [Location]
+  createPracticeSettings(data: PracticeSettingsCreateInput!): PracticeSettings
+  createPracticeSettingsItems(data: [PracticeSettingsCreateInput!]!): [PracticeSettings]
+  updatePracticeSettings(where: PracticeSettingsWhereUniqueInput! = {id: 1}, data: PracticeSettingsUpdateInput!): PracticeSettings
+  updatePracticeSettingsItems(data: [PracticeSettingsUpdateArgs!]!): [PracticeSettings]
+  deletePracticeSettings(where: PracticeSettingsWhereUniqueInput! = {id: 1}): PracticeSettings
+  deletePracticeSettingsItems(where: [PracticeSettingsWhereUniqueInput!]!): [PracticeSettings]
+  createProfessionalLicense(data: ProfessionalLicenseCreateInput!): ProfessionalLicense
+  createProfessionalLicenses(data: [ProfessionalLicenseCreateInput!]!): [ProfessionalLicense]
+  updateProfessionalLicense(where: ProfessionalLicenseWhereUniqueInput!, data: ProfessionalLicenseUpdateInput!): ProfessionalLicense
+  updateProfessionalLicenses(data: [ProfessionalLicenseUpdateArgs!]!): [ProfessionalLicense]
+  deleteProfessionalLicense(where: ProfessionalLicenseWhereUniqueInput!): ProfessionalLicense
+  deleteProfessionalLicenses(where: [ProfessionalLicenseWhereUniqueInput!]!): [ProfessionalLicense]
+  createStaffMember(data: StaffMemberCreateInput!): StaffMember
+  createStaffMembers(data: [StaffMemberCreateInput!]!): [StaffMember]
+  updateStaffMember(where: StaffMemberWhereUniqueInput!, data: StaffMemberUpdateInput!): StaffMember
+  updateStaffMembers(data: [StaffMemberUpdateArgs!]!): [StaffMember]
+  deleteStaffMember(where: StaffMemberWhereUniqueInput!): StaffMember
+  deleteStaffMembers(where: [StaffMemberWhereUniqueInput!]!): [StaffMember]
+  createComplianceTask(data: ComplianceTaskCreateInput!): ComplianceTask
+  createComplianceTasks(data: [ComplianceTaskCreateInput!]!): [ComplianceTask]
+  updateComplianceTask(where: ComplianceTaskWhereUniqueInput!, data: ComplianceTaskUpdateInput!): ComplianceTask
+  updateComplianceTasks(data: [ComplianceTaskUpdateArgs!]!): [ComplianceTask]
+  deleteComplianceTask(where: ComplianceTaskWhereUniqueInput!): ComplianceTask
+  deleteComplianceTasks(where: [ComplianceTaskWhereUniqueInput!]!): [ComplianceTask]
+  createIncident(data: IncidentCreateInput!): Incident
+  createIncidents(data: [IncidentCreateInput!]!): [Incident]
+  updateIncident(where: IncidentWhereUniqueInput!, data: IncidentUpdateInput!): Incident
+  updateIncidents(data: [IncidentUpdateArgs!]!): [Incident]
+  deleteIncident(where: IncidentWhereUniqueInput!): Incident
+  deleteIncidents(where: [IncidentWhereUniqueInput!]!): [Incident]
+  createLegalHold(data: LegalHoldCreateInput!): LegalHold
+  createLegalHolds(data: [LegalHoldCreateInput!]!): [LegalHold]
+  updateLegalHold(where: LegalHoldWhereUniqueInput!, data: LegalHoldUpdateInput!): LegalHold
+  updateLegalHolds(data: [LegalHoldUpdateArgs!]!): [LegalHold]
+  deleteLegalHold(where: LegalHoldWhereUniqueInput!): LegalHold
+  deleteLegalHolds(where: [LegalHoldWhereUniqueInput!]!): [LegalHold]
+  createNote(data: NoteCreateInput!): Note
+  createNotes(data: [NoteCreateInput!]!): [Note]
+  updateNote(where: NoteWhereUniqueInput!, data: NoteUpdateInput!): Note
+  updateNotes(data: [NoteUpdateArgs!]!): [Note]
+  deleteNote(where: NoteWhereUniqueInput!): Note
+  deleteNotes(where: [NoteWhereUniqueInput!]!): [Note]
+  createPolicyBinding(data: PolicyBindingCreateInput!): PolicyBinding
+  createPolicyBindings(data: [PolicyBindingCreateInput!]!): [PolicyBinding]
+  updatePolicyBinding(where: PolicyBindingWhereUniqueInput!, data: PolicyBindingUpdateInput!): PolicyBinding
+  updatePolicyBindings(data: [PolicyBindingUpdateArgs!]!): [PolicyBinding]
+  deletePolicyBinding(where: PolicyBindingWhereUniqueInput!): PolicyBinding
+  deletePolicyBindings(where: [PolicyBindingWhereUniqueInput!]!): [PolicyBinding]
+  createPolicyPack(data: PolicyPackCreateInput!): PolicyPack
+  createPolicyPacks(data: [PolicyPackCreateInput!]!): [PolicyPack]
+  updatePolicyPack(where: PolicyPackWhereUniqueInput!, data: PolicyPackUpdateInput!): PolicyPack
+  updatePolicyPacks(data: [PolicyPackUpdateArgs!]!): [PolicyPack]
+  deletePolicyPack(where: PolicyPackWhereUniqueInput!): PolicyPack
+  deletePolicyPacks(where: [PolicyPackWhereUniqueInput!]!): [PolicyPack]
+  createPolicyVersion(data: PolicyVersionCreateInput!): PolicyVersion
+  createPolicyVersions(data: [PolicyVersionCreateInput!]!): [PolicyVersion]
+  updatePolicyVersion(where: PolicyVersionWhereUniqueInput!, data: PolicyVersionUpdateInput!): PolicyVersion
+  updatePolicyVersions(data: [PolicyVersionUpdateArgs!]!): [PolicyVersion]
+  deletePolicyVersion(where: PolicyVersionWhereUniqueInput!): PolicyVersion
+  deletePolicyVersions(where: [PolicyVersionWhereUniqueInput!]!): [PolicyVersion]
+  createRetentionPolicy(data: RetentionPolicyCreateInput!): RetentionPolicy
+  createRetentionPolicies(data: [RetentionPolicyCreateInput!]!): [RetentionPolicy]
+  updateRetentionPolicy(where: RetentionPolicyWhereUniqueInput!, data: RetentionPolicyUpdateInput!): RetentionPolicy
+  updateRetentionPolicies(data: [RetentionPolicyUpdateArgs!]!): [RetentionPolicy]
+  deleteRetentionPolicy(where: RetentionPolicyWhereUniqueInput!): RetentionPolicy
+  deleteRetentionPolicies(where: [RetentionPolicyWhereUniqueInput!]!): [RetentionPolicy]
+  createTag(data: TagCreateInput!): Tag
+  createTags(data: [TagCreateInput!]!): [Tag]
+  updateTag(where: TagWhereUniqueInput!, data: TagUpdateInput!): Tag
+  updateTags(data: [TagUpdateArgs!]!): [Tag]
+  deleteTag(where: TagWhereUniqueInput!): Tag
+  deleteTags(where: [TagWhereUniqueInput!]!): [Tag]
+  createTask(data: TaskCreateInput!): Task
+  createTasks(data: [TaskCreateInput!]!): [Task]
+  updateTask(where: TaskWhereUniqueInput!, data: TaskUpdateInput!): Task
+  updateTasks(data: [TaskUpdateArgs!]!): [Task]
+  deleteTask(where: TaskWhereUniqueInput!): Task
+  deleteTasks(where: [TaskWhereUniqueInput!]!): [Task]
+  createAgentToolGrant(data: AgentToolGrantCreateInput!): AgentToolGrant
+  createAgentToolGrants(data: [AgentToolGrantCreateInput!]!): [AgentToolGrant]
+  updateAgentToolGrant(where: AgentToolGrantWhereUniqueInput!, data: AgentToolGrantUpdateInput!): AgentToolGrant
+  updateAgentToolGrants(data: [AgentToolGrantUpdateArgs!]!): [AgentToolGrant]
+  deleteAgentToolGrant(where: AgentToolGrantWhereUniqueInput!): AgentToolGrant
+  deleteAgentToolGrants(where: [AgentToolGrantWhereUniqueInput!]!): [AgentToolGrant]
+  createAgentRun(data: AgentRunCreateInput!): AgentRun
+  createAgentRuns(data: [AgentRunCreateInput!]!): [AgentRun]
+  updateAgentRun(where: AgentRunWhereUniqueInput!, data: AgentRunUpdateInput!): AgentRun
+  updateAgentRuns(data: [AgentRunUpdateArgs!]!): [AgentRun]
+  deleteAgentRun(where: AgentRunWhereUniqueInput!): AgentRun
+  deleteAgentRuns(where: [AgentRunWhereUniqueInput!]!): [AgentRun]
+  createAgentAction(data: AgentActionCreateInput!): AgentAction
+  createAgentActions(data: [AgentActionCreateInput!]!): [AgentAction]
+  updateAgentAction(where: AgentActionWhereUniqueInput!, data: AgentActionUpdateInput!): AgentAction
+  updateAgentActions(data: [AgentActionUpdateArgs!]!): [AgentAction]
+  deleteAgentAction(where: AgentActionWhereUniqueInput!): AgentAction
+  deleteAgentActions(where: [AgentActionWhereUniqueInput!]!): [AgentAction]
+  createProposal(data: ProposalCreateInput!): Proposal
+  createProposals(data: [ProposalCreateInput!]!): [Proposal]
+  updateProposal(where: ProposalWhereUniqueInput!, data: ProposalUpdateInput!): Proposal
+  updateProposals(data: [ProposalUpdateArgs!]!): [Proposal]
+  deleteProposal(where: ProposalWhereUniqueInput!): Proposal
+  deleteProposals(where: [ProposalWhereUniqueInput!]!): [Proposal]
   endSession: Boolean!
   authenticateUserWithPassword(email: String!, password: String!): UserAuthenticationWithPasswordResult
   createInitialUser(data: CreateInitialUserInput!): UserAuthenticationWithPasswordSuccess!
   sendUserPasswordResetLink(email: String!): Boolean!
   redeemUserPasswordResetToken(email: String!, token: String!, password: String!): RedeemUserPasswordResetTokenResult
+  updateActiveUser(data: UserUpdateProfileInput!): User
+  loadPracticeSetup(idempotencyKey: String!): JSON
+  decideApprovalRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  cancelApprovalRequest(requestId: ID!, expectedVersion: Int!, reason: String, idempotencyKey: String!): JSON
+  requestPracticeControls(changes: JSON!, reason: String!, idempotencyKey: String!): JSON
 }
 
 union UserAuthenticationWithPasswordResult = UserAuthenticationWithPasswordSuccess | UserAuthenticationWithPasswordFailure
@@ -856,22 +4708,130 @@ type Query {
   role(where: RoleWhereUniqueInput!): Role
   roles(where: RoleWhereInput! = {}, orderBy: [RoleOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RoleWhereUniqueInput): [Role!]
   rolesCount(where: RoleWhereInput! = {}): Int
-  todo(where: TodoWhereUniqueInput!): Todo
-  todos(where: TodoWhereInput! = {}, orderBy: [TodoOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TodoWhereUniqueInput): [Todo!]
-  todosCount(where: TodoWhereInput! = {}): Int
-  todoImage(where: TodoImageWhereUniqueInput!): TodoImage
-  todoImages(where: TodoImageWhereInput! = {}, orderBy: [TodoImageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TodoImageWhereUniqueInput): [TodoImage!]
-  todoImagesCount(where: TodoImageWhereInput! = {}): Int
   oAuthApp(where: OAuthAppWhereUniqueInput!): OAuthApp
   oAuthApps(where: OAuthAppWhereInput! = {}, orderBy: [OAuthAppOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OAuthAppWhereUniqueInput): [OAuthApp!]
   oAuthAppsCount(where: OAuthAppWhereInput! = {}): Int
   oAuthToken(where: OAuthTokenWhereUniqueInput!): OAuthToken
   oAuthTokens(where: OAuthTokenWhereInput! = {}, orderBy: [OAuthTokenOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OAuthTokenWhereUniqueInput): [OAuthToken!]
   oAuthTokensCount(where: OAuthTokenWhereInput! = {}): Int
+  agentIdentity(where: AgentIdentityWhereUniqueInput!): AgentIdentity
+  agentIdentities(where: AgentIdentityWhereInput! = {}, orderBy: [AgentIdentityOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentIdentityWhereUniqueInput): [AgentIdentity!]
+  agentIdentitiesCount(where: AgentIdentityWhereInput! = {}): Int
+  approvalDecision(where: ApprovalDecisionWhereUniqueInput!): ApprovalDecision
+  approvalDecisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
+  approvalDecisionsCount(where: ApprovalDecisionWhereInput! = {}): Int
+  approvalPolicy(where: ApprovalPolicyWhereUniqueInput!): ApprovalPolicy
+  approvalPolicies(where: ApprovalPolicyWhereInput! = {}, orderBy: [ApprovalPolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalPolicyWhereUniqueInput): [ApprovalPolicy!]
+  approvalPoliciesCount(where: ApprovalPolicyWhereInput! = {}): Int
+  approvalRequest(where: ApprovalRequestWhereUniqueInput!): ApprovalRequest
+  approvalRequests(where: ApprovalRequestWhereInput! = {}, orderBy: [ApprovalRequestOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalRequestWhereUniqueInput): [ApprovalRequest!]
+  approvalRequestsCount(where: ApprovalRequestWhereInput! = {}): Int
+  auditEvent(where: AuditEventWhereUniqueInput!): AuditEvent
+  auditEvents(where: AuditEventWhereInput! = {}, orderBy: [AuditEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AuditEventWhereUniqueInput): [AuditEvent!]
+  auditEventsCount(where: AuditEventWhereInput! = {}): Int
+  breakGlassEvent(where: BreakGlassEventWhereUniqueInput!): BreakGlassEvent
+  breakGlassEvents(where: BreakGlassEventWhereInput! = {}, orderBy: [BreakGlassEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BreakGlassEventWhereUniqueInput): [BreakGlassEvent!]
+  breakGlassEventsCount(where: BreakGlassEventWhereInput! = {}): Int
+  businessCalendar(where: BusinessCalendarWhereUniqueInput!): BusinessCalendar
+  businessCalendars(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
+  businessCalendarsCount(where: BusinessCalendarWhereInput! = {}): Int
+  calendarException(where: CalendarExceptionWhereUniqueInput!): CalendarException
+  calendarExceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
+  calendarExceptionsCount(where: CalendarExceptionWhereInput! = {}): Int
+  document(where: DocumentWhereUniqueInput!): Document
+  documents(where: DocumentWhereInput! = {}, orderBy: [DocumentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DocumentWhereUniqueInput): [Document!]
+  documentsCount(where: DocumentWhereInput! = {}): Int
+  externalId(where: ExternalIdWhereUniqueInput!): ExternalId
+  externalIds(where: ExternalIdWhereInput! = {}, orderBy: [ExternalIdOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExternalIdWhereUniqueInput): [ExternalId!]
+  externalIdsCount(where: ExternalIdWhereInput! = {}): Int
+  integrationConnection(where: IntegrationConnectionWhereUniqueInput!): IntegrationConnection
+  integrationConnections(where: IntegrationConnectionWhereInput! = {}, orderBy: [IntegrationConnectionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: IntegrationConnectionWhereUniqueInput): [IntegrationConnection!]
+  integrationConnectionsCount(where: IntegrationConnectionWhereInput! = {}): Int
+  notification(where: NotificationWhereUniqueInput!): Notification
+  notifications(where: NotificationWhereInput! = {}, orderBy: [NotificationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: NotificationWhereUniqueInput): [Notification!]
+  notificationsCount(where: NotificationWhereInput! = {}): Int
+  outboxEvent(where: OutboxEventWhereUniqueInput!): OutboxEvent
+  outboxEvents(where: OutboxEventWhereInput! = {}, orderBy: [OutboxEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OutboxEventWhereUniqueInput): [OutboxEvent!]
+  outboxEventsCount(where: OutboxEventWhereInput! = {}): Int
+  providerObservation(where: ProviderObservationWhereUniqueInput!): ProviderObservation
+  providerObservations(where: ProviderObservationWhereInput! = {}, orderBy: [ProviderObservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProviderObservationWhereUniqueInput): [ProviderObservation!]
+  providerObservationsCount(where: ProviderObservationWhereInput! = {}): Int
+  readAudit(where: ReadAuditWhereUniqueInput!): ReadAudit
+  readAudits(where: ReadAuditWhereInput! = {}, orderBy: [ReadAuditOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReadAuditWhereUniqueInput): [ReadAudit!]
+  readAuditsCount(where: ReadAuditWhereInput! = {}): Int
+  scheduledJob(where: ScheduledJobWhereUniqueInput!): ScheduledJob
+  scheduledJobs(where: ScheduledJobWhereInput! = {}, orderBy: [ScheduledJobOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ScheduledJobWhereUniqueInput): [ScheduledJob!]
+  scheduledJobsCount(where: ScheduledJobWhereInput! = {}): Int
+  deaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!): DeaPowerOfAttorney
+  deaPowerOfAttorneys(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
+  deaPowerOfAttorneysCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int
+  deaRegistration(where: DeaRegistrationWhereUniqueInput!): DeaRegistration
+  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
+  deaRegistrationsCount(where: DeaRegistrationWhereInput! = {}): Int
+  licenseEvaluation(where: LicenseEvaluationWhereUniqueInput!): LicenseEvaluation
+  licenseEvaluations(where: LicenseEvaluationWhereInput! = {}, orderBy: [LicenseEvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LicenseEvaluationWhereUniqueInput): [LicenseEvaluation!]
+  licenseEvaluationsCount(where: LicenseEvaluationWhereInput! = {}): Int
+  location(where: LocationWhereUniqueInput!): Location
+  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
+  locationsCount(where: LocationWhereInput! = {}): Int
+  practiceSettings(where: PracticeSettingsWhereUniqueInput! = {id: 1}): PracticeSettings
+  practiceSettingsItems(where: PracticeSettingsWhereInput! = {id: {equals: 1}}, orderBy: [PracticeSettingsOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PracticeSettingsWhereUniqueInput): [PracticeSettings!]
+  practiceSettingsItemsCount(where: PracticeSettingsWhereInput! = {id: {equals: 1}}): Int
+  professionalLicense(where: ProfessionalLicenseWhereUniqueInput!): ProfessionalLicense
+  professionalLicenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
+  professionalLicensesCount(where: ProfessionalLicenseWhereInput! = {}): Int
+  staffMember(where: StaffMemberWhereUniqueInput!): StaffMember
+  staffMembers(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
+  staffMembersCount(where: StaffMemberWhereInput! = {}): Int
+  complianceTask(where: ComplianceTaskWhereUniqueInput!): ComplianceTask
+  complianceTasks(where: ComplianceTaskWhereInput! = {}, orderBy: [ComplianceTaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ComplianceTaskWhereUniqueInput): [ComplianceTask!]
+  complianceTasksCount(where: ComplianceTaskWhereInput! = {}): Int
+  incident(where: IncidentWhereUniqueInput!): Incident
+  incidents(where: IncidentWhereInput! = {}, orderBy: [IncidentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: IncidentWhereUniqueInput): [Incident!]
+  incidentsCount(where: IncidentWhereInput! = {}): Int
+  legalHold(where: LegalHoldWhereUniqueInput!): LegalHold
+  legalHolds(where: LegalHoldWhereInput! = {}, orderBy: [LegalHoldOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LegalHoldWhereUniqueInput): [LegalHold!]
+  legalHoldsCount(where: LegalHoldWhereInput! = {}): Int
+  note(where: NoteWhereUniqueInput!): Note
+  notes(where: NoteWhereInput! = {}, orderBy: [NoteOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: NoteWhereUniqueInput): [Note!]
+  notesCount(where: NoteWhereInput! = {}): Int
+  policyBinding(where: PolicyBindingWhereUniqueInput!): PolicyBinding
+  policyBindings(where: PolicyBindingWhereInput! = {}, orderBy: [PolicyBindingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyBindingWhereUniqueInput): [PolicyBinding!]
+  policyBindingsCount(where: PolicyBindingWhereInput! = {}): Int
+  policyPack(where: PolicyPackWhereUniqueInput!): PolicyPack
+  policyPacks(where: PolicyPackWhereInput! = {}, orderBy: [PolicyPackOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyPackWhereUniqueInput): [PolicyPack!]
+  policyPacksCount(where: PolicyPackWhereInput! = {}): Int
+  policyVersion(where: PolicyVersionWhereUniqueInput!): PolicyVersion
+  policyVersions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
+  policyVersionsCount(where: PolicyVersionWhereInput! = {}): Int
+  retentionPolicy(where: RetentionPolicyWhereUniqueInput!): RetentionPolicy
+  retentionPolicies(where: RetentionPolicyWhereInput! = {}, orderBy: [RetentionPolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RetentionPolicyWhereUniqueInput): [RetentionPolicy!]
+  retentionPoliciesCount(where: RetentionPolicyWhereInput! = {}): Int
+  tag(where: TagWhereUniqueInput!): Tag
+  tags(where: TagWhereInput! = {}, orderBy: [TagOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TagWhereUniqueInput): [Tag!]
+  tagsCount(where: TagWhereInput! = {}): Int
+  task(where: TaskWhereUniqueInput!): Task
+  tasks(where: TaskWhereInput! = {}, orderBy: [TaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TaskWhereUniqueInput): [Task!]
+  tasksCount(where: TaskWhereInput! = {}): Int
+  agentToolGrant(where: AgentToolGrantWhereUniqueInput!): AgentToolGrant
+  agentToolGrants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
+  agentToolGrantsCount(where: AgentToolGrantWhereInput! = {}): Int
+  agentRun(where: AgentRunWhereUniqueInput!): AgentRun
+  agentRuns(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
+  agentRunsCount(where: AgentRunWhereInput! = {}): Int
+  agentAction(where: AgentActionWhereUniqueInput!): AgentAction
+  agentActions(where: AgentActionWhereInput! = {}, orderBy: [AgentActionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentActionWhereUniqueInput): [AgentAction!]
+  agentActionsCount(where: AgentActionWhereInput! = {}): Int
+  proposal(where: ProposalWhereUniqueInput!): Proposal
+  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
+  proposalsCount(where: ProposalWhereInput! = {}): Int
   keystone: KeystoneMeta!
   authenticatedItem: AuthenticatedItem
   validateUserPasswordResetToken(email: String!, token: String!): ValidateUserPasswordResetTokenResult
   redirectToInit: Boolean
+  verifyAuditChain: JSON
+  policyInForce(kind: String!, locationId: ID!, on: String): JSON
+  policyMatrix: JSON
 }
 
 union AuthenticatedItem = User
@@ -1010,4 +4970,11 @@ type KeystoneAdminUISort {
 enum KeystoneAdminUISortDirection {
   ASC
   DESC
+}
+
+input UserUpdateProfileInput {
+  name: String
+  email: String
+  password: String
+  onboardingStatus: String
 }

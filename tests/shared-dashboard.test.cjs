@@ -19,8 +19,8 @@ function sandbox({ env = {}, mocks = {}, stubUnknown = false } = {}) {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
       jsx: ts.JsxEmit.ReactJSX,
     } }).outputText;
-    const module = { exports: {} };
-    cache.set(filename, module);
+    const loaded = { exports: {} };
+    cache.set(filename, loaded);
     function localRequire(specifier) {
       if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
       const resolved = specifier.startsWith('@/') ? path.join(root, specifier.slice(2))
@@ -30,11 +30,11 @@ function sandbox({ env = {}, mocks = {}, stubUnknown = false } = {}) {
       throw new Error(`Unmocked dependency: ${specifier}`);
     }
     vm.runInNewContext(output, {
-      module, exports: module.exports, require: localRequire,
+      module: loaded, exports: loaded.exports, require: localRequire,
       process: { env }, console: { error() {}, warn() {}, log() {} },
       URL, FormData, structuredClone,
     }, { filename });
-    return module.exports;
+    return loaded.exports;
   }
   return { load };
 }
@@ -73,7 +73,7 @@ function middlewareRun({ pathname, user = null, env = {} }) {
     'next/server': {
       NextResponse: { redirect: url => ({ redirect: new URL(url).pathname }), next: () => ({ next: true }) },
     },
-    '@/features/dashboard/lib/getBaseUrl': { getGraphQLEndpoint: async () => 'https://test.invalid/api/graphql' },
+    '@/features/dashboard/lib/getBaseUrl': { getServerGraphQLTarget: async () => ({ endpoint: 'https://test.invalid/api/graphql' }) },
     'graphql-request': { GraphQLClient: class {} },
   } }).load('features/dashboard/middleware.ts');
   const url = `https://shop.invalid${pathname}`;
@@ -168,9 +168,10 @@ test('sidebar shows only lists and platform pages the session can see', () => {
 });
 
 test('timestamps render the same text on the server and during hydration', () => {
-  const { formatTimestamp } = sandbox({ stubUnknown: true, mocks: { 'date-fns': require('date-fns'), react: require('react') } })
+  const { formatTimestamp } = sandbox({ stubUnknown: true, mocks: { react: require('react') } })
     .load('features/dashboard/views/timestamp/index.tsx');
-  const date = new Date('2026-10-24T18:05:09.000Z');
-  assert.equal(formatTimestamp(date, 'PPP p', false), '2026-10-24 18:05 UTC');
-  assert.equal(formatTimestamp(date, 'yyyy', true), require('date-fns').format(date, 'yyyy'));
+  const d = new Date('2026-11-02T18:00:00Z');
+  // Empty until mounted, so the server render and hydration match; then the viewer's zone.
+  assert.equal(formatTimestamp(d, undefined, false), '');
+  assert.equal(formatTimestamp(d, 'America/New_York', true), 'Nov 2, 2026, 1:00 PM EST');
 });
