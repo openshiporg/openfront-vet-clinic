@@ -99,7 +99,7 @@ export function renderSignIn(view: SignInView): string {
 <form method="post">
 <input type="hidden" name="intent" value="${signup ? 'signup' : 'signin'}">
 ${nameField}
-<div class="field"><label for="email">Email</label><input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required maxlength="320" value="${e(view.email ?? '')}"></div>
+<div class="field"><label for="email">Email</label><input type="email" id="email" name="email" autocomplete="email" placeholder="you@yourclinic.com" required maxlength="320" value="${e(view.email ?? '')}"></div>
 <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="••••••••" required maxlength="1024"></div>
 ${view.error ? `<div class="error" role="alert">${e(view.error)}</div>` : ''}
 <div class="actions one"><button type="submit" class="primary">${signup ? 'Create account' : 'Sign in'}</button></div>

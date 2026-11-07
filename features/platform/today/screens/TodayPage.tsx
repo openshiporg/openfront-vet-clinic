@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { q, practiceTimeZone } from '../../lib/server';
-import { when, label } from '../../lib/format';
+import { when, label, zoneName } from '../../lib/format';
 import { dayBounds, todayIn } from '../../lib/clinic';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { ActionButton } from '../../components/ActionButton';
@@ -46,7 +46,7 @@ export default async function TodayPage() {
   const aiTransferred = ai.filter(c => ['transferred', 'urgent_transfer', 'er_referred'].includes(c.disposition)).length;
   return (
     <Page title="Today">
-      <p className="text-sm text-muted-foreground">{when(from, tz, 'day')} · {tz}</p>
+      <p className="text-sm text-muted-foreground">{when(from, tz, 'day')} · {zoneName(tz)}</p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Stat name="Appointments" value={appts.length} />
         <Stat name="Checked in" value={appts.filter(a => ['checked_in', 'in_progress'].includes(a.status)).length} />
@@ -100,7 +100,7 @@ function ApptRow({ a, tz }: { a: Appt; tz: string }) {
           {a.patients.map(p => p.patient ? <Link key={p.patient.id} href={`/dashboard/platform/patients/${p.patient.id}`} className="font-medium underline-offset-2 hover:underline">{p.patient.name}</Link> : null)}
           {a.client ? <Link href={`/dashboard/platform/clients/${a.client.id}`} className="text-muted-foreground hover:underline">{a.client.displayName}</Link> : null}
         </div>
-        <Meta>{a.ref} · {a.appointmentType?.name} · {a.provider?.displayName ?? 'unassigned'} · {a.location?.code}{a.channel === 'ai_voice' ? ' · booked by AI receptionist' : ''}{a.reason ? ` · ${a.reason}` : ''}</Meta>
+        <Meta>{a.ref} · {a.appointmentType?.name} · {a.provider?.displayName ?? 'unassigned'} · {a.location?.code}{a.channel === 'ai_voice' ? ' · booked by AI receptionist' : ''}{a.reason && a.reason !== a.appointmentType?.name ? ` · ${a.reason}` : ''}</Meta>
         {alerts.length ? <p className="text-xs text-red-700 dark:text-red-400">⚠ {alerts.map(x => x.text).join(' · ')}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">

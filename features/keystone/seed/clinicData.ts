@@ -1,7 +1,7 @@
 import { dec, toScale } from '../lib/decimal'
 /**
  * Phase 1 seed data for Cedar Creek Animal Hospital. Everything here is fictional: households,
- * pets, numbers (+1 916-555-01xx) and addresses (@example.com). Clinical content (the phone triage
+ * pets, numbers (+1 916-555-01xx) and addresses (common consumer mail domains). Clinical content (the phone triage
  * protocol, knowledge-base answers) is a conservative starting point the practice owner reviews and
  * re-publishes as their own version; nothing in it diagnoses or reassures.
  */
@@ -21,9 +21,9 @@ export const COLOURS: Record<string, string[]> = {
 }
 
 export const REFERRAL_HOSPITALS = [
-  { id: 'seed_er_river', name: 'River City Veterinary Emergency (24 h)', kind: 'emergency', phone: '+19165550190', email: 'er@rivercity-vet.example.com', addressLine1: '2200 Riverside Blvd', city: 'Sacramento', stateCode: 'US-CA', lat: '38.553100', lng: '-121.507800', open24h: true },
-  { id: 'seed_er_south', name: 'South Valley Animal Emergency (24 h)', kind: 'emergency', phone: '+19165550191', email: 'triage@southvalley-er.example.com', addressLine1: '8800 Calvine Rd', city: 'Elk Grove', stateCode: 'US-CA', lat: '38.464000', lng: '-121.390500', open24h: true },
-  { id: 'seed_ref_specialty', name: 'Capitol Veterinary Specialists', kind: 'specialty', phone: '+19165550192', email: 'referrals@capitol-specialists.example.com', addressLine1: '1500 Expo Pkwy', city: 'Sacramento', stateCode: 'US-CA', lat: '38.594400', lng: '-121.433900', open24h: false },
+  { id: 'seed_er_river', name: 'River City Veterinary Emergency (24 h)', kind: 'emergency', phone: '+19165550190', email: 'er@rivercityvetemergency.com', addressLine1: '2200 Riverside Blvd', city: 'Sacramento', stateCode: 'US-CA', lat: '38.553100', lng: '-121.507800', open24h: true },
+  { id: 'seed_er_south', name: 'South Valley Animal Emergency (24 h)', kind: 'emergency', phone: '+19165550191', email: 'triage@southvalleyanimaler.com', addressLine1: '8800 Calvine Rd', city: 'Elk Grove', stateCode: 'US-CA', lat: '38.464000', lng: '-121.390500', open24h: true },
+  { id: 'seed_ref_specialty', name: 'Capitol Veterinary Specialists', kind: 'specialty', phone: '+19165550192', email: 'referrals@capitolvetspecialists.com', addressLine1: '1500 Expo Pkwy', city: 'Sacramento', stateCode: 'US-CA', lat: '38.594400', lng: '-121.433900', open24h: false },
 ]
 
 export const RESOURCES = [
@@ -159,6 +159,8 @@ export const DRUG_PRODUCTS = [
 ]
 
 const FIRST = ['Olivia', 'Liam', 'Emma', 'Noah', 'Ava', 'Mateo', 'Sophia', 'Ethan', 'Isabella', 'Lucas', 'Mia', 'Elijah', 'Amara', 'James', 'Harper', 'Benjamin', 'Camila', 'Daniel', 'Aria', 'Henry', 'Zoe', 'Jack', 'Layla', 'Owen', 'Nora', 'Wyatt', 'Leah', 'Caleb', 'Hazel', 'Isaac', 'Ivy', 'Julian']
+/** Realistic consumer mail domains. Messaging adapters are manual or recording in the seed, so nothing is ever sent to these. */
+const MAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com', 'icloud.com', 'comcast.net', 'sbcglobal.net', 'hotmail.com', 'aol.com']
 const LAST = ['Alvarez', 'Bishop', 'Castillo', 'Dalton', 'Espinoza', 'Fairbanks', 'Gallagher', 'Hayward', 'Ingram', 'Jaramillo', 'Kowalski', 'Lindqvist', 'Mendoza', 'Nakamura', 'Oyelaran', 'Pemberton', 'Quintero', 'Rasmussen', 'Sorensen', 'Takahashi', 'Underwood', 'Valdivia', 'Whitfield', 'Xiong', 'Yamamoto', 'Zielinski', 'Abernathy', 'Bergstrom', 'Chaudhry', 'Delacroix', 'Eriksen', 'Fontaine']
 const DOGS = ['Biscuit', 'Maple', 'Juniper', 'Moose', 'Pepper', 'Rosie', 'Bear', 'Winnie', 'Scout', 'Hazel', 'Tucker', 'Olive', 'Ranger', 'Daisy', 'Koda', 'Penny', 'Murphy', 'Luna', 'Gus', 'Ruby', 'Finn', 'Willow', 'Otis', 'Ginger']
 const CATS = ['Miso', 'Clementine', 'Toast', 'Mochi', 'Jasper', 'Pumpkin', 'Nimbus', 'Sage', 'Felix', 'Poppy', 'Ziggy', 'Mabel', 'Tofu', 'Cleo', 'Basil', 'Pickles']
@@ -198,8 +200,8 @@ export function households(): HouseholdSeed[] {
     // 916-555-0102 … 0189 is the fictional range left after the hospital lines (0100/0101) and the
     // referral hospitals (0190-0192); later households are reachable by email only.
     const phone = i + 2 < 90 ? `+1916555${String(100 + i + 2).padStart(4, '0')}` : null
-    const people: HouseholdSeed['people'] = [{ id: `seed_cp_${n}_1`, firstName: first, lastName: last, relationship: 'owner', dob: `19${60 + (i % 38)}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 27) + 1).padStart(2, '0')}`, phone, email: `${first}.${last}${n}@example.com`.toLowerCase() }]
-    if (i % 3 === 0) people.push({ id: `seed_cp_${n}_2`, firstName: FIRST[(i * 7 + 5) % FIRST.length], lastName: last, relationship: 'co_owner', dob: `19${62 + (i % 35)}-0${(i % 9) + 1}-1${i % 9}`, phone: null, email: `${FIRST[(i * 7 + 5) % FIRST.length]}.${last}${n}@example.com`.toLowerCase() })
+    const people: HouseholdSeed['people'] = [{ id: `seed_cp_${n}_1`, firstName: first, lastName: last, relationship: 'owner', dob: `19${60 + (i % 38)}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 27) + 1).padStart(2, '0')}`, phone, email: `${first}.${last}${n}@${MAIL_DOMAINS[i % MAIL_DOMAINS.length]}`.toLowerCase() }]
+    if (i % 3 === 0) people.push({ id: `seed_cp_${n}_2`, firstName: FIRST[(i * 7 + 5) % FIRST.length], lastName: last, relationship: 'co_owner', dob: `19${62 + (i % 35)}-0${(i % 9) + 1}-1${i % 9}`, phone: null, email: `${FIRST[(i * 7 + 5) % FIRST.length]}.${last}${n}@${MAIL_DOMAINS[(i + 2) % MAIL_DOMAINS.length]}`.toLowerCase() })
     const petCount = i % 7 === 0 ? 3 : i % 3 === 0 ? 2 : 1
     const pets: PetSeed[] = []
     for (let p = 0; p < petCount; p++) {

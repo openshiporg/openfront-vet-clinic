@@ -127,7 +127,7 @@ function authActions({ env = {}, response }) {
 }
 function form() {
   const data = new FormData();
-  data.set('email', 'owner@example.invalid'); data.set('password', 'short'); data.set('name', 'Owner');
+  data.set('email', 'owner@cedarcreekvet.com'); data.set('password', 'short'); data.set('name', 'Owner');
   return data;
 }
 
@@ -147,7 +147,7 @@ test('reset says plainly when no mail transport is configured, without calling K
   const on = authActions({ env: { SMTP_HOST: 'smtp.invalid' }, response: { success: true, data: { sendUserPasswordResetLink: true } } });
   const sent = await on.auth.resetPassword({}, form(), 'request');
   assert.match(sent.success, /reset link has been sent/);
-  assert.deepEqual(plain(sent.formData), { email: 'owner@example.invalid' });
+  assert.deepEqual(plain(sent.formData), { email: 'owner@cedarcreekvet.com' });
   const expired = authActions({ response: { success: true, data: { redeemUserPasswordResetToken: { code: 'TOKEN_EXPIRED' } } } });
   assert.match((await expired.auth.resetPassword({}, form(), 'reset')).message, /invalid or has expired/);
 });

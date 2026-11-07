@@ -93,7 +93,7 @@ export function ResetForm({ mode, token }: ResetFormProps) {
             id="email"
             name="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder="you@yourclinic.com"
             className="mt-2 bg-muted/40"
             defaultValue={state.formData.email}
             required

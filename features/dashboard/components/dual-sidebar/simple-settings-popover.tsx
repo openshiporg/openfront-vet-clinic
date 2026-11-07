@@ -128,7 +128,7 @@ export function SimpleSettingsPopover({ disabled = false }: SimpleSettingsPopove
             {provider === "custom" && (
               <div className="mt-1.5">
                 <Input
-                  placeholder="https://api.example.com/v1"
+                  placeholder="https://api.openai.com/v1"
                   value={customEndpoint}
                   onChange={(e) => setCustomEndpoint(e.target.value)}
                   className="h-9 text-sm"

@@ -47,10 +47,10 @@ export default async function ClientsPage({ searchParams }: { searchParams?: Pro
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Tabs active={view} items={[{ key: 'active', label: 'Active', href: href({ view: 'active' }) }, { key: 'prospect', label: 'To confirm', href: href({ view: 'prospect' }), count: data.prospect }, { key: 'inactive', label: 'Inactive', href: href({ view: 'inactive' }) }]} />
-        <form className="flex gap-2" action="/dashboard/platform/clients">
+        <form className="flex w-full min-w-0 gap-2 sm:w-auto" action="/dashboard/platform/clients">
           <input type="hidden" name="view" value={view} />
-          <input name="q" defaultValue={text} placeholder="Name, C-ref, phone or email" className="h-8 w-64 rounded-md border bg-background px-2 text-sm" />
-          <button className="h-8 rounded-md border px-3 text-sm">Search</button>
+          <input name="q" defaultValue={text} placeholder="Name, C-ref, phone or email" className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:w-64 sm:flex-none" />
+          <button className="h-8 shrink-0 rounded-md border px-3 text-sm">Search</button>
         </form>
       </div>
       <div>
@@ -81,7 +81,7 @@ export default async function ClientsPage({ searchParams }: { searchParams?: Pro
             { name: 'phone', label: 'Mobile', placeholder: '916-555-0123' }, { name: 'email', label: 'Email', width: 'md' },
             { name: 'petName', label: 'Pet name' },
             { name: 'species', label: 'Species', options: [{ value: 'canine', label: 'Dog' }, { value: 'feline', label: 'Cat' }, { value: 'rabbit', label: 'Rabbit' }, { value: 'ferret', label: 'Ferret' }, { value: 'avian', label: 'Bird' }, { value: 'reptile', label: 'Reptile' }] },
-            { name: 'sex', label: 'Sex', width: 'sm', options: [{ value: 'female', label: 'female' }, { value: 'male', label: 'male' }, { value: 'unknown', label: 'unknown' }] },
+            { name: 'sex', label: 'Sex', width: 'sm', options: [{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: 'unknown', label: 'Unknown' }] },
             { name: 'dateOfBirth', label: 'Born (YYYY-MM-DD)' },
           ]} />
       </section>

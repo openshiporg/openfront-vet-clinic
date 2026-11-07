@@ -29,7 +29,7 @@ import { TeamSwitcher } from "./team-switcher";
 const data = {
   user: {
     name: "shadcn",
-    email: "m@example.com",
+    email: "elena.marsh@cedarcreekvet.com",
     avatar: "/avatars/shadcn.jpg",
   },
   teams: [

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { label } from '../lib/format';
 import { runCommand } from '../actions/commands';
 import { pillClass } from './ActionButton';
 
@@ -57,10 +58,10 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
       }}
     >
       {fields.map((f) => (
-        <label key={f.name} className={cn('flex min-w-0 flex-col gap-1 text-xs text-muted-foreground', f.width === 'lg' ? 'w-full sm:w-80' : f.width === 'sm' ? 'w-24' : 'w-36')}>
+        <label key={f.name} className={cn('flex min-w-0 max-w-full flex-col gap-1 text-xs text-muted-foreground', f.width === 'lg' ? 'w-full sm:w-80' : f.options ? (f.width === 'sm' ? 'w-auto min-w-24' : 'w-auto min-w-36') : f.width === 'sm' ? 'w-24' : 'w-36')}>
           {f.label}
           {f.options ? (
-            <select className="h-8 rounded-md border bg-background px-2 text-sm text-foreground" value={values[f.name]} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
+            <select className="h-8 w-full max-w-full rounded-md border bg-background pl-2 pr-7 text-sm text-foreground" value={values[f.name]} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
               {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           ) : (
@@ -79,8 +80,9 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
 function summaryOf(data: unknown): string {
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== 'object') return 'Done.';
-  if (typeof d.reference === 'string') return `${d.reference} · ${String(d.status ?? 'done').replaceAll('_', ' ')}`;
-  if (typeof d.status === 'string') return d.status === 'pending' ? 'Sent for approval.' : `Done · ${d.status.replaceAll('_', ' ')}.`;
+  if (d.duplicate === true) return 'Already recorded a few minutes ago; kept the one reading.';
+  if (typeof d.reference === 'string') return `${d.reference} · ${label(String(d.status ?? 'done'))}`;
+  if (typeof d.status === 'string') return d.status === 'pending' ? 'Sent for approval.' : `Done · ${label(d.status)}.`;
   return 'Done.';
 }
 

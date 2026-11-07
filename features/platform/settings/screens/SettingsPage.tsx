@@ -1,5 +1,5 @@
 import { q } from '../../lib/server';
-import { label, money } from '../../lib/format';
+import { label, money, zoneName } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
 
@@ -45,7 +45,7 @@ export default async function SettingsPage() {
               { name: 'noShowGraceMinutes', label: 'No-show grace (min)', width: 'sm' },
               { name: 'estimateValidityDays', label: 'Estimate validity (days)', width: 'sm' },
               { name: 'refundThreshold', label: 'Refund approval over ($)', width: 'md' },
-              { name: 'aiVoice', label: 'AI receptionist', options: [{ value: '', label: 'unchanged' }, { value: 'on', label: 'turn on' }, { value: 'off', label: 'turn off' }] },
+              { name: 'aiVoice', label: 'AI receptionist', options: [{ value: '', label: 'No change' }, { value: 'on', label: 'Turn on' }, { value: 'off', label: 'Turn off' }] },
               { name: 'reason', label: 'Reason', width: 'lg' },
             ]}
           />
@@ -56,7 +56,7 @@ export default async function SettingsPage() {
           <Row key={l.id}>
             <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{l.name}</span><span className="font-mono text-xs text-muted-foreground">{l.code}</span></div>
-              <Meta>{label(l.kind)} · {l.city}, {l.stateCode.replace('US-', '')} · {l.timeZone} · emergencies: {label(l.emergencyCoverage)}{l.calendar ? ` · calendar ${l.calendar.code}` : ''}</Meta>
+              <Meta>{label(l.kind)} · {l.city}, {l.stateCode.replace('US-', '')} · {zoneName(l.timeZone)} · emergencies: {label(l.emergencyCoverage)}{l.calendar ? ` · calendar ${l.calendar.code}` : ''}</Meta>
             </div>
             <Status value={l.active ? 'active' : 'retired'} />
           </Row>
@@ -67,7 +67,7 @@ export default async function SettingsPage() {
           <Row key={c.id}>
             <div className="min-w-0 flex-1 basis-64 space-y-1">
               <span className="font-medium">{c.name}</span>
-              <Meta>{c.code} · {label(c.kind)} · {c.regularOpen}–{c.regularClose} {c.timeZone} · {c.exceptionsCount} holidays/closures · covered through {c.coverageThrough ?? '—'}</Meta>
+              <Meta>{c.code} · {label(c.kind)} · {c.regularOpen}–{c.regularClose} {zoneName(c.timeZone)} · {c.exceptionsCount} holidays/closures · covered through {c.coverageThrough ?? '—'}</Meta>
               {c.source ? <p className="break-words text-xs text-muted-foreground">{c.source}</p> : null}
             </div>
           </Row>

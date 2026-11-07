@@ -9,7 +9,7 @@ import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { decideApprovalRequest, requestPracticeControls } from './approvals'
 import { bookAppointment, searchAvailability } from './schedule'
 import { recordCallDisclosure, endCall, receiveInboundSms, receptionContext, runTriage, startCall, verifyCaller, requestRefill } from './reception'
-import { registerPendingClient } from './clients'
+import { recordWeight, registerPendingClient } from './clients'
 import { runCommsWorker, sendQueued } from '../workers/comms'
 import { recordingTelephony, manualTelephony } from '../../integrations/telephony'
 import { households, TRIAGE_PROTOCOL } from '../seed/clinicData'
@@ -262,6 +262,17 @@ describe.skipIf(!hasTestDatabase)('Phase 1 exit gate (database)', () => {
     await expect(line('seed_drug_ketamine', 'CIII', 2, 7)).rejects.toThrow(/six months/)
     await expect(line('seed_drug_hydromorphone', 'CII', 0)).resolves.toBeTruthy()
     await expect(line('seed_drug_butorphanol', 'CIV', 5)).resolves.toBeTruthy()
+  })
+
+  it('the same weight entered twice is one weighing; a different reading is a second one', async () => {
+    const patientId = ACTIVE_PET(1).id
+    const before = await prisma.weightMeasurement.count({ where: { patientId } })
+    const first = await recordWeight(null, { patientId, value: '12.6', unit: 'kg', idempotencyKey: uniqueKey('w1') }, csr as never) as { id: string; duplicate: boolean }
+    const again = await recordWeight(null, { patientId, value: '12.60', unit: 'kg', idempotencyKey: uniqueKey('w2') }, csr as never) as { id: string; duplicate: boolean }
+    expect(first.duplicate).toBe(false)
+    expect(again).toMatchObject({ id: first.id, duplicate: true })
+    await recordWeight(null, { patientId, value: '12.8', unit: 'kg', idempotencyKey: uniqueKey('w3') }, csr as never)
+    expect(await prisma.weightMeasurement.count({ where: { patientId } })).toBe(before + 2)
   })
 
   it('append-only clinical evidence: weights, consents and triage can be added, never edited', async () => {

@@ -42,10 +42,10 @@ export default async function PatientsPage({ searchParams }: { searchParams?: Pr
     <Page title="Patients">
       <div className="flex flex-wrap items-center gap-3">
         <Tabs active={view} items={[{ key: 'all', label: 'All', href: href({ view: 'all' }) }, { key: 'alerts', label: 'With alerts', href: href({ view: 'alerts' }) }, { key: 'vcpr', label: 'No VCPR in force', href: href({ view: 'vcpr' }) }]} />
-        <form className="flex gap-2" action="/dashboard/platform/patients">
+        <form className="flex w-full min-w-0 gap-2 sm:w-auto" action="/dashboard/platform/patients">
           <input type="hidden" name="view" value={view} />
-          <input name="q" defaultValue={text} placeholder="Name, P-ref or microchip" className="h-8 w-64 rounded-md border bg-background px-2 text-sm" />
-          <button className="h-8 rounded-md border px-3 text-sm">Search</button>
+          <input name="q" defaultValue={text} placeholder="Name, P-ref or microchip" className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm sm:w-64 sm:flex-none" />
+          <button className="h-8 shrink-0 rounded-md border px-3 text-sm">Search</button>
         </form>
         <span className="text-sm text-muted-foreground">{data.count} patients</span>
       </div>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { q, practiceTimeZone } from '../../lib/server';
-import { when, label, weight } from '../../lib/format';
+import { when, label, title, options, weight } from '../../lib/format';
 import { ALERT_TONE, ageText, todayIn } from '../../lib/clinic';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
@@ -59,17 +59,17 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-mono text-sm">{p.ref}</span><Status value={p.status} />
-          <Meta>{p.species?.name} · {p.breed?.name ?? 'breed not recorded'} · {p.sex} {label(p.reproductiveStatus)} · {p.dateOfBirth ? `${ageText(p.dateOfBirth, today)}${p.dobEstimated ? ' (est.)' : ''} · born ${p.dateOfBirth.slice(0, 10)}` : 'age unknown'}{p.colourMarkings ? ` · ${p.colourMarkings}` : ''}{p.kind === 'group' ? ` · group of ${p.groupSize}` : ''}</Meta>
+          <Meta>{p.species?.name} · {p.breed?.name ?? 'breed not recorded'} · {label(p.sex)} {label(p.reproductiveStatus)} · {p.dateOfBirth ? `${ageText(p.dateOfBirth, today)}${p.dobEstimated ? ' (est.)' : ''} · born ${p.dateOfBirth.slice(0, 10)}` : 'age unknown'}{p.colourMarkings ? ` · ${p.colourMarkings}` : ''}{p.kind === 'group' ? ` · group of ${p.groupSize}` : ''}</Meta>
         </div>
         {p.status === 'deceased' ? <p className={`rounded-md border px-3 py-2 text-sm ${ALERT_TONE.info}`}>Died {p.deceasedAt ? when(p.deceasedAt, tz, 'day') : ''}. Reminders and marketing to this household about {p.name} are suppressed.</p> : null}
         {p.alerts.map(a => (
-          <p key={a.id} className={`rounded-md border px-3 py-2 text-sm ${SEVERITY_TONE[a.severity] ?? ALERT_TONE.info}`}><span className="font-mono text-xs uppercase">{label(a.kind)}</span> · {a.text}</p>
+          <p key={a.id} className={`rounded-md border px-3 py-2 text-sm ${SEVERITY_TONE[a.severity] ?? ALERT_TONE.info}`}><span className="font-medium">{title(a.kind)}</span> · {a.text}</p>
         ))}
         <div className={`rounded-md border px-3 py-2 text-sm ${vcpr ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200' : ALERT_TONE.critical}`}>
           {vcpr
-            ? <>VCPR in force ({label(vcpr.scope)}) · {vcpr.dvm?.displayName ?? vcpr.location?.name} · since {when(vcpr.establishedAt, tz, 'day')} · expires {when(vcpr.expiresAt, tz, 'day')}</>
+            ? <>VCPR in force ({label(vcpr.scope)}) · {vcpr.dvm?.displayName ?? vcpr.location?.name} · {when(vcpr.establishedAt, tz, 'date')} to {when(vcpr.expiresAt, tz, 'date')}</>
             : lastVcpr
-              ? <>VCPR lapsed {when(lastVcpr.expiresAt, tz, 'day')}. An exam is needed before prescribing or refills.</>
+              ? <>VCPR lapsed {when(lastVcpr.expiresAt, tz, 'date')}. An exam is needed before prescribing or refills.</>
               : <>No VCPR on file. An exam is needed before prescribing.</>}
         </div>
       </header>
@@ -86,7 +86,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       </Section>
       <Section title="Weight history">
         {p.weights.length ? p.weights.map(w => (
-          <Row key={w.id}><span className="font-mono">{weight(w.value, w.unit)}</span><Meta>{w.unit !== 'kg' ? `${weight(w.valueKg, 'kg')} · ` : ''}{label(w.method)}{w.bodyConditionScore ? ` · BCS ${w.bodyConditionScore}/9` : ''} · {when(w.measuredAt, tz, 'day')}</Meta></Row>
+          <Row key={w.id}><span className="font-mono">{weight(w.value, w.unit)}</span><Meta>{w.unit !== 'kg' ? `${weight(w.valueKg, 'kg')} · ` : ''}{label(w.method)}{w.bodyConditionScore ? ` · BCS ${w.bodyConditionScore}/9` : ''} · {when(w.measuredAt, tz, 'dayTime')}</Meta></Row>
         )) : <Empty>No weights yet.</Empty>}
         {p.status === 'active' ? (
           <CommandForm op="recordWeight" build="recordWeight" submit="Record weight" fixed={{ patientId: p.id }} paths={[`/dashboard/platform/patients/${p.id}`]}
@@ -102,8 +102,8 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         <Section title="Add an alert">
           <CommandForm op="addPatientAlert" build="addPatientAlert" submit="Add alert" fixed={{ patientId: p.id }} paths={[`/dashboard/platform/patients/${p.id}`]}
             fields={[
-              { name: 'kind', label: 'Kind', options: ['behaviour_caution', 'allergy', 'drug_sensitivity', 'medical', 'genetic', 'handling', 'financial'].map(v => ({ value: v, label: label(v) })) },
-              { name: 'severity', label: 'Severity', width: 'sm', options: [{ value: 'warn', label: 'warn' }, { value: 'block', label: 'block' }, { value: 'info', label: 'info' }] },
+              { name: 'kind', label: 'Kind', options: options(['behaviour_caution', 'allergy', 'drug_sensitivity', 'medical', 'genetic', 'handling', 'financial']) },
+              { name: 'severity', label: 'Severity', width: 'sm', options: [{ value: 'warn', label: 'Warning' }, { value: 'block', label: 'Blocking (stop and check)' }, { value: 'info', label: 'Information' }] },
               { name: 'text', label: 'Alert', width: 'lg' },
             ]} />
         </Section>

@@ -115,7 +115,7 @@ function Summary({ a, tz, day }: { a: Appt; tz: string; day?: boolean }) {
         {a.patients.map(p => p.patient ? <span key={p.patient.id} className="font-medium">{p.patient.name}</span> : null)}
         <span className="text-muted-foreground">{a.client?.displayName}</span>
       </div>
-      <Meta>{a.ref} · {a.appointmentType?.name} · {a.provider?.displayName ?? 'unassigned'} · via {label(a.channel)}{a.reason ? ` · ${a.reason}` : ''}</Meta>
+      <Meta>{a.ref} · {a.appointmentType?.name} · {a.provider?.displayName ?? 'unassigned'} · via {label(a.channel)}{a.reason && a.reason !== a.appointmentType?.name ? ` · ${a.reason}` : ''}</Meta>
     </div>
   );
 }

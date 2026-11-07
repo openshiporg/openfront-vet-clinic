@@ -57,7 +57,7 @@ function authSandbox(response, throws = false) {
 }
 function form(from = '/dashboard/orders') {
   const data = new FormData();
-  data.set('email', 'test@example.invalid'); data.set('password', 'synthetic-password');
+  data.set('email', 'test@cedarcreekvet.com'); data.set('password', 'synthetic-password');
   data.set('name', 'Test'); data.set('token', 'synthetic-token'); data.set('from', from);
   return data;
 }
@@ -84,7 +84,7 @@ test('shared-key actions return availability/model only, never a key in any conf
 
 test('GraphQL errors log only a fixed message and admitted codes; no request/variables/headers/message leak', async () => {
   const error = Object.assign(new Error('synthetic-password in ClientError.message'), {
-    request: { variables: { email: 'private@example.invalid', password: 'synthetic-password' }, headers: { cookie: 'synthetic-cookie' } },
+    request: { variables: { email: 'private@cedarcreekvet.com', password: 'synthetic-password' }, headers: { cookie: 'synthetic-cookie' } },
     response: { errors: [
       { message: 'synthetic-password', extensions: { code: 'FORBIDDEN', originalError: { message: 'internal SQL' } } },
       { extensions: { code: 'synthetic-password' } },
@@ -125,7 +125,7 @@ test('all sign-in/sign-up failure branches return email only and plain messages'
       const { auth, logs } = authSandbox(response, throws);
       for (const action of ['signIn', 'signUp']) {
         const state = await auth[action]({ message: null, formData: { email: '' } }, form());
-        assert.deepEqual(plain(state.formData), { email: 'test@example.invalid' });
+        assert.deepEqual(plain(state.formData), { email: 'test@cedarcreekvet.com' });
         assert.doesNotMatch(state.message, /synthetic|SQL|ClientError/);
       }
       assert.doesNotMatch(JSON.stringify(logs), /synthetic/);

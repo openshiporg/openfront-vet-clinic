@@ -52,7 +52,7 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
                 {m.patient ? <span className="text-xs text-muted-foreground">re {m.patient.name}</span> : null}
               </div>
               <p className="break-words text-sm">{m.body}</p>
-              <Meta>{when(m.sentAt ?? m.createdAt, tz)} · {label(m.purpose)}{m.templateCode ? ` · ${m.templateCode}` : ''}{m.appointment ? ` · ${m.appointment.ref}` : ''}{m.blockedReason ? ` · blocked: ${label(m.blockedReason)}` : ''}</Meta>
+              <Meta>{when(m.sentAt ?? m.createdAt, tz)} · {label(m.purpose)}{m.templateCode ? ` · ${label(m.templateCode)}` : ''}{m.appointment ? ` · ${m.appointment.ref}` : ''}{m.blockedReason ? ` · blocked: ${label(m.blockedReason)}` : ''}</Meta>
             </div>
             <Status value={m.status} />
           </Row>

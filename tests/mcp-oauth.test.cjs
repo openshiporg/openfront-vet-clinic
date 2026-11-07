@@ -74,8 +74,8 @@ function fakePrisma() {
 const STAFF_ROLE = { id: 'r1', name: 'Admin', canManageClients: true, canManageSchedules: true, canSeeOtherPeople: true,
   canEditOtherPeople: true, canManagePeople: true, canManageRoles: true, canAccessDashboard: true };
 const USERS = {
-  customer: { id: 'customer', name: 'Cass Customer', email: 'cass@example.invalid', role: null },
-  staff: { id: 'staff', name: 'Sam Staff', email: 'sam@example.invalid', role: STAFF_ROLE },
+  customer: { id: 'customer', name: 'Cass Customer', email: 'cass@cedarcreekvet.com', role: null },
+  staff: { id: 'staff', name: 'Sam Staff', email: 'sam@cedarcreekvet.com', role: STAFF_ROLE },
 };
 
 /**
@@ -418,13 +418,13 @@ test('the sign-in screen signs people in through Keystone and returns to the sam
     res.setHeader('Set-Cookie', 'keystonejs-session=sealed; Path=/; HttpOnly; SameSite=Lax');
     return { data: { authenticate: { sessionToken: 'sealed' } } };
   } } });
-  const response = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', form: { intent: 'signin', email: 'cass@example.invalid', password: 'pw' } }));
+  const response = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', form: { intent: 'signin', email: 'cass@cedarcreekvet.com', password: 'pw' } }));
   assert.equal(response.status, 303);
   assert.equal(response.headers.get('set-cookie'), 'keystonejs-session=sealed; Path=/; HttpOnly; SameSite=Lax');
   const location = response.headers.get('location');
   assert.ok(location.startsWith('/oauth/authorize?') && !location.includes('screen='));
-  assert.equal(variables.email, 'cass@example.invalid');
+  assert.equal(variables.email, 'cass@cedarcreekvet.com');
   // Account creation follows the starter's existing PUBLIC_SIGNUPS_ALLOWED switch (off here).
-  const signup = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', form: { intent: 'signup', email: 'n@example.invalid', password: 'pw', name: 'N' } }));
+  const signup = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', form: { intent: 'signup', email: 'n@cedarcreekvet.com', password: 'pw', name: 'N' } }));
   assert.equal(signup.status, 403);
 });

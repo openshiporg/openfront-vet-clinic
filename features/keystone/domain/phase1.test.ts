@@ -80,7 +80,7 @@ describe('availability', () => {
 describe('contact rules', () => {
   it('normalises and hashes', () => {
     expect(normalisePhone('(916) 555-0142')).toBe('+19165550142')
-    expect(normaliseEmail(' Olivia@Example.COM ')).toBe('olivia@example.com')
+    expect(normaliseEmail(' Olivia.Alvarez@Gmail.COM ')).toBe('olivia.alvarez@gmail.com')
     expect(contactHash('+19165550142')).toMatch(/^[0-9a-f]{64}$/)
     expect(() => normalisePhone('555')).toThrow()
   })
@@ -110,7 +110,7 @@ describe('contact rules', () => {
 describe('telephony and voice adapters', () => {
   it('verifies the Twilio signature (and rejects a tampered body)', () => {
     const params = { From: '+19165550142', To: '+19165550100', Body: 'C', MessageSid: 'SM0123456789abcdef' }
-    const url = 'https://vet-clinic.example.com/api/webhooks/sms'
+    const url = 'https://vet-clinic.openship.org/api/webhooks/sms'
     const sig = twilioSignature('token', url, params)
     expect(verifyTwilioSignature('token', url, params, sig)).toBe(true)
     expect(verifyTwilioSignature('token', url, { ...params, Body: 'STOP' }, sig)).toBe(false)

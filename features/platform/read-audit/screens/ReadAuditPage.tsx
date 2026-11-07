@@ -31,7 +31,7 @@ export default async function ReadAuditPage({ searchParams }: { searchParams?: P
             <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <Link className="font-medium underline-offset-2 hover:underline" href={`/dashboard/platform/read-audit?actor=${encodeURIComponent(r.actorId)}`}>{r.actorLabel ?? r.actorId}</Link>
-                <span className="text-xs text-muted-foreground">{r.actorKind}</span>
+                <span className="text-xs text-muted-foreground">{label(r.actorKind)}</span>
               </div>
               <Meta>
                 read <Link className="underline underline-offset-2" href={`/dashboard/platform/read-audit?resource=${encodeURIComponent(r.resourceId ?? '')}`}>{r.resourceType} {r.resourceId}</Link> · {label(r.purpose)} · {(r.fields ?? []).join(', ')}

@@ -172,6 +172,9 @@ export async function addPatient(_root: unknown, args: { clientId: string; input
 }
 
 /** Weight entry (I-C4): stored as entered plus the exact kilogram value; never edited. */
+/** A matching reading inside this window is treated as the same weighing. */
+export const DUPLICATE_WEIGHT_WINDOW_MS = 10 * 60 * 1000
+
 export async function recordWeight(_root: unknown, args: { patientId: string; value: string; unit: 'kg' | 'lb' | 'g'; method?: string | null; bodyConditionScore?: number | null; appointmentId?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canCheckIn', 'canWriteRecord'], tool: 'patient.weight', humanOnly: true }, args, async actor => {
     if (!['kg', 'lb', 'g'].includes(args.unit)) throw new DomainError(Codes.INVALID_INPUT, 'Unit is kg, lb or g.', { field: 'unit' })
@@ -183,6 +186,13 @@ export async function recordWeight(_root: unknown, args: { patientId: string; va
       if (!patient) throw new DomainError(Codes.NOT_FOUND, 'Patient not found.')
       if (patient.status === 'deceased' || patient.status === 'merged') throw new DomainError(Codes.PATIENT_DECEASED, `The patient is ${patient.status}.`)
       const staff = actor.kind === 'user' ? await uow.tx.staffMember.findFirst({ where: { userId: actor.userId }, select: { id: true } }) : null
+      // The same reading entered twice within a few minutes is a double submit, not a second weighing:
+      // return the reading already on file so the chart and the trend are not distorted.
+      const recent = await uow.tx.weightMeasurement.findFirst({
+        where: { patientId: args.patientId, unit: args.unit, value: toScale(value, 'wt'), measuredAt: { gte: new Date(uow.now.getTime() - DUPLICATE_WEIGHT_WINDOW_MS) } },
+        orderBy: { measuredAt: 'desc' }, select: { id: true, valueKg: true },
+      })
+      if (recent) return { id: recent.id, valueKg: recent.valueKg.toString(), duplicate: true }
       const row = await uow.tx.weightMeasurement.create({
         data: {
           patientId: args.patientId, value: toScale(value, 'wt'), unit: args.unit, valueKg: toScale(toKg(value, args.unit), 'wt'), method: args.method ?? 'scale',
@@ -190,7 +200,7 @@ export async function recordWeight(_root: unknown, args: { patientId: string; va
         },
       })
       auditCreate(uow, actor, 'WeightMeasurement', row.id, 'patient.weight_recorded', { patientId: args.patientId, value: row.value.toString(), unit: row.unit, valueKg: row.valueKg.toString() })
-      return { id: row.id, valueKg: row.valueKg.toString() }
+      return { id: row.id, valueKg: row.valueKg.toString(), duplicate: false }
     })
     return { replay: result.replay, ...result.value }
   })

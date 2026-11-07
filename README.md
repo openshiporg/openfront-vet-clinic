@@ -6,9 +6,33 @@ Openfront Vet Clinic runs a veterinary practice on one system: clients and patie
 
 Built on Next.js and KeystoneJS 6 with PostgreSQL.
 
-## Status
+## What works today
 
-The foundation is being built. The data model and build plan are in progress.
+- **Practice set-up (Phase 0):** locations, staff with licences and DEA registrations, roles, maker-checker approvals, a hash-chained audit log, a read audit on every client and clinical record, and federal and California policy packs that fail closed when a rule is missing.
+- **Front desk (Phase 1):** clients (households), patients with alerts, weights, microchips and VCPR status, a day sheet with booking, a patient-flow whiteboard, a waitlist, client messages with quiet hours and STOP handling, and the controlled-substance register foundation (the database refuses a negative balance and Schedule II refills).
+- **AI receptionist (inbound calls only):** it plays an AI and recording disclosure, screens for emergencies (an emergency is transferred, never booked), verifies the caller before sharing anything, books routine visits and takes refill and records requests for staff. It works only through scoped MCP tools, can be switched off instantly, and is switched on only by a second approver. It never prescribes, never touches controlled substances and never makes outbound calls.
+
+Coming next: the medical record, orders, vaccines and reminders, inventory, invoicing, payments and wellness plans (see the build plan).
+
+## Coming from another system
+
+Practice-management imports run behind adapters, so a practice can move over without retyping its records. ezyVet and Avimark are the first two import targets; Cornerstone follows the same adapter contract.
+
+## Sample practice
+
+The seed loads **Cedar Creek Animal Hospital** (Sacramento, CA) and its Elk Grove satellite: 20+ staff, 400 households and about 640 patients. Every name, phone number and address is fictional. Phones use the 916-555-01xx range. Staff emails use the practice's own domain (for example `elena.marsh@cedarcreekvet.com`) and clients use common mail providers. Messaging and telephony run on manual or recording adapters in the sample, so nothing is ever sent.
+
+Seeded staff cannot sign in until an owner sets their password. Create the first owner at `/dashboard/init`, then load the sample practice from onboarding or set staff passwords from the Team screen.
+
+## Running it
+
+```bash
+cp .env.example .env   # set DATABASE_URL and SESSION_SECRET
+npm install
+npm run dev            # builds Keystone, applies migrations, starts Next.js
+```
+
+`npm run verify` runs type checks, lint, unit and database tests (database tests need `VC_TEST_DATABASE_URL`).
 
 ## License
 

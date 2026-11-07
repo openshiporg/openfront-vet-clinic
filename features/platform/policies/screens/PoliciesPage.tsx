@@ -1,5 +1,5 @@
 import { q } from '../../lib/server';
-import { label } from '../../lib/format';
+import { title, policyRule, policyLayer } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 
 type MatrixRow = { location: string; locationName: string; kind: string; on: string; ok: boolean; verified?: boolean; versions?: { id: string; packCode: string; layer: string; verified: boolean }[]; unverifiedRules?: string[]; code?: string; message?: string };
@@ -37,9 +37,9 @@ export default async function PoliciesPage() {
           {rows.filter(r => r.location === code).map(r => (
             <Row key={`${code}-${r.kind}`}>
               <div className="min-w-0 flex-1 basis-64 space-y-1">
-                <p className="font-medium">{label(r.kind)}</p>
-                <Meta>{r.ok ? (r.versions ?? []).map(v => `${v.packCode} (${v.layer})`).join(' → ') : `${r.code}: ${r.message}`}</Meta>
-                {r.ok && r.unverifiedRules?.length ? <p className="break-words text-xs text-amber-700">verify: {r.unverifiedRules.join('; ')}</p> : null}
+                <p className="font-medium">{title(r.kind)}</p>
+                <Meta>{r.ok ? (r.versions ?? []).map(v => policyLayer(v.layer, v.packCode)).join(' → ') : r.message}</Meta>
+                {r.ok && r.unverifiedRules?.length ? <p className="break-words text-xs text-amber-700">verify: {r.unverifiedRules.map(policyRule).join('; ')}</p> : null}
               </div>
               <Status value={!r.ok ? 'failed' : r.verified ? 'active' : 'unverified'} />
             </Row>
@@ -50,12 +50,12 @@ export default async function PoliciesPage() {
         {data.policyVersions.length ? data.policyVersions.map(v => (
           <Row key={v.id}>
             <div className="min-w-0 flex-1 basis-64 space-y-1">
-              <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{v.pack?.name ?? v.label}</span><span className="font-mono text-xs text-muted-foreground">{v.pack?.code}</span></div>
+              <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{v.pack?.name ?? v.label}</span><span className="text-xs text-muted-foreground">{v.pack ? `${v.pack.jurisdiction === 'US' ? 'Federal' : v.pack.jurisdiction} · ${title(v.pack.kind)}` : ''}</span></div>
               <Meta>from {v.effectiveFrom}{v.effectiveTo ? ` to ${v.effectiveTo}` : ''} · hash {v.rulesHash.slice(0, 12)}</Meta>
               <ul className="space-y-0.5 text-xs">
                 {(v.sourceRefs ?? []).map(s => <li key={s.ref + s.title} className="break-words">{s.url ? <a className="underline underline-offset-2" href={s.url} target="_blank" rel="noreferrer">{s.ref}</a> : s.ref} · {s.title}{s.section ? ` ${s.section}` : ''}</li>)}
               </ul>
-              {!v.verified && v.unverifiedRules?.length ? <p className="break-words text-xs text-amber-700">(verify) {v.unverifiedRules.join('; ')}</p> : null}
+              {!v.verified && v.unverifiedRules?.length ? <p className="break-words text-xs text-amber-700">(verify) {v.unverifiedRules.map(policyRule).join('; ')}</p> : null}
             </div>
             <Status value={v.verified ? v.status : 'unverified'} />
           </Row>

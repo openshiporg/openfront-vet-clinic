@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { q, practiceTimeZone } from '../../lib/server';
-import { when, label } from '../../lib/format';
+import { when, label, title, redFlag } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section } from '../../components/ui';
 
 type Turn = { role?: string; speaker?: string; text?: string; at?: string };
@@ -13,16 +13,35 @@ type Call = {
 };
 
 /** One call: the disclosure, verification, triage, what was done, and the transcript (redacted text only). */
+/** Red flags as staff read them: what the caller said or answered yes to, and what stayed open because the question was never asked. */
+function flagText(t: { complaint: string; redFlagsHit: string[] | null; answers: Record<string, boolean | null> | null; protocolVersion: { redFlags: { id: string; label: string; whenYes: string[]; keywords?: string[] }[] | null } | null }) {
+  const hit = t.redFlagsHit ?? []
+  if (!hit.length) return ''
+  const answers = t.answers ?? {}
+  const flags = t.protocolVersion?.redFlags ?? []
+  const name = (id: string) => { const l = flags.find(f => f.id === id)?.label; return l ? l.charAt(0).toLowerCase() + l.slice(1) : redFlag(id) }
+  const raised: string[] = []
+  const open: string[] = []
+  for (const id of hit) {
+    const f = flags.find(x => x.id === id)
+    const said = ` ${t.complaint.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `
+    const answeredYes = f?.whenYes.some(q => answers[q] === true) || (f?.keywords ?? []).some(k => said.includes(` ${k.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `))
+    const notAsked = f ? f.whenYes.length > 0 && f.whenYes.every(q => typeof answers[q] !== 'boolean') : false
+    if (!answeredYes && notAsked) open.push(id); else raised.push(id)
+  }
+  return [raised.length ? ` · red flags: ${raised.map(name).join(', ')}` : '', open.length ? ` · not ruled out (question not asked): ${open.map(name).join(', ')}` : ''].join('')
+}
+
 export default async function CallDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [data, tz] = await Promise.all([
-    q<{ callRecord: Call | null; triageAssessments: { id: string; level: string; outcome: string; complaint: string; redFlagsHit: string[] | null; at: string; referredTo: { name: string; phone: string } | null }[]; appointments: { id: string; ref: string; startsAt: string; status: string; appointmentType: { name: string } | null }[]; refillRequests: { ref: string; productText: string; status: string }[]; recordsRequests: { ref: string; status: string; scope: string }[] }>(`
+    q<{ callRecord: Call | null; triageAssessments: { id: string; level: string; outcome: string; complaint: string; redFlagsHit: string[] | null; at: string; answers: Record<string, boolean | null> | null; protocolVersion: { redFlags: { id: string; label: string; whenYes: string[]; keywords: string[] }[] | null } | null; referredTo: { name: string; phone: string } | null }[]; appointments: { id: string; ref: string; startsAt: string; status: string; appointmentType: { name: string } | null }[]; refillRequests: { ref: string; productText: string; status: string }[]; recordsRequests: { ref: string; status: string; scope: string }[] }>(`
       query Call($id: ID!) {
         callRecord(where: { id: $id }) {
           id ref direction from to answeredBy adapterKey providerCallId disposition status startedAt endedAt durationSeconds disclosurePlayedAt recordingConsent verificationMethod callerVerifiedAt
           transcript summary transferTo recordingRef client { id displayName } person { firstName lastName } agent { name } location { name }
         }
-        triageAssessments(where: { callRecord: { id: { equals: $id } } }, orderBy: { at: asc }) { id level outcome complaint redFlagsHit at referredTo { name phone } }
+        triageAssessments(where: { callRecord: { id: { equals: $id } } }, orderBy: { at: asc }) { id level outcome complaint redFlagsHit answers at protocolVersion { redFlags } referredTo { name phone } }
         appointments(where: { callRecord: { id: { equals: $id } } }) { id ref startsAt status appointmentType { name } }
         refillRequests(where: { callRecord: { id: { equals: $id } } }) { ref productText status }
         recordsRequests(where: { callRecord: { id: { equals: $id } } }) { ref status scope }
@@ -47,8 +66,8 @@ export default async function CallDetailPage({ params }: { params: Promise<{ id:
       <Section title="Urgency screen">
         {data.triageAssessments.length ? data.triageAssessments.map(t => (
           <Row key={t.id}>
-            <div className="min-w-0 flex-1 basis-64 space-y-1"><span>{t.complaint}</span><Meta>{label(t.outcome)}{t.redFlagsHit?.length ? ` · red flags: ${t.redFlagsHit.join(', ')}` : ''}{t.referredTo ? ` · referred to ${t.referredTo.name} ${t.referredTo.phone}` : ''}</Meta></div>
-            <Status value={t.level === 'emergency_now' ? 'urgent' : t.level === 'urgent_today' ? 'overdue' : 'ok'} /><span className="font-mono text-xs uppercase">{label(t.level)}</span>
+            <div className="min-w-0 flex-1 basis-64 space-y-1"><span>{t.complaint}</span><Meta>{label(t.outcome)}{flagText(t)}{t.referredTo ? ` · referred to ${t.referredTo.name} ${t.referredTo.phone}` : ''}</Meta></div>
+            <Status value={t.level === 'emergency_now' ? 'urgent' : t.level === 'urgent_today' ? 'overdue' : 'ok'} /><span className="text-xs">{title(t.level)}</span>
           </Row>
         )) : <Empty>No urgency screen on this call.</Empty>}
       </Section>
