@@ -69,7 +69,26 @@ export default async function AnaesthesiaPage({ params }: { params: Promise<{ id
             ]} />
         ) : null}
         {r.readings.length ? (
-          <div className="max-w-full overflow-x-auto rounded-md border">
+          <>
+          <ul className="divide-y rounded-md border md:hidden">
+            {r.readings.map(m => (
+              <li key={m.id} className="space-y-1 px-3 py-2 text-xs">
+                <p className="font-medium">{when(m.at, tz, 'time')} · {m.by?.displayName}</p>
+                <p className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
+                  {m.hr !== null ? <span>HR {m.hr}</span> : null}
+                  {m.rr !== null ? <span>RR {m.rr}</span> : null}
+                  {m.spo2 !== null ? <span className={m.spo2 < 90 ? 'text-red-700' : ''}>SpO₂ {m.spo2}</span> : null}
+                  {m.etco2 !== null ? <span>EtCO₂ {m.etco2}</span> : null}
+                  {m.sbp !== null ? <span>SBP {m.sbp}</span> : null}
+                  {m.map !== null ? <span className={m.map < 60 ? 'text-red-700' : ''}>MAP {m.map}</span> : null}
+                  {m.tempC ? <span>Temp {quantity(m.tempC)} °C</span> : null}
+                  {m.agentPct ? <span>Agent {quantity(m.agentPct)} %</span> : null}
+                </p>
+                {m.notes ? <p className="break-words text-muted-foreground">{m.notes}</p> : null}
+              </li>
+            ))}
+          </ul>
+          <div className="hidden max-w-full overflow-x-auto rounded-md border md:block">
             <table className="min-w-max text-xs">
               <thead><tr className="border-b text-left">{['Time', 'HR', 'RR', 'SpO₂', 'EtCO₂', 'SBP', 'MAP', 'Temp °C', 'Agent %', 'Notes', 'By'].map(h => <th key={h} className="px-2 py-1.5 font-medium">{h}</th>)}</tr></thead>
               <tbody>{r.readings.map(m => (
@@ -82,6 +101,7 @@ export default async function AnaesthesiaPage({ params }: { params: Promise<{ id
               ))}</tbody>
             </table>
           </div>
+          </>
         ) : <Empty>No readings yet. Readings start after induction.</Empty>}
         <p className="text-xs text-muted-foreground">Readings below SpO₂ 90 % or MAP 60 mmHg are shown in red.</p>
       </Section>

@@ -87,7 +87,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
         <Meta>{p.species?.name} · {p.breed?.name ?? 'breed not recorded'} · {label(p.sex)} {label(p.reproductiveStatus)} · {p.dateOfBirth ? `${ageText(p.dateOfBirth, today)} · born ${calendarDay(p.dateOfBirth)}` : 'age unknown'}{e.reason ? ` · ${e.reason}` : ''}</Meta>
         {p.alerts.map(a => <p key={a.id} className={`rounded-md border px-3 py-2 text-sm ${a.severity === 'block' ? ALERT_TONE.critical : a.severity === 'warn' ? ALERT_TONE.warning : ALERT_TONE.info}`}><span className="font-medium">{title(a.kind)}</span> · {a.text}</p>)}
         {signed ? (
-          <p className={`rounded-md border px-3 py-2 text-sm ${ALERT_TONE.info}`}>Signed by {e.signedBy?.displayName} on {when(e.signedAt, tz)}. The record is frozen; corrections are addenda below. Content hash <span className="break-all font-mono text-xs">{e.contentHash}</span>.</p>
+          <p className={`rounded-md border px-3 py-2 text-sm ${ALERT_TONE.info}`}>Signed by {e.signedBy?.displayName} on {when(e.signedAt, tz)}. The record is frozen; corrections are addenda below.</p>
         ) : null}
         {e.status === 'voided' ? <p className={`rounded-md border px-3 py-2 text-sm ${ALERT_TONE.critical}`}>Voided: {e.voidReason}</p> : null}
       </header>

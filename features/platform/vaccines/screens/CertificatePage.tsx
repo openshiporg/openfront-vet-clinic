@@ -49,7 +49,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
         </dl>
       </Section>
       <Section title="Document">
-        {c.document ? <Meta>{c.document.status === 'rendered' ? `Rendered ${when(c.document.renderedAt, tz)} · SHA-256 ${c.document.sha256}` : 'Being prepared by the document worker.'}</Meta> : <Meta>Not rendered yet.</Meta>}
+        {c.document ? <Meta>{c.document.status === 'rendered' ? `Rendered ${when(c.document.renderedAt, tz)}; the document is fingerprinted so any later change shows.` : 'Being prepared by the document worker.'}</Meta> : <Meta>Not rendered yet.</Meta>}
         <Meta>Issued {when(c.createdAt, tz)} · vaccinated {calendarDay(c.vaccinatedOn)} · valid {c.durationMonths} months, to {calendarDay(c.nextDueOn)}.</Meta>
       </Section>
       <p className="text-xs text-muted-foreground"><Link className="underline" href={`/dashboard/platform/vaccines?patient=${c.patient?.id}`}>All vaccines for {c.patient?.name}</Link></p>

@@ -88,7 +88,26 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
         <Section title={`Treatment sheet · ${stay.patient?.name} · ${stay.ref}`} aside={stay.encounter ? <Link className="text-xs underline" href={`/dashboard/platform/encounters/${stay.encounter.id}`}>Record {stay.encounter.ref}</Link> : null}>
           {stay.patient?.alerts.map((a, i) => <p key={i} className={`rounded-md border px-3 py-2 text-sm ${a.severity === 'block' ? ALERT_TONE.critical : ALERT_TONE.warning}`}>{a.text}</p>)}
           {rows.size ? (
-            <div className="max-w-full overflow-x-auto rounded-md border">
+            <>
+            <ul className="divide-y rounded-md border md:hidden">
+              {[...rows.entries()].map(([key, r]) => {
+                const inWindow = r.tasks.filter(x => { const d = Date.parse(x.dueAt); return d >= hours[0].getTime() && d < hours[hours.length - 1].getTime() + 3_600_000; }).sort((x, y) => Date.parse(x.dueAt) - Date.parse(y.dueAt));
+                return (
+                  <li key={key} className="space-y-1 px-3 py-2 text-xs">
+                    <p className="break-words font-medium">{r.label}</p>
+                    <p className="text-muted-foreground">{title(r.frequency)}</p>
+                    <p className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
+                      {inWindow.length ? inWindow.map(t => {
+                        const mark = t.status === 'done' ? '✓' : t.status === 'skipped' ? '—' : t.status === 'overdue' ? '!' : '○';
+                        const tone = t.status === 'done' ? 'text-emerald-700' : t.status === 'overdue' ? 'text-red-700' : t.status === 'skipped' ? 'text-muted-foreground' : 'text-amber-700';
+                        return <span key={t.id} className={tone}>{mark} {hourLabel(new Date(t.dueAt), tz)}</span>;
+                      }) : <span className="font-sans text-muted-foreground">Nothing in the next 24 hours.</span>}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden max-w-full overflow-x-auto rounded-md border md:block">
               <table className="min-w-max border-collapse text-xs">
                 <thead>
                   <tr>
@@ -111,6 +130,7 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
                 </tbody>
               </table>
             </div>
+            </>
           ) : <Empty>No treatments scheduled for the next 24 hours. Order from the visit record with a sheet frequency.</Empty>}
           <p className="text-xs text-muted-foreground">○ due · ✓ done · ! overdue · — skipped</p>
 

@@ -28,7 +28,7 @@ export function Page({ title, crumbs = [], children }: { title: string; crumbs?:
       breadcrumbs={[{ type: 'link', label: 'Dashboard', href: '/dashboard' }, ...crumbs.map((c) => ({ type: (c.href ? 'link' : 'page') as 'link' | 'page', label: c.label, href: c.href })), { type: 'page', label: title }]}
       header={<h1 className="text-xl font-semibold tracking-tight">{title}</h1>}
     >
-      <div className="min-w-0 space-y-6 px-4 pb-10 md:px-6">{children}</div>
+      <div className="min-w-0 space-y-6 px-4 pb-28 md:px-6">{children}</div>
     </PageContainer>
   );
 }
