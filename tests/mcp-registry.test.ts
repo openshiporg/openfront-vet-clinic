@@ -49,6 +49,20 @@ describe('MCP registry never-list', () => {
   })
 })
 
+describe('Phase 2 clinical commands stay off MCP', () => {
+  // Charting, orders, administration, anaesthesia, vaccines and imports are clinical acts by a
+  // person (humanOnly in the resolver too); no tool may reach them, whatever its name.
+  const CLINICAL = ['openEncounter', 'saveSoapSection', 'recordVitals', 'setExamFinding', 'addDiagnosis', 'submitEncounter', 'signEncounter', 'addAddendum', 'requestVoidEncounter', 'startScribeSession', 'draftScribeSession', 'acceptScribeDraft', 'placeOrder', 'recordAdministration', 'completeTreatmentTask', 'admitPatient', 'dischargePatient', 'openAnaesthesia', 'recordMonitoring', 'closeAnaesthesia', 'saveSurgeryReport', 'administerVaccine', 'recordOutsideVaccine', 'applyImport', 'previewDose']
+  it('no registered tool document calls a clinical command', () => {
+    for (const tool of DOMAIN_TOOLS) for (const op of CLINICAL) expect(tool.document, `${tool.name} → ${op}`).not.toMatch(new RegExp(`\\b${op}\\(`))
+  })
+  it('the record-signing and controlled paths are on the never-list', () => {
+    for (const name of ['signEncounter', 'addAddendum', 'sign_record', 'recordControlledAdministration', 'cs_waste']) {
+      expect(() => assertToolAllowed({ name, document: 'query { x }' }), name).toThrow()
+    }
+  })
+})
+
 describe('read audit walker', () => {
   const typeOf = (parent: string, field: string) => ({ Query: { patients: 'Patient', clients: 'Client' }, Patient: { owner: 'Client', weights: 'PatientWeight' }, Client: {} } as Record<string, Record<string, string>>)[parent]?.[field] ?? null
 

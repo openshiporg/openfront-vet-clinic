@@ -66,6 +66,14 @@ export function when(iso: string | null | undefined, tz = 'America/Los_Angeles',
   return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: style === 'day' || style === 'date' ? undefined : 'short', ...opts }).format(d)
 }
 
+/** A calendar day (YYYY-MM-DD, date-only column) as "Mar 19, 2014". Never shifted by time zone. */
+export function calendarDay(value: string | null | undefined) {
+  if (!value) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!m) return value
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])))
+}
+
 /**
  * Human wording for stored codes. Screens never show a raw enum: `label()` is the lower-case phrase
  * for use inside a sentence ("via AI voice"), `title()` the same phrase capitalised for a list item,

@@ -1,5 +1,5 @@
 import { q, practiceTimeZone } from '../../lib/server';
-import { label } from '../../lib/format';
+import { label, calendarDay } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 
 type Licence = { id: string; kind: string; stateCode: string; licenseNumber: string; status: string; expiresOn: string; verificationSource: string | null };
@@ -12,9 +12,9 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00
 
 function expiry(today: string, expiresOn: string) {
   const d = daysBetween(today, expiresOn);
-  if (d < 0) return <span className="text-red-600">expired {expiresOn}</span>;
-  if (d <= 60) return <span className="text-amber-600">expires {expiresOn} · {d} days</span>;
-  return <span>expires {expiresOn}</span>;
+  if (d < 0) return <span className="text-red-600">expired {calendarDay(expiresOn)}</span>;
+  if (d <= 60) return <span className="text-amber-600">expires {calendarDay(expiresOn)} · {d} days</span>;
+  return <span>expires {calendarDay(expiresOn)}</span>;
 }
 
 /** Team, licences and DEA registrations (I-P1, I-P2). A lapsed licence or registration blocks the licensed act it covers. */
@@ -45,7 +45,7 @@ export default async function TeamPage() {
           <Row key={s.id}>
             <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{s.displayName}</span>{s.credentials ? <span className="text-xs text-muted-foreground">{s.credentials}</span> : null}</div>
-              <Meta>{s.user?.role?.name ?? label(s.kind)} · {label(s.employment)} · {s.locations.map(l => l.code).join(', ') || s.homeLocation?.code}{s.user?.accessExpiresAt ? ` · access until ${s.user.accessExpiresAt.slice(0, 10)}` : ''}</Meta>
+              <Meta>{s.user?.role?.name ?? label(s.kind)} · {label(s.employment)} · {s.locations.map(l => l.code).join(', ') || s.homeLocation?.code}{s.user?.accessExpiresAt ? ` · access until ${calendarDay(s.user.accessExpiresAt)}` : ''}</Meta>
               {s.licenses.map(l => (
                 <p key={l.id} className="text-xs"><span className="font-mono">{l.licenseNumber}</span> · {label(l.kind)} · {l.stateCode} · {expiry(today, l.expiresOn)}</p>
               ))}

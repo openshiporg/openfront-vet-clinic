@@ -165,5 +165,6 @@ export const APPROVAL_POLICIES: ApprovalPolicySeed[] = [
   { action: 'purchase_order.approve', description: 'Approve a purchase order over threshold.', requiredPermission: 'canApprovePurchase', expiresAfterMinutes: 3 * 1440 },
   { action: 'agent_scope.grant', description: 'Grant an AI agent a tool scope.', requiredPermission: 'canApproveAgentScopes', expiresAfterMinutes: 1440 },
   { action: 'role.assign_approval', description: 'Give a person a role that can approve.', requiredPermission: 'canManageRoles', expiresAfterMinutes: 1440 },
+  { action: 'encounter.void', description: 'Void an unsigned visit record opened in error (nothing given, ordered or charged).', requiredPermission: 'canSignRecord', expiresAfterMinutes: 1440 },
   { action: 'cs.discrepancy_close', description: 'Close a controlled-substance discrepancy case.', requiredPermission: 'canManageControlled', expiresAfterMinutes: 3 * 1440 },
 ]

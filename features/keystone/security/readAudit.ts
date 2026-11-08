@@ -28,6 +28,10 @@ export const AUDITED_TYPES = new Set<string>([
   'PatientOwnership', 'WeightMeasurement', 'AlertAcknowledgement', 'Microchip', 'VcprRecord', 'PetInsurancePolicy',
   'AppointmentPatient', 'AppointmentSegment', 'WaitlistEntry', 'TriageAssessment', 'WhiteboardEntry', 'Suppression',
   'CsContainer', 'CsLogEntry',
+  // Phase 2: the medical record, orders and treatment, preventive care
+  'SoapSection', 'SoapSectionRevision', 'VitalsObservation', 'PhysicalExamFinding', 'Problem', 'Diagnosis', 'ClinicalAttachment', 'ScribeSession',
+  'ClinicalOrder', 'DoseCalculation', 'Administration', 'HospitalStay', 'CageAssignment', 'TreatmentSheetOrder', 'TreatmentTask', 'MonitoringReading',
+  'SurgeryReport', 'DentalChart', 'DischargeInstruction', 'VaccineAdministration', 'PatientReminder', 'ReminderSatisfaction', 'AdverseEventReport',
 ])
 
 type Ref = { resourceType: string; resourceId: string | null; fields: Set<string> }

@@ -54,6 +54,8 @@ model User {
   from_Appointment_bookedByUser       Appointment[]          @relation("Appointment_bookedByUser")
   from_SegmentTransition_by           SegmentTransition[]    @relation("SegmentTransition_by")
   from_TriageAssessment_actorUser     TriageAssessment[]     @relation("TriageAssessment_actorUser")
+  from_SoapSectionRevision_authorUser SoapSectionRevision[]  @relation("SoapSectionRevision_authorUser")
+  from_ImportBatch_startedBy          ImportBatch[]          @relation("ImportBatch_startedBy")
   from_Proposal_proposedByUser        Proposal[]             @relation("Proposal_proposedByUser")
 
   @@index([roleId])
@@ -207,6 +209,7 @@ model AgentIdentity {
   from_Appointment_bookedByAgent        Appointment[]      @relation("Appointment_bookedByAgent")
   from_TriageAssessment_actorAgent      TriageAssessment[] @relation("TriageAssessment_actorAgent")
   from_CallRecord_agent                 CallRecord[]       @relation("CallRecord_agent")
+  from_ScribeSession_startedByAgent     ScribeSession[]    @relation("ScribeSession_startedByAgent")
   from_AgentAction_agent                AgentAction[]      @relation("AgentAction_agent")
   from_Proposal_proposedByAgent         Proposal[]         @relation("Proposal_proposedByAgent")
 
@@ -262,6 +265,7 @@ model ApprovalRequest {
   updatedAt                           DateTime                @default(now()) @updatedAt
   from_PolicyVersion_approval         PolicyVersion[]         @relation("PolicyVersion_approval")
   from_TriageProtocolVersion_approval TriageProtocolVersion[] @relation("TriageProtocolVersion_approval")
+  from_Encounter_voidApproval         Encounter[]             @relation("Encounter_voidApproval")
   from_AgentToolGrant_approval        AgentToolGrant[]        @relation("AgentToolGrant_approval")
   from_Proposal_approval              Proposal[]              @relation("Proposal_approval")
 
@@ -371,29 +375,33 @@ model CommandReceipt {
 }
 
 model Document {
-  id                                          String               @id @default(cuid())
-  title                                       String               @default("")
-  kind                                        String               @default("other")
-  storageKey                                  String               @default("")
-  sha256                                      String               @default("")
-  mimeType                                    String               @default("")
+  id                                          String                 @id @default(cuid())
+  title                                       String                 @default("")
+  kind                                        String                 @default("other")
+  storageKey                                  String                 @default("")
+  sha256                                      String                 @default("")
+  mimeType                                    String                 @default("")
   sizeBytes                                   Int?
-  documentVersion                             Int?                 @default(1)
-  supersedes                                  Document?            @relation("Document_supersedes", fields: [supersedesId], references: [id])
-  supersedesId                                String?              @map("supersedes")
-  visibility                                  String               @default("internal")
-  retentionUntil                              DateTime?            @postgresql.Date
+  documentVersion                             Int?                   @default(1)
+  supersedes                                  Document?              @relation("Document_supersedes", fields: [supersedesId], references: [id])
+  supersedesId                                String?                @map("supersedes")
+  visibility                                  String                 @default("internal")
+  retentionUntil                              DateTime?              @postgresql.Date
   signedAt                                    DateTime?
-  esignEnvelopeId                             String               @default("")
-  createdAt                                   DateTime             @default(now())
-  updatedAt                                   DateTime             @default(now()) @updatedAt
-  from_Document_supersedes                    Document[]           @relation("Document_supersedes")
-  from_DeaPowerOfAttorney_document            DeaPowerOfAttorney[] @relation("DeaPowerOfAttorney_document")
-  from_ConsentRecord_evidence                 ConsentRecord[]      @relation("ConsentRecord_evidence")
-  from_Patient_photo                          Patient[]            @relation("Patient_photo")
-  from_PatientOwnership_evidence              PatientOwnership[]   @relation("PatientOwnership_evidence")
-  from_PetInsurancePolicy_clientAuthorisation PetInsurancePolicy[] @relation("PetInsurancePolicy_clientAuthorisation")
-  from_RecordsRequest_authorisationDocument   RecordsRequest[]     @relation("RecordsRequest_authorisationDocument")
+  esignEnvelopeId                             String                 @default("")
+  createdAt                                   DateTime               @default(now())
+  updatedAt                                   DateTime               @default(now()) @updatedAt
+  from_Document_supersedes                    Document[]             @relation("Document_supersedes")
+  from_DeaPowerOfAttorney_document            DeaPowerOfAttorney[]   @relation("DeaPowerOfAttorney_document")
+  from_ConsentRecord_evidence                 ConsentRecord[]        @relation("ConsentRecord_evidence")
+  from_Patient_photo                          Patient[]              @relation("Patient_photo")
+  from_PatientOwnership_evidence              PatientOwnership[]     @relation("PatientOwnership_evidence")
+  from_PetInsurancePolicy_clientAuthorisation PetInsurancePolicy[]   @relation("PetInsurancePolicy_clientAuthorisation")
+  from_RecordsRequest_authorisationDocument   RecordsRequest[]       @relation("RecordsRequest_authorisationDocument")
+  from_ClinicalAttachment_document            ClinicalAttachment[]   @relation("ClinicalAttachment_document")
+  from_ClinicalDocument_document              ClinicalDocument[]     @relation("ClinicalDocument_document")
+  from_ScribeSession_audioDocument            ScribeSession[]        @relation("ScribeSession_audioDocument")
+  from_ReminderSatisfaction_externalEvidence  ReminderSatisfaction[] @relation("ReminderSatisfaction_externalEvidence")
 
   @@index([supersedesId])
 }
@@ -598,22 +606,26 @@ model DeaRegistration {
 }
 
 model LicenseEvaluation {
-  id                                  String               @id @default(cuid())
-  action                              String               @default("")
-  staffMember                         StaffMember?         @relation("LicenseEvaluation_staffMember", fields: [staffMemberId], references: [id])
-  staffMemberId                       String?              @map("staffMember")
-  location                            Location?            @relation("LicenseEvaluation_location", fields: [locationId], references: [id])
-  locationId                          String?              @map("location")
-  at                                  DateTime
-  onDate                              DateTime?            @postgresql.Date
-  license                             ProfessionalLicense? @relation("LicenseEvaluation_license", fields: [licenseId], references: [id])
-  licenseId                           String?              @map("license")
-  deaRegistration                     DeaRegistration?     @relation("LicenseEvaluation_deaRegistration", fields: [deaRegistrationId], references: [id])
-  deaRegistrationId                   String?              @map("deaRegistration")
-  policyVersions                      Json?
-  result                              String
-  findings                            Json?
-  from_Prescription_licenseEvaluation Prescription[]       @relation("Prescription_licenseEvaluation")
+  id                                       String               @id @default(cuid())
+  action                                   String               @default("")
+  staffMember                              StaffMember?         @relation("LicenseEvaluation_staffMember", fields: [staffMemberId], references: [id])
+  staffMemberId                            String?              @map("staffMember")
+  location                                 Location?            @relation("LicenseEvaluation_location", fields: [locationId], references: [id])
+  locationId                               String?              @map("location")
+  at                                       DateTime
+  onDate                                   DateTime?            @postgresql.Date
+  license                                  ProfessionalLicense? @relation("LicenseEvaluation_license", fields: [licenseId], references: [id])
+  licenseId                                String?              @map("license")
+  deaRegistration                          DeaRegistration?     @relation("LicenseEvaluation_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId                        String?              @map("deaRegistration")
+  policyVersions                           Json?
+  result                                   String
+  findings                                 Json?
+  from_Prescription_licenseEvaluation      Prescription[]       @relation("Prescription_licenseEvaluation")
+  from_Encounter_licenseEvaluation         Encounter[]          @relation("Encounter_licenseEvaluation")
+  from_ClinicalOrder_licenseEvaluation     ClinicalOrder[]      @relation("ClinicalOrder_licenseEvaluation")
+  from_Administration_licenseEvaluation    Administration[]     @relation("Administration_licenseEvaluation")
+  from_AnaesthesiaRecord_licenseEvaluation AnaesthesiaRecord[]  @relation("AnaesthesiaRecord_licenseEvaluation")
 
   @@index([action])
   @@index([staffMemberId])
@@ -664,6 +676,13 @@ model Location {
   from_KnowledgeBaseEntry_location    KnowledgeBaseEntry[]    @relation("KnowledgeBaseEntry_location")
   from_Prescription_location          Prescription[]          @relation("Prescription_location")
   from_CsContainer_location           CsContainer[]           @relation("CsContainer_location")
+  from_Encounter_location             Encounter[]             @relation("Encounter_location")
+  from_ClinicalOrder_location         ClinicalOrder[]         @relation("ClinicalOrder_location")
+  from_InventoryLot_location          InventoryLot[]          @relation("InventoryLot_location")
+  from_Ward_location                  Ward[]                  @relation("Ward_location")
+  from_HospitalStay_location          HospitalStay[]          @relation("HospitalStay_location")
+  from_PatientReminder_location       PatientReminder[]       @relation("PatientReminder_location")
+  from_ImportBatch_location           ImportBatch[]           @relation("ImportBatch_location")
 
   @@index([calendarId])
 }
@@ -722,40 +741,72 @@ model ProfessionalLicense {
 }
 
 model StaffMember {
-  id                                    String                @id @default(cuid())
-  user                                  User?                 @relation("StaffMember_user", fields: [userId], references: [id])
-  userId                                String?               @unique @map("user")
-  displayName                           String                @default("")
-  kind                                  String                @default("dvm")
-  credentials                           String                @default("")
-  employment                            String                @default("employee")
-  homeLocation                          Location?             @relation("StaffMember_homeLocation", fields: [homeLocationId], references: [id])
-  homeLocationId                        String?               @map("homeLocation")
-  locations                             Location[]            @relation("StaffMember_locations")
-  colour                                String                @default("")
-  licenses                              ProfessionalLicense[] @relation("ProfessionalLicense_staffMember")
-  active                                Boolean               @default(true)
-  createdAt                             DateTime              @default(now())
-  updatedAt                             DateTime              @default(now()) @updatedAt
-  from_DeaPowerOfAttorney_grantee       DeaPowerOfAttorney[]  @relation("DeaPowerOfAttorney_grantee")
-  from_DeaRegistration_staffMember      DeaRegistration[]     @relation("DeaRegistration_staffMember")
-  from_LicenseEvaluation_staffMember    LicenseEvaluation[]   @relation("LicenseEvaluation_staffMember")
-  from_PracticeSettings_medicalDirector PracticeSettings[]    @relation("PracticeSettings_medicalDirector")
-  from_Task_assignee                    Task[]                @relation("Task_assignee")
-  from_Patient_preferredDvm             Patient[]             @relation("Patient_preferredDvm")
-  from_RefillRequest_decidedBy          RefillRequest[]       @relation("RefillRequest_decidedBy")
-  from_VcprRecord_dvm                   VcprRecord[]          @relation("VcprRecord_dvm")
-  from_WeightMeasurement_measuredBy     WeightMeasurement[]   @relation("WeightMeasurement_measuredBy")
-  from_Appointment_provider             Appointment[]         @relation("Appointment_provider")
-  from_AppointmentSegment_staff         AppointmentSegment[]  @relation("AppointmentSegment_staff")
-  from_ProviderReservation_staffMember  ProviderReservation[] @relation("ProviderReservation_staffMember")
-  from_StaffSchedule_staffMember        StaffSchedule[]       @relation("StaffSchedule_staffMember")
-  from_WhiteboardEntry_assignedDvm      WhiteboardEntry[]     @relation("WhiteboardEntry_assignedDvm")
-  from_WhiteboardEntry_assignedTech     WhiteboardEntry[]     @relation("WhiteboardEntry_assignedTech")
-  from_CommsThread_assignedTo           CommsThread[]         @relation("CommsThread_assignedTo")
-  from_Prescription_prescriber          Prescription[]        @relation("Prescription_prescriber")
-  from_CsContainer_openedBy             CsContainer[]         @relation("CsContainer_openedBy")
-  from_CsLogEntry_actor                 CsLogEntry[]          @relation("CsLogEntry_actor")
+  id                                        String                  @id @default(cuid())
+  user                                      User?                   @relation("StaffMember_user", fields: [userId], references: [id])
+  userId                                    String?                 @unique @map("user")
+  displayName                               String                  @default("")
+  kind                                      String                  @default("dvm")
+  credentials                               String                  @default("")
+  employment                                String                  @default("employee")
+  homeLocation                              Location?               @relation("StaffMember_homeLocation", fields: [homeLocationId], references: [id])
+  homeLocationId                            String?                 @map("homeLocation")
+  locations                                 Location[]              @relation("StaffMember_locations")
+  colour                                    String                  @default("")
+  licenses                                  ProfessionalLicense[]   @relation("ProfessionalLicense_staffMember")
+  active                                    Boolean                 @default(true)
+  createdAt                                 DateTime                @default(now())
+  updatedAt                                 DateTime                @default(now()) @updatedAt
+  from_DeaPowerOfAttorney_grantee           DeaPowerOfAttorney[]    @relation("DeaPowerOfAttorney_grantee")
+  from_DeaRegistration_staffMember          DeaRegistration[]       @relation("DeaRegistration_staffMember")
+  from_LicenseEvaluation_staffMember        LicenseEvaluation[]     @relation("LicenseEvaluation_staffMember")
+  from_PracticeSettings_medicalDirector     PracticeSettings[]      @relation("PracticeSettings_medicalDirector")
+  from_Task_assignee                        Task[]                  @relation("Task_assignee")
+  from_Patient_preferredDvm                 Patient[]               @relation("Patient_preferredDvm")
+  from_RefillRequest_decidedBy              RefillRequest[]         @relation("RefillRequest_decidedBy")
+  from_VcprRecord_dvm                       VcprRecord[]            @relation("VcprRecord_dvm")
+  from_WeightMeasurement_measuredBy         WeightMeasurement[]     @relation("WeightMeasurement_measuredBy")
+  from_Appointment_provider                 Appointment[]           @relation("Appointment_provider")
+  from_AppointmentSegment_staff             AppointmentSegment[]    @relation("AppointmentSegment_staff")
+  from_ProviderReservation_staffMember      ProviderReservation[]   @relation("ProviderReservation_staffMember")
+  from_StaffSchedule_staffMember            StaffSchedule[]         @relation("StaffSchedule_staffMember")
+  from_WhiteboardEntry_assignedDvm          WhiteboardEntry[]       @relation("WhiteboardEntry_assignedDvm")
+  from_WhiteboardEntry_assignedTech         WhiteboardEntry[]       @relation("WhiteboardEntry_assignedTech")
+  from_CommsThread_assignedTo               CommsThread[]           @relation("CommsThread_assignedTo")
+  from_Prescription_prescriber              Prescription[]          @relation("Prescription_prescriber")
+  from_CsContainer_openedBy                 CsContainer[]           @relation("CsContainer_openedBy")
+  from_CsLogEntry_actor                     CsLogEntry[]            @relation("CsLogEntry_actor")
+  from_Encounter_attendingDvm               Encounter[]             @relation("Encounter_attendingDvm")
+  from_Encounter_participants               Encounter[]             @relation("Encounter_participants")
+  from_Encounter_signedBy                   Encounter[]             @relation("Encounter_signedBy")
+  from_SoapSection_lastAuthor               SoapSection[]           @relation("SoapSection_lastAuthor")
+  from_SoapSectionRevision_author           SoapSectionRevision[]   @relation("SoapSectionRevision_author")
+  from_Addendum_author                      Addendum[]              @relation("Addendum_author")
+  from_VitalsObservation_by                 VitalsObservation[]     @relation("VitalsObservation_by")
+  from_PhysicalExamFinding_by               PhysicalExamFinding[]   @relation("PhysicalExamFinding_by")
+  from_Diagnosis_by                         Diagnosis[]             @relation("Diagnosis_by")
+  from_ClinicalAttachment_addedBy           ClinicalAttachment[]    @relation("ClinicalAttachment_addedBy")
+  from_ClinicalDocument_signedBy            ClinicalDocument[]      @relation("ClinicalDocument_signedBy")
+  from_ScribeSession_startedBy              ScribeSession[]         @relation("ScribeSession_startedBy")
+  from_ScribeDraft_decidedBy                ScribeDraft[]           @relation("ScribeDraft_decidedBy")
+  from_Referral_createdBy                   Referral[]              @relation("Referral_createdBy")
+  from_ClinicalOrder_orderedBy              ClinicalOrder[]         @relation("ClinicalOrder_orderedBy")
+  from_DoseCalculation_by                   DoseCalculation[]       @relation("DoseCalculation_by")
+  from_Administration_givenBy               Administration[]        @relation("Administration_givenBy")
+  from_Administration_supervisingDvm        Administration[]        @relation("Administration_supervisingDvm")
+  from_Administration_witness               Administration[]        @relation("Administration_witness")
+  from_HospitalStay_attendingDvm            HospitalStay[]          @relation("HospitalStay_attendingDvm")
+  from_TreatmentTask_doneBy                 TreatmentTask[]         @relation("TreatmentTask_doneBy")
+  from_AnaesthesiaRecord_anaesthetist       AnaesthesiaRecord[]     @relation("AnaesthesiaRecord_anaesthetist")
+  from_AnaesthesiaRecord_dvm                AnaesthesiaRecord[]     @relation("AnaesthesiaRecord_dvm")
+  from_AnaesthesiaRecord_closedBy           AnaesthesiaRecord[]     @relation("AnaesthesiaRecord_closedBy")
+  from_MonitoringReading_by                 MonitoringReading[]     @relation("MonitoringReading_by")
+  from_SurgeryReport_surgeon                SurgeryReport[]         @relation("SurgeryReport_surgeon")
+  from_SurgeryReport_assistant              SurgeryReport[]         @relation("SurgeryReport_assistant")
+  from_DischargeInstruction_author          DischargeInstruction[]  @relation("DischargeInstruction_author")
+  from_VaccineAdministration_vaccinatedBy   VaccineAdministration[] @relation("VaccineAdministration_vaccinatedBy")
+  from_VaccineAdministration_supervisingDvm VaccineAdministration[] @relation("VaccineAdministration_supervisingDvm")
+  from_ReminderSatisfaction_recordedBy      ReminderSatisfaction[]  @relation("ReminderSatisfaction_recordedBy")
+  from_AdverseEventReport_createdBy         AdverseEventReport[]    @relation("AdverseEventReport_createdBy")
 
   @@index([homeLocationId])
 }
@@ -916,6 +967,7 @@ model PolicyVersion {
   from_RecordsRequest_policyVersion  RecordsRequest[]  @relation("RecordsRequest_policyVersion")
   from_VcprRecord_policyVersion      VcprRecord[]      @relation("VcprRecord_policyVersion")
   from_Prescription_policyVersion    Prescription[]    @relation("Prescription_policyVersion")
+  from_Encounter_policyVersion       Encounter[]       @relation("Encounter_policyVersion")
 
   @@unique([packId, versionNumber], map: "PolicyVersion_pack_number_key")
   @@index([packId])
@@ -1093,24 +1145,25 @@ model ColourMarking {
 }
 
 model ConsentRecord {
-  id                String         @id @default(cuid())
-  contactPoint      ContactPoint?  @relation("ConsentRecord_contactPoint", fields: [contactPointId], references: [id])
-  contactPointId    String?        @map("contactPoint")
-  purpose           String
-  action            String
-  method            String
-  evidence          Document?      @relation("ConsentRecord_evidence", fields: [evidenceId], references: [id])
-  evidenceId        String?        @map("evidence")
-  callRecord        CallRecord?    @relation("ConsentRecord_callRecord", fields: [callRecordId], references: [id])
-  callRecordId      String?        @map("callRecord")
-  keyword           String         @default("")
-  capturedByUser    User?          @relation("ConsentRecord_capturedByUser", fields: [capturedByUserId], references: [id])
-  capturedByUserId  String?        @map("capturedByUser")
-  capturedByAgent   AgentIdentity? @relation("ConsentRecord_capturedByAgent", fields: [capturedByAgentId], references: [id])
-  capturedByAgentId String?        @map("capturedByAgent")
-  policyVersion     PolicyVersion? @relation("ConsentRecord_policyVersion", fields: [policyVersionId], references: [id])
-  policyVersionId   String?        @map("policyVersion")
-  at                DateTime
+  id                               String          @id @default(cuid())
+  contactPoint                     ContactPoint?   @relation("ConsentRecord_contactPoint", fields: [contactPointId], references: [id])
+  contactPointId                   String?         @map("contactPoint")
+  purpose                          String
+  action                           String
+  method                           String
+  evidence                         Document?       @relation("ConsentRecord_evidence", fields: [evidenceId], references: [id])
+  evidenceId                       String?         @map("evidence")
+  callRecord                       CallRecord?     @relation("ConsentRecord_callRecord", fields: [callRecordId], references: [id])
+  callRecordId                     String?         @map("callRecord")
+  keyword                          String          @default("")
+  capturedByUser                   User?           @relation("ConsentRecord_capturedByUser", fields: [capturedByUserId], references: [id])
+  capturedByUserId                 String?         @map("capturedByUser")
+  capturedByAgent                  AgentIdentity?  @relation("ConsentRecord_capturedByAgent", fields: [capturedByAgentId], references: [id])
+  capturedByAgentId                String?         @map("capturedByAgent")
+  policyVersion                    PolicyVersion?  @relation("ConsentRecord_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId                  String?         @map("policyVersion")
+  at                               DateTime
+  from_ScribeSession_clientConsent ScribeSession[] @relation("ScribeSession_clientConsent")
 
   @@index([contactPointId])
   @@index([evidenceId])
@@ -1162,51 +1215,71 @@ model Microchip {
 }
 
 model Patient {
-  id                              String               @id @default(cuid())
-  ref                             String               @unique @default("")
-  name                            String               @default("")
-  kind                            String
-  species                         Species?             @relation("Patient_species", fields: [speciesId], references: [id])
-  speciesId                       String?              @map("species")
-  breed                           Breed?               @relation("Patient_breed", fields: [breedId], references: [id])
-  breedId                         String?              @map("breed")
-  secondaryBreed                  Breed?               @relation("Patient_secondaryBreed", fields: [secondaryBreedId], references: [id])
-  secondaryBreedId                String?              @map("secondaryBreed")
-  sex                             String
-  reproductiveStatus              String
-  dateOfBirth                     DateTime?            @postgresql.Date
-  dobEstimated                    Boolean              @default(false)
-  colourMarkings                  String               @default("")
-  status                          String               @default("pending")
-  deceasedAt                      DateTime?
-  codeStatus                      String
-  preferredDvm                    StaffMember?         @relation("Patient_preferredDvm", fields: [preferredDvmId], references: [id])
-  preferredDvmId                  String?              @map("preferredDvm")
-  groupSize                       Int?
-  mergedInto                      Patient?             @relation("Patient_mergedInto", fields: [mergedIntoId], references: [id])
-  mergedIntoId                    String?              @map("mergedInto")
-  photo                           Document?            @relation("Patient_photo", fields: [photoId], references: [id])
-  photoId                         String?              @map("photo")
-  ownerships                      PatientOwnership[]   @relation("PatientOwnership_patient")
-  alerts                          PatientAlert[]       @relation("PatientAlert_patient")
-  weights                         WeightMeasurement[]  @relation("WeightMeasurement_patient")
-  microchips                      Microchip[]          @relation("Microchip_patient")
-  vcprs                           VcprRecord[]         @relation("VcprRecord_patient")
-  insurancePolicies               PetInsurancePolicy[] @relation("PetInsurancePolicy_patient")
-  version                         Int                  @default(0)
-  createdAt                       DateTime             @default(now())
-  updatedAt                       DateTime             @default(now()) @updatedAt
-  from_Patient_mergedInto         Patient[]            @relation("Patient_mergedInto")
-  from_RecordsRequest_patient     RecordsRequest[]     @relation("RecordsRequest_patient")
-  from_RefillRequest_patient      RefillRequest[]      @relation("RefillRequest_patient")
-  from_AppointmentPatient_patient AppointmentPatient[] @relation("AppointmentPatient_patient")
-  from_TriageAssessment_patient   TriageAssessment[]   @relation("TriageAssessment_patient")
-  from_WaitlistEntry_patients     WaitlistEntry[]      @relation("WaitlistEntry_patients")
-  from_WhiteboardEntry_patient    WhiteboardEntry[]    @relation("WhiteboardEntry_patient")
-  from_CommsMessage_patient       CommsMessage[]       @relation("CommsMessage_patient")
-  from_Suppression_patient        Suppression[]        @relation("Suppression_patient")
-  from_Prescription_patient       Prescription[]       @relation("Prescription_patient")
-  from_CsLogEntry_patient         CsLogEntry[]         @relation("CsLogEntry_patient")
+  id                                 String                  @id @default(cuid())
+  ref                                String                  @unique @default("")
+  name                               String                  @default("")
+  kind                               String
+  species                            Species?                @relation("Patient_species", fields: [speciesId], references: [id])
+  speciesId                          String?                 @map("species")
+  breed                              Breed?                  @relation("Patient_breed", fields: [breedId], references: [id])
+  breedId                            String?                 @map("breed")
+  secondaryBreed                     Breed?                  @relation("Patient_secondaryBreed", fields: [secondaryBreedId], references: [id])
+  secondaryBreedId                   String?                 @map("secondaryBreed")
+  sex                                String
+  reproductiveStatus                 String
+  dateOfBirth                        DateTime?               @postgresql.Date
+  dobEstimated                       Boolean                 @default(false)
+  colourMarkings                     String                  @default("")
+  status                             String                  @default("pending")
+  deceasedAt                         DateTime?
+  codeStatus                         String
+  preferredDvm                       StaffMember?            @relation("Patient_preferredDvm", fields: [preferredDvmId], references: [id])
+  preferredDvmId                     String?                 @map("preferredDvm")
+  groupSize                          Int?
+  mergedInto                         Patient?                @relation("Patient_mergedInto", fields: [mergedIntoId], references: [id])
+  mergedIntoId                       String?                 @map("mergedInto")
+  photo                              Document?               @relation("Patient_photo", fields: [photoId], references: [id])
+  photoId                            String?                 @map("photo")
+  ownerships                         PatientOwnership[]      @relation("PatientOwnership_patient")
+  alerts                             PatientAlert[]          @relation("PatientAlert_patient")
+  weights                            WeightMeasurement[]     @relation("WeightMeasurement_patient")
+  microchips                         Microchip[]             @relation("Microchip_patient")
+  vcprs                              VcprRecord[]            @relation("VcprRecord_patient")
+  insurancePolicies                  PetInsurancePolicy[]    @relation("PetInsurancePolicy_patient")
+  version                            Int                     @default(0)
+  createdAt                          DateTime                @default(now())
+  updatedAt                          DateTime                @default(now()) @updatedAt
+  from_Patient_mergedInto            Patient[]               @relation("Patient_mergedInto")
+  from_RecordsRequest_patient        RecordsRequest[]        @relation("RecordsRequest_patient")
+  from_RefillRequest_patient         RefillRequest[]         @relation("RefillRequest_patient")
+  from_AppointmentPatient_patient    AppointmentPatient[]    @relation("AppointmentPatient_patient")
+  from_TriageAssessment_patient      TriageAssessment[]      @relation("TriageAssessment_patient")
+  from_WaitlistEntry_patients        WaitlistEntry[]         @relation("WaitlistEntry_patients")
+  from_WhiteboardEntry_patient       WhiteboardEntry[]       @relation("WhiteboardEntry_patient")
+  from_CommsMessage_patient          CommsMessage[]          @relation("CommsMessage_patient")
+  from_Suppression_patient           Suppression[]           @relation("Suppression_patient")
+  from_Prescription_patient          Prescription[]          @relation("Prescription_patient")
+  from_CsLogEntry_patient            CsLogEntry[]            @relation("CsLogEntry_patient")
+  from_Encounter_patient             Encounter[]             @relation("Encounter_patient")
+  from_VitalsObservation_patient     VitalsObservation[]     @relation("VitalsObservation_patient")
+  from_Problem_patient               Problem[]               @relation("Problem_patient")
+  from_Diagnosis_patient             Diagnosis[]             @relation("Diagnosis_patient")
+  from_ClinicalAttachment_patient    ClinicalAttachment[]    @relation("ClinicalAttachment_patient")
+  from_ClinicalDocument_patient      ClinicalDocument[]      @relation("ClinicalDocument_patient")
+  from_Referral_patient              Referral[]              @relation("Referral_patient")
+  from_ClinicalOrder_patient         ClinicalOrder[]         @relation("ClinicalOrder_patient")
+  from_DoseCalculation_patient       DoseCalculation[]       @relation("DoseCalculation_patient")
+  from_Administration_patient        Administration[]        @relation("Administration_patient")
+  from_HospitalStay_patient          HospitalStay[]          @relation("HospitalStay_patient")
+  from_TreatmentSheetOrder_patient   TreatmentSheetOrder[]   @relation("TreatmentSheetOrder_patient")
+  from_TreatmentTask_patient         TreatmentTask[]         @relation("TreatmentTask_patient")
+  from_AnaesthesiaRecord_patient     AnaesthesiaRecord[]     @relation("AnaesthesiaRecord_patient")
+  from_DentalChart_patient           DentalChart[]           @relation("DentalChart_patient")
+  from_DischargeInstruction_patient  DischargeInstruction[]  @relation("DischargeInstruction_patient")
+  from_VaccineAdministration_patient VaccineAdministration[] @relation("VaccineAdministration_patient")
+  from_RabiesCertificate_patient     RabiesCertificate[]     @relation("RabiesCertificate_patient")
+  from_PatientReminder_patient       PatientReminder[]       @relation("PatientReminder_patient")
+  from_AdverseEventReport_patient    AdverseEventReport[]    @relation("AdverseEventReport_patient")
 
   @@index([speciesId])
   @@index([breedId])
@@ -1282,17 +1355,18 @@ model PetInsurancePolicy {
 }
 
 model RecordsRelease {
-  id                String          @id @default(cuid())
-  request           RecordsRequest? @relation("RecordsRelease_request", fields: [requestId], references: [id])
-  requestId         String?         @map("request")
-  recipient         String          @default("")
-  channel           String
-  documents         Json?
-  releasedByUser    User?           @relation("RecordsRelease_releasedByUser", fields: [releasedByUserId], references: [id])
-  releasedByUserId  String?         @map("releasedByUser")
-  releasedByAgent   AgentIdentity?  @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
-  releasedByAgentId String?         @map("releasedByAgent")
-  at                DateTime
+  id                           String          @id @default(cuid())
+  request                      RecordsRequest? @relation("RecordsRelease_request", fields: [requestId], references: [id])
+  requestId                    String?         @map("request")
+  recipient                    String          @default("")
+  channel                      String
+  documents                    Json?
+  releasedByUser               User?           @relation("RecordsRelease_releasedByUser", fields: [releasedByUserId], references: [id])
+  releasedByUserId             String?         @map("releasedByUser")
+  releasedByAgent              AgentIdentity?  @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
+  releasedByAgentId            String?         @map("releasedByAgent")
+  at                           DateTime
+  from_Referral_recordsRelease Referral[]      @relation("Referral_recordsRelease")
 
   @@index([requestId])
   @@index([releasedByUserId])
@@ -1357,18 +1431,20 @@ model ReferralHospital {
   createdAt                        DateTime           @default(now())
   updatedAt                        DateTime           @default(now()) @updatedAt
   from_TriageAssessment_referredTo TriageAssessment[] @relation("TriageAssessment_referredTo")
+  from_Referral_hospital           Referral[]         @relation("Referral_hospital")
 }
 
 model ReferringVet {
-  id              String   @id @default(cuid())
-  name            String   @default("")
-  clinicName      String   @default("")
-  phone           String   @default("")
-  fax             String   @default("")
-  email           String   @default("")
-  verifiedChannel Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+  id                         String     @id @default(cuid())
+  name                       String     @default("")
+  clinicName                 String     @default("")
+  phone                      String     @default("")
+  fax                        String     @default("")
+  email                      String     @default("")
+  verifiedChannel            Boolean    @default(false)
+  createdAt                  DateTime   @default(now())
+  updatedAt                  DateTime   @default(now()) @updatedAt
+  from_Referral_referringVet Referral[] @relation("Referral_referringVet")
 }
 
 model RefillRequest {
@@ -1406,19 +1482,23 @@ model RefillRequest {
 }
 
 model Species {
-  id                           String            @id @default(cuid())
-  code                         String            @unique @default("")
-  name                         String            @default("")
-  module                       String            @default("companion")
-  defaultWeightUnit            String            @default("kg")
-  vitalsReference              Json?
-  breeds                       Breed[]           @relation("Breed_species")
-  active                       Boolean           @default(true)
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @default(now()) @updatedAt
-  from_ColourMarking_species   ColourMarking[]   @relation("ColourMarking_species")
-  from_Patient_species         Patient[]         @relation("Patient_species")
-  from_AppointmentType_species AppointmentType[] @relation("AppointmentType_species")
+  id                            String             @id @default(cuid())
+  code                          String             @unique @default("")
+  name                          String             @default("")
+  module                        String             @default("companion")
+  defaultWeightUnit             String             @default("kg")
+  vitalsReference               Json?
+  breeds                        Breed[]            @relation("Breed_species")
+  active                        Boolean            @default(true)
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @default(now()) @updatedAt
+  from_ColourMarking_species    ColourMarking[]    @relation("ColourMarking_species")
+  from_Patient_species          Patient[]          @relation("Patient_species")
+  from_AppointmentType_species  AppointmentType[]  @relation("AppointmentType_species")
+  from_DiagnosisCode_species    DiagnosisCode[]    @relation("DiagnosisCode_species")
+  from_RecordTemplate_species   RecordTemplate[]   @relation("RecordTemplate_species")
+  from_VaccineProduct_species   VaccineProduct[]   @relation("VaccineProduct_species")
+  from_ReminderProtocol_species ReminderProtocol[] @relation("ReminderProtocol_species")
 }
 
 model ThirdPartyPayer {
@@ -1457,6 +1537,7 @@ model VcprRecord {
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @default(now()) @updatedAt
   from_Prescription_vcpr Prescription[] @relation("Prescription_vcpr")
+  from_Encounter_vcpr    Encounter[]    @relation("Encounter_vcpr")
 
   @@index([patientId])
   @@index([dvmId])
@@ -1465,21 +1546,24 @@ model VcprRecord {
 }
 
 model WeightMeasurement {
-  id                 String       @id @default(cuid())
-  patient            Patient?     @relation("WeightMeasurement_patient", fields: [patientId], references: [id])
-  patientId          String?      @map("patient")
-  value              Decimal      @postgresql.Decimal(10, 4)
-  unit               String
-  valueKg            Decimal      @postgresql.Decimal(10, 4)
-  method             String
-  bodyConditionScore Int?
-  measuredAt         DateTime
-  measuredBy         StaffMember? @relation("WeightMeasurement_measuredBy", fields: [measuredById], references: [id])
-  measuredById       String?      @map("measuredBy")
-  appointment        Appointment? @relation("WeightMeasurement_appointment", fields: [appointmentId], references: [id])
-  appointmentId      String?      @map("appointment")
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @default(now()) @updatedAt
+  id                               String              @id @default(cuid())
+  patient                          Patient?            @relation("WeightMeasurement_patient", fields: [patientId], references: [id])
+  patientId                        String?             @map("patient")
+  value                            Decimal             @postgresql.Decimal(10, 4)
+  unit                             String
+  valueKg                          Decimal             @postgresql.Decimal(10, 4)
+  method                           String
+  bodyConditionScore               Int?
+  measuredAt                       DateTime
+  measuredBy                       StaffMember?        @relation("WeightMeasurement_measuredBy", fields: [measuredById], references: [id])
+  measuredById                     String?             @map("measuredBy")
+  appointment                      Appointment?        @relation("WeightMeasurement_appointment", fields: [appointmentId], references: [id])
+  appointmentId                    String?             @map("appointment")
+  createdAt                        DateTime            @default(now())
+  updatedAt                        DateTime            @default(now()) @updatedAt
+  from_Encounter_weightUsed        Encounter[]         @relation("Encounter_weightUsed")
+  from_DoseCalculation_weight      DoseCalculation[]   @relation("DoseCalculation_weight")
+  from_AnaesthesiaRecord_preWeight AnaesthesiaRecord[] @relation("AnaesthesiaRecord_preWeight")
 
   @@index([patientId])
   @@index([measuredById])
@@ -1528,6 +1612,7 @@ model Appointment {
   from_WaitlistEntry_bookedAppointment  WaitlistEntry[]        @relation("WaitlistEntry_bookedAppointment")
   from_WhiteboardEntry_appointment      WhiteboardEntry[]      @relation("WhiteboardEntry_appointment")
   from_CommsMessage_appointment         CommsMessage[]         @relation("CommsMessage_appointment")
+  from_Encounter_appointment            Encounter[]            @relation("Encounter_appointment")
 
   @@index([locationId])
   @@index([clientId])
@@ -2017,30 +2102,37 @@ model Suppression {
 }
 
 model DrugProduct {
-  id                            String             @id @default(cuid())
-  displayName                   String             @default("")
-  genericName                   String             @default("")
-  brandName                     String             @default("")
+  id                            String               @id @default(cuid())
+  displayName                   String               @default("")
+  genericName                   String               @default("")
+  brandName                     String               @default("")
   form                          String
-  strength                      Decimal?           @postgresql.Decimal(18, 6)
+  strength                      Decimal?             @postgresql.Decimal(18, 6)
   strengthUnit                  String?
   per                           String?
-  concentration                 Decimal?           @postgresql.Decimal(18, 6)
-  concentrationUnit             String             @default("")
-  packageQty                    Decimal?           @postgresql.Decimal(18, 6)
+  concentration                 Decimal?             @postgresql.Decimal(18, 6)
+  concentrationUnit             String               @default("")
+  packageQty                    Decimal?             @postgresql.Decimal(18, 6)
   packageUnit                   String?
   csSchedule                    String
   stateCsSchedule               Json?
-  isHumanLabel                  Boolean            @default(false)
+  isHumanLabel                  Boolean              @default(false)
   approvalStatus                String
   multiDoseBudDays              Int?
-  ndc                           String             @default("")
-  requiresWitnessOnAdminister   Boolean            @default(false)
-  active                        Boolean            @default(true)
-  createdAt                     DateTime           @default(now())
-  updatedAt                     DateTime           @default(now()) @updatedAt
-  from_PrescriptionLine_product PrescriptionLine[] @relation("PrescriptionLine_product")
-  from_CsContainer_product      CsContainer[]      @relation("CsContainer_product")
+  ndc                           String               @default("")
+  requiresWitnessOnAdminister   Boolean              @default(false)
+  doseRanges                    Json?
+  cautionFlags                  Json?                @default("[]")
+  measurableIncrement           Decimal?             @postgresql.Decimal(18, 6)
+  active                        Boolean              @default(true)
+  createdAt                     DateTime             @default(now())
+  updatedAt                     DateTime             @default(now()) @updatedAt
+  from_PrescriptionLine_product PrescriptionLine[]   @relation("PrescriptionLine_product")
+  from_CsContainer_product      CsContainer[]        @relation("CsContainer_product")
+  from_ClinicalOrder_drug       ClinicalOrder[]      @relation("ClinicalOrder_drug")
+  from_DoseCalculation_product  DoseCalculation[]    @relation("DoseCalculation_product")
+  from_InventoryLot_drug        InventoryLot[]       @relation("InventoryLot_drug")
+  from_AdverseEventReport_drug  AdverseEventReport[] @relation("AdverseEventReport_drug")
 
   @@index([ndc])
 }
@@ -2106,27 +2198,28 @@ model PrescriptionLine {
 }
 
 model CsContainer {
-  id                String           @id @default(cuid())
-  ref               String           @unique @default("")
-  product           DrugProduct?     @relation("CsContainer_product", fields: [productId], references: [id])
-  productId         String?          @map("product")
-  location          Location?        @relation("CsContainer_location", fields: [locationId], references: [id])
-  locationId        String?          @map("location")
-  deaRegistration   DeaRegistration? @relation("CsContainer_deaRegistration", fields: [deaRegistrationId], references: [id])
-  deaRegistrationId String?          @map("deaRegistration")
-  lotNumber         String           @default("")
-  lotExpiresOn      DateTime?        @postgresql.Date
-  status            String           @default("sealed")
-  labelQty          Decimal          @postgresql.Decimal(18, 6)
-  labelUnit         String?
-  openedAt          DateTime?
-  openedBy          StaffMember?     @relation("CsContainer_openedBy", fields: [openedById], references: [id])
-  openedById        String?          @map("openedBy")
-  budAt             DateTime?
-  entries           CsLogEntry[]     @relation("CsLogEntry_container")
-  version           Int              @default(0)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @default(now()) @updatedAt
+  id                              String           @id @default(cuid())
+  ref                             String           @unique @default("")
+  product                         DrugProduct?     @relation("CsContainer_product", fields: [productId], references: [id])
+  productId                       String?          @map("product")
+  location                        Location?        @relation("CsContainer_location", fields: [locationId], references: [id])
+  locationId                      String?          @map("location")
+  deaRegistration                 DeaRegistration? @relation("CsContainer_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId               String?          @map("deaRegistration")
+  lotNumber                       String           @default("")
+  lotExpiresOn                    DateTime?        @postgresql.Date
+  status                          String           @default("sealed")
+  labelQty                        Decimal          @postgresql.Decimal(18, 6)
+  labelUnit                       String?
+  openedAt                        DateTime?
+  openedBy                        StaffMember?     @relation("CsContainer_openedBy", fields: [openedById], references: [id])
+  openedById                      String?          @map("openedBy")
+  budAt                           DateTime?
+  entries                         CsLogEntry[]     @relation("CsLogEntry_container")
+  version                         Int              @default(0)
+  createdAt                       DateTime         @default(now())
+  updatedAt                       DateTime         @default(now()) @updatedAt
+  from_Administration_csContainer Administration[] @relation("Administration_csContainer")
 
   @@index([productId])
   @@index([locationId])
@@ -2135,32 +2228,34 @@ model CsContainer {
 }
 
 model CsLogEntry {
-  id                       String           @id @default(cuid())
-  ref                      String           @unique @default("")
-  ciiRef                   String?          @unique
-  container                CsContainer?     @relation("CsLogEntry_container", fields: [containerId], references: [id])
-  containerId              String?          @map("container")
-  deaRegistration          DeaRegistration? @relation("CsLogEntry_deaRegistration", fields: [deaRegistrationId], references: [id])
-  deaRegistrationId        String?          @map("deaRegistration")
-  schedule                 String
-  type                     String
-  qtySigned                Decimal          @postgresql.Decimal(18, 6)
-  unit                     String?
-  occurredAt               DateTime
-  recordedAt               DateTime
-  actor                    StaffMember?     @relation("CsLogEntry_actor", fields: [actorId], references: [id])
-  actorId                  String?          @map("actor")
-  patient                  Patient?         @relation("CsLogEntry_patient", fields: [patientId], references: [id])
-  patientId                String?          @map("patient")
-  client                   Client?          @relation("CsLogEntry_client", fields: [clientId], references: [id])
-  clientId                 String?          @map("client")
-  clientSnapshot           Json?
-  reverses                 CsLogEntry?      @relation("CsLogEntry_reverses", fields: [reversesId], references: [id])
-  reversesId               String?          @map("reverses")
-  reason                   String           @default("")
-  prevHash                 String           @default("")
-  hash                     String           @default("")
-  from_CsLogEntry_reverses CsLogEntry[]     @relation("CsLogEntry_reverses")
+  id                                String           @id @default(cuid())
+  ref                               String           @unique @default("")
+  ciiRef                            String?          @unique
+  container                         CsContainer?     @relation("CsLogEntry_container", fields: [containerId], references: [id])
+  containerId                       String?          @map("container")
+  deaRegistration                   DeaRegistration? @relation("CsLogEntry_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId                 String?          @map("deaRegistration")
+  schedule                          String
+  type                              String
+  qtySigned                         Decimal          @postgresql.Decimal(18, 6)
+  unit                              String?
+  occurredAt                        DateTime
+  recordedAt                        DateTime
+  actor                             StaffMember?     @relation("CsLogEntry_actor", fields: [actorId], references: [id])
+  actorId                           String?          @map("actor")
+  patient                           Patient?         @relation("CsLogEntry_patient", fields: [patientId], references: [id])
+  patientId                         String?          @map("patient")
+  client                            Client?          @relation("CsLogEntry_client", fields: [clientId], references: [id])
+  clientId                          String?          @map("client")
+  clientSnapshot                    Json?
+  reverses                          CsLogEntry?      @relation("CsLogEntry_reverses", fields: [reversesId], references: [id])
+  reversesId                        String?          @map("reverses")
+  reason                            String           @default("")
+  prevHash                          String           @default("")
+  hash                              String           @default("")
+  from_CsLogEntry_reverses          CsLogEntry[]     @relation("CsLogEntry_reverses")
+  from_Administration_csLogEntry    Administration[] @relation("Administration_csLogEntry")
+  from_Administration_wasteLogEntry Administration[] @relation("Administration_wasteLogEntry")
 
   @@index([containerId])
   @@index([deaRegistrationId])
@@ -2168,6 +2263,1152 @@ model CsLogEntry {
   @@index([patientId])
   @@index([clientId])
   @@index([reversesId])
+}
+
+model Encounter {
+  id                                   String                  @id @default(cuid())
+  ref                                  String                  @unique @default("")
+  patient                              Patient?                @relation("Encounter_patient", fields: [patientId], references: [id])
+  patientId                            String?                 @map("patient")
+  location                             Location?               @relation("Encounter_location", fields: [locationId], references: [id])
+  locationId                           String?                 @map("location")
+  appointment                          Appointment?            @relation("Encounter_appointment", fields: [appointmentId], references: [id])
+  appointmentId                        String?                 @map("appointment")
+  stay                                 HospitalStay?           @relation("Encounter_stay", fields: [stayId], references: [id])
+  stayId                               String?                 @map("stay")
+  kind                                 String
+  vcprQualifying                       Boolean                 @default(false)
+  status                               String                  @default("open")
+  reason                               String                  @default("")
+  attendingDvm                         StaffMember?            @relation("Encounter_attendingDvm", fields: [attendingDvmId], references: [id])
+  attendingDvmId                       String?                 @map("attendingDvm")
+  participants                         StaffMember[]           @relation("Encounter_participants")
+  weightUsed                           WeightMeasurement?      @relation("Encounter_weightUsed", fields: [weightUsedId], references: [id])
+  weightUsedId                         String?                 @map("weightUsed")
+  startedAt                            DateTime
+  submittedAt                          DateTime?
+  signedBy                             StaffMember?            @relation("Encounter_signedBy", fields: [signedById], references: [id])
+  signedById                           String?                 @map("signedBy")
+  signedAt                             DateTime?
+  contentHash                          String                  @default("")
+  signedContent                        Json?
+  licenseEvaluation                    LicenseEvaluation?      @relation("Encounter_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId                  String?                 @map("licenseEvaluation")
+  vcpr                                 VcprRecord?             @relation("Encounter_vcpr", fields: [vcprId], references: [id])
+  vcprId                               String?                 @map("vcpr")
+  document                             ClinicalDocument?       @relation("Encounter_document", fields: [documentId], references: [id])
+  documentId                           String?                 @map("document")
+  policyVersion                        PolicyVersion?          @relation("Encounter_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId                      String?                 @map("policyVersion")
+  completeness                         Json?
+  voidReason                           String                  @default("")
+  voidApproval                         ApprovalRequest?        @relation("Encounter_voidApproval", fields: [voidApprovalId], references: [id])
+  voidApprovalId                       String?                 @map("voidApproval")
+  importedFrom                         String                  @default("")
+  sections                             SoapSection[]           @relation("SoapSection_encounter")
+  addenda                              Addendum[]              @relation("Addendum_encounter")
+  vitals                               VitalsObservation[]     @relation("VitalsObservation_encounter")
+  findings                             PhysicalExamFinding[]   @relation("PhysicalExamFinding_encounter")
+  diagnoses                            Diagnosis[]             @relation("Diagnosis_encounter")
+  orders                               ClinicalOrder[]         @relation("ClinicalOrder_encounter")
+  version                              Int                     @default(0)
+  createdAt                            DateTime                @default(now())
+  updatedAt                            DateTime                @default(now()) @updatedAt
+  from_Problem_encounter               Problem[]               @relation("Problem_encounter")
+  from_ClinicalAttachment_encounter    ClinicalAttachment[]    @relation("ClinicalAttachment_encounter")
+  from_ClinicalDocument_encounter      ClinicalDocument[]      @relation("ClinicalDocument_encounter")
+  from_ScribeSession_encounter         ScribeSession[]         @relation("ScribeSession_encounter")
+  from_Referral_encounter              Referral[]              @relation("Referral_encounter")
+  from_Administration_encounter        Administration[]        @relation("Administration_encounter")
+  from_HospitalStay_encounter          HospitalStay[]          @relation("HospitalStay_encounter")
+  from_AnaesthesiaRecord_encounter     AnaesthesiaRecord[]     @relation("AnaesthesiaRecord_encounter")
+  from_SurgeryReport_encounter         SurgeryReport[]         @relation("SurgeryReport_encounter")
+  from_DentalChart_encounter           DentalChart[]           @relation("DentalChart_encounter")
+  from_DischargeInstruction_encounter  DischargeInstruction[]  @relation("DischargeInstruction_encounter")
+  from_VaccineAdministration_encounter VaccineAdministration[] @relation("VaccineAdministration_encounter")
+
+  @@index([patientId])
+  @@index([locationId])
+  @@index([appointmentId])
+  @@index([stayId])
+  @@index([attendingDvmId])
+  @@index([weightUsedId])
+  @@index([signedById])
+  @@index([licenseEvaluationId])
+  @@index([vcprId])
+  @@index([documentId])
+  @@index([policyVersionId])
+  @@index([voidApprovalId])
+}
+
+model SoapSection {
+  id           String                @id @default(cuid())
+  encounter    Encounter?            @relation("SoapSection_encounter", fields: [encounterId], references: [id])
+  encounterId  String?               @map("encounter")
+  kind         String
+  ordinal      Int                   @default(1)
+  body         String                @default("")
+  structured   Json?
+  source       String
+  lastAuthor   StaffMember?          @relation("SoapSection_lastAuthor", fields: [lastAuthorId], references: [id])
+  lastAuthorId String?               @map("lastAuthor")
+  revisions    SoapSectionRevision[] @relation("SoapSectionRevision_section")
+  lockedAt     DateTime?
+  version      Int                   @default(0)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @default(now()) @updatedAt
+
+  @@unique([encounterId, kind, ordinal], map: "SoapSection_encounter_kind_ordinal_key")
+  @@index([encounterId])
+  @@index([lastAuthorId])
+}
+
+model SoapSectionRevision {
+  id             String          @id @default(cuid())
+  section        SoapSection?    @relation("SoapSectionRevision_section", fields: [sectionId], references: [id])
+  sectionId      String?         @map("section")
+  revisionNumber Int
+  body           String          @default("")
+  structured     Json?
+  source         String
+  template       RecordTemplate? @relation("SoapSectionRevision_template", fields: [templateId], references: [id])
+  templateId     String?         @map("template")
+  scribeDraft    ScribeDraft?    @relation("SoapSectionRevision_scribeDraft", fields: [scribeDraftId], references: [id])
+  scribeDraftId  String?         @map("scribeDraft")
+  author         StaffMember?    @relation("SoapSectionRevision_author", fields: [authorId], references: [id])
+  authorId       String?         @map("author")
+  authorUser     User?           @relation("SoapSectionRevision_authorUser", fields: [authorUserId], references: [id])
+  authorUserId   String?         @map("authorUser")
+  at             DateTime
+  contentHash    String          @default("")
+
+  @@unique([sectionId, revisionNumber], map: "SoapSectionRevision_section_number_key")
+  @@index([sectionId])
+  @@index([templateId])
+  @@index([scribeDraftId])
+  @@index([authorId])
+  @@index([authorUserId])
+}
+
+model Addendum {
+  id          String       @id @default(cuid())
+  encounter   Encounter?   @relation("Addendum_encounter", fields: [encounterId], references: [id])
+  encounterId String?      @map("encounter")
+  sectionKind String
+  author      StaffMember? @relation("Addendum_author", fields: [authorId], references: [id])
+  authorId    String?      @map("author")
+  authorIsDvm Boolean      @default(false)
+  reason      String       @default("")
+  body        String       @default("")
+  signedAt    DateTime
+  hash        String       @default("")
+
+  @@index([encounterId])
+  @@index([authorId])
+}
+
+model VitalsObservation {
+  id                 String       @id @default(cuid())
+  encounter          Encounter?   @relation("VitalsObservation_encounter", fields: [encounterId], references: [id])
+  encounterId        String?      @map("encounter")
+  patient            Patient?     @relation("VitalsObservation_patient", fields: [patientId], references: [id])
+  patientId          String?      @map("patient")
+  temperature        Decimal?     @postgresql.Decimal(18, 6)
+  temperatureUnit    String       @default("F")
+  heartRate          Int?
+  respRate           Int?
+  mucousMembranes    String?
+  crtSeconds         Decimal?     @postgresql.Decimal(18, 6)
+  painScore          Int?
+  bodyConditionScore Int?
+  mentation          String?
+  hydrationPct       Decimal?     @postgresql.Decimal(18, 6)
+  at                 DateTime
+  by                 StaffMember? @relation("VitalsObservation_by", fields: [byId], references: [id])
+  byId               String?      @map("by")
+
+  @@index([encounterId])
+  @@index([patientId])
+  @@index([byId])
+}
+
+model PhysicalExamFinding {
+  id          String       @id @default(cuid())
+  encounter   Encounter?   @relation("PhysicalExamFinding_encounter", fields: [encounterId], references: [id])
+  encounterId String?      @map("encounter")
+  system      String
+  status      String
+  text        String       @default("")
+  by          StaffMember? @relation("PhysicalExamFinding_by", fields: [byId], references: [id])
+  byId        String?      @map("by")
+  version     Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([byId])
+}
+
+model DiagnosisCode {
+  id                  String      @id @default(cuid())
+  codeSystem          String      @default("practice")
+  code                String      @default("")
+  term                String      @default("")
+  species             Species[]   @relation("DiagnosisCode_species")
+  active              Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @default(now()) @updatedAt
+  from_Problem_code   Problem[]   @relation("Problem_code")
+  from_Diagnosis_code Diagnosis[] @relation("Diagnosis_code")
+
+  @@unique([codeSystem, code], map: "DiagnosisCode_system_code_key")
+}
+
+model Problem {
+  id                     String         @id @default(cuid())
+  patient                Patient?       @relation("Problem_patient", fields: [patientId], references: [id])
+  patientId              String?        @map("patient")
+  encounter              Encounter?     @relation("Problem_encounter", fields: [encounterId], references: [id])
+  encounterId            String?        @map("encounter")
+  code                   DiagnosisCode? @relation("Problem_code", fields: [codeId], references: [id])
+  codeId                 String?        @map("code")
+  term                   String         @default("")
+  status                 String         @default("active")
+  chronic                Boolean        @default(false)
+  onset                  DateTime?      @postgresql.Date
+  resolvedAt             DateTime?
+  version                Int            @default(0)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @default(now()) @updatedAt
+  from_Diagnosis_problem Diagnosis[]    @relation("Diagnosis_problem")
+
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([codeId])
+}
+
+model Diagnosis {
+  id          String         @id @default(cuid())
+  encounter   Encounter?     @relation("Diagnosis_encounter", fields: [encounterId], references: [id])
+  encounterId String?        @map("encounter")
+  patient     Patient?       @relation("Diagnosis_patient", fields: [patientId], references: [id])
+  patientId   String?        @map("patient")
+  code        DiagnosisCode? @relation("Diagnosis_code", fields: [codeId], references: [id])
+  codeId      String?        @map("code")
+  term        String         @default("")
+  certainty   String
+  problem     Problem?       @relation("Diagnosis_problem", fields: [problemId], references: [id])
+  problemId   String?        @map("problem")
+  by          StaffMember?   @relation("Diagnosis_by", fields: [byId], references: [id])
+  byId        String?        @map("by")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([patientId])
+  @@index([codeId])
+  @@index([problemId])
+  @@index([byId])
+}
+
+model ClinicalAttachment {
+  id          String       @id @default(cuid())
+  encounter   Encounter?   @relation("ClinicalAttachment_encounter", fields: [encounterId], references: [id])
+  encounterId String?      @map("encounter")
+  patient     Patient?     @relation("ClinicalAttachment_patient", fields: [patientId], references: [id])
+  patientId   String?      @map("patient")
+  kind        String
+  caption     String       @default("")
+  document    Document?    @relation("ClinicalAttachment_document", fields: [documentId], references: [id])
+  documentId  String?      @map("document")
+  addedBy     StaffMember? @relation("ClinicalAttachment_addedBy", fields: [addedById], references: [id])
+  addedById   String?      @map("addedBy")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([patientId])
+  @@index([documentId])
+  @@index([addedById])
+}
+
+model ClinicalDocument {
+  id                              String              @id @default(cuid())
+  patient                         Patient?            @relation("ClinicalDocument_patient", fields: [patientId], references: [id])
+  patientId                       String?             @map("patient")
+  encounter                       Encounter?          @relation("ClinicalDocument_encounter", fields: [encounterId], references: [id])
+  encounterId                     String?             @map("encounter")
+  kind                            String
+  title                           String              @default("")
+  status                          String              @default("pending_render")
+  sourceType                      String              @default("")
+  sourceId                        String              @default("")
+  sourceHash                      String              @default("")
+  document                        Document?           @relation("ClinicalDocument_document", fields: [documentId], references: [id])
+  documentId                      String?             @map("document")
+  signedBy                        StaffMember?        @relation("ClinicalDocument_signedBy", fields: [signedById], references: [id])
+  signedById                      String?             @map("signedBy")
+  renderedAt                      DateTime?
+  mimeType                        String              @default("")
+  body                            String              @default("")
+  sha256                          String              @default("")
+  renderError                     String              @default("")
+  version                         Int                 @default(0)
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @default(now()) @updatedAt
+  from_Encounter_document         Encounter[]         @relation("Encounter_document")
+  from_RabiesCertificate_document RabiesCertificate[] @relation("RabiesCertificate_document")
+
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([sourceId])
+  @@index([documentId])
+  @@index([signedById])
+}
+
+model RecordTemplate {
+  id                                String                @id @default(cuid())
+  name                              String                @default("")
+  kind                              String                @default("wellness")
+  sectionKind                       String                @default("objective")
+  species                           Species?              @relation("RecordTemplate_species", fields: [speciesId], references: [id])
+  speciesId                         String?               @map("species")
+  body                              String                @default("")
+  templateVersion                   Int?                  @default(1)
+  active                            Boolean               @default(true)
+  createdAt                         DateTime              @default(now())
+  updatedAt                         DateTime              @default(now()) @updatedAt
+  from_SoapSectionRevision_template SoapSectionRevision[] @relation("SoapSectionRevision_template")
+
+  @@index([speciesId])
+}
+
+model Glossary {
+  id        String   @id @default(cuid())
+  term      String   @unique @default("")
+  expansion String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model ScribeSession {
+  id                    String         @id @default(cuid())
+  encounter             Encounter?     @relation("ScribeSession_encounter", fields: [encounterId], references: [id])
+  encounterId           String?        @map("encounter")
+  startedBy             StaffMember?   @relation("ScribeSession_startedBy", fields: [startedById], references: [id])
+  startedById           String?        @map("startedBy")
+  startedByAgent        AgentIdentity? @relation("ScribeSession_startedByAgent", fields: [startedByAgentId], references: [id])
+  startedByAgentId      String?        @map("startedByAgent")
+  clientConsent         ConsentRecord? @relation("ScribeSession_clientConsent", fields: [clientConsentId], references: [id])
+  clientConsentId       String?        @map("clientConsent")
+  staffAcknowledged     Boolean        @default(false)
+  audioDocument         Document?      @relation("ScribeSession_audioDocument", fields: [audioDocumentId], references: [id])
+  audioDocumentId       String?        @map("audioDocument")
+  audioDeleteAfter      DateTime?
+  transcriptRef         String         @default("")
+  transcript            String         @default("")
+  transcriptionProvider String         @default("")
+  modelProvider         String         @default("")
+  modelRef              String         @default("")
+  status                String         @default("recording")
+  drafts                ScribeDraft[]  @relation("ScribeDraft_session")
+  version               Int            @default(0)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([startedById])
+  @@index([startedByAgentId])
+  @@index([clientConsentId])
+  @@index([audioDocumentId])
+}
+
+model ScribeDraft {
+  id                                   String                @id @default(cuid())
+  session                              ScribeSession?        @relation("ScribeDraft_session", fields: [sessionId], references: [id])
+  sessionId                            String?               @map("session")
+  sections                             Json?
+  suggestedCharges                     Json?
+  confidence                           Decimal?              @postgresql.Decimal(12, 6)
+  modelRef                             String                @default("")
+  acceptedBlocks                       Json?
+  status                               String                @default("proposed")
+  decidedBy                            StaffMember?          @relation("ScribeDraft_decidedBy", fields: [decidedById], references: [id])
+  decidedById                          String?               @map("decidedBy")
+  decidedAt                            DateTime?
+  version                              Int                   @default(0)
+  createdAt                            DateTime              @default(now())
+  updatedAt                            DateTime              @default(now()) @updatedAt
+  from_SoapSectionRevision_scribeDraft SoapSectionRevision[] @relation("SoapSectionRevision_scribeDraft")
+
+  @@index([sessionId])
+  @@index([decidedById])
+}
+
+model Referral {
+  id               String            @id @default(cuid())
+  patient          Patient?          @relation("Referral_patient", fields: [patientId], references: [id])
+  patientId        String?           @map("patient")
+  encounter        Encounter?        @relation("Referral_encounter", fields: [encounterId], references: [id])
+  encounterId      String?           @map("encounter")
+  direction        String
+  hospital         ReferralHospital? @relation("Referral_hospital", fields: [hospitalId], references: [id])
+  hospitalId       String?           @map("hospital")
+  referringVet     ReferringVet?     @relation("Referral_referringVet", fields: [referringVetId], references: [id])
+  referringVetId   String?           @map("referringVet")
+  reason           String            @default("")
+  urgency          String
+  recordsRelease   RecordsRelease?   @relation("Referral_recordsRelease", fields: [recordsReleaseId], references: [id])
+  recordsReleaseId String?           @map("recordsRelease")
+  status           String            @default("draft")
+  createdBy        StaffMember?      @relation("Referral_createdBy", fields: [createdById], references: [id])
+  createdById      String?           @map("createdBy")
+  version          Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([hospitalId])
+  @@index([referringVetId])
+  @@index([recordsReleaseId])
+  @@index([createdById])
+}
+
+model ClinicalOrder {
+  id                             String                @id @default(cuid())
+  ref                            String                @unique @default("")
+  encounter                      Encounter?            @relation("ClinicalOrder_encounter", fields: [encounterId], references: [id])
+  encounterId                    String?               @map("encounter")
+  patient                        Patient?              @relation("ClinicalOrder_patient", fields: [patientId], references: [id])
+  patientId                      String?               @map("patient")
+  location                       Location?             @relation("ClinicalOrder_location", fields: [locationId], references: [id])
+  locationId                     String?               @map("location")
+  kind                           String
+  description                    String                @default("")
+  drug                           DrugProduct?          @relation("ClinicalOrder_drug", fields: [drugId], references: [id])
+  drugId                         String?               @map("drug")
+  vaccine                        VaccineProduct?       @relation("ClinicalOrder_vaccine", fields: [vaccineId], references: [id])
+  vaccineId                      String?               @map("vaccine")
+  status                         String                @default("ordered")
+  orderedBy                      StaffMember?          @relation("ClinicalOrder_orderedBy", fields: [orderedById], references: [id])
+  orderedById                    String?               @map("orderedBy")
+  licenseEvaluation              LicenseEvaluation?    @relation("ClinicalOrder_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId            String?               @map("licenseEvaluation")
+  dose                           DoseCalculation?      @relation("ClinicalOrder_dose", fields: [doseId], references: [id])
+  doseId                         String?               @map("dose")
+  frequency                      String                @default("")
+  schedule                       Json?
+  route                          String
+  quantity                       Decimal?              @postgresql.Decimal(18, 6)
+  quantityUnit                   String?
+  extralabel                     Boolean               @default(false)
+  emergencyStabilisation         Boolean               @default(false)
+  overrideReason                 String                @default("")
+  warnings                       Json?                 @default("[]")
+  cancelReason                   String                @default("")
+  administrations                Administration[]      @relation("Administration_order")
+  version                        Int                   @default(0)
+  createdAt                      DateTime              @default(now())
+  updatedAt                      DateTime              @default(now()) @updatedAt
+  from_TreatmentSheetOrder_order TreatmentSheetOrder[] @relation("TreatmentSheetOrder_order")
+
+  @@index([encounterId])
+  @@index([patientId])
+  @@index([locationId])
+  @@index([drugId])
+  @@index([vaccineId])
+  @@index([orderedById])
+  @@index([licenseEvaluationId])
+  @@index([doseId])
+}
+
+model DoseCalculation {
+  id                      String             @id @default(cuid())
+  patient                 Patient?           @relation("DoseCalculation_patient", fields: [patientId], references: [id])
+  patientId               String?            @map("patient")
+  weight                  WeightMeasurement? @relation("DoseCalculation_weight", fields: [weightId], references: [id])
+  weightId                String?            @map("weight")
+  weightKg                Decimal            @postgresql.Decimal(10, 4)
+  weightAgeHours          Int?
+  doseAmount              Decimal            @postgresql.Decimal(18, 6)
+  doseUnit                String
+  dosePer                 String
+  bsaM2                   Decimal?           @postgresql.Decimal(18, 6)
+  bsaConstant             Decimal?           @postgresql.Decimal(18, 6)
+  totalAmount             Decimal            @postgresql.Decimal(18, 6)
+  totalUnit               String             @default("")
+  product                 DrugProduct?       @relation("DoseCalculation_product", fields: [productId], references: [id])
+  productId               String?            @map("product")
+  concentration           Decimal?           @postgresql.Decimal(18, 6)
+  concentrationUnit       String             @default("")
+  computedQty             Decimal?           @postgresql.Decimal(18, 6)
+  computedUnit            String             @default("")
+  roundingRule            Json?
+  roundedQty              Decimal?           @postgresql.Decimal(18, 6)
+  deliveredAmount         Decimal?           @postgresql.Decimal(18, 6)
+  deviationBps            Int?
+  manualOverrideQty       Decimal?           @postgresql.Decimal(18, 6)
+  overrideReason          String             @default("")
+  warnings                Json?              @default("[]")
+  calcVersion             String             @default("")
+  hash                    String             @default("")
+  by                      StaffMember?       @relation("DoseCalculation_by", fields: [byId], references: [id])
+  byId                    String?            @map("by")
+  at                      DateTime
+  from_ClinicalOrder_dose ClinicalOrder[]    @relation("ClinicalOrder_dose")
+
+  @@index([patientId])
+  @@index([weightId])
+  @@index([productId])
+  @@index([byId])
+}
+
+model InventoryLot {
+  id                             String                  @id @default(cuid())
+  drug                           DrugProduct?            @relation("InventoryLot_drug", fields: [drugId], references: [id])
+  drugId                         String?                 @map("drug")
+  vaccine                        VaccineProduct?         @relation("InventoryLot_vaccine", fields: [vaccineId], references: [id])
+  vaccineId                      String?                 @map("vaccine")
+  location                       Location?               @relation("InventoryLot_location", fields: [locationId], references: [id])
+  locationId                     String?                 @map("location")
+  lotNumber                      String                  @default("")
+  expiresOn                      DateTime                @postgresql.Date
+  status                         String                  @default("available")
+  quarantineReason               String                  @default("")
+  version                        Int                     @default(0)
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @default(now()) @updatedAt
+  from_Administration_lot        Administration[]        @relation("Administration_lot")
+  from_VaccineAdministration_lot VaccineAdministration[] @relation("VaccineAdministration_lot")
+
+  @@index([drugId])
+  @@index([vaccineId])
+  @@index([locationId])
+}
+
+model Administration {
+  id                                        String                  @id @default(cuid())
+  order                                     ClinicalOrder?          @relation("Administration_order", fields: [orderId], references: [id])
+  orderId                                   String?                 @map("order")
+  patient                                   Patient?                @relation("Administration_patient", fields: [patientId], references: [id])
+  patientId                                 String?                 @map("patient")
+  encounter                                 Encounter?              @relation("Administration_encounter", fields: [encounterId], references: [id])
+  encounterId                               String?                 @map("encounter")
+  treatmentTask                             TreatmentTask?          @relation("Administration_treatmentTask", fields: [treatmentTaskId], references: [id])
+  treatmentTaskId                           String?                 @map("treatmentTask")
+  lot                                       InventoryLot?           @relation("Administration_lot", fields: [lotId], references: [id])
+  lotId                                     String?                 @map("lot")
+  lotNumber                                 String                  @default("")
+  lotExpiresOn                              DateTime?               @postgresql.Date
+  csContainer                               CsContainer?            @relation("Administration_csContainer", fields: [csContainerId], references: [id])
+  csContainerId                             String?                 @map("csContainer")
+  csLogEntry                                CsLogEntry?             @relation("Administration_csLogEntry", fields: [csLogEntryId], references: [id])
+  csLogEntryId                              String?                 @map("csLogEntry")
+  qty                                       Decimal                 @postgresql.Decimal(18, 6)
+  unit                                      String                  @default("")
+  route                                     String
+  site                                      String                  @default("")
+  givenBy                                   StaffMember?            @relation("Administration_givenBy", fields: [givenById], references: [id])
+  givenById                                 String?                 @map("givenBy")
+  supervisingDvm                            StaffMember?            @relation("Administration_supervisingDvm", fields: [supervisingDvmId], references: [id])
+  supervisingDvmId                          String?                 @map("supervisingDvm")
+  witness                                   StaffMember?            @relation("Administration_witness", fields: [witnessId], references: [id])
+  witnessId                                 String?                 @map("witness")
+  licenseEvaluation                         LicenseEvaluation?      @relation("Administration_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId                       String?                 @map("licenseEvaluation")
+  wasteLogEntry                             CsLogEntry?             @relation("Administration_wasteLogEntry", fields: [wasteLogEntryId], references: [id])
+  wasteLogEntryId                           String?                 @map("wasteLogEntry")
+  givenAt                                   DateTime
+  wasteQty                                  Decimal?                @postgresql.Decimal(18, 6)
+  reverses                                  Administration?         @relation("Administration_reverses", fields: [reversesId], references: [id])
+  reversesId                                String?                 @map("reverses")
+  reason                                    String                  @default("")
+  from_Administration_reverses              Administration[]        @relation("Administration_reverses")
+  from_TreatmentTask_administration         TreatmentTask[]         @relation("TreatmentTask_administration")
+  from_VaccineAdministration_administration VaccineAdministration[] @relation("VaccineAdministration_administration")
+  from_ReminderSatisfaction_administration  ReminderSatisfaction[]  @relation("ReminderSatisfaction_administration")
+  from_AdverseEventReport_administration    AdverseEventReport[]    @relation("AdverseEventReport_administration")
+
+  @@index([orderId])
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([treatmentTaskId])
+  @@index([lotId])
+  @@index([csContainerId])
+  @@index([csLogEntryId])
+  @@index([givenById])
+  @@index([supervisingDvmId])
+  @@index([witnessId])
+  @@index([licenseEvaluationId])
+  @@index([wasteLogEntryId])
+  @@index([reversesId])
+}
+
+model Ward {
+  id         String    @id @default(cuid())
+  location   Location? @relation("Ward_location", fields: [locationId], references: [id])
+  locationId String?   @map("location")
+  name       String    @default("")
+  kind       String    @default("general")
+  cages      Cage[]    @relation("Cage_ward")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@index([locationId])
+}
+
+model Cage {
+  id                       String           @id @default(cuid())
+  ward                     Ward?            @relation("Cage_ward", fields: [wardId], references: [id])
+  wardId                   String?          @map("ward")
+  code                     String           @unique @default("")
+  size                     String           @default("medium")
+  features                 Json?            @default("{}")
+  active                   Boolean          @default(true)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @default(now()) @updatedAt
+  from_HospitalStay_cage   HospitalStay[]   @relation("HospitalStay_cage")
+  from_CageAssignment_cage CageAssignment[] @relation("CageAssignment_cage")
+
+  @@index([wardId])
+}
+
+model HospitalStay {
+  id                             String                 @id @default(cuid())
+  ref                            String                 @unique @default("")
+  patient                        Patient?               @relation("HospitalStay_patient", fields: [patientId], references: [id])
+  patientId                      String?                @map("patient")
+  location                       Location?              @relation("HospitalStay_location", fields: [locationId], references: [id])
+  locationId                     String?                @map("location")
+  encounter                      Encounter?             @relation("HospitalStay_encounter", fields: [encounterId], references: [id])
+  encounterId                    String?                @map("encounter")
+  cage                           Cage?                  @relation("HospitalStay_cage", fields: [cageId], references: [id])
+  cageId                         String?                @map("cage")
+  admittedAt                     DateTime
+  dischargedAt                   DateTime?
+  status                         String                 @default("admitted")
+  codeStatus                     String
+  attendingDvm                   StaffMember?           @relation("HospitalStay_attendingDvm", fields: [attendingDvmId], references: [id])
+  attendingDvmId                 String?                @map("attendingDvm")
+  reason                         String                 @default("")
+  assignments                    CageAssignment[]       @relation("CageAssignment_stay")
+  sheetOrders                    TreatmentSheetOrder[]  @relation("TreatmentSheetOrder_stay")
+  version                        Int                    @default(0)
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @default(now()) @updatedAt
+  from_Encounter_stay            Encounter[]            @relation("Encounter_stay")
+  from_TreatmentTask_stay        TreatmentTask[]        @relation("TreatmentTask_stay")
+  from_DischargeInstruction_stay DischargeInstruction[] @relation("DischargeInstruction_stay")
+
+  @@index([patientId])
+  @@index([locationId])
+  @@index([encounterId])
+  @@index([cageId])
+  @@index([attendingDvmId])
+}
+
+model CageAssignment {
+  id        String        @id @default(cuid())
+  stay      HospitalStay? @relation("CageAssignment_stay", fields: [stayId], references: [id])
+  stayId    String?       @map("stay")
+  cage      Cage?         @relation("CageAssignment_cage", fields: [cageId], references: [id])
+  cageId    String?       @map("cage")
+  fromAt    DateTime
+  toAt      DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now()) @updatedAt
+
+  @@index([stayId])
+  @@index([cageId])
+}
+
+model TreatmentSheetOrder {
+  id                  String          @id @default(cuid())
+  stay                HospitalStay?   @relation("TreatmentSheetOrder_stay", fields: [stayId], references: [id])
+  stayId              String?         @map("stay")
+  order               ClinicalOrder?  @relation("TreatmentSheetOrder_order", fields: [orderId], references: [id])
+  orderId             String?         @map("order")
+  patient             Patient?        @relation("TreatmentSheetOrder_patient", fields: [patientId], references: [id])
+  patientId           String?         @map("patient")
+  frequency           String
+  startAt             DateTime
+  endAt               DateTime?
+  instructions        String          @default("")
+  materialisedThrough DateTime?
+  graceMinutes        Int?            @default(30)
+  active              Boolean         @default(true)
+  tasks               TreatmentTask[] @relation("TreatmentTask_sheetOrder")
+  version             Int             @default(0)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @default(now()) @updatedAt
+
+  @@index([stayId])
+  @@index([orderId])
+  @@index([patientId])
+}
+
+model TreatmentTask {
+  id                                String               @id @default(cuid())
+  sheetOrder                        TreatmentSheetOrder? @relation("TreatmentTask_sheetOrder", fields: [sheetOrderId], references: [id])
+  sheetOrderId                      String?              @map("sheetOrder")
+  stay                              HospitalStay?        @relation("TreatmentTask_stay", fields: [stayId], references: [id])
+  stayId                            String?              @map("stay")
+  patient                           Patient?             @relation("TreatmentTask_patient", fields: [patientId], references: [id])
+  patientId                         String?              @map("patient")
+  dueAt                             DateTime
+  status                            String               @default("scheduled")
+  doneBy                            StaffMember?         @relation("TreatmentTask_doneBy", fields: [doneById], references: [id])
+  doneById                          String?              @map("doneBy")
+  doneAt                            DateTime?
+  skipReason                        String               @default("")
+  rescheduledTo                     TreatmentTask?       @relation("TreatmentTask_rescheduledTo", fields: [rescheduledToId], references: [id])
+  rescheduledToId                   String?              @map("rescheduledTo")
+  administration                    Administration?      @relation("TreatmentTask_administration", fields: [administrationId], references: [id])
+  administrationId                  String?              @map("administration")
+  observation                       Json?
+  version                           Int                  @default(0)
+  createdAt                         DateTime             @default(now())
+  updatedAt                         DateTime             @default(now()) @updatedAt
+  from_Administration_treatmentTask Administration[]     @relation("Administration_treatmentTask")
+  from_TreatmentTask_rescheduledTo  TreatmentTask[]      @relation("TreatmentTask_rescheduledTo")
+
+  @@unique([sheetOrderId, dueAt], map: "TreatmentTask_sheet_due_key")
+  @@index([sheetOrderId])
+  @@index([stayId])
+  @@index([patientId])
+  @@index([doneById])
+  @@index([rescheduledToId])
+  @@index([administrationId])
+}
+
+model AnaesthesiaRecord {
+  id                  String              @id @default(cuid())
+  ref                 String              @unique @default("")
+  encounter           Encounter?          @relation("AnaesthesiaRecord_encounter", fields: [encounterId], references: [id])
+  encounterId         String?             @map("encounter")
+  patient             Patient?            @relation("AnaesthesiaRecord_patient", fields: [patientId], references: [id])
+  patientId           String?             @map("patient")
+  procedure           String              @default("")
+  asaStatus           String
+  fastingConfirmed    Boolean             @default(false)
+  consentConfirmed    Boolean             @default(false)
+  preWeight           WeightMeasurement?  @relation("AnaesthesiaRecord_preWeight", fields: [preWeightId], references: [id])
+  preWeightId         String?             @map("preWeight")
+  ivCatheter          Json?
+  protocol            Json?
+  checklist           Json?
+  inductionAt         DateTime?
+  intubatedAt         DateTime?
+  extubatedAt         DateTime?
+  recoveryEndAt       DateTime?
+  anaesthetist        StaffMember?        @relation("AnaesthesiaRecord_anaesthetist", fields: [anaesthetistId], references: [id])
+  anaesthetistId      String?             @map("anaesthetist")
+  dvm                 StaffMember?        @relation("AnaesthesiaRecord_dvm", fields: [dvmId], references: [id])
+  dvmId               String?             @map("dvm")
+  licenseEvaluation   LicenseEvaluation?  @relation("AnaesthesiaRecord_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId String?             @map("licenseEvaluation")
+  status              String              @default("open")
+  complications       String              @default("")
+  closedBy            StaffMember?        @relation("AnaesthesiaRecord_closedBy", fields: [closedById], references: [id])
+  closedById          String?             @map("closedBy")
+  readings            MonitoringReading[] @relation("MonitoringReading_record")
+  version             Int                 @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([patientId])
+  @@index([preWeightId])
+  @@index([anaesthetistId])
+  @@index([dvmId])
+  @@index([licenseEvaluationId])
+  @@index([closedById])
+}
+
+model MonitoringReading {
+  id             String             @id @default(cuid())
+  record         AnaesthesiaRecord? @relation("MonitoringReading_record", fields: [recordId], references: [id])
+  recordId       String?            @map("record")
+  at             DateTime
+  hr             Int?
+  rr             Int?
+  spo2           Int?
+  etco2          Int?
+  sbp            Int?
+  dbp            Int?
+  map            Int?
+  tempC          Decimal?           @postgresql.Decimal(18, 6)
+  agentPct       Decimal?           @postgresql.Decimal(18, 6)
+  o2FlowLpm      Decimal?           @postgresql.Decimal(18, 6)
+  fluidsRateMlHr Decimal?           @postgresql.Decimal(18, 6)
+  notes          String             @default("")
+  by             StaffMember?       @relation("MonitoringReading_by", fields: [byId], references: [id])
+  byId           String?            @map("by")
+
+  @@index([recordId])
+  @@index([byId])
+}
+
+model SurgeryReport {
+  id          String       @id @default(cuid())
+  encounter   Encounter?   @relation("SurgeryReport_encounter", fields: [encounterId], references: [id])
+  encounterId String?      @map("encounter")
+  procedure   String       @default("")
+  surgeon     StaffMember? @relation("SurgeryReport_surgeon", fields: [surgeonId], references: [id])
+  surgeonId   String?      @map("surgeon")
+  assistant   StaffMember? @relation("SurgeryReport_assistant", fields: [assistantId], references: [id])
+  assistantId String?      @map("assistant")
+  technique   String       @default("")
+  findings    String       @default("")
+  closure     String       @default("")
+  sutures     String       @default("")
+  specimens   String       @default("")
+  status      String       @default("draft")
+  version     Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([surgeonId])
+  @@index([assistantId])
+}
+
+model DentalChart {
+  id          String     @id @default(cuid())
+  encounter   Encounter? @relation("DentalChart_encounter", fields: [encounterId], references: [id])
+  encounterId String?    @map("encounter")
+  patient     Patient?   @relation("DentalChart_patient", fields: [patientId], references: [id])
+  patientId   String?    @map("patient")
+  teeth       Json?      @default("{}")
+  version     Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([patientId])
+}
+
+model DischargeInstruction {
+  id          String        @id @default(cuid())
+  encounter   Encounter?    @relation("DischargeInstruction_encounter", fields: [encounterId], references: [id])
+  encounterId String?       @map("encounter")
+  stay        HospitalStay? @relation("DischargeInstruction_stay", fields: [stayId], references: [id])
+  stayId      String?       @map("stay")
+  patient     Patient?      @relation("DischargeInstruction_patient", fields: [patientId], references: [id])
+  patientId   String?       @map("patient")
+  body        String        @default("")
+  medsSummary String        @default("")
+  recheckOn   DateTime?     @postgresql.Date
+  sentAt      DateTime?
+  author      StaffMember?  @relation("DischargeInstruction_author", fields: [authorId], references: [id])
+  authorId    String?       @map("author")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@index([encounterId])
+  @@index([stayId])
+  @@index([patientId])
+  @@index([authorId])
+}
+
+model VaccineProduct {
+  id                                 String                  @id @default(cuid())
+  name                               String                  @default("")
+  manufacturer                       String                  @default("")
+  antigens                           Json?                   @default("[]")
+  species                            Species[]               @relation("VaccineProduct_species")
+  licensedDoiMonths                  Int                     @default(12)
+  minAgeWeeks                        Int                     @default(8)
+  isRabies                           Boolean                 @default(false)
+  usdaProductCode                    String                  @default("")
+  defaultRoute                       String                  @default("sc")
+  reminderType                       ReminderType?           @relation("VaccineProduct_reminderType", fields: [reminderTypeId], references: [id])
+  reminderTypeId                     String?                 @map("reminderType")
+  active                             Boolean                 @default(true)
+  createdAt                          DateTime                @default(now())
+  updatedAt                          DateTime                @default(now()) @updatedAt
+  from_ClinicalOrder_vaccine         ClinicalOrder[]         @relation("ClinicalOrder_vaccine")
+  from_InventoryLot_vaccine          InventoryLot[]          @relation("InventoryLot_vaccine")
+  from_VaccineAdministration_product VaccineAdministration[] @relation("VaccineAdministration_product")
+  from_ReminderRule_triggerVaccines  ReminderRule[]          @relation("ReminderRule_triggerVaccines")
+  from_AdverseEventReport_product    AdverseEventReport[]    @relation("AdverseEventReport_product")
+
+  @@index([reminderTypeId])
+}
+
+model VaccineAdministration {
+  id                                              String                 @id @default(cuid())
+  administration                                  Administration?        @relation("VaccineAdministration_administration", fields: [administrationId], references: [id])
+  administrationId                                String?                @map("administration")
+  patient                                         Patient?               @relation("VaccineAdministration_patient", fields: [patientId], references: [id])
+  patientId                                       String?                @map("patient")
+  encounter                                       Encounter?             @relation("VaccineAdministration_encounter", fields: [encounterId], references: [id])
+  encounterId                                     String?                @map("encounter")
+  product                                         VaccineProduct?        @relation("VaccineAdministration_product", fields: [productId], references: [id])
+  productId                                       String?                @map("product")
+  lot                                             InventoryLot?          @relation("VaccineAdministration_lot", fields: [lotId], references: [id])
+  lotId                                           String?                @map("lot")
+  lotNumber                                       String                 @default("")
+  lotExpiresOn                                    DateTime               @postgresql.Date
+  doseSeries                                      Int
+  isInitialSeries                                 Boolean                @default(false)
+  route                                           String
+  site                                            String                 @default("")
+  administeredOn                                  DateTime               @postgresql.Date
+  durationMonths                                  Int
+  dueNextOn                                       DateTime               @postgresql.Date
+  vaccinatedBy                                    StaffMember?           @relation("VaccineAdministration_vaccinatedBy", fields: [vaccinatedById], references: [id])
+  vaccinatedById                                  String?                @map("vaccinatedBy")
+  supervisingDvm                                  StaffMember?           @relation("VaccineAdministration_supervisingDvm", fields: [supervisingDvmId], references: [id])
+  supervisingDvmId                                String?                @map("supervisingDvm")
+  policyVersions                                  Json?
+  certificate                                     RabiesCertificate?     @relation("VaccineAdministration_certificate", fields: [certificateId], references: [id])
+  certificateId                                   String?                @map("certificate")
+  source                                          String
+  from_ReminderSatisfaction_vaccineAdministration ReminderSatisfaction[] @relation("ReminderSatisfaction_vaccineAdministration")
+  from_AdverseEventReport_vaccineAdministration   AdverseEventReport[]   @relation("AdverseEventReport_vaccineAdministration")
+
+  @@index([administrationId])
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([productId])
+  @@index([lotId])
+  @@index([vaccinatedById])
+  @@index([supervisingDvmId])
+  @@index([certificateId])
+}
+
+model RabiesCertificate {
+  id                                     String                  @id @default(cuid())
+  ref                                    String                  @unique @default("")
+  patient                                Patient?                @relation("RabiesCertificate_patient", fields: [patientId], references: [id])
+  patientId                              String?                 @map("patient")
+  ownerSnapshot                          Json?
+  patientSnapshot                        Json?
+  vaccineSnapshot                        Json?
+  vetSnapshot                            Json?
+  vaccinatedOn                           DateTime                @postgresql.Date
+  durationMonths                         Int
+  nextDueOn                              DateTime                @postgresql.Date
+  tagNumber                              String                  @default("")
+  tagJurisdiction                        String                  @default("")
+  fields                                 Json?
+  missingFields                          Json?                   @default("[]")
+  document                               ClinicalDocument?       @relation("RabiesCertificate_document", fields: [documentId], references: [id])
+  documentId                             String?                 @map("document")
+  reportedTo                             String
+  reportedAt                             DateTime?
+  policyVersions                         Json?
+  createdAt                              DateTime                @default(now())
+  updatedAt                              DateTime                @default(now()) @updatedAt
+  from_VaccineAdministration_certificate VaccineAdministration[] @relation("VaccineAdministration_certificate")
+
+  @@index([patientId])
+  @@index([documentId])
+}
+
+model ReminderType {
+  id                               String            @id @default(cuid())
+  code                             String            @unique @default("")
+  name                             String            @default("")
+  kind                             String            @default("vaccine")
+  active                           Boolean           @default(true)
+  createdAt                        DateTime          @default(now())
+  updatedAt                        DateTime          @default(now()) @updatedAt
+  from_VaccineProduct_reminderType VaccineProduct[]  @relation("VaccineProduct_reminderType")
+  from_ReminderRule_satisfies      ReminderRule[]    @relation("ReminderRule_satisfies")
+  from_PatientReminder_type        PatientReminder[] @relation("PatientReminder_type")
+}
+
+model ReminderProtocol {
+  id        String                    @id @default(cuid())
+  code      String                    @unique @default("")
+  name      String                    @default("")
+  species   Species?                  @relation("ReminderProtocol_species", fields: [speciesId], references: [id])
+  speciesId String?                   @map("species")
+  versions  ReminderProtocolVersion[] @relation("ReminderProtocolVersion_protocol")
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @default(now()) @updatedAt
+
+  @@index([speciesId])
+}
+
+model ReminderProtocolVersion {
+  id                                   String            @id @default(cuid())
+  protocol                             ReminderProtocol? @relation("ReminderProtocolVersion_protocol", fields: [protocolId], references: [id])
+  protocolId                           String?           @map("protocol")
+  label                                String            @default("")
+  versionNumber                        Int
+  rules                                ReminderRule[]    @relation("ReminderRule_protocolVersion")
+  sourceRefs                           Json?
+  verified                             Boolean           @default(false)
+  unverifiedRules                      Json?             @default("[]")
+  status                               String            @default("draft")
+  publishedAt                          DateTime?
+  contentHash                          String            @default("")
+  version                              Int               @default(0)
+  createdAt                            DateTime          @default(now())
+  updatedAt                            DateTime          @default(now()) @updatedAt
+  from_PatientReminder_protocolVersion PatientReminder[] @relation("PatientReminder_protocolVersion")
+
+  @@unique([protocolId, versionNumber], map: "ReminderProtocolVersion_protocol_number_key")
+  @@index([protocolId])
+}
+
+model ReminderRule {
+  id                        String                   @id @default(cuid())
+  protocolVersion           ReminderProtocolVersion? @relation("ReminderRule_protocolVersion", fields: [protocolVersionId], references: [id])
+  protocolVersionId         String?                  @map("protocolVersion")
+  code                      String                   @default("")
+  triggerVaccines           VaccineProduct[]         @relation("ReminderRule_triggerVaccines")
+  triggerServiceCode        String                   @default("")
+  satisfies                 ReminderType?            @relation("ReminderRule_satisfies", fields: [satisfiesId], references: [id])
+  satisfiesId               String?                  @map("satisfies")
+  schedule                  Json?
+  leadDays                  Int?                     @default(30)
+  graceDays                 Int?                     @default(30)
+  lapseDays                 Int?                     @default(180)
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @default(now()) @updatedAt
+  from_PatientReminder_rule PatientReminder[]        @relation("PatientReminder_rule")
+
+  @@index([protocolVersionId])
+  @@index([satisfiesId])
+}
+
+model PatientReminder {
+  id                String                   @id @default(cuid())
+  patient           Patient?                 @relation("PatientReminder_patient", fields: [patientId], references: [id])
+  patientId         String?                  @map("patient")
+  location          Location?                @relation("PatientReminder_location", fields: [locationId], references: [id])
+  locationId        String?                  @map("location")
+  type              ReminderType?            @relation("PatientReminder_type", fields: [typeId], references: [id])
+  typeId            String?                  @map("type")
+  rule              ReminderRule?            @relation("PatientReminder_rule", fields: [ruleId], references: [id])
+  ruleId            String?                  @map("rule")
+  dueOn             DateTime                 @postgresql.Date
+  status            String                   @default("scheduled")
+  suppressedReason  String                   @default("")
+  protocolVersion   ReminderProtocolVersion? @relation("PatientReminder_protocolVersion", fields: [protocolVersionId], references: [id])
+  protocolVersionId String?                  @map("protocolVersion")
+  source            String
+  sourceKey         String                   @default("")
+  lastNotifiedAt    DateTime?
+  satisfactions     ReminderSatisfaction[]   @relation("ReminderSatisfaction_reminder")
+  version           Int                      @default(0)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @default(now()) @updatedAt
+
+  @@unique([patientId, typeId, dueOn], map: "PatientReminder_patient_type_due_key")
+  @@index([patientId])
+  @@index([locationId])
+  @@index([typeId])
+  @@index([ruleId])
+  @@index([protocolVersionId])
+}
+
+model ReminderSatisfaction {
+  id                      String                 @id @default(cuid())
+  reminder                PatientReminder?       @relation("ReminderSatisfaction_reminder", fields: [reminderId], references: [id])
+  reminderId              String?                @map("reminder")
+  sourceKey               String                 @default("")
+  vaccineAdministration   VaccineAdministration? @relation("ReminderSatisfaction_vaccineAdministration", fields: [vaccineAdministrationId], references: [id])
+  vaccineAdministrationId String?                @map("vaccineAdministration")
+  administration          Administration?        @relation("ReminderSatisfaction_administration", fields: [administrationId], references: [id])
+  administrationId        String?                @map("administration")
+  externalEvidence        Document?              @relation("ReminderSatisfaction_externalEvidence", fields: [externalEvidenceId], references: [id])
+  externalEvidenceId      String?                @map("externalEvidence")
+  note                    String                 @default("")
+  recordedBy              StaffMember?           @relation("ReminderSatisfaction_recordedBy", fields: [recordedById], references: [id])
+  recordedById            String?                @map("recordedBy")
+  at                      DateTime
+
+  @@unique([reminderId, sourceKey], map: "ReminderSatisfaction_reminder_source_key")
+  @@index([reminderId])
+  @@index([vaccineAdministrationId])
+  @@index([administrationId])
+  @@index([externalEvidenceId])
+  @@index([recordedById])
+}
+
+model AdverseEventReport {
+  id                      String                 @id @default(cuid())
+  patient                 Patient?               @relation("AdverseEventReport_patient", fields: [patientId], references: [id])
+  patientId               String?                @map("patient")
+  vaccineAdministration   VaccineAdministration? @relation("AdverseEventReport_vaccineAdministration", fields: [vaccineAdministrationId], references: [id])
+  vaccineAdministrationId String?                @map("vaccineAdministration")
+  administration          Administration?        @relation("AdverseEventReport_administration", fields: [administrationId], references: [id])
+  administrationId        String?                @map("administration")
+  product                 VaccineProduct?        @relation("AdverseEventReport_product", fields: [productId], references: [id])
+  productId               String?                @map("product")
+  drug                    DrugProduct?           @relation("AdverseEventReport_drug", fields: [drugId], references: [id])
+  drugId                  String?                @map("drug")
+  lotNumber               String                 @default("")
+  description             String                 @default("")
+  severity                String
+  reportedTo              String
+  status                  String                 @default("draft")
+  reference               String                 @default("")
+  submittedAt             DateTime?
+  createdBy               StaffMember?           @relation("AdverseEventReport_createdBy", fields: [createdById], references: [id])
+  createdById             String?                @map("createdBy")
+  version                 Int                    @default(0)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([vaccineAdministrationId])
+  @@index([administrationId])
+  @@index([productId])
+  @@index([drugId])
+  @@index([createdById])
+}
+
+model ImportBatch {
+  id          String      @id @default(cuid())
+  ref         String      @unique @default("")
+  system      String
+  channel     String
+  entity      String
+  location    Location?   @relation("ImportBatch_location", fields: [locationId], references: [id])
+  locationId  String?     @map("location")
+  fileName    String      @default("")
+  fileHash    String      @default("")
+  status      String      @default("received")
+  rowsTotal   Int?        @default(0)
+  rowsCreated Int?        @default(0)
+  rowsSkipped Int?        @default(0)
+  rowsFailed  Int?        @default(0)
+  mapping     Json?
+  startedBy   User?       @relation("ImportBatch_startedBy", fields: [startedById], references: [id])
+  startedById String?     @map("startedBy")
+  finishedAt  DateTime?
+  rows        ImportRow[] @relation("ImportRow_batch")
+  version     Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([fileHash])
+  @@index([startedById])
+}
+
+model ImportRow {
+  id         String       @id @default(cuid())
+  batch      ImportBatch? @relation("ImportRow_batch", fields: [batchId], references: [id])
+  batchId    String?      @map("batch")
+  rowNumber  Int
+  externalId String       @default("")
+  result     String
+  recordType String       @default("")
+  recordId   String       @default("")
+  errors     Json?        @default("[]")
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @default(now()) @updatedAt
+
+  @@unique([batchId, rowNumber], map: "ImportRow_batch_row_key")
+  @@index([batchId])
 }
 
 model AgentToolGrant {

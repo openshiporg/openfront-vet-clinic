@@ -8,6 +8,7 @@ import { reserveReferences, reserveSerials } from '../lib/sequence'
 import { contactHash, microchipStandard } from '../domain/contact'
 import { parseProtocol, protocolHash } from '../domain/triage'
 import { buildSegments, type SegmentTemplate } from '../domain/scheduling'
+import { seedClinical } from './clinical'
 import {
   APPOINTMENT_TYPES, COLOURS, DRUG_PRODUCTS, households, KNOWLEDGE_BASE, MESSAGE_TEMPLATES, REFERRAL_HOSPITALS, RESOURCES, SCHEDULES, SPECIES, TRIAGE_PROTOCOL,
 } from './clinicData'
@@ -238,6 +239,9 @@ export async function seedClinic(uow: UnitOfWork, actor: Actor) {
     auditCreate(uow, actor, 'CsContainer', 'seed_cs', 'cs.containers_opened', { containers: containers.map(c => c.ref) }, meta)
     count('csContainers', containers.length)
   }
+
+  // ── Phase 2: formulary dose ranges, vaccines, reminder protocols, wards, codes, templates ──
+  await seedClinical(uow, actor, count)
 
   return created
 }

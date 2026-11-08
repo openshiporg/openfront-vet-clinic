@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ClinicalDocument" ADD COLUMN     "body" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "mimeType" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "renderError" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "sha256" TEXT NOT NULL DEFAULT '';

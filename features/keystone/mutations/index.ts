@@ -11,6 +11,11 @@ import * as clients from './clients'
 import * as schedule from './schedule'
 import * as reception from './reception'
 import * as agents from './agents'
+import * as record from './record'
+import * as scribe from './scribe'
+import * as treatment from './treatment'
+import * as vaccines from './vaccines'
+import * as imports from './imports'
 import '../lib/practiceControls'
 
 const graphql = String.raw
@@ -31,6 +36,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         triageQuestions: JSON
         lookupKnowledge(question: String!, locationId: ID): JSON
         receptionContext(callRecordId: ID, clientId: ID): JSON
+        previewDose(patientId: ID!, drugId: ID!, doseAmount: String!, doseUnit: String!, dosePer: String!, weightId: ID, context: String, manualOverrideQty: String, overrideReason: String): JSON
       }
       input UserUpdateProfileInput { name: String, email: String, password: String, onboardingStatus: String }
       type Mutation {
@@ -67,6 +73,43 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestRefill(input: JSON!, idempotencyKey: String!): JSON
         requestRecords(input: JSON!, idempotencyKey: String!): JSON
         setAgentKillSwitch(agentId: ID!, killSwitch: Boolean!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        openEncounter(patientId: ID!, locationId: ID!, kind: String!, appointmentId: ID, reason: String, attendingDvmId: ID, idempotencyKey: String!): JSON
+        saveSoapSection(encounterId: ID!, kind: String!, ordinal: Int, body: String!, structured: JSON, templateId: ID, expectedVersion: Int, idempotencyKey: String!): JSON
+        recordVitals(encounterId: ID!, temperature: String, temperatureUnit: String, heartRate: Int, respRate: Int, mucousMembranes: String, crtSeconds: String, painScore: Int, bodyConditionScore: Int, mentation: String, hydrationPct: String, idempotencyKey: String!): JSON
+        setExamFinding(encounterId: ID!, system: String!, status: String!, text: String, idempotencyKey: String!): JSON
+        addDiagnosis(encounterId: ID!, term: String, codeId: ID, certainty: String!, addToProblems: Boolean, chronic: Boolean, idempotencyKey: String!): JSON
+        resolveProblem(problemId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        submitEncounter(encounterId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        returnEncounter(encounterId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        signEncounter(encounterId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addAddendum(encounterId: ID!, sectionKind: String!, reason: String!, body: String!, idempotencyKey: String!): JSON
+        requestVoidEncounter(encounterId: ID!, reason: String!, idempotencyKey: String!): JSON
+        startScribeSession(encounterId: ID!, clientConsent: Boolean!, consentMethod: String, staffAcknowledged: Boolean!, idempotencyKey: String!): JSON
+        draftScribeSession(sessionId: ID!, pastedTranscript: String, idempotencyKey: String!): JSON
+        acceptScribeDraft(draftId: ID!, blocks: JSON!, idempotencyKey: String!): JSON
+        rejectScribeDraft(draftId: ID!, reason: String!, idempotencyKey: String!): JSON
+        placeOrder(encounterId: ID!, kind: String!, description: String, drugId: ID, route: String, frequency: String, quantity: String, quantityUnit: String, dose: JSON, extralabel: Boolean, sheet: JSON, idempotencyKey: String!): JSON
+        cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
+        admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
+        moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
+        dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
+        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, idempotencyKey: String!): JSON
+        skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
+        openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON
+        anaesthesiaEvent(recordId: ID!, event: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordMonitoring(recordId: ID!, hr: Int, rr: Int, spo2: Int, etco2: Int, sbp: Int, dbp: Int, map: Int, tempC: String, agentPct: String, o2FlowLpm: String, fluidsRateMlHr: String, notes: String, idempotencyKey: String!): JSON
+        closeAnaesthesia(recordId: ID!, expectedVersion: Int!, complications: String, idempotencyKey: String!): JSON
+        saveSurgeryReport(encounterId: ID!, procedure: String!, technique: String, findings: String, closure: String, sutures: String, specimens: String, assistantId: ID, idempotencyKey: String!): JSON
+        saveDentalChart(encounterId: ID!, teeth: JSON!, idempotencyKey: String!): JSON
+        administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, idempotencyKey: String!): JSON
+        recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
+        suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
+        previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
+        applyImport(batchId: ID!, idempotencyKey: String!): JSON
       }
     `,
     resolvers: {
@@ -79,6 +122,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         triageQuestions: op(reception.triageQuestions),
         lookupKnowledge: op(reception.lookupKnowledge),
         receptionContext: op(reception.receptionContext),
+        previewDose: op(treatment.previewDose),
       },
       Mutation: {
         updateActiveUser,
@@ -114,6 +158,43 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestRefill: op(reception.requestRefill),
         requestRecords: op(reception.requestRecords),
         setAgentKillSwitch: op(agents.setAgentKillSwitch),
+        openEncounter: op(record.openEncounter),
+        saveSoapSection: op(record.saveSoapSection),
+        recordVitals: op(record.recordVitals),
+        setExamFinding: op(record.setExamFinding),
+        addDiagnosis: op(record.addDiagnosis),
+        resolveProblem: op(record.resolveProblem),
+        submitEncounter: op(record.submitEncounter),
+        returnEncounter: op(record.returnEncounter),
+        signEncounter: op(record.signEncounter),
+        addAddendum: op(record.addAddendum),
+        requestVoidEncounter: op(record.requestVoidEncounter),
+        startScribeSession: op(scribe.startScribeSession),
+        draftScribeSession: op(scribe.draftScribeSession),
+        acceptScribeDraft: op(scribe.acceptScribeDraft),
+        rejectScribeDraft: op(scribe.rejectScribeDraft),
+        placeOrder: op(treatment.placeOrder),
+        cancelOrder: op(treatment.cancelOrder),
+        completeOrder: op(treatment.completeOrder),
+        recordAdministration: op(treatment.recordAdministration),
+        admitPatient: op(treatment.admitPatient),
+        moveCage: op(treatment.moveCage),
+        dischargePatient: op(treatment.dischargePatient),
+        completeTreatmentTask: op(treatment.completeTreatmentTask),
+        skipTreatmentTask: op(treatment.skipTreatmentTask),
+        rescheduleTreatmentTask: op(treatment.rescheduleTreatmentTask),
+        openAnaesthesia: op(treatment.openAnaesthesia),
+        anaesthesiaEvent: op(treatment.anaesthesiaEvent),
+        recordMonitoring: op(treatment.recordMonitoring),
+        closeAnaesthesia: op(treatment.closeAnaesthesia),
+        saveSurgeryReport: op(treatment.saveSurgeryReport),
+        saveDentalChart: op(treatment.saveDentalChart),
+        administerVaccine: op(vaccines.administerVaccine),
+        recordOutsideVaccine: op(vaccines.recordOutsideVaccine),
+        suppressReminder: op(vaccines.suppressReminder),
+        addManualReminder: op(vaccines.addManualReminder),
+        previewImport: op(imports.previewImport),
+        applyImport: op(imports.applyImport),
       },
     },
   })

@@ -21,6 +21,15 @@ export const COMPOUND_UNIQUES: Record<string, string[]> = {
   TriageProtocolVersion: ['@@unique([protocolId, versionNumber], map: "TriageProtocolVersion_protocol_number_key")'],
   MessageTemplate: ['@@unique([code, channel, locale, templateVersion], map: "MessageTemplate_code_channel_locale_version_key")'],
   Breed: ['@@unique([speciesId, name], map: "Breed_species_name_key")'],
+  // Phase 2
+  SoapSection: ['@@unique([encounterId, kind, ordinal], map: "SoapSection_encounter_kind_ordinal_key")'],
+  SoapSectionRevision: ['@@unique([sectionId, revisionNumber], map: "SoapSectionRevision_section_number_key")'],
+  DiagnosisCode: ['@@unique([codeSystem, code], map: "DiagnosisCode_system_code_key")'],
+  TreatmentTask: ['@@unique([sheetOrderId, dueAt], map: "TreatmentTask_sheet_due_key")'],
+  PatientReminder: ['@@unique([patientId, typeId, dueOn], map: "PatientReminder_patient_type_due_key")'],
+  ReminderSatisfaction: ['@@unique([reminderId, sourceKey], map: "ReminderSatisfaction_reminder_source_key")'],
+  ReminderProtocolVersion: ['@@unique([protocolId, versionNumber], map: "ReminderProtocolVersion_protocol_number_key")'],
+  ImportRow: ['@@unique([batchId, rowNumber], map: "ImportRow_batch_row_key")'],
 }
 
 export function addDatabaseConstraints(schema: string): string {

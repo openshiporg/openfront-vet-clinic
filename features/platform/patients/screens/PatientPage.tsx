@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { q, practiceTimeZone } from '../../lib/server';
-import { when, label, title, options, weight } from '../../lib/format';
+import { when, label, title, options, weight, calendarDay } from '../../lib/format';
 import { ALERT_TONE, ageText, todayIn } from '../../lib/clinic';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
@@ -59,7 +59,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-mono text-sm">{p.ref}</span><Status value={p.status} />
-          <Meta>{p.species?.name} · {p.breed?.name ?? 'breed not recorded'} · {label(p.sex)} {label(p.reproductiveStatus)} · {p.dateOfBirth ? `${ageText(p.dateOfBirth, today)}${p.dobEstimated ? ' (est.)' : ''} · born ${p.dateOfBirth.slice(0, 10)}` : 'age unknown'}{p.colourMarkings ? ` · ${p.colourMarkings}` : ''}{p.kind === 'group' ? ` · group of ${p.groupSize}` : ''}</Meta>
+          <Meta>{p.species?.name} · {p.breed?.name ?? 'breed not recorded'} · {label(p.sex)} {label(p.reproductiveStatus)} · {p.dateOfBirth ? `${ageText(p.dateOfBirth, today)}${p.dobEstimated ? ' (est.)' : ''} · born ${calendarDay(p.dateOfBirth)}` : 'age unknown'}{p.colourMarkings ? ` · ${p.colourMarkings}` : ''}{p.kind === 'group' ? ` · group of ${p.groupSize}` : ''}</Meta>
         </div>
         {p.status === 'deceased' ? <p className={`rounded-md border px-3 py-2 text-sm ${ALERT_TONE.info}`}>Died {p.deceasedAt ? when(p.deceasedAt, tz, 'day') : ''}. Reminders and marketing to this household about {p.name} are suppressed.</p> : null}
         {p.alerts.map(a => (

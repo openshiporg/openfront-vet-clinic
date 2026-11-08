@@ -1,5 +1,5 @@
 import { q } from '../../lib/server';
-import { title, policyRule, policyLayer } from '../../lib/format';
+import { title, policyRule, policyLayer, calendarDay } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 
 type MatrixRow = { location: string; locationName: string; kind: string; on: string; ok: boolean; verified?: boolean; versions?: { id: string; packCode: string; layer: string; verified: boolean }[]; unverifiedRules?: string[]; code?: string; message?: string };
@@ -51,7 +51,7 @@ export default async function PoliciesPage() {
           <Row key={v.id}>
             <div className="min-w-0 flex-1 basis-64 space-y-1">
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-medium">{v.pack?.name ?? v.label}</span><span className="text-xs text-muted-foreground">{v.pack ? `${v.pack.jurisdiction === 'US' ? 'Federal' : v.pack.jurisdiction} · ${title(v.pack.kind)}` : ''}</span></div>
-              <Meta>from {v.effectiveFrom}{v.effectiveTo ? ` to ${v.effectiveTo}` : ''} · hash {v.rulesHash.slice(0, 12)}</Meta>
+              <Meta>from {calendarDay(v.effectiveFrom)}{v.effectiveTo ? ` to ${calendarDay(v.effectiveTo)}` : ''} · hash {v.rulesHash.slice(0, 12)}</Meta>
               <ul className="space-y-0.5 text-xs">
                 {(v.sourceRefs ?? []).map(s => <li key={s.ref + s.title} className="break-words">{s.url ? <a className="underline underline-offset-2" href={s.url} target="_blank" rel="noreferrer">{s.ref}</a> : s.ref} · {s.title}{s.section ? ` ${s.section}` : ''}</li>)}
               </ul>

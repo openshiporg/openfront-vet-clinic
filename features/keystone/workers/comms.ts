@@ -6,6 +6,7 @@ import { appendAuditEvents } from '../lib/audit'
 import { loadPolicySnapshot, resolveFromSnapshot } from '../domain/policy'
 import { sendDecision, type ConsentRequirement } from '../domain/contact'
 import { telephony, type TelephonyAdapter } from '../../integrations/telephony'
+import { renderDocument } from './documents'
 
 /**
  * The comms worker (INTEGRATIONS §1, §7.1). Two steps, never mixed:
@@ -31,6 +32,7 @@ const FALLBACK: Record<string, string> = {
   appointment_requested: '{{practice}}: we have your request for {{pet}} on {{when}}. The team will confirm shortly. Reply STOP to opt out.',
   stop_confirmation: '{{practice}}: you will no longer receive texts from us. Reply START to opt back in.',
   help_reply: '{{practice}}: for help call {{phone}}. Reply STOP to opt out. Msg & data rates may apply.',
+  vaccine_reminder: '{{practice}}: {{lines}}. Call {{phone}} or reply to book. Reply STOP to opt out.',
 }
 
 async function template(db: Db, code: string) {
@@ -112,7 +114,40 @@ async function noteFreedSlot(db: Db, message: ClaimedMessage) {
   }, TRANSACTION_OPTIONS)
 }
 
+/**
+ * One reminder text per household per day (the job batches every due pet into one payload). Care
+ * purpose, so the send-time guard applies the care consent rule and quiet hours as usual.
+ */
+async function composeReminder(db: Db, message: ClaimedMessage) {
+  const { clientId, locationId, reminderIds, lines } = message.payload as { clientId: string; locationId: string; reminderIds: string[]; lines: string[] }
+  const client = await db.client.findUnique({ where: { id: clientId }, select: { id: true, people: { where: { isPrimary: true }, select: { contactPoints: { where: { kind: 'mobile', isPrimary: true }, select: { id: true, value: true } } } } } })
+  const contact = client?.people[0]?.contactPoints[0]
+  const location = await db.location.findUnique({ where: { id: locationId }, select: { name: true, phone: true } })
+  if (!client || !contact) {
+    // No textable number: the front desk calls instead (the reminder stays due on the chart).
+    await db.$transaction(async tx => {
+      const open = await tx.task.findFirst({ where: { subjectType: 'Client', subjectId: clientId, kind: 'follow_up', status: 'open', title: { startsWith: 'Reminder call' } }, select: { id: true } })
+      if (!open) await tx.task.create({ data: { kind: 'follow_up', priority: 'normal', status: 'open', dueAt: new Date(), subjectType: 'Client', subjectId: clientId, locationId, roleName: 'csr', title: 'Reminder call: no mobile number on file', detail: lines.join('; ') } })
+    }, TRANSACTION_OPTIONS)
+    return null
+  }
+  const tpl = await template(db, 'vaccine_reminder')
+  const body = render(tpl.body, { practice: location?.name ?? '', phone: location?.phone ?? '', lines: lines.join('; ') })
+  const first = await db.patientReminder.findFirst({ where: { id: { in: reminderIds } }, select: { patientId: true } })
+  return db.$transaction(async tx => {
+    const thread = (await tx.commsThread.findFirst({ where: { contactPointId: contact.id, channel: 'sms', status: { not: 'closed' } } }))
+      ?? (await tx.commsThread.create({ data: { clientId, contactPointId: contact.id, channel: 'sms', subject: 'Text messages', status: 'open' } }))
+    // A retried delivery of the same outbox row must not queue a second text.
+    const exists = await tx.commsMessage.findFirst({ where: { threadId: thread.id, templateCode: 'vaccine_reminder', body, createdAt: { gte: new Date(Date.now() - 86_400_000) } }, select: { id: true } })
+    if (exists) return exists.id
+    const row = await tx.commsMessage.create({ data: { threadId: thread.id, direction: 'outbound', purpose: 'care', templateCode: 'vaccine_reminder', to: contact.value, body, status: 'queued', patientId: first?.patientId ?? null } })
+    return row.id
+  }, TRANSACTION_OPTIONS)
+}
+
 export const composeHandlers = (db: Db): OutboxHandlers => ({
+  'notify.reminder': async message => { await composeReminder(db, message) },
+  'document.render': async message => { await renderDocument(db, message) },
   'comms.appointment_booked': async message => { await composeAppointment(db, message) },
   'comms.send': async message => { await composeKeywordReply(db, message) },
   'notify.urgent_call': async message => { await raiseUrgentTask(db, message) },
