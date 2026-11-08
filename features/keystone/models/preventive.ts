@@ -56,7 +56,10 @@ export const VaccineAdministration = list({
     supervisingDvm: relationship({ ref: 'StaffMember', ...readOnly }),
     policyVersions: json({ ...readOnly }),
     certificate: relationship({ ref: 'RabiesCertificate', ...readOnly }),
-    source: fixedChoice(['administered', 'import', 'external_evidence']),
+    source: fixedChoice(['administered', 'import', 'external_evidence', 'reversal']),
+    /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
+    reverses: relationship({ ref: 'VaccineAdministration', ...readOnly }),
+    reason: systemText(),
   },
 })
 
@@ -82,6 +85,9 @@ export const RabiesCertificate = list({
     reportedTo: fixedChoice(['none', 'county', 'city']),
     reportedAt: timestamp({ ...readOnly }),
     policyVersions: json({ ...readOnly }),
+    /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
+    voidedAt: timestamp({ ...readOnly }),
+    voidReason: systemText(),
     ...trackingFields,
   },
 })

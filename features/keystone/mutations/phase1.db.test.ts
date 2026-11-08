@@ -241,9 +241,9 @@ describe.skipIf(!hasTestDatabase)('Phase 1 exit gate (database)', () => {
     const id = 'seed_csc_hydromorphone_1'
     const balance = await containerBalance(prisma as never, id)
     expect(balance.toFixed()).toBe('0.65')
-    await expect(prisma.$transaction(tx => appendCsEntry(tx as never, { containerId: id, type: 'administer', qtySigned: '-0.7', unit: 'mL', occurredAt: new Date(), actorId: 'seed_staff_lopez' }, new Date()))).rejects.toThrow(/below zero/)
+    await expect(prisma.$transaction(tx => appendCsEntry(tx as never, { containerId: id, type: 'administer', qtySigned: '-0.7', unit: 'mL', occurredAt: new Date(), actorId: 'seed_staff_lopez', witnessId: 'seed_staff_okafor' }, new Date()))).rejects.toThrow(/below zero/)
     // Ten concurrent 0.1 mL draws against 0.65 mL: at most six succeed; the balance never goes negative.
-    const draws = await Promise.allSettled(Array.from({ length: 10 }, () => prisma.$transaction(tx => appendCsEntry(tx as never, { containerId: id, type: 'administer', qtySigned: '-0.1', unit: 'mL', occurredAt: new Date(), actorId: 'seed_staff_lopez' }, new Date()), { timeout: 30_000, maxWait: 30_000 })))
+    const draws = await Promise.allSettled(Array.from({ length: 10 }, () => prisma.$transaction(tx => appendCsEntry(tx as never, { containerId: id, type: 'administer', qtySigned: '-0.1', unit: 'mL', occurredAt: new Date(), actorId: 'seed_staff_lopez', witnessId: 'seed_staff_okafor' }, new Date()), { timeout: 30_000, maxWait: 30_000 })))
     expect(draws.filter(d => d.status === 'fulfilled').length).toBe(6)
     expect((await containerBalance(prisma as never, id)).toFixed()).toBe('0.05')
     // CII entries carry the separate CII sequence; register rows are append-only.

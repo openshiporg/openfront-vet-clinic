@@ -2405,7 +2405,7 @@ var DrugProduct = (0, import_core13.list)({
     multiDoseBudDays: (0, import_fields13.integer)({ ...readOnly }),
     ndc: systemText({ indexed: true }),
     requiresWitnessOnAdminister: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: false }),
-    doseRanges: (0, import_fields13.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per species: {"dog":{"min":"0.2","max":"0.4","unit":"mg","per":"kg"}} from the practice formulary (I-O2 dose check).' } }),
+    doseRanges: (0, import_fields13.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per species: {"canine":{"min":"0.2","max":"0.4","unit":"mg","per":"kg"}} from the practice formulary (I-O2 dose check).' } }),
     cautionFlags: (0, import_fields13.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: 'Breed genetic flags that make this drug a caution, e.g. ["MDR1_risk"].' } }),
     measurableIncrement: qty(),
     active: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: true }),
@@ -2488,6 +2488,7 @@ var CsLogEntry = (0, import_core13.list)({
     occurredAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     recordedAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     actor: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
+    witness: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
     patient: (0, import_fields13.relationship)({ ref: "Patient", ...readOnly }),
     client: (0, import_fields13.relationship)({ ref: "Client", ...readOnly }),
     clientSnapshot: (0, import_fields13.json)({ ...readOnly }),
@@ -3129,7 +3130,10 @@ var VaccineAdministration = (0, import_core16.list)({
     supervisingDvm: (0, import_fields16.relationship)({ ref: "StaffMember", ...readOnly }),
     policyVersions: (0, import_fields16.json)({ ...readOnly }),
     certificate: (0, import_fields16.relationship)({ ref: "RabiesCertificate", ...readOnly }),
-    source: fixedChoice(["administered", "import", "external_evidence"])
+    source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
+    /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
+    reverses: (0, import_fields16.relationship)({ ref: "VaccineAdministration", ...readOnly }),
+    reason: systemText()
   }
 });
 var RabiesCertificate = (0, import_core16.list)({
@@ -3153,6 +3157,9 @@ var RabiesCertificate = (0, import_core16.list)({
     reportedTo: fixedChoice(["none", "county", "city"]),
     reportedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     policyVersions: (0, import_fields16.json)({ ...readOnly }),
+    /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
+    voidedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    voidReason: systemText(),
     ...trackingFields
   }
 });
@@ -3545,43 +3552,6 @@ var Codes = {
   DUPLICATE_SUSPECTED: "DUPLICATE_SUSPECTED"
 };
 
-// features/keystone/mutations/op.ts
-var UNSAFE = /prisma|invocation|\bat\s+\S+\s*\(|node_modules|postgres(ql)?:\/\/|\bSQL\b|ECONN|query engine|\.ts:\d+|\.js:\d+/i;
-var SAFE_DETAIL_KEYS = /* @__PURE__ */ new Set(["currentStatus", "currentVersion", "to", "reason", "field", "problems", "replay"]);
-var op = (fn) => async (root, args, context) => {
-  try {
-    return await fn(root, args, context);
-  } catch (error) {
-    if (error instanceof import_graphql.GraphQLError) throw error;
-    if (isDomainError(error)) {
-      const details = Object.fromEntries(Object.entries(error.details).filter(([key2]) => SAFE_DETAIL_KEYS.has(key2)));
-      throw new import_graphql.GraphQLError(error.message, { extensions: { code: error.code, ...details } });
-    }
-    const message = typeof error?.message === "string" ? error.message : "";
-    console.error("Operation failed:", message.slice(0, 300).replace(/postgres(ql)?:\/\/\S+/g, "<url>"));
-    const safe = message && message.length <= 300 && !UNSAFE.test(message) && !error?.code;
-    throw new import_graphql.GraphQLError(safe ? message : "Unable to complete the request. Please try again.", { extensions: { code: "KS_USER_INPUT_ERROR" } });
-  }
-};
-
-// features/keystone/lib/actor.ts
-function actorFromSession(session) {
-  if (!session || !isSignedIn({ session })) throw new DomainError(Codes.NOT_AUTHORIZED, "Sign in to continue.");
-  const role = session.data.role;
-  const granted = new Set(role ? permissionNames.filter((name) => role[name] === true) : []);
-  return { kind: "user", userId: session.itemId, name: session.data.name, permissions: granted };
-}
-function requirePermission(actor, ...anyOf2) {
-  if (actor.kind === "system") return;
-  if (actor.kind === "agent") throw new DomainError(Codes.NOT_AUTHORIZED, "Agents act only through their tool grants.");
-  if (!anyOf2.some((permission) => actor.permissions.has(permission))) {
-    throw new DomainError(Codes.NOT_AUTHORIZED, `This needs the ${anyOf2.join(" or ")} permission.`);
-  }
-}
-var principalKey = (actor) => actor.kind === "user" ? `user:${actor.userId}` : actor.kind === "agent" ? `agent:${actor.agentId}` : `system:${actor.name}`;
-var actorUserId = (actor) => actor.kind === "user" ? actor.userId : null;
-var actorAgentId = (actor) => actor.kind === "agent" ? actor.agentId : null;
-
 // features/keystone/lib/canonical.ts
 var import_node_crypto2 = require("node:crypto");
 
@@ -3652,6 +3622,24 @@ var canonicalJson = (value) => JSON.stringify(canonicalize(value));
 var sha256 = (text16) => (0, import_node_crypto2.createHash)("sha256").update(text16).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
+
+// features/keystone/lib/actor.ts
+function actorFromSession(session) {
+  if (!session || !isSignedIn({ session })) throw new DomainError(Codes.NOT_AUTHORIZED, "Sign in to continue.");
+  const role = session.data.role;
+  const granted = new Set(role ? permissionNames.filter((name) => role[name] === true) : []);
+  return { kind: "user", userId: session.itemId, name: session.data.name, permissions: granted };
+}
+function requirePermission(actor, ...anyOf2) {
+  if (actor.kind === "system") return;
+  if (actor.kind === "agent") throw new DomainError(Codes.NOT_AUTHORIZED, "Agents act only through their tool grants.");
+  if (!anyOf2.some((permission) => actor.permissions.has(permission))) {
+    throw new DomainError(Codes.NOT_AUTHORIZED, `This needs the ${anyOf2.join(" or ")} permission.`);
+  }
+}
+var principalKey = (actor) => actor.kind === "user" ? `user:${actor.userId}` : actor.kind === "agent" ? `agent:${actor.agentId}` : `system:${actor.name}`;
+var actorUserId = (actor) => actor.kind === "user" ? actor.userId : null;
+var actorAgentId = (actor) => actor.kind === "agent" ? actor.agentId : null;
 
 // features/keystone/lib/db.ts
 async function advisoryLock(tx, key2) {
@@ -3882,6 +3870,56 @@ async function command(db, spec, work) {
     }
   }
 }
+
+// features/keystone/mutations/op.ts
+var UNSAFE = /prisma|invocation|\bat\s+\S+\s*\(|node_modules|postgres(ql)?:\/\/|\bSQL\b|ECONN|query engine|\.ts:\d+|\.js:\d+/i;
+var SAFE_DETAIL_KEYS = /* @__PURE__ */ new Set(["currentStatus", "currentVersion", "to", "reason", "field", "problems", "replay"]);
+function prismaToDomain(error) {
+  if (isDomainError(error)) return error;
+  const guarded = invariantError(error);
+  if (guarded) return guarded;
+  const code = String(error?.code ?? error?.extensions?.prisma?.code ?? "");
+  const meta4 = error?.meta ?? error?.extensions?.prisma?.meta ?? {};
+  const target = Array.isArray(meta4?.target) ? meta4.target.join(", ") : String(meta4?.target ?? "");
+  switch (code) {
+    case "P2002":
+      return new DomainError(Codes.GUARD_FAILED, `That ${target && !/[_"]/.test(target) ? target : "value"} is already in use.`, { reason: "unique" });
+    case "P2003":
+      return new DomainError(Codes.NOT_FOUND, "A linked record does not exist.", { reason: "foreign_key" });
+    case "P2025":
+      return new DomainError(Codes.NOT_FOUND, "The record was not found or changed meanwhile. Reload and try again.", { reason: "not_found" });
+    case "P2000":
+      return new DomainError(Codes.INVALID_INPUT, "A value is too long.", { reason: "too_long" });
+    case "P2006":
+    case "P2007":
+    case "P2009":
+    case "P2012":
+    case "P2019":
+      return new DomainError(Codes.INVALID_INPUT, "A value has the wrong form.", { reason: "invalid" });
+    case "P2034":
+      return new DomainError(Codes.STALE_STATE, "Someone else changed this at the same moment. Try again.", { reason: "conflict" });
+  }
+  const message = String(error?.message ?? "");
+  if (/23505|unique constraint/i.test(message)) return new DomainError(Codes.GUARD_FAILED, "That value is already in use.", { reason: /constraint "([A-Za-z0-9_]+)"/.exec(message)?.[1] ?? "unique" });
+  if (/23503|foreign key/i.test(message)) return new DomainError(Codes.NOT_FOUND, "A linked record does not exist.", { reason: "foreign_key" });
+  return null;
+}
+var op = (fn) => async (root, args, context) => {
+  try {
+    return await fn(root, args, context);
+  } catch (raw) {
+    if (raw instanceof import_graphql.GraphQLError && raw.extensions?.code !== "KS_PRISMA_ERROR") throw raw;
+    const error = prismaToDomain(raw) ?? raw;
+    if (isDomainError(error)) {
+      const details = Object.fromEntries(Object.entries(error.details).filter(([key2]) => SAFE_DETAIL_KEYS.has(key2)));
+      throw new import_graphql.GraphQLError(error.message, { extensions: { code: error.code, ...details } });
+    }
+    const message = typeof error?.message === "string" ? error.message : "";
+    console.error("Operation failed:", message.slice(0, 300).replace(/postgres(ql)?:\/\/\S+/g, "<url>"));
+    const safe = message && message.length <= 300 && !UNSAFE.test(message) && !error?.code;
+    throw new import_graphql.GraphQLError(safe ? message : "Unable to complete the request. Please try again.", { extensions: { code: "KS_USER_INPUT_ERROR" } });
+  }
+};
 
 // features/keystone/lib/calendar.ts
 var FEDERAL_HOLIDAYS = [
@@ -5040,7 +5078,10 @@ async function appendCsEntry(tx, input, now) {
   const ref = await nextReference(tx, "CS", now);
   const ciiRef = schedule === "CII" || schedule === "CIIN" ? await nextReference(tx, "CII", now) : null;
   const qty2 = toScale(dec(input.qtySigned), "qty");
-  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty2, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null };
+  const witnessId = input.witnessId ?? null;
+  if ((input.type === "waste" || input.type === "administer" && ciiRef) && !witnessId) throw new Error(`A ${input.type === "waste" ? "waste" : "Schedule II"} register entry needs a witness`);
+  if (witnessId && witnessId === input.actorId) throw new Error("The witness must be someone other than the person recording the entry");
+  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty2, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null, ...witnessId ? { witnessId } : {}, ...input.reversesId ? { reversesId: input.reversesId } : {} };
   const hash = sha256(`${prevHash}
 ${canonicalJson(body)}`);
   return tx.csLogEntry.create({
@@ -5057,6 +5098,8 @@ ${canonicalJson(body)}`);
       occurredAt: input.occurredAt,
       recordedAt: now,
       actorId: input.actorId,
+      witnessId,
+      reversesId: input.reversesId ?? null,
       patientId: input.patientId ?? null,
       clientId: input.clientId ?? null,
       reason: input.reason ?? "",
@@ -5231,6 +5274,241 @@ function verifySlot(token, now = Date.now()) {
   return claims;
 }
 
+// features/keystone/seed/clinicalData.ts
+var REMINDER_TYPES = [
+  { id: "seed_rt_rabies", code: "RABIES", name: "Rabies", kind: "vaccine" },
+  { id: "seed_rt_dhpp", code: "DHPP", name: "Distemper / parvo (DHPP)", kind: "vaccine" },
+  { id: "seed_rt_lepto", code: "LEPTO", name: "Leptospirosis", kind: "vaccine" },
+  { id: "seed_rt_bord", code: "BORDETELLA", name: "Bordetella (kennel cough)", kind: "vaccine" },
+  { id: "seed_rt_civ", code: "CIV", name: "Canine influenza", kind: "vaccine" },
+  { id: "seed_rt_fvrcp", code: "FVRCP", name: "Feline distemper (FVRCP)", kind: "vaccine" },
+  { id: "seed_rt_felv", code: "FELV", name: "Feline leukaemia (FeLV)", kind: "vaccine" },
+  { id: "seed_rt_heartworm", code: "HW_TEST", name: "Heartworm test", kind: "test" },
+  { id: "seed_rt_wellness", code: "WELLNESS", name: "Annual wellness exam", kind: "procedure" },
+  { id: "seed_rt_dental", code: "DENTAL", name: "Dental check", kind: "procedure" }
+];
+var VACCINE_PRODUCTS = [
+  { id: "seed_vx_rabies3_k9", name: "Rabies 3-year (canine/feline, killed)", manufacturer: "Zoetis", antigens: ["rabies"], species: ["canine", "feline"], doi: 36, minAgeWeeks: 12, isRabies: true, route: "sc", type: "seed_rt_rabies" },
+  { id: "seed_vx_rabies1_fel", name: "Rabies 1-year (feline, recombinant)", manufacturer: "Boehringer Ingelheim", antigens: ["rabies"], species: ["feline"], doi: 12, minAgeWeeks: 12, isRabies: true, route: "sc", type: "seed_rt_rabies" },
+  { id: "seed_vx_dapp", name: "DAPP (distemper, adenovirus-2, parvovirus, parainfluenza)", manufacturer: "Merck Animal Health", antigens: ["CDV", "CAV2", "CPV", "CPiV"], species: ["canine"], doi: 36, minAgeWeeks: 6, isRabies: false, route: "sc", type: "seed_rt_dhpp" },
+  { id: "seed_vx_lepto4", name: "Leptospirosis 4-serovar", manufacturer: "Zoetis", antigens: ["L. canicola", "L. grippotyphosa", "L. icterohaemorrhagiae", "L. pomona"], species: ["canine"], doi: 12, minAgeWeeks: 8, isRabies: false, route: "sc", type: "seed_rt_lepto" },
+  { id: "seed_vx_bord_in", name: "Bordetella intranasal", manufacturer: "Merck Animal Health", antigens: ["B. bronchiseptica", "CPiV"], species: ["canine"], doi: 12, minAgeWeeks: 8, isRabies: false, route: "intranasal", type: "seed_rt_bord" },
+  { id: "seed_vx_civ", name: "Canine influenza bivalent (H3N2/H3N8)", manufacturer: "Merck Animal Health", antigens: ["H3N2", "H3N8"], species: ["canine"], doi: 12, minAgeWeeks: 8, isRabies: false, route: "sc", type: "seed_rt_civ" },
+  { id: "seed_vx_fvrcp", name: "FVRCP (panleukopenia, herpesvirus-1, calicivirus)", manufacturer: "Boehringer Ingelheim", antigens: ["FPV", "FHV1", "FCV"], species: ["feline"], doi: 36, minAgeWeeks: 6, isRabies: false, route: "sc", type: "seed_rt_fvrcp" },
+  { id: "seed_vx_felv", name: "FeLV (recombinant)", manufacturer: "Boehringer Ingelheim", antigens: ["FeLV"], species: ["feline"], doi: 12, minAgeWeeks: 8, isRabies: false, route: "transdermal", type: "seed_rt_felv" }
+];
+var VACCINE_LOTS = [
+  { id: "seed_lot_rab_main", vaccine: "seed_vx_rabies3_k9", location: "seed_loc_main", lot: "RB3-2611A", expiresOn: "2027-08-31" },
+  { id: "seed_lot_rab_eg", vaccine: "seed_vx_rabies3_k9", location: "seed_loc_elkgrove", lot: "RB3-2609C", expiresOn: "2027-06-30" },
+  { id: "seed_lot_rabf_main", vaccine: "seed_vx_rabies1_fel", location: "seed_loc_main", lot: "PRF-25418", expiresOn: "2027-03-31" },
+  { id: "seed_lot_dapp_main", vaccine: "seed_vx_dapp", location: "seed_loc_main", lot: "NB-77310", expiresOn: "2027-11-30" },
+  { id: "seed_lot_dapp_old", vaccine: "seed_vx_dapp", location: "seed_loc_main", lot: "NB-70142", expiresOn: "2026-10-31" },
+  { id: "seed_lot_dapp_eg", vaccine: "seed_vx_dapp", location: "seed_loc_elkgrove", lot: "NB-77294", expiresOn: "2027-10-31" },
+  { id: "seed_lot_lepto_main", vaccine: "seed_vx_lepto4", location: "seed_loc_main", lot: "L4-60918", expiresOn: "2027-05-31" },
+  { id: "seed_lot_bord_main", vaccine: "seed_vx_bord_in", location: "seed_loc_main", lot: "BIN-3305", expiresOn: "2027-02-28" },
+  { id: "seed_lot_civ_main", vaccine: "seed_vx_civ", location: "seed_loc_main", lot: "CIV-2214", expiresOn: "2027-04-30" },
+  { id: "seed_lot_fvrcp_main", vaccine: "seed_vx_fvrcp", location: "seed_loc_main", lot: "PF-48820", expiresOn: "2027-09-30" },
+  { id: "seed_lot_felv_main", vaccine: "seed_vx_felv", location: "seed_loc_main", lot: "PL-10377", expiresOn: "2027-07-31" }
+];
+var DRUG_LOTS = [
+  { id: "seed_lot_carprofen_main", drug: "seed_drug_carprofen", location: "seed_loc_main", lot: "CP-55102", expiresOn: "2027-12-31" },
+  { id: "seed_lot_gabapentin_main", drug: "seed_drug_gabapentin", location: "seed_loc_main", lot: "GB-90311", expiresOn: "2028-01-31" },
+  { id: "seed_lot_meloxicam_main", drug: "seed_drug_meloxicam", location: "seed_loc_main", lot: "MX-31877", expiresOn: "2027-06-30" },
+  { id: "seed_lot_cefovecin_main", drug: "seed_drug_cefovecin", location: "seed_loc_main", lot: "CV-40219", expiresOn: "2027-03-31" },
+  { id: "seed_lot_maropitant_main", drug: "seed_drug_maropitant", location: "seed_loc_main", lot: "MP-12088", expiresOn: "2027-08-31" },
+  { id: "seed_lot_lrs_main", drug: "seed_drug_lrs", location: "seed_loc_main", lot: "LR-77015", expiresOn: "2028-04-30" }
+];
+var CLINICAL_DRUGS = [
+  { id: "seed_drug_meloxicam", displayName: "Meloxicam 5 mg/mL injection", genericName: "meloxicam", brandName: "Metacam", form: "injectable", strength: "5", strengthUnit: "mg", per: "mL", concentration: "5", concentrationUnit: "mg/mL", packageQty: "20", packageUnit: "mL", approvalStatus: "fda_approved", multiDoseBudDays: 28, ndc: "0010-6013-01" },
+  { id: "seed_drug_cefovecin", displayName: "Cefovecin 80 mg/mL injection", genericName: "cefovecin", brandName: "Convenia", form: "injectable", strength: "80", strengthUnit: "mg", per: "mL", concentration: "80", concentrationUnit: "mg/mL", packageQty: "10", packageUnit: "mL", approvalStatus: "fda_approved", multiDoseBudDays: 28, ndc: "54771-5850-1" },
+  { id: "seed_drug_maropitant", displayName: "Maropitant 10 mg/mL injection", genericName: "maropitant", brandName: "Cerenia", form: "injectable", strength: "10", strengthUnit: "mg", per: "mL", concentration: "10", concentrationUnit: "mg/mL", packageQty: "20", packageUnit: "mL", approvalStatus: "fda_approved", multiDoseBudDays: 90, ndc: "54771-5640-1" },
+  { id: "seed_drug_lrs", displayName: "Lactated Ringer's solution 1 L", genericName: "lactated Ringer's", brandName: "", form: "injectable", strength: null, strengthUnit: "", per: "mL", concentration: null, concentrationUnit: "", packageQty: "1000", packageUnit: "mL", approvalStatus: "human_label", multiDoseBudDays: null, ndc: "0338-0117-04" }
+];
+var mgkg = (min, max) => ({ min, max, unit: "mg", per: "kg" });
+var DOSE_FORMULARY = {
+  seed_drug_meloxicam: { doseRanges: { canine: mgkg("0.1", "0.2"), feline: mgkg("0.05", "0.3") }, measurableIncrement: "0.01" },
+  seed_drug_cefovecin: { doseRanges: { canine: mgkg("8", "8"), feline: mgkg("8", "8") }, measurableIncrement: "0.01" },
+  seed_drug_maropitant: { doseRanges: { canine: mgkg("1", "1"), feline: mgkg("1", "1") }, measurableIncrement: "0.01" },
+  seed_drug_carprofen: { doseRanges: { canine: mgkg("2", "4.4") }, measurableIncrement: "0.25" },
+  seed_drug_gabapentin: { doseRanges: { canine: mgkg("5", "20"), feline: mgkg("5", "20") }, measurableIncrement: "1" },
+  seed_drug_butorphanol: { doseRanges: { canine: mgkg("0.2", "0.4"), feline: mgkg("0.2", "0.4") }, cautionFlags: ["MDR1_risk"], measurableIncrement: "0.01" },
+  seed_drug_buprenorphine: { doseRanges: { canine: mgkg("0.01", "0.02"), feline: mgkg("0.01", "0.03") }, measurableIncrement: "0.01" },
+  seed_drug_hydromorphone: { doseRanges: { canine: mgkg("0.05", "0.1"), feline: mgkg("0.025", "0.05") }, measurableIncrement: "0.01" },
+  seed_drug_midazolam: { doseRanges: { canine: mgkg("0.1", "0.3"), feline: mgkg("0.1", "0.3") }, measurableIncrement: "0.01" },
+  seed_drug_ketamine: { doseRanges: { canine: mgkg("2", "5"), feline: mgkg("2", "5") }, measurableIncrement: "0.01" }
+};
+var MDR1_BREEDS = ["Border Collie", "Rough Collie", "Australian Shepherd"];
+var REMINDER_PROTOCOLS = [
+  {
+    id: "seed_rp_canine",
+    code: "CANINE_CORE",
+    name: "Canine wellness and vaccines",
+    species: "canine",
+    rules: [
+      { code: "RABIES", satisfies: "seed_rt_rabies", vaccines: ["seed_vx_rabies3_k9"], schedule: { boosterAfterFirstMonths: 12 }, leadDays: 30, graceDays: 30, lapseDays: 365 },
+      { code: "DHPP", satisfies: "seed_rt_dhpp", vaccines: ["seed_vx_dapp"], schedule: { initialSeries: { doses: 4, intervalWeeks: 3, untilAgeWeeks: 16 } }, leadDays: 30, graceDays: 30, lapseDays: 365 },
+      { code: "LEPTO", satisfies: "seed_rt_lepto", vaccines: ["seed_vx_lepto4"], schedule: { initialSeries: { doses: 2, intervalWeeks: 3, untilAgeWeeks: 52 } }, leadDays: 30, graceDays: 30, lapseDays: 180 },
+      { code: "BORDETELLA", satisfies: "seed_rt_bord", vaccines: ["seed_vx_bord_in"], schedule: {}, leadDays: 21, graceDays: 14, lapseDays: 180 },
+      { code: "CIV", satisfies: "seed_rt_civ", vaccines: ["seed_vx_civ"], schedule: { initialSeries: { doses: 2, intervalWeeks: 3, untilAgeWeeks: 520 } }, leadDays: 21, graceDays: 14, lapseDays: 180 }
+    ],
+    sourceRefs: [{ ref: "S37", title: "NASPHV Compendium of Animal Rabies Prevention and Control", url: "https://www.cdc.gov/mmwr/preview/mmwrhtml/rr5603a1.htm" }, { ref: "AAHA-C", title: "AAHA Canine Vaccination Guidelines (practice to verify current edition)" }],
+    unverified: ["DHPP", "LEPTO", "BORDETELLA", "CIV"]
+  },
+  {
+    id: "seed_rp_feline",
+    code: "FELINE_CORE",
+    name: "Feline wellness and vaccines",
+    species: "feline",
+    rules: [
+      { code: "RABIES", satisfies: "seed_rt_rabies", vaccines: ["seed_vx_rabies3_k9", "seed_vx_rabies1_fel"], schedule: { boosterAfterFirstMonths: 12 }, leadDays: 30, graceDays: 30, lapseDays: 365 },
+      { code: "FVRCP", satisfies: "seed_rt_fvrcp", vaccines: ["seed_vx_fvrcp"], schedule: { initialSeries: { doses: 3, intervalWeeks: 4, untilAgeWeeks: 16 } }, leadDays: 30, graceDays: 30, lapseDays: 365 },
+      { code: "FELV", satisfies: "seed_rt_felv", vaccines: ["seed_vx_felv"], schedule: { initialSeries: { doses: 2, intervalWeeks: 4, untilAgeWeeks: 52 } }, leadDays: 30, graceDays: 30, lapseDays: 180 }
+    ],
+    sourceRefs: [{ ref: "S37", title: "NASPHV Compendium of Animal Rabies Prevention and Control", url: "https://www.cdc.gov/mmwr/preview/mmwrhtml/rr5603a1.htm" }, { ref: "AAHA-F", title: "AAHA/AAFP Feline Vaccination Guidelines (practice to verify current edition)" }],
+    unverified: ["FVRCP", "FELV"]
+  }
+];
+var WARDS = [
+  { id: "seed_ward_main_gen", location: "seed_loc_main", name: "Main ward", kind: "general", cages: [["MW-01", "small"], ["MW-02", "small"], ["MW-03", "medium"], ["MW-04", "medium"], ["MW-05", "large"], ["MW-06", "run"]] },
+  { id: "seed_ward_main_icu", location: "seed_loc_main", name: "ICU", kind: "icu", cages: [["ICU-1", "medium"], ["ICU-2", "large"]] },
+  { id: "seed_ward_main_iso", location: "seed_loc_main", name: "Isolation", kind: "isolation", cages: [["ISO-1", "large"]] },
+  { id: "seed_ward_main_cat", location: "seed_loc_main", name: "Cat ward", kind: "general", cages: [["CW-01", "small"], ["CW-02", "small"], ["CW-03", "small"]] },
+  { id: "seed_ward_eg_gen", location: "seed_loc_elkgrove", name: "Elk Grove ward", kind: "general", cages: [["EG-01", "small"], ["EG-02", "medium"], ["EG-03", "large"]] }
+];
+var DIAGNOSIS_CODES = [
+  ["P-0001", "Otitis externa", ["canine", "feline"]],
+  ["P-0002", "Acute gastroenteritis", ["canine", "feline"]],
+  ["P-0003", "Periodontal disease", ["canine", "feline"]],
+  ["P-0004", "Atopic dermatitis", ["canine"]],
+  ["P-0005", "Cranial cruciate ligament rupture", ["canine"]],
+  ["P-0006", "Osteoarthritis", ["canine", "feline"]],
+  ["P-0007", "Chronic kidney disease", ["feline", "canine"]],
+  ["P-0008", "Hyperthyroidism", ["feline"]],
+  ["P-0009", "Diabetes mellitus", ["canine", "feline"]],
+  ["P-0010", "Feline lower urinary tract disease", ["feline"]],
+  ["P-0011", "Pyoderma", ["canine"]],
+  ["P-0012", "Dental fracture", ["canine", "feline"]],
+  ["P-0013", "Healthy, wellness visit", ["canine", "feline", "rabbit", "ferret"]],
+  ["P-0014", "Laceration", ["canine", "feline"]],
+  ["P-0015", "Foreign body ingestion", ["canine", "feline"]],
+  ["P-0016", "Pancreatitis", ["canine", "feline"]],
+  ["P-0017", "Hypothyroidism", ["canine"]],
+  ["P-0018", "Mitral valve disease", ["canine"]],
+  ["P-0019", "Upper respiratory infection", ["feline", "rabbit"]],
+  ["P-0020", "Gastrointestinal stasis", ["rabbit"]]
+];
+var RECORD_TEMPLATES = [
+  { id: "seed_tpl_wellness_obj", name: "Wellness exam (normal)", kind: "wellness", sectionKind: "objective", body: "Bright, alert and responsive. Hydration normal. MM pink, CRT < 2 s. Heart: no murmur or arrhythmia. Lungs clear bilaterally. Abdomen soft, non-painful, no masses. Lymph nodes normal. Skin and coat healthy. Eyes, ears and nose clear. Musculoskeletal normal gait. Teeth: grade 1 tartar." },
+  { id: "seed_tpl_wellness_plan", name: "Wellness plan", kind: "wellness", sectionKind: "plan", body: "Vaccines per protocol today. Continue monthly heartworm, flea and tick prevention. Dental home care discussed. Recheck in 12 months or sooner if concerns." },
+  { id: "seed_tpl_sick_hx", name: "Sick visit history", kind: "sick", sectionKind: "history", body: "Presenting complaint:\nDuration:\nAppetite / water intake:\nVomiting / diarrhoea:\nUrination:\nEnergy:\nMedications and diet:\nToxin exposure:" },
+  { id: "seed_tpl_discharge_dental", name: "Dental discharge", kind: "discharge", sectionKind: "discharge", body: "Soft food only for 3 days. No chew toys for 7 days. Give pain medication as labelled with food. Call us if you see facial swelling, bleeding that does not stop, or refusal to eat for more than 24 hours." }
+];
+var GLOSSARY = [
+  ["BAR", "bright, alert, responsive"],
+  ["QAR", "quiet, alert, responsive"],
+  ["MM", "mucous membranes"],
+  ["CRT", "capillary refill time"],
+  ["BCS", "body condition score"],
+  ["NSF", "no significant findings"],
+  ["WNL", "within normal limits"],
+  ["V/D", "vomiting and diarrhoea"],
+  ["PU/PD", "polyuria and polydipsia"],
+  ["TPR", "temperature, pulse, respiration"],
+  ["SID", "once daily"],
+  ["BID", "twice daily"],
+  ["TID", "three times daily"],
+  ["PRN", "as needed"],
+  ["SQ", "subcutaneous"],
+  ["CCL", "cranial cruciate ligament"]
+];
+
+// features/keystone/seed/clinical.ts
+var DAY2 = (d) => /* @__PURE__ */ new Date(`${d}T00:00:00Z`);
+var meta2 = { metadata: { seed: true } };
+async function seedClinical(uow, actor, count) {
+  const { tx, now } = uow;
+  const species = new Map((await tx.species.findMany({ select: { id: true, code: true } })).map((s) => [s.code, s.id]));
+  const haveDrugs = new Set((await tx.drugProduct.findMany({ where: { id: { in: CLINICAL_DRUGS.map((d) => d.id) } }, select: { id: true } })).map((d) => d.id));
+  const newDrugs = CLINICAL_DRUGS.filter((d) => !haveDrugs.has(d.id));
+  if (newDrugs.length) {
+    await tx.drugProduct.createMany({ data: newDrugs.map((d) => ({ ...d, csSchedule: "none", isHumanLabel: d.approvalStatus === "human_label", requiresWitnessOnAdminister: false, active: true })) });
+    count("drugProducts", newDrugs.length);
+  }
+  const needsRanges = (await tx.drugProduct.findMany({ where: { id: { in: Object.keys(DOSE_FORMULARY) } }, select: { id: true, doseRanges: true } })).filter((d) => d.doseRanges == null);
+  for (const d of needsRanges) {
+    const f = DOSE_FORMULARY[d.id];
+    await tx.drugProduct.update({ where: { id: d.id }, data: { doseRanges: f.doseRanges, cautionFlags: f.cautionFlags ?? [], measurableIncrement: f.measurableIncrement ?? null } });
+  }
+  if (needsRanges.length) {
+    auditCreate(uow, actor, "DrugProduct", "seed_formulary", "formulary.dose_ranges_loaded", { drugs: needsRanges.map((d) => d.id), verified: false }, meta2);
+    count("doseRanges", needsRanges.length);
+  }
+  const mdr1 = await tx.breed.findMany({ where: { name: { in: MDR1_BREEDS }, speciesId: species.get("canine") }, select: { id: true, geneticFlags: true } });
+  for (const b of mdr1.filter((b2) => !b2.geneticFlags?.MDR1_risk)) {
+    await tx.breed.update({ where: { id: b.id }, data: { geneticFlags: { ...b.geneticFlags ?? {}, MDR1_risk: true } } });
+  }
+  const haveDrugLots = new Set((await tx.inventoryLot.findMany({ where: { id: { in: DRUG_LOTS.map((l) => l.id) } }, select: { id: true } })).map((l) => l.id));
+  const newDrugLots = DRUG_LOTS.filter((l) => !haveDrugLots.has(l.id));
+  if (newDrugLots.length) {
+    await tx.inventoryLot.createMany({ data: newDrugLots.map((l) => ({ id: l.id, drugId: l.drug, locationId: l.location, lotNumber: l.lot, expiresOn: DAY2(l.expiresOn), status: "available" })) });
+    count("drugLots", newDrugLots.length);
+  }
+  const haveTypes = new Set((await tx.reminderType.findMany({ where: { id: { in: REMINDER_TYPES.map((t) => t.id) } }, select: { id: true } })).map((t) => t.id));
+  const newTypes = REMINDER_TYPES.filter((t) => !haveTypes.has(t.id));
+  if (newTypes.length) {
+    await tx.reminderType.createMany({ data: newTypes.map((t) => ({ ...t, active: true })) });
+    count("reminderTypes", newTypes.length);
+  }
+  const haveVx = new Set((await tx.vaccineProduct.findMany({ where: { id: { in: VACCINE_PRODUCTS.map((v) => v.id) } }, select: { id: true } })).map((v) => v.id));
+  for (const v of VACCINE_PRODUCTS.filter((v2) => !haveVx.has(v2.id))) {
+    await tx.vaccineProduct.create({ data: { id: v.id, name: v.name, manufacturer: v.manufacturer, antigens: [...v.antigens], licensedDoiMonths: v.doi, minAgeWeeks: v.minAgeWeeks, isRabies: v.isRabies, usdaProductCode: "", defaultRoute: v.route, reminderTypeId: v.type, active: true, species: { connect: v.species.map((code) => ({ id: species.get(code) })) } } });
+    auditCreate(uow, actor, "VaccineProduct", v.id, "vaccine_product.created", { name: v.name, doiMonths: v.doi, isRabies: v.isRabies }, meta2);
+    count("vaccineProducts", 1);
+  }
+  const haveVxLots = new Set((await tx.inventoryLot.findMany({ where: { id: { in: VACCINE_LOTS.map((l) => l.id) } }, select: { id: true } })).map((l) => l.id));
+  const newVxLots = VACCINE_LOTS.filter((l) => !haveVxLots.has(l.id));
+  if (newVxLots.length) {
+    await tx.inventoryLot.createMany({ data: newVxLots.map((l) => ({ id: l.id, vaccineId: l.vaccine, locationId: l.location, lotNumber: l.lot, expiresOn: DAY2(l.expiresOn), status: "available" })) });
+    count("vaccineLots", newVxLots.length);
+  }
+  for (const p of REMINDER_PROTOCOLS) {
+    if (await tx.reminderProtocol.findUnique({ where: { id: p.id }, select: { id: true } })) continue;
+    await tx.reminderProtocol.create({ data: { id: p.id, code: p.code, name: p.name, speciesId: species.get(p.species) ?? null } });
+    const content = p.rules.map((r) => ({ code: r.code, satisfies: r.satisfies, vaccines: [...r.vaccines], schedule: r.schedule, leadDays: r.leadDays, graceDays: r.graceDays, lapseDays: r.lapseDays }));
+    const versionId = `${p.id}_v1`;
+    await tx.reminderProtocolVersion.create({ data: { id: versionId, protocolId: p.id, label: "v1 (Cedar Creek, pending medical-director review)", versionNumber: 1, sourceRefs: toJsonValue(p.sourceRefs), verified: false, unverifiedRules: [...p.unverified], status: "draft", contentHash: sha256(canonicalJson(content)) } });
+    for (const r of p.rules) {
+      await tx.reminderRule.create({ data: { id: `${versionId}_${r.code.toLowerCase()}`, protocolVersionId: versionId, code: r.code, satisfiesId: r.satisfies, schedule: toJsonValue(r.schedule), leadDays: r.leadDays, graceDays: r.graceDays, lapseDays: r.lapseDays, triggerVaccines: { connect: r.vaccines.map((id2) => ({ id: id2 })) } } });
+    }
+    await tx.reminderProtocolVersion.update({ where: { id: versionId }, data: { status: "published", publishedAt: now, version: { increment: 1 } } });
+    auditCreate(uow, actor, "ReminderProtocolVersion", versionId, "reminder_protocol.published", { code: p.code, rules: p.rules.length, verified: false, unverified: p.unverified }, meta2);
+    count("reminderProtocols", 1);
+  }
+  for (const w of WARDS) {
+    if (await tx.ward.findUnique({ where: { id: w.id }, select: { id: true } })) continue;
+    await tx.ward.create({ data: { id: w.id, locationId: w.location, name: w.name, kind: w.kind } });
+    await tx.cage.createMany({ data: w.cages.map(([code, size]) => ({ id: `seed_cage_${code.toLowerCase().replace(/[^a-z0-9]/g, "")}`, wardId: w.id, code, size, features: {}, active: true })) });
+    count("cages", w.cages.length);
+  }
+  const haveCodes = new Set((await tx.diagnosisCode.findMany({ where: { codeSystem: "practice" }, select: { code: true } })).map((c) => c.code));
+  for (const [code, term, sp] of DIAGNOSIS_CODES.filter(([code2]) => !haveCodes.has(code2))) {
+    await tx.diagnosisCode.create({ data: { codeSystem: "practice", code, term, active: true, species: { connect: sp.map((s) => species.get(s)).filter((id2) => !!id2).map((id2) => ({ id: id2 })) } } });
+    count("diagnosisCodes", 1);
+  }
+  const haveTpl = new Set((await tx.recordTemplate.findMany({ where: { id: { in: RECORD_TEMPLATES.map((t) => t.id) } }, select: { id: true } })).map((t) => t.id));
+  const newTpl = RECORD_TEMPLATES.filter((t) => !haveTpl.has(t.id));
+  if (newTpl.length) {
+    await tx.recordTemplate.createMany({ data: newTpl.map((t) => ({ ...t, templateVersion: 1, active: true })) });
+    count("recordTemplates", newTpl.length);
+  }
+  const haveGloss = new Set((await tx.glossary.findMany({ select: { term: true } })).map((g) => g.term));
+  const newGloss = GLOSSARY.filter(([term]) => !haveGloss.has(term));
+  if (newGloss.length) {
+    await tx.glossary.createMany({ data: newGloss.map(([term, expansion]) => ({ term, expansion })) });
+    count("glossary", newGloss.length);
+  }
+}
+
 // features/keystone/seed/clinicData.ts
 var SPECIES = [
   { id: "seed_sp_canine", code: "canine", name: "Dog", module: "companion", defaultWeightUnit: "lb", breeds: ["Labrador Retriever", "Golden Retriever", "German Shepherd", "French Bulldog", "Border Collie", "Rough Collie", "Australian Shepherd", "Dachshund", "Beagle", "Boxer", "Chihuahua", "Pit Bull Terrier", "Siberian Husky", "Poodle (Standard)", "Poodle (Miniature)", "Shih Tzu", "Yorkshire Terrier", "Cavalier King Charles Spaniel", "Great Dane", "Mixed Breed"] },
@@ -5397,6 +5675,37 @@ var MAIL_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com", "icloud.com", "comc
 var LAST = ["Alvarez", "Bishop", "Castillo", "Dalton", "Espinoza", "Fairbanks", "Gallagher", "Hayward", "Ingram", "Jaramillo", "Kowalski", "Lindqvist", "Mendoza", "Nakamura", "Oyelaran", "Pemberton", "Quintero", "Rasmussen", "Sorensen", "Takahashi", "Underwood", "Valdivia", "Whitfield", "Xiong", "Yamamoto", "Zielinski", "Abernathy", "Bergstrom", "Chaudhry", "Delacroix", "Eriksen", "Fontaine"];
 var DOGS = ["Biscuit", "Maple", "Juniper", "Moose", "Pepper", "Rosie", "Bear", "Winnie", "Scout", "Hazel", "Tucker", "Olive", "Ranger", "Daisy", "Koda", "Penny", "Murphy", "Luna", "Gus", "Ruby", "Finn", "Willow", "Otis", "Ginger"];
 var CATS = ["Miso", "Clementine", "Toast", "Mochi", "Jasper", "Pumpkin", "Nimbus", "Sage", "Felix", "Poppy", "Ziggy", "Mabel", "Tofu", "Cleo", "Basil", "Pickles"];
+var BREED_KG = {
+  "Labrador Retriever": [25, 36],
+  "Golden Retriever": [25, 34],
+  "German Shepherd": [24, 40],
+  "French Bulldog": [8, 13],
+  "Border Collie": [13, 20],
+  "Rough Collie": [18, 29],
+  "Australian Shepherd": [16, 30],
+  Dachshund: [7, 14],
+  Beagle: [9, 14],
+  Boxer: [25, 32],
+  Chihuahua: [1.5, 3],
+  "Pit Bull Terrier": [14, 30],
+  "Siberian Husky": [16, 27],
+  "Poodle (Standard)": [18, 30],
+  "Poodle (Miniature)": [4, 8],
+  "Shih Tzu": [4, 7.5],
+  "Yorkshire Terrier": [2, 3.5],
+  "Cavalier King Charles Spaniel": [5.5, 8.5],
+  "Great Dane": [50, 80],
+  "Mixed Breed": [8, 30],
+  "Domestic Shorthair": [3.5, 6],
+  "Domestic Longhair": [3.5, 6],
+  "Maine Coon": [5.5, 9],
+  Siamese: [3, 5],
+  Ragdoll: [4.5, 8],
+  Bengal: [3.5, 6.5],
+  Persian: [3.5, 5.5],
+  "British Shorthair": [4, 7.5],
+  Sphynx: [3, 5]
+};
 function rng(seed) {
   let x = seed >>> 0;
   return () => {
@@ -5431,7 +5740,8 @@ function households() {
       const name = species === "canine" ? DOGS[(i + p * 5) % DOGS.length] : species === "feline" ? CATS[(i + p * 3) % CATS.length] : pick(["Clover", "Bandit", "Spike", "Kiwi"]);
       const breed = species === "canine" ? pick(dogBreeds) : species === "feline" ? pick(catBreeds) : SPECIES.find((s) => s.code === species).breeds[0];
       const year = 2012 + Math.floor(r() * 14);
-      const base = species === "canine" ? 6 + r() * 34 : species === "feline" ? 3 + r() * 4 : species === "rabbit" ? 1.2 + r() : species === "ferret" ? 0.7 + r() * 0.6 : species === "bearded_dragon" ? 0.35 + r() * 0.15 : 0.08 + r() * 0.02;
+      const [lo, hi] = BREED_KG[breed] ?? (species === "canine" ? [8, 30] : [3, 6]);
+      const base = species === "canine" || species === "feline" ? lo + r() * (hi - lo) : species === "rabbit" ? 1.2 + r() : species === "ferret" ? 0.7 + r() * 0.6 : species === "bearded_dragon" ? 0.35 + r() * 0.15 : 0.08 + r() * 0.02;
       const weights = [94, 98, 100].map((pct) => {
         const places = base < 1 ? 3 : 2;
         const units = Math.round(base * pct / 100 * 10 ** places);
@@ -5458,6 +5768,11 @@ function households() {
   out[7].pets[0].alerts = [{ kind: "behaviour_caution", severity: "warn", text: "Bites when restrained: muzzle on arrival, two-person handling." }];
   const nsaidCat = out[9].pets.find((p) => p.species === "feline") ?? out[9].pets[0];
   Object.assign(nsaidCat, { species: "feline", breed: "Domestic Shorthair", name: "Saffron", alerts: [{ kind: "drug_sensitivity", severity: "block", text: "NSAID intolerance (acute kidney injury after meloxicam, 2025). No NSAIDs." }] });
+  for (const pet of [collie, nsaidCat]) {
+    const [lo, hi] = BREED_KG[pet.breed] ?? [3, 6];
+    const mid = (lo + hi) / 2;
+    pet.weightsKg = [94, 98, 100].map((pct) => toScale(dec(Math.round(mid * pct)).div(100), 2));
+  }
   out[12].pets[0].alerts = [{ kind: "allergy", severity: "warn", text: "Vaccine reaction (facial swelling) after leptospirosis vaccine: pre-medicate and split vaccines." }];
   Object.assign(out[15].pets[0], { status: "deceased", diedOn: "2026-09-18" });
   out[20] = {
@@ -5471,8 +5786,8 @@ function households() {
 }
 
 // features/keystone/seed/clinic.ts
-var DAY2 = (d) => /* @__PURE__ */ new Date(`${d}T00:00:00Z`);
-var meta2 = { metadata: { seed: true } };
+var DAY3 = (d) => /* @__PURE__ */ new Date(`${d}T00:00:00Z`);
+var meta3 = { metadata: { seed: true } };
 async function seedClinic(uow, actor) {
   const { tx, now } = uow;
   const created = {};
@@ -5488,7 +5803,7 @@ async function seedClinic(uow, actor) {
     await tx.species.createMany({ data: newSpecies.map((s) => ({ id: s.id, code: s.code, name: s.name, module: s.module, defaultWeightUnit: s.defaultWeightUnit, active: true })) });
     await tx.breed.createMany({ data: newSpecies.flatMap((s) => s.breeds.map((name, i) => ({ id: `${s.id}_b${i + 1}`, speciesId: s.id, name }))) });
     await tx.colourMarking.createMany({ data: newSpecies.flatMap((s) => (COLOURS[s.code] ?? []).map((name, i) => ({ id: `${s.id}_c${i + 1}`, speciesId: s.id, name }))) });
-    auditCreate(uow, actor, "Species", "seed_species", "species.loaded", { species: newSpecies.map((s) => s.code), breeds: newSpecies.reduce((n, s) => n + s.breeds.length, 0) }, meta2);
+    auditCreate(uow, actor, "Species", "seed_species", "species.loaded", { species: newSpecies.map((s) => s.code), breeds: newSpecies.reduce((n, s) => n + s.breeds.length, 0) }, meta3);
     count("species", newSpecies.length);
   }
   const speciesByCode = new Map((await tx.species.findMany({ select: { id: true, code: true } })).map((s) => [s.code, s.id]));
@@ -5497,14 +5812,14 @@ async function seedClinic(uow, actor) {
   const newEr = REFERRAL_HOSPITALS.filter((h) => !haveEr.has(h.id));
   if (newEr.length) {
     await tx.referralHospital.createMany({ data: newEr.map((h) => ({ ...h, fax: "", verifiedChannel: true, active: true })) });
-    for (const h of newEr) auditCreate(uow, actor, "ReferralHospital", h.id, "referral_hospital.created", { name: h.name, kind: h.kind, open24h: h.open24h }, meta2);
+    for (const h of newEr) auditCreate(uow, actor, "ReferralHospital", h.id, "referral_hospital.created", { name: h.name, kind: h.kind, open24h: h.open24h }, meta3);
     count("referralHospitals", newEr.length);
   }
   const haveRes = new Set((await tx.resource.findMany({ where: { id: { in: RESOURCES.map((r) => r.id) } }, select: { id: true } })).map((r) => r.id));
   const newRes = RESOURCES.filter((r) => !haveRes.has(r.id));
   if (newRes.length) {
     await tx.resource.createMany({ data: newRes.map((r) => ({ ...r, active: true })) });
-    auditCreate(uow, actor, "Resource", "seed_resources", "resources.loaded", { count: newRes.length }, meta2);
+    auditCreate(uow, actor, "Resource", "seed_resources", "resources.loaded", { count: newRes.length }, meta3);
     count("resources", newRes.length);
   }
   const haveTypes = new Set((await tx.appointmentType.findMany({ where: { id: { in: APPOINTMENT_TYPES.map((t) => t.id) } }, select: { id: true } })).map((t) => t.id));
@@ -5532,20 +5847,20 @@ async function seedClinic(uow, actor) {
       },
       select: { id: true }
     });
-    auditCreate(uow, actor, "AppointmentType", t.id, "appointment_type.created", { code: t.code, aiBookable: t.aiBookable, requestOnly: t.requestOnly }, meta2);
+    auditCreate(uow, actor, "AppointmentType", t.id, "appointment_type.created", { code: t.code, aiBookable: t.aiBookable, requestOnly: t.requestOnly }, meta3);
     count("appointmentTypes", 1);
   }
   if (!await tx.staffSchedule.findFirst({ where: { id: { startsWith: "seed_sch_" } }, select: { id: true } })) {
-    const rows = SCHEDULES.flatMap((s, i) => s.days.map((weekday) => ({ id: `seed_sch_${i}_${weekday}`, staffMemberId: s.staffId, locationId: s.locationId, kind: "recurring", weekday, startTime: s.start, endTime: s.end, appointmentCategories: s.categories ?? null, effectiveFrom: DAY2("2026-01-01") })));
+    const rows = SCHEDULES.flatMap((s, i) => s.days.map((weekday) => ({ id: `seed_sch_${i}_${weekday}`, staffMemberId: s.staffId, locationId: s.locationId, kind: "recurring", weekday, startTime: s.start, endTime: s.end, appointmentCategories: s.categories ?? null, effectiveFrom: DAY3("2026-01-01") })));
     await tx.staffSchedule.createMany({ data: rows });
-    auditCreate(uow, actor, "StaffSchedule", "seed_schedules", "schedules.loaded", { blocks: rows.length }, meta2);
+    auditCreate(uow, actor, "StaffSchedule", "seed_schedules", "schedules.loaded", { blocks: rows.length }, meta3);
     count("scheduleBlocks", rows.length);
   }
   if (!await tx.triageProtocol.findUnique({ where: { code: "phone_triage" }, select: { id: true } })) {
     const protocol = parseProtocol(TRIAGE_PROTOCOL);
     await tx.triageProtocol.create({ data: { id: "seed_tp_phone", code: "phone_triage", name: "Phone triage (front desk and AI receptionist)" } });
     await tx.triageProtocolVersion.create({ data: { id: "seed_tpv_phone_1", protocolId: "seed_tp_phone", versionNumber: 1, label: "v1 (Cedar Creek, reviewed by Dr. Marsh)", questions: protocol.questions, redFlags: protocol.redFlags, levelRules: protocol.levelRules, scripts: protocol.scripts, contentHash: protocolHash(protocol), status: "published", publishedAt: now } });
-    auditCreate(uow, actor, "TriageProtocolVersion", "seed_tpv_phone_1", "triage_protocol.published", { code: "phone_triage", version: 1, redFlags: protocol.redFlags.length, contentHash: protocolHash(protocol) }, meta2);
+    auditCreate(uow, actor, "TriageProtocolVersion", "seed_tpv_phone_1", "triage_protocol.published", { code: "phone_triage", version: 1, redFlags: protocol.redFlags.length, contentHash: protocolHash(protocol) }, meta3);
     count("triageProtocols", 1);
   }
   const haveTemplates = new Set((await tx.messageTemplate.findMany({ where: { channel: "sms" }, select: { code: true } })).map((t) => t.code));
@@ -5556,7 +5871,7 @@ async function seedClinic(uow, actor) {
   }
   if (!await tx.knowledgeBaseEntry.findFirst({ where: { id: { startsWith: "seed_kb_" } }, select: { id: true } })) {
     await tx.knowledgeBaseEntry.createMany({ data: KNOWLEDGE_BASE.map((k, i) => ({ id: `seed_kb_${i + 1}`, topic: k.topic, keywords: k.keywords, content: k.content, visibility: k.visibility, locationId: k.locationId, entryVersion: 1, active: true })) });
-    auditCreate(uow, actor, "KnowledgeBaseEntry", "seed_kb", "knowledge_base.loaded", { entries: KNOWLEDGE_BASE.length }, meta2);
+    auditCreate(uow, actor, "KnowledgeBaseEntry", "seed_kb", "knowledge_base.loaded", { entries: KNOWLEDGE_BASE.length }, meta3);
     count("knowledgeBase", KNOWLEDGE_BASE.length);
   }
   if (!await tx.publicSiteProfile.findFirst({ select: { id: true } })) {
@@ -5570,7 +5885,7 @@ async function seedClinic(uow, actor) {
     await tx.agentIdentity.create({ data: { id: "seed_agent_reception", name: "Cedar Creek AI receptionist", kind: "voice_receptionist", model: "operator-selected (OpenRouter)", provider: "openrouter", ownerId: "seed_user_park", status: "active", killSwitch: false, limits: { toolCallsPerRun: 40, maxBookingsPerCall: 3 }, oauthAppId: "seed_oauth_reception" } });
     const scopes = ["reception.read", "reception.book", "reception.register", "triage.run", "pharmacy.intake", "records.request"];
     await tx.agentToolGrant.createMany({ data: scopes.map((scope) => ({ id: `seed_grant_reception_${scope.replace(".", "_")}`, agentId: "seed_agent_reception", scope, status: "active", constraints: { locations: ["seed_loc_main", "seed_loc_elkgrove"] } })) });
-    auditCreate(uow, actor, "AgentIdentity", "seed_agent_reception", "agent.created", { kind: "voice_receptionist", owner: "seed_user_park", scopes, note: "aiVoice feature is off until a practice-controls change is approved" }, meta2);
+    auditCreate(uow, actor, "AgentIdentity", "seed_agent_reception", "agent.created", { kind: "voice_receptionist", owner: "seed_user_park", scopes, note: "aiVoice feature is off until a practice-controls change is approved" }, meta3);
     count("agents", 1);
   }
   const homes = households();
@@ -5585,7 +5900,7 @@ async function seedClinic(uow, actor) {
     });
     const people = newHomes.flatMap((h) => h.people.map((p, i) => ({ home: h, person: p, primary: i === 0 })));
     await tx.clientPerson.createMany({
-      data: people.map(({ home, person, primary }) => ({ id: person.id, clientId: home.id, firstName: person.firstName, lastName: person.lastName, relationship: person.relationship, isPrimary: primary, canBook: true, canApproveTreatment: primary, canReceiveRecords: primary, canPay: true, canAuthoriseEuthanasia: primary, dateOfBirth: DAY2(person.dob), preferredLanguage: "en" }))
+      data: people.map(({ home, person, primary }) => ({ id: person.id, clientId: home.id, firstName: person.firstName, lastName: person.lastName, relationship: person.relationship, isPrimary: primary, canBook: true, canApproveTreatment: primary, canReceiveRecords: primary, canPay: true, canAuthoriseEuthanasia: primary, dateOfBirth: DAY3(person.dob), preferredLanguage: "en" }))
     });
     const contacts = people.flatMap(({ person }) => [
       ...person.phone ? [{ id: `${person.id}_m`, personId: person.id, kind: "mobile", value: person.phone, valueHash: contactHash(person.phone), isPrimary: true, canText: true, status: "active", verifiedAt: now }] : [],
@@ -5596,10 +5911,10 @@ async function seedClinic(uow, actor) {
     await tx.patient.createMany({
       data: pets.map(({ pet }, i) => {
         const spId = speciesByCode.get(pet.species);
-        return { id: pet.id, ref: patientRefs[i], name: pet.name, kind: "individual", speciesId: spId, breedId: breedId.get(`${spId}|${pet.breed}`) ?? null, sex: pet.sex, reproductiveStatus: pet.repro, dateOfBirth: DAY2(pet.dob), dobEstimated: false, colourMarkings: pet.colour, status: pet.status ?? "active", deceasedAt: pet.diedOn ? /* @__PURE__ */ new Date(`${pet.diedOn}T17:00:00Z`) : null, codeStatus: "unspecified" };
+        return { id: pet.id, ref: patientRefs[i], name: pet.name, kind: "individual", speciesId: spId, breedId: breedId.get(`${spId}|${pet.breed}`) ?? null, sex: pet.sex, reproductiveStatus: pet.repro, dateOfBirth: DAY3(pet.dob), dobEstimated: false, colourMarkings: pet.colour, status: pet.status ?? "active", deceasedAt: pet.diedOn ? /* @__PURE__ */ new Date(`${pet.diedOn}T17:00:00Z`) : null, codeStatus: "unspecified" };
       })
     });
-    await tx.patientOwnership.createMany({ data: pets.map(({ home, pet }) => ({ id: `${pet.id}_own`, patientId: pet.id, clientId: home.id, role: "primary", effectiveFrom: DAY2("2024-01-01"), basis: "import" })) });
+    await tx.patientOwnership.createMany({ data: pets.map(({ home, pet }) => ({ id: `${pet.id}_own`, patientId: pet.id, clientId: home.id, role: "primary", effectiveFrom: DAY3("2024-01-01"), basis: "import" })) });
     const weights = pets.flatMap(({ pet }) => pet.weightsKg.map((kg, k) => ({ id: `${pet.id}_w${k + 1}`, patientId: pet.id, value: toScale(dec(kg), "wt"), unit: "kg", valueKg: toScale(dec(kg), "wt"), method: "scale", measuredAt: new Date(now.getTime() - (2 - k) * 180 * 864e5 - 30 * 864e5) })));
     if (weights.length) await tx.weightMeasurement.createMany({ data: weights });
     const chips = pets.filter(({ pet }) => pet.microchip).map(({ pet }) => ({ id: `${pet.id}_chip`, patientId: pet.id, number: pet.microchip, standard: microchipStandard(pet.microchip), registry: "Found Animals (fictional entry)", registeredToClient: true, active: true }));
@@ -5615,7 +5930,7 @@ async function seedClinic(uow, actor) {
     for (const { home, pet } of pets.filter(({ pet: pet2 }) => pet2.status === "deceased")) {
       await tx.suppression.create({ data: { id: `${pet.id}_supp`, patientId: pet.id, clientId: home.id, reason: "deceased", active: true } });
     }
-    auditCreate(uow, actor, "Client", "seed_clients", "clients.imported", { households: newHomes.length, people: people.length, patients: pets.length, alerts: alerts.length, deceased: pets.filter(({ pet }) => pet.status === "deceased").length }, meta2);
+    auditCreate(uow, actor, "Client", "seed_clients", "clients.imported", { households: newHomes.length, people: people.length, patients: pets.length, alerts: alerts.length, deceased: pets.filter(({ pet }) => pet.status === "deceased").length }, meta3);
     count("clients", newHomes.length);
     count("patients", pets.length);
   }
@@ -5660,7 +5975,7 @@ async function seedClinic(uow, actor) {
       await tx.providerReservation.create({ data: { staffMemberId: p.provider, appointmentId: id2, startsAt, endsAt, status: hold } });
       if (p.status === "checked_in") await tx.whiteboardEntry.create({ data: { locationId: "seed_loc_main", patientId: pet.id, appointmentId: id2, status: "in_exam", roomId: p.room, assignedDvmId: p.provider, assignedTechId: "seed_staff_price", since: now, flags: {} } });
     }
-    auditCreate(uow, actor, "Appointment", "seed_day_sheet", "appointments.loaded", { count: plan.length, day: today }, meta2);
+    auditCreate(uow, actor, "Appointment", "seed_day_sheet", "appointments.loaded", { count: plan.length, day: today }, meta3);
     count("appointments", plan.length);
   }
   const haveDrugs = new Set((await tx.drugProduct.findMany({ where: { id: { in: DRUG_PRODUCTS.map((d) => d.id) } }, select: { id: true } })).map((d) => d.id));
@@ -5678,13 +5993,14 @@ async function seedClinic(uow, actor) {
       { id: "seed_csc_butorphanol_eg", ref: "CSC-EG-0001", productId: "seed_drug_butorphanol", locationId: "seed_loc_elkgrove", dea: "seed_dea_elkgrove", lot: "BT25210", label: "10", unit: "mL", used: "0.8" }
     ];
     for (const c of containers) {
-      await tx.csContainer.create({ data: { id: c.id, ref: c.ref, productId: c.productId, locationId: c.locationId, deaRegistrationId: c.dea, lotNumber: c.lot, lotExpiresOn: DAY2("2027-09-30"), status: "open", labelQty: c.label, labelUnit: c.unit, openedAt: new Date(now.getTime() - 3 * 864e5), openedById: "seed_staff_lopez", budAt: new Date(now.getTime() + 25 * 864e5) } });
+      await tx.csContainer.create({ data: { id: c.id, ref: c.ref, productId: c.productId, locationId: c.locationId, deaRegistrationId: c.dea, lotNumber: c.lot, lotExpiresOn: DAY3("2027-09-30"), status: "open", labelQty: c.label, labelUnit: c.unit, openedAt: new Date(now.getTime() - 3 * 864e5), openedById: "seed_staff_lopez", budAt: new Date(now.getTime() + 25 * 864e5) } });
       await appendCsEntry(tx, { containerId: c.id, type: "receive", qtySigned: c.label, unit: c.unit, occurredAt: new Date(now.getTime() - 3 * 864e5), actorId: "seed_staff_lopez", reason: "Opening balance" }, now);
-      await appendCsEntry(tx, { containerId: c.id, type: "administer", qtySigned: dec(c.used).negated(), unit: c.unit, occurredAt: new Date(now.getTime() - 2 * 864e5), actorId: "seed_staff_lopez", patientId: homes[0].pets[0].id, clientId: homes[0].id, reason: "Premedication" }, now);
+      await appendCsEntry(tx, { containerId: c.id, type: "administer", qtySigned: dec(c.used).negated(), unit: c.unit, occurredAt: new Date(now.getTime() - 2 * 864e5), actorId: "seed_staff_lopez", witnessId: "seed_staff_okafor", patientId: homes[0].pets[0].id, clientId: homes[0].id, reason: "Premedication" }, now);
     }
-    auditCreate(uow, actor, "CsContainer", "seed_cs", "cs.containers_opened", { containers: containers.map((c) => c.ref) }, meta2);
+    auditCreate(uow, actor, "CsContainer", "seed_cs", "cs.containers_opened", { containers: containers.map((c) => c.ref) }, meta3);
     count("csContainers", containers.length);
   }
+  await seedClinical(uow, actor, count);
   return created;
 }
 
@@ -7186,6 +7502,11 @@ function rabiesCertificateFields(required, snapshot) {
   }
   return { fields, missing };
 }
+function calendarDayText(isoDay3) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDay3 ?? "");
+  if (!m) return isoDay3 ?? "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])));
+}
 
 // features/keystone/mutations/clinical.ts
 var text15 = (value, field, max = 200, required = true) => {
@@ -7210,6 +7531,14 @@ async function staffById(uow, id2) {
   const staff = await uow.tx.staffMember.findUnique({ where: { id: id2 }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true } });
   if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Staff member not found.");
   return staff;
+}
+async function witnessFor(uow, witnessId, administratorId) {
+  if (witnessId === administratorId) throw new DomainError(Codes.GUARD_FAILED, "The witness must be someone other than the person giving the dose.", { field: "witnessId" });
+  const staff = await uow.tx.staffMember.findUnique({ where: { id: witnessId }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true, user: { select: { accessExpiresAt: true, role: { select: { canWitnessControlled: true } } } } } });
+  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Witness not found.", { field: "witnessId" });
+  const expired = staff.user?.accessExpiresAt && staff.user.accessExpiresAt <= uow.now;
+  if (!staff.user?.role?.canWitnessControlled || expired) throw new DomainError(Codes.NOT_AUTHORIZED, `${staff.displayName} is not authorised to witness controlled drugs. Ask a veterinarian or a credentialed technician.`, { field: "witnessId" });
+  return { id: staff.id, kind: staff.kind, displayName: staff.displayName, homeLocationId: staff.homeLocationId };
 }
 async function activePatient(uow, patientId) {
   const patient = await uow.tx.patient.findUnique({
@@ -7384,6 +7713,14 @@ async function recordVitals(_root, args, context) {
         at: uow.now,
         byId: staff.id
       };
+      if (args.temperatureUnit && !["F", "C"].includes(args.temperatureUnit)) throw new DomainError(Codes.INVALID_INPUT, "Temperature unit is \xB0F or \xB0C.", { field: "temperatureUnit" });
+      if (data.temperature !== null) {
+        const t = Number(data.temperature);
+        const [lo, hi] = data.temperatureUnit === "F" ? [80, 115] : [26, 46];
+        if (t < lo || t > hi) throw new DomainError(Codes.INVALID_INPUT, `Temperature ${data.temperature} \xB0${data.temperatureUnit} is outside ${lo}\u2013${hi} \xB0${data.temperatureUnit}. Check the reading and the unit.`, { field: "temperature" });
+      }
+      if (data.crtSeconds !== null && Number(data.crtSeconds) > 10) throw new DomainError(Codes.INVALID_INPUT, "Capillary refill time is 0\u201310 seconds.", { field: "crtSeconds" });
+      if (data.hydrationPct !== null && Number(data.hydrationPct) > 20) throw new DomainError(Codes.INVALID_INPUT, "Dehydration is 0\u201320 %.", { field: "hydrationPct" });
       if (![data.temperature, data.heartRate, data.respRate, data.mucousMembranes, data.crtSeconds, data.painScore, data.bodyConditionScore, data.mentation, data.hydrationPct].some((v) => v !== null)) {
         throw new DomainError(Codes.INVALID_INPUT, "Enter at least one vital sign.");
       }
@@ -7622,9 +7959,10 @@ async function addAddendum(_root, args, context) {
 }
 async function voidBlockers(uow, encounterId) {
   const [orders, administrations, vaccines] = await Promise.all([
-    uow.tx.clinicalOrder.count({ where: { encounterId, status: { not: "cancelled" } } }),
-    uow.tx.administration.count({ where: { encounterId } }),
-    uow.tx.vaccineAdministration.count({ where: { encounterId } })
+    uow.tx.clinicalOrder.count({ where: { encounterId, status: { notIn: ["cancelled", "reversed"] } } }),
+    // Doses still standing: neither a reversal row nor reversed since (M5).
+    uow.tx.administration.count({ where: { encounterId, reversesId: null, from_Administration_reverses: { none: {} } } }),
+    uow.tx.vaccineAdministration.count({ where: { encounterId, reversesId: null, from_VaccineAdministration_reverses: { none: {} } } })
   ]);
   const blockers = [];
   if (orders) blockers.push(`${orders} active order${orders === 1 ? "" : "s"}`);
@@ -7800,8 +8138,11 @@ async function rejectScribeDraft(_root, args, context) {
 }
 
 // features/keystone/domain/dose.ts
-var DOSE_CALC_VERSION = "dose-2026.11-1";
-var BSA_CONSTANTS = { dog: "10.1", cat: "10.0" };
+var DOSE_CALC_VERSION = "dose-2026.11-2";
+var DOSE_PERS = ["kg", "m2", "animal"];
+var DOSE_UNITS = ["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"];
+var KG_PER_LB2 = "0.45359237";
+var BSA_CONSTANTS = { canine: "10.1", feline: "10.0" };
 var MASS_TO_MG = { mcg: "0.001", mg: "1", g: "1000" };
 function bodySurfaceArea(weightKg, species) {
   const k = BSA_CONSTANTS[species];
@@ -7837,6 +8178,8 @@ function calculateDose(input) {
   if (weightKg.lte(0)) throw new RangeError("A dose needs a positive weight.");
   const doseAmount = dec(input.doseAmount);
   if (doseAmount.lte(0)) throw new RangeError("A dose rate must be positive.");
+  if (!DOSE_PERS.includes(input.dosePer)) throw new RangeError(`"${input.dosePer}" is not a dose basis: dose per kg, per m\xB2 or per animal (1 mg/lb = 2.2046 mg/kg).`);
+  if (!DOSE_UNITS.includes(input.doseUnit)) throw new RangeError(`"${input.doseUnit}" is not a dose unit.`);
   if (input.maxWeightAgeHours != null && input.weightAgeHours != null && input.weightAgeHours > input.maxWeightAgeHours) {
     warnings.push({ code: "weight_stale", severity: "block", message: `The weight is ${input.weightAgeHours} hours old; this context allows ${input.maxWeightAgeHours}. Weigh the patient or record why the old weight is used.` });
   }
@@ -7887,9 +8230,18 @@ function calculateDose(input) {
       if (Math.abs(deviationBps) > 1e3) warnings.push({ code: "rounding_deviation", severity: "warn", message: `Rounding changes the delivered dose by ${(deviationBps / 100).toString()}%.` });
     }
     const range = product.doseRanges?.[input.species];
-    if (range && range.unit === input.doseUnit && range.per === input.dosePer) {
-      if (range.max && doseAmount.gt(range.max)) warnings.push({ code: "above_range", severity: "block", message: `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer} is above the formulary maximum for a ${input.species} (${range.max}).` });
-      if (range.min && doseAmount.lt(range.min)) warnings.push({ code: "below_range", severity: "warn", message: `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer} is below the formulary minimum for a ${input.species} (${range.min}).` });
+    if (range) {
+      const conc = product.concentration != null ? dec(product.concentration) : null;
+      const rate2 = rateInRangeBasis(total, input.doseUnit, range, weightKg, input.species, conc && conc.gt(0) ? conc : null, numeratorUnit(product.concentrationUnit));
+      const shown = `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer}`;
+      if (!rate2) {
+        warnings.push({ code: "range_unconvertible", severity: "block", message: `${shown} cannot be compared with the formulary range (${range.unit}/${range.per}); enter the dose in ${range.unit}/${range.per}.` });
+      } else {
+        const asRange = `${toScale(rate2, 4).replace(/\.?0+$/, "")} ${range.unit}/${range.per}`;
+        const same = range.unit === input.doseUnit && range.per === input.dosePer;
+        if (range.max && rate2.gt(range.max)) warnings.push({ code: "above_range", severity: "block", message: `${shown}${same ? "" : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` });
+        if (range.min && rate2.lt(range.min)) warnings.push({ code: "below_range", severity: "warn", message: `${shown}${same ? "" : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` });
+      }
     } else if (product.doseRanges && !range) {
       warnings.push({ code: "no_species_range", severity: "warn", message: `The formulary has no ${input.species} dose range for ${product.genericName}; check the dose against a current reference.` });
     }
@@ -7927,6 +8279,21 @@ function calculateDose(input) {
   };
   return { ...body, hash: sha256(canonicalJson({ input: { ...input, product: product ? { ...product, id: product.id ?? null } : null }, output: body })) };
 }
+function rateInRangeBasis(total, unit2, range, weightKg, species, concentration, concentrationUnit) {
+  let amount = null;
+  if (unit2 === range.unit) amount = total;
+  else if (MASS_TO_MG[unit2] && MASS_TO_MG[range.unit]) amount = convertAmount(total, unit2, range.unit);
+  else if (unit2 === "mL" && concentration && concentrationUnit && MASS_TO_MG[concentrationUnit] && MASS_TO_MG[range.unit]) amount = convertAmount(total.times(concentration), concentrationUnit, range.unit);
+  if (!amount) return null;
+  if (range.per === "animal") return amount;
+  if (range.per === "kg") return amount.div(weightKg);
+  if (range.per === "lb") return amount.div(weightKg.div(KG_PER_LB2));
+  if (range.per === "m2") {
+    if (!BSA_CONSTANTS[species]) return null;
+    return amount.div(bodySurfaceArea(weightKg, species).m2);
+  }
+  return null;
+}
 var quantityToGive = (dose) => dose.manualOverrideQty ?? dose.roundedQty ?? dose.computedQty ?? null;
 var blockingWarnings = (warnings) => warnings.filter((w) => w.severity === "block");
 
@@ -7938,6 +8305,7 @@ var FREQUENCY_HOURS = {
   q6h: 6,
   q8h: 8,
   q12h: 12,
+  q24h: 24,
   sid: 24,
   bid: 12,
   tid: 8,
@@ -7946,6 +8314,10 @@ var FREQUENCY_HOURS = {
   cri: null,
   once: null
 };
+function sheetFrequency(raw) {
+  const f = raw.trim().toLowerCase();
+  return f in FREQUENCY_HOURS ? f : null;
+}
 var HOUR = 36e5;
 function dueTimes(input, from, to) {
   const hours = FREQUENCY_HOURS[input.frequency];
@@ -7958,11 +8330,34 @@ function dueTimes(input, from, to) {
   for (let t = first; t < end.getTime(); t += step) out.push(new Date(t));
   return out;
 }
+var TASK_EARLY_MINUTES = 60;
+function taskWindowProblem(input) {
+  const hhmm2 = (d) => new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone ?? "UTC", hour: "numeric", minute: "2-digit", month: "short", day: "numeric" }).format(d);
+  const hours = FREQUENCY_HOURS[input.frequency] ?? null;
+  if (input.lastDoneAt && hours) {
+    const minGapMs = hours * HOUR / 2;
+    const since = input.now.getTime() - input.lastDoneAt.getTime();
+    if (since < minGapMs) {
+      const next = new Date(input.lastDoneAt.getTime() + minGapMs);
+      return { code: "too_soon", message: `A ${input.frequency} dose was already given ${Math.round(since / 6e4)} minutes ago; the next one cannot be given before ${hhmm2(next)}.` };
+    }
+  }
+  const opens = input.dueAt.getTime() - TASK_EARLY_MINUTES * 6e4;
+  if (input.now.getTime() < opens && !input.earlyOverride) {
+    return { code: "too_early", message: `This task is due ${hhmm2(input.dueAt)}; it can be done from ${hhmm2(new Date(opens))}. A veterinarian can give it early with a reason.` };
+  }
+  return null;
+}
 
 // features/keystone/mutations/treatment.ts
 var ORDER_KINDS = ["medication", "procedure", "treatment", "lab", "imaging", "vaccine", "fluid", "diet", "nursing"];
 var LICENSED_ORDER = { medication: "prescribe", procedure: "diagnose", euthanasia: "authorise_euthanasia" };
+function checkDoseArgs(args) {
+  if (!DOSE_PERS.includes(args.dosePer)) throw new DomainError(Codes.INVALID_INPUT, "Dose per kg, per m\xB2 or per animal. For a per-lb dose, multiply by 2.2046 to get per kg.", { field: "dosePer" });
+  if (!DOSE_UNITS.includes(args.doseUnit)) throw new DomainError(Codes.INVALID_INPUT, "Choose the dose unit.", { field: "doseUnit" });
+}
 async function doseFor(uow, patientId, drugId, args, staff) {
+  checkDoseArgs(args);
   const patient = await activePatient(uow, patientId);
   const drug = await uow.tx.drugProduct.findUnique({ where: { id: drugId } });
   if (!drug || !drug.active) throw new DomainError(Codes.NOT_FOUND, "Drug not found.");
@@ -7993,8 +8388,9 @@ async function doseFor(uow, patientId, drugId, args, staff) {
   }
   const blocks = blockingWarnings(result.warnings);
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
-    throw new DomainError(Codes.GUARD_FAILED, `${blocks.map((b) => b.message).join(" ")} To go ahead, record an override reason.`, { reason: "dose_blocked", problems: result.warnings });
+    throw new DomainError(Codes.GUARD_FAILED, `${blocks.map((b) => b.message).join(" ")} To go ahead, a veterinarian records an override reason.`, { reason: "dose_blocked", problems: result.warnings });
   }
+  if (blocks.length && staff.kind !== "dvm") throw new DomainError(Codes.GUARD_FAILED, `${blocks.map((b) => b.message).join(" ")} Only a veterinarian can override this.`, { reason: "dose_blocked", problems: result.warnings });
   const row = await uow.tx.doseCalculation.create({
     data: {
       patientId,
@@ -8030,6 +8426,7 @@ async function doseFor(uow, patientId, drugId, args, staff) {
 }
 async function previewDose(_root, args, context) {
   return gated(context, { permissions: ["canOrder", "canReadClinical"], tool: "dose.preview", humanOnly: true }, args, async () => {
+    checkDoseArgs(args);
     const prisma = context.prisma;
     const patient = await prisma.patient.findUnique({ where: { id: args.patientId }, select: { species: { select: { code: true } }, breed: { select: { geneticFlags: true } } } });
     const drug = await prisma.drugProduct.findUnique({ where: { id: args.drugId } });
@@ -8187,14 +8584,14 @@ async function administer(uow, actor, staff, args) {
     const waste = args.wasteQty ? dec(decimalText(args.wasteQty, "wasteQty")) : dec(0);
     const balance = await containerBalance(uow.tx, container.id);
     if (balance.lt(dec(qty2).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`);
-    if (drug.requiresWitnessOnAdminister || waste.gt(0)) {
-      if (!args.witnessId) throw new DomainError(Codes.INVALID_INPUT, "A second person must witness this controlled drug.", { field: "witnessId" });
-      if (args.witnessId === staff.id) throw new DomainError(Codes.GUARD_FAILED, "The witness must be someone else.");
-      witnessId = (await staffById(uow, args.witnessId)).id;
+    const scheduleII = drug.csSchedule === "CII" || drug.csSchedule === "CIIN";
+    if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id;
+    if ((drug.requiresWitnessOnAdminister || scheduleII || waste.gt(0)) && !witnessId) {
+      throw new DomainError(Codes.INVALID_INPUT, waste.gt(0) ? "Wasting a controlled drug needs a witness." : "A second person must witness this controlled drug.", { field: "witnessId" });
     }
-    const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "administer", qtySigned: dec(qty2).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: order.patientId, reason: order.ref }, uow.now);
+    const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "administer", qtySigned: dec(qty2).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: order.ref }, uow.now);
     csEntryId = entry.id;
-    if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: "waste", qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: order.patientId, reason: `Waste on ${order.ref}, witnessed` }, uow.now)).id;
+    if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: "waste", qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: `Waste on ${order.ref}` }, uow.now)).id;
     lotNumber = container.lotNumber;
     lotExpiresOn = container.lotExpiresOn;
   } else if (args.lotId) {
@@ -8237,6 +8634,63 @@ async function administer(uow, actor, staff, args) {
   auditCreate(uow, actor, "Administration", row.id, "order.administered", { orderRef: order.ref, qty: row.qty.toString(), unit: unit2, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber });
   return { id: row.id, qty: row.qty.toString(), unit: unit2, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId };
 }
+async function reverseAdministration(_root, args, context) {
+  return gated(context, { permissions: ["canOrder", "canAdminister"], tool: "order.reverse_administration", humanOnly: true }, args, async (actor) => {
+    const reason = text15(args.reason, "reason", 300);
+    if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
+    const result = await command(context.prisma, { name: "order.reverse_administration", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can reverse an administration.");
+      const original = await uow.tx.administration.findUnique({ where: { id: args.administrationId }, include: { csLogEntry: { select: { id: true, ref: true, qtySigned: true, unit: true, containerId: true } }, wasteLogEntry: { select: { ref: true } } } });
+      if (!original) throw new DomainError(Codes.NOT_FOUND, "Administration not found.");
+      if (original.reversesId) throw new DomainError(Codes.GUARD_FAILED, "That row is itself a reversal.");
+      const order = await lockRow(uow.tx, "ClinicalOrder", original.orderId);
+      if (await uow.tx.administration.count({ where: { reversesId: original.id } })) throw new DomainError(Codes.GUARD_FAILED, "This dose was already reversed.", { reason: "already_reversed" });
+      let contraId = null;
+      let witnessId = null;
+      if (original.csLogEntry) {
+        if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id;
+        await lockRow(uow.tx, "CsContainer", original.csLogEntry.containerId);
+        contraId = (await appendCsEntry(uow.tx, { containerId: original.csLogEntry.containerId, type: "adjust", qtySigned: dec(original.csLogEntry.qtySigned.toString()).neg(), unit: original.csLogEntry.unit ?? "mL", occurredAt: uow.now, actorId: staff.id, witnessId, patientId: original.patientId, reversesId: original.csLogEntry.id, reason: `Reversal of ${original.csLogEntry.ref} on ${order.ref}: ${reason}`.slice(0, 300) }, uow.now)).id;
+      }
+      const row = await uow.tx.administration.create({
+        data: {
+          orderId: original.orderId,
+          patientId: original.patientId,
+          encounterId: original.encounterId,
+          lotId: original.lotId,
+          lotNumber: original.lotNumber,
+          lotExpiresOn: original.lotExpiresOn,
+          csContainerId: original.csContainerId,
+          csLogEntryId: contraId,
+          qty: toScale(dec(original.qty.toString()).neg(), "qty"),
+          unit: original.unit,
+          route: original.route,
+          site: original.site,
+          givenById: staff.id,
+          witnessId,
+          givenAt: uow.now,
+          reversesId: original.id,
+          reason
+        }
+      });
+      const live = await uow.tx.administration.count({ where: { orderId: order.id, reversesId: null, from_Administration_reverses: { none: {} } } });
+      let orderStatus = order.status;
+      if (!live && ["ordered", "in_progress"].includes(order.status)) {
+        const t = await transition(uow, { model: "ClinicalOrder", id: order.id, from: ["ordered", "in_progress"], to: "reversed", expectedVersion: order.version, actor, eventType: "order.reversed", reason, data: { cancelReason: `Doses reversed: ${reason}`.slice(0, 300) } });
+        orderStatus = String(t.status);
+        const sheets = await uow.tx.treatmentSheetOrder.findMany({ where: { orderId: order.id, active: true }, select: { id: true } });
+        for (const s of sheets) {
+          await uow.tx.treatmentSheetOrder.update({ where: { id: s.id }, data: { active: false, endAt: uow.now, version: { increment: 1 } } });
+          await uow.tx.treatmentTask.updateMany({ where: { sheetOrderId: s.id, status: { in: ["scheduled", "due", "overdue"] } }, data: { status: "skipped", skipReason: `Order reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } });
+        }
+      }
+      auditCreate(uow, actor, "Administration", row.id, "order.administration_reversed", { reverses: original.id, orderRef: order.ref, qty: original.qty.toString(), contraCsLogEntryId: contraId, reason, orderStatus });
+      return { id: row.id, reverses: original.id, contraCsLogEntryId: contraId, orderStatus };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
 async function completeOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrder", "canAdminister"], tool: "order.complete", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "order.complete", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -8246,6 +8700,10 @@ async function completeOrder(_root, args, context) {
     });
     return { replay: result.replay, ...result.value };
   });
+}
+async function cageFree(uow, cage) {
+  const taken = await uow.tx.cageAssignment.findFirst({ where: { cageId: cage.id, toAt: null }, select: { stay: { select: { ref: true, patient: { select: { name: true } } } } } });
+  if (taken) throw new DomainError(Codes.GUARD_FAILED, `Cage ${cage.code} is occupied${taken.stay?.patient?.name ? ` by ${taken.stay.patient.name}` : ""} (${taken.stay?.ref ?? "another stay"}). Choose a free cage.`, { reason: "cage_occupied" });
 }
 async function admitPatient(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "stay.admit", humanOnly: true }, args, async (actor) => {
@@ -8258,6 +8716,7 @@ async function admitPatient(_root, args, context) {
       const cage = await uow.tx.cage.findUnique({ where: { id: args.cageId }, select: { id: true, code: true, active: true, ward: { select: { locationId: true } } } });
       if (!cage || !cage.active) throw new DomainError(Codes.NOT_FOUND, "Cage not found.");
       if (cage.ward?.locationId !== enc.locationId) throw new DomainError(Codes.GUARD_FAILED, "That cage is at another location.");
+      await cageFree(uow, cage);
       const live = await uow.tx.hospitalStay.findFirst({ where: { patientId: enc.patientId, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, select: { ref: true } });
       if (live) throw new DomainError(Codes.GUARD_FAILED, `The patient is already admitted (${live.ref}).`);
       const ref = await nextReference(uow.tx, "STAY", uow.now);
@@ -8283,6 +8742,7 @@ async function moveCage(_root, args, context) {
       await advisoryLock(uow.tx, `cage:${args.cageId}`);
       const cage = await uow.tx.cage.findUnique({ where: { id: args.cageId }, select: { id: true, code: true, active: true, ward: { select: { locationId: true } } } });
       if (!cage || !cage.active || cage.ward?.locationId !== stay.locationId) throw new DomainError(Codes.NOT_FOUND, "Cage not found at this location.");
+      await cageFree(uow, cage);
       await uow.tx.cageAssignment.updateMany({ where: { stayId: stay.id, toAt: null }, data: { toAt: uow.now } });
       await uow.tx.cageAssignment.create({ data: { stayId: stay.id, cageId: cage.id, fromAt: uow.now } });
       await uow.tx.hospitalStay.update({ where: { id: stay.id }, data: { cageId: cage.id, version: { increment: 1 } } });
@@ -8314,7 +8774,9 @@ async function dischargePatient(_root, args, context) {
   });
 }
 async function addSheetOrder(uow, input) {
-  if (!(input.frequency in FREQUENCY_HOURS)) throw new DomainError(Codes.INVALID_INPUT, "Unknown frequency.", { field: "frequency" });
+  const frequency = sheetFrequency(input.frequency);
+  if (!frequency) throw new DomainError(Codes.INVALID_INPUT, `"${input.frequency}" is not a treatment-sheet frequency: use q1h to q24h, SID, BID, TID, QID, PRN, CRI or once.`, { field: "frequency" });
+  input = { ...input, frequency };
   const stay = await uow.tx.hospitalStay.findUnique({ where: { id: input.stayId }, select: { id: true, status: true, patientId: true } });
   if (!stay || stay.patientId !== input.patientId) throw new DomainError(Codes.NOT_FOUND, "Hospital stay not found for this patient.");
   if (!["admitted", "in_care"].includes(stay.status)) throw new DomainError(Codes.GUARD_FAILED, `The stay is ${stay.status}.`);
@@ -8343,13 +8805,23 @@ async function completeTreatmentTask(_root, args, context) {
       const task = await lockRow(uow.tx, "TreatmentTask", args.taskId);
       if (task.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "This task changed since you loaded it.", { currentVersion: task.version });
       if (!["scheduled", "due", "overdue"].includes(task.status)) throw new DomainError(Codes.INVALID_TRANSITION, `This task is already ${task.status}.`);
-      const sheet = await uow.tx.treatmentSheetOrder.findUniqueOrThrow({ where: { id: task.sheetOrderId }, select: { order: { select: { id: true, kind: true, drugId: true } } } });
+      await lockRow(uow.tx, "TreatmentSheetOrder", task.sheetOrderId);
+      const sheet = await uow.tx.treatmentSheetOrder.findUniqueOrThrow({ where: { id: task.sheetOrderId }, select: { frequency: true, order: { select: { id: true, kind: true, drugId: true, locationId: true } } } });
+      const earlyReason = args.earlyReason?.trim() ?? "";
+      if (earlyReason && staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can give a scheduled dose early.", { field: "earlyReason" });
+      if (earlyReason && earlyReason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Say why the dose is given early.", { field: "earlyReason" });
+      const lastDone = await uow.tx.treatmentTask.findFirst({ where: { sheetOrderId: task.sheetOrderId, status: "done", id: { not: task.id } }, orderBy: { doneAt: "desc" }, select: { doneAt: true } });
+      const loc = sheet.order?.locationId ? await uow.tx.location.findUnique({ where: { id: sheet.order.locationId }, select: { timeZone: true } }) : null;
+      const problem = taskWindowProblem({ frequency: sheet.frequency, dueAt: task.dueAt, now: uow.now, lastDoneAt: lastDone?.doneAt ?? null, earlyOverride: Boolean(earlyReason), timeZone: loc?.timeZone });
+      if (problem) throw new DomainError(Codes.GUARD_FAILED, problem.message, { reason: problem.code });
       let administrationId = null;
       if (sheet.order?.kind === "medication" || sheet.order?.drugId) {
         administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id })).id;
       }
-      await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: "done", doneById: staff.id, doneAt: uow.now, administrationId, observation: args.observation ? { note: text15(args.observation, "observation", 2e3) } : void 0, version: { increment: 1 } } });
-      auditCreate(uow, actor, "TreatmentTask", task.id, "treatment.done", { administrationId });
+      const note = args.observation ? text15(args.observation, "observation", 2e3) : "";
+      const observation = note || earlyReason ? { ...note ? { note } : {}, ...earlyReason ? { earlyReason, earlyBy: staff.id } : {} } : void 0;
+      await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: "done", doneById: staff.id, doneAt: uow.now, administrationId, observation, version: { increment: 1 } } });
+      auditCreate(uow, actor, "TreatmentTask", task.id, "treatment.done", { administrationId, early: Boolean(earlyReason) }, { reason: earlyReason || null });
       return { id: task.id, status: "done", administrationId };
     });
     return { replay: result.replay, ...result.value };
@@ -8426,14 +8898,18 @@ async function openAnaesthesia(_root, args, context) {
 }
 var ANAESTHESIA_STEPS = {
   induce: { from: ["open"], to: "monitoring", field: "inductionAt" },
-  intubate: { from: ["monitoring"], to: "monitoring", field: "intubatedAt" },
-  extubate: { from: ["monitoring"], to: "recovery", field: "extubatedAt" }
+  intubate: { from: ["monitoring"], to: "monitoring", field: "intubatedAt", needs: "inductionAt" },
+  extubate: { from: ["monitoring"], to: "recovery", field: "extubatedAt", needs: "intubatedAt" }
 };
+var STEP_LABEL = { inductionAt: "Induction", intubatedAt: "Intubation", extubatedAt: "Extubation" };
 async function anaesthesiaEvent(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "anaesthesia.event", humanOnly: true }, args, async (actor) => {
     const step = ANAESTHESIA_STEPS[args.event];
     if (!step) throw new DomainError(Codes.INVALID_INPUT, "Unknown anaesthesia event.", { field: "event" });
     const result = await command(context.prisma, { name: "anaesthesia.event", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const rec = await lockRow(uow.tx, "AnaesthesiaRecord", args.recordId);
+      if (rec[step.field]) throw new DomainError(Codes.INVALID_TRANSITION, `${STEP_LABEL[step.field]} was already recorded on ${rec.ref}; times are never overwritten.`, { reason: "already_recorded" });
+      if (step.needs && !rec[step.needs]) throw new DomainError(Codes.INVALID_TRANSITION, `Record ${STEP_LABEL[step.needs].toLowerCase()} before ${STEP_LABEL[step.field].toLowerCase()}.`, { reason: "out_of_order" });
       const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: step.from, to: step.to, expectedVersion: args.expectedVersion, actor, eventType: `anaesthesia.${args.event}`, data: { [step.field]: uow.now } });
       return { id: row.id, status: row.status, version: row.version };
     });
@@ -8451,8 +8927,13 @@ async function recordMonitoring(_root, args, context) {
         throw new DomainError(Codes.INVALID_INPUT, `${f} is out of range.`, { field: f });
       })();
       const d = (v, f) => v === null || v === void 0 || v === "" ? null : decimalText(v, f);
+      const tempC = (v) => {
+        const t = d(v, "tempC");
+        if (t !== null && (dec(t).lt(25) || dec(t).gt(45))) throw new DomainError(Codes.INVALID_INPUT, `Temperature ${t} \xB0C is out of range (25\u201345 \xB0C). Was it entered in \xB0F?`, { field: "tempC" });
+        return t;
+      };
       const row = await uow.tx.monitoringReading.create({
-        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: d(args.tempC, "tempC"), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text15(args.notes ?? "", "notes", 500, false), byId: staff.id }
+        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text15(args.notes ?? "", "notes", 500, false), byId: staff.id }
       });
       auditCreate(uow, actor, "MonitoringReading", row.id, "anaesthesia.reading", { recordId: rec.id });
       return { id: row.id };
@@ -8515,7 +8996,10 @@ async function activeRulesFor(uow, productId, speciesId) {
   }).then((rows) => rows.map((r) => ({ ...r, leadDays: r.leadDays ?? 30, graceDays: r.graceDays ?? 30, lapseDays: r.lapseDays ?? 180 })));
 }
 async function satisfyAndSchedule(uow, input) {
-  const open = await uow.tx.patientReminder.findMany({ where: { patientId: input.patientId, typeId: input.typeId, status: { in: ["scheduled", "due", "overdue", "lapsed"] } }, select: { id: true, status: true } });
+  const nextDue = /* @__PURE__ */ new Date(`${input.nextDueOn}T00:00:00Z`);
+  const newer = await uow.tx.patientReminder.findFirst({ where: { patientId: input.patientId, typeId: input.typeId, status: { not: "suppressed" }, dueOn: { gt: nextDue } }, orderBy: { dueOn: "desc" }, select: { id: true, dueOn: true } });
+  if (newer) return { satisfied: 0, nextReminderId: newer.id, nextDueOn: day2(newer.dueOn), superseded: true };
+  const open = await uow.tx.patientReminder.findMany({ where: { patientId: input.patientId, typeId: input.typeId, status: { in: ["scheduled", "due", "overdue", "lapsed"] }, dueOn: { lte: nextDue } }, select: { id: true, status: true } });
   for (const r of open) {
     await uow.tx.reminderSatisfaction.create({ data: { reminderId: r.id, sourceKey: input.sourceKey, vaccineAdministrationId: input.vaccineAdministrationId ?? null, note: input.note ?? "", recordedById: input.staffId, at: uow.now } });
     await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: "satisfied", version: { increment: 1 } } });
@@ -8527,8 +9011,11 @@ async function satisfyAndSchedule(uow, input) {
     create: { patientId: input.patientId, locationId: input.locationId, typeId: input.typeId, ruleId: rule2?.id ?? null, protocolVersionId: rule2?.protocolVersionId ?? null, dueOn: /* @__PURE__ */ new Date(`${input.nextDueOn}T00:00:00Z`), status, source: input.vaccineAdministrationId ? "vaccine" : "manual", sourceKey: input.sourceKey },
     update: {}
   });
-  return { satisfied: open.length, nextReminderId: next.id, nextDueOn: input.nextDueOn };
+  return { satisfied: open.length, nextReminderId: next.id, nextDueOn: input.nextDueOn, superseded: false };
 }
+var liveDose = { source: { not: "reversal" }, from_VaccineAdministration_reverses: { none: {} } };
+var RABIES_BOOSTER_MIN_DAYS = 270;
+var VACCINE_REPEAT_MIN_DAYS = 14;
 async function administerVaccine(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "vaccine.administer", humanOnly: true }, args, async (actor) => {
     const site = text15(args.site, "site", 100);
@@ -8562,8 +9049,15 @@ async function administerVaccine(_root, args, context) {
       });
       if (problems.length) throw new DomainError(Codes.GUARD_FAILED, problems.join(" "), { problems });
       const licence = product.isRabies ? await requireLicence(uow.tx, { staffMemberId: (staff.kind === "dvm" ? staff : supervising).id, locationId: enc.locationId, action: "examine", at: uow.now }) : null;
-      const priorDoses = await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, productId: product.id } });
-      const priorRabies = product.isRabies ? await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, product: { isRabies: true } } }) : 0;
+      const recent = await uow.tx.vaccineAdministration.findFirst({ where: { patientId: patient.id, productId: product.id, ...liveDose, administeredOn: { gt: /* @__PURE__ */ new Date(`${addDays(on, -VACCINE_REPEAT_MIN_DAYS)}T00:00:00Z`) } }, orderBy: { administeredOn: "desc" }, select: { administeredOn: true } });
+      if (recent && day2(recent.administeredOn) === on) throw new DomainError(Codes.GUARD_FAILED, `${patient.name ?? "This patient"} already had ${product.name} today. Reverse that dose first if it was recorded by mistake.`, { reason: "repeat_same_day" });
+      const repeatReason = args.repeatReason?.trim() ?? "";
+      if (recent) {
+        if (staff.kind !== "dvm" && !(supervising && repeatReason)) throw new DomainError(Codes.GUARD_FAILED, `${product.name} was given on ${day2(recent.administeredOn)}; a repeat within ${VACCINE_REPEAT_MIN_DAYS} days needs a veterinarian and a reason.`, { reason: "repeat_too_soon" });
+        if (repeatReason.length < 8) throw new DomainError(Codes.INVALID_INPUT, `${product.name} was given on ${day2(recent.administeredOn)}; give the reason for repeating it (at least 8 characters).`, { field: "repeatReason", reason: "repeat_too_soon" });
+      }
+      const priorDoses = await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, productId: product.id, ...liveDose } });
+      const priorRabies = product.isRabies ? await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, product: { isRabies: true }, ...liveDose, administeredOn: { lte: /* @__PURE__ */ new Date(`${addDays(on, -RABIES_BOOSTER_MIN_DAYS)}T00:00:00Z`) } } }) : 0;
       const rules2 = await activeRulesFor(uow, product.id, patient.speciesId ?? null);
       const rule2 = rules2[0] ?? null;
       const series = inInitialSeries(rule2?.schedule, day2(patient.dateOfBirth), on);
@@ -8598,7 +9092,7 @@ async function administerVaccine(_root, args, context) {
       const typeId = rule2?.satisfiesId ?? product.reminderTypeId;
       if (typeId) reminder = await satisfyAndSchedule(uow, { patientId: patient.id, locationId: enc.locationId, typeId, sourceKey: `VA:${va.id}`, nextDueOn: dueNextOn, rule: rule2, vaccineAdministrationId: va.id, staffId: staff.id, on });
       await markInProgress(uow, enc);
-      auditCreate(uow, actor, "VaccineAdministration", va.id, "vaccine.administered", { product: product.name, lotNumber: lot.lotNumber, dueNextOn, durationReason: duration.reason, certificate: certificate?.ref ?? null, reminder });
+      auditCreate(uow, actor, "VaccineAdministration", va.id, "vaccine.administered", { product: product.name, lotNumber: lot.lotNumber, dueNextOn, durationReason: duration.reason, certificate: certificate?.ref ?? null, reminder, repeatReason: recent ? repeatReason : null });
       return { id: va.id, dueNextOn, durationMonths: duration.months, durationReason: duration.reason, certificate, reminder, verified: rabiesPack?.verified ?? true };
     });
     return { replay: result.replay, ...result.value };
@@ -8623,7 +9117,7 @@ async function issueRabiesCertificate(uow, input) {
   const location = await uow.tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { name: true, addressLine1: true, city: true, stateCode: true, phone: true } });
   const snapshot = {
     owner_name_address: owner ? `${owner.displayName}, ${[owner.addressLine1, owner.city, owner.stateCode, owner.postalCode].filter(Boolean).join(", ")}` : null,
-    animal_name_species_breed_sex_age_colour: [patient.name, patient.species?.name, patient.breed?.name ?? "mixed", `${patient.sex} ${patient.reproductiveStatus ?? ""}`.trim(), patient.dateOfBirth ? `born ${day2(patient.dateOfBirth)}` : null, patient.colourMarkings || null].every(Boolean) ? [patient.name, patient.species?.name, patient.breed?.name ?? "mixed", `${patient.sex} ${patient.reproductiveStatus ?? ""}`.trim(), `born ${day2(patient.dateOfBirth)}`, patient.colourMarkings].join(", ") : null,
+    animal_name_species_breed_sex_age_colour: [patient.name, patient.species?.name, patient.breed?.name ?? "mixed", `${patient.sex} ${patient.reproductiveStatus ?? ""}`.trim(), patient.dateOfBirth ? `born ${day2(patient.dateOfBirth)}` : null, patient.colourMarkings || null].every(Boolean) ? [patient.name, patient.species?.name, patient.breed?.name ?? "mixed", `${patient.sex} ${patient.reproductiveStatus ?? ""}`.trim(), `born ${calendarDayText(day2(patient.dateOfBirth))}`, patient.colourMarkings].join(", ") : null,
     microchip: patient.microchips[0]?.number ?? "none recorded",
     vaccine_manufacturer_product_lot: `${input.product.manufacturer}, ${input.product.name}${input.product.usdaProductCode ? ` (USDA ${input.product.usdaProductCode})` : ""}, lot ${input.lotNumber}`,
     date_given: input.on,
@@ -8672,11 +9166,45 @@ async function recordOutsideVaccine(_root, args, context) {
       const rules2 = await activeRulesFor(uow, product.id, patient.speciesId ?? null);
       const rule2 = rules2[0] ?? null;
       const nextDueOn = dueDate(args.administeredOn, { months: product.licensedDoiMonths, weeks: 0 });
+      const latest = await uow.tx.vaccineAdministration.findFirst({ where: { patientId: patient.id, ...product.reminderTypeId ? { product: { reminderTypeId: product.reminderTypeId } } : { productId: product.id }, ...liveDose, administeredOn: { gte: /* @__PURE__ */ new Date(`${args.administeredOn}T00:00:00Z`) } }, orderBy: { administeredOn: "desc" }, select: { administeredOn: true } });
       const typeId = rule2?.satisfiesId ?? product.reminderTypeId;
       if (!typeId) throw new DomainError(Codes.GUARD_FAILED, `${product.name} has no reminder type to satisfy.`);
-      const r = await satisfyAndSchedule(uow, { patientId: patient.id, locationId, typeId, sourceKey: `OUT:${patient.id}:${product.id}:${args.administeredOn}`, nextDueOn, rule: rule2, staffId: staff.id, note: `Given elsewhere on ${args.administeredOn}${args.lotNumber ? `, lot ${args.lotNumber}` : ""}. ${note}`, on });
-      uow.audit({ eventType: "vaccine.outside_recorded", entityType: "Patient", entityId: patient.id, actorUserId: actorUserId(actor), after: { product: product.name, administeredOn: args.administeredOn, nextDueOn } });
+      const evidence = `Given elsewhere on ${args.administeredOn}${args.lotNumber ? `, lot ${args.lotNumber}` : ""}. ${note}`;
+      const r = latest ? { satisfied: 0, nextReminderId: null, nextDueOn: null, superseded: true, newerDoseOn: day2(latest.administeredOn) } : await satisfyAndSchedule(uow, { patientId: patient.id, locationId, typeId, sourceKey: `OUT:${patient.id}:${product.id}:${args.administeredOn}`, nextDueOn, rule: rule2, staffId: staff.id, note: evidence, on });
+      uow.audit({ eventType: "vaccine.outside_recorded", entityType: "Patient", entityId: patient.id, actorUserId: actorUserId(actor), after: { product: product.name, administeredOn: args.administeredOn, nextDueOn, evidence, superseded: r.superseded } });
       return r;
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reverseVaccineAdministration(_root, args, context) {
+  return gated(context, { permissions: ["canWriteRecord", "canOrder"], tool: "vaccine.reverse", humanOnly: true }, args, async (actor) => {
+    const reason = text15(args.reason, "reason", 300);
+    if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
+    const result = await command(context.prisma, { name: "vaccine.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can reverse a vaccine.");
+      await advisoryLock(uow.tx, `vaccine-reverse:${args.vaccineAdministrationId}`);
+      const va = await uow.tx.vaccineAdministration.findUnique({ where: { id: args.vaccineAdministrationId }, include: { product: { select: { name: true } }, certificate: { select: { id: true, ref: true } } } });
+      if (!va) throw new DomainError(Codes.NOT_FOUND, "Vaccine administration not found.");
+      if (va.source === "reversal") throw new DomainError(Codes.GUARD_FAILED, "That row is itself a reversal.");
+      if (await uow.tx.vaccineAdministration.count({ where: { reversesId: va.id } })) throw new DomainError(Codes.GUARD_FAILED, `This ${va.product?.name ?? "vaccine"} dose was already reversed.`, { reason: "already_reversed" });
+      const { id: _id, createdAt: _c, product: _p, certificate: _cert, certificateId: _ci, administrationId: _a, reason: _r, reversesId: _rv, ...copy } = va;
+      const row = await uow.tx.vaccineAdministration.create({ data: { ...copy, policyVersions: va.policyVersions ?? [], source: "reversal", reversesId: va.id, reason, vaccinatedById: staff.id } });
+      if (va.certificate) await uow.tx.rabiesCertificate.update({ where: { id: va.certificate.id }, data: { voidedAt: uow.now, voidReason: reason } });
+      const scheduled = await uow.tx.patientReminder.updateMany({ where: { sourceKey: `VA:${va.id}`, status: { not: "suppressed" } }, data: { status: "suppressed", suppressedReason: `Vaccine reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } });
+      const satisfied = await uow.tx.reminderSatisfaction.findMany({ where: { OR: [{ vaccineAdministrationId: va.id }, { sourceKey: `VA:${va.id}` }] }, select: { reminderId: true } });
+      let reopened = 0;
+      for (const s of satisfied) {
+        const r = await uow.tx.patientReminder.findUnique({ where: { id: s.reminderId }, select: { id: true, status: true, dueOn: true, sourceKey: true, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } } } });
+        if (!r || r.status !== "satisfied" || r.sourceKey === `VA:${va.id}`) continue;
+        const { on } = await locationDay2(uow, (await uow.tx.patientReminder.findUnique({ where: { id: r.id }, select: { locationId: true } })).locationId, uow.now);
+        const status = reminderStatusOn({ dueOn: day2(r.dueOn), status: "scheduled" }, { leadDays: r.rule?.leadDays ?? 30, graceDays: r.rule?.graceDays ?? 30, lapseDays: r.rule?.lapseDays ?? 180 }, on);
+        await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status, version: { increment: 1 } } });
+        reopened++;
+      }
+      auditCreate(uow, actor, "VaccineAdministration", row.id, "vaccine.reversed", { reverses: va.id, product: va.product?.name ?? null, certificate: va.certificate?.ref ?? null, reason, remindersSuppressed: scheduled.count, remindersReopened: reopened });
+      return { id: row.id, reverses: va.id, certificateVoided: va.certificate?.ref ?? null, remindersSuppressed: scheduled.count, remindersReopened: reopened };
     });
     return { replay: result.replay, ...result.value };
   });
@@ -8833,34 +9361,48 @@ function parseExport(system, entity, csv, explicit = {}) {
 function importDate(value) {
   const v = value.trim();
   if (!v) return null;
+  const real = (iso) => {
+    const d = /* @__PURE__ */ new Date(`${iso}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null;
+  };
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return real(`${m[1]}-${m[2]}-${m[3]}`);
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(v);
   if (m) {
     const year = m[3].length === 2 ? (Number(m[3]) > 50 ? 1900 : 2e3) + Number(m[3]) : Number(m[3]);
-    const iso = `${year}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
-    const d = /* @__PURE__ */ new Date(`${iso}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null;
+    return real(`${year}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`);
   }
   return null;
 }
 var SPECIES_ALIASES = {
-  canine: "dog",
-  dog: "dog",
-  k9: "dog",
-  feline: "cat",
-  cat: "cat",
-  equine: "horse",
-  horse: "horse",
+  canine: "canine",
+  dog: "canine",
+  k9: "canine",
+  "k-9": "canine",
+  puppy: "canine",
+  feline: "feline",
+  cat: "feline",
+  kitten: "feline",
   rabbit: "rabbit",
   lagomorph: "rabbit",
-  avian: "bird",
-  bird: "bird",
+  bunny: "rabbit",
   ferret: "ferret",
-  reptile: "reptile",
-  "pocket pet": "small_mammal",
-  rodent: "small_mammal"
+  mustelid: "ferret",
+  "bearded dragon": "bearded_dragon",
+  "pogona vitticeps": "bearded_dragon",
+  cockatiel: "cockatiel",
+  equine: "equine",
+  horse: "equine"
 };
+function importSpeciesCode(value, species) {
+  const v = norm(value);
+  if (!v) return null;
+  const codes = new Set(species.map((s) => s.code));
+  const alias = SPECIES_ALIASES[v];
+  if (alias && codes.has(alias)) return alias;
+  const hit = species.find((s) => s.code.toLowerCase() === v || s.code.toLowerCase().replace(/_/g, " ") === v || norm(s.name) === v);
+  return hit?.code ?? null;
+}
 function importSex(value) {
   const v = norm(value);
   const map = {
@@ -8961,7 +9503,8 @@ function rowKey(entity, row) {
   }
 }
 var RECORD_TYPE = { clients: "Client", patients: "Patient", weights: "WeightMeasurement", vaccinations: "PatientReminder", reminders: "PatientReminder", consults: "Encounter" };
-function validateRow(entity, row) {
+var speciesList = (tx) => tx.species.findMany({ select: { code: true, name: true } });
+function validateRow(entity, row, species) {
   const errors = [];
   const need = (f, label) => {
     if (!row[f]?.trim()) errors.push(`${label} is empty.`);
@@ -8976,7 +9519,7 @@ function validateRow(entity, row) {
     need("externalId", "Patient id");
     need("clientExternalId", "Client id");
     need("name", "Name");
-    if (!SPECIES_ALIASES[(row.species ?? "").trim().toLowerCase()]) errors.push(`Unknown species "${row.species}".`);
+    if (!importSpeciesCode(row.species ?? "", species)) errors.push(`Species "${row.species ?? ""}" is not set up here (${species.map((s) => s.name).join(", ") || "no species yet"}).`);
     if (row.dateOfBirth && !importDate(row.dateOfBirth)) errors.push(`Date of birth "${row.dateOfBirth}" is not a date.`);
   }
   if (entity === "weights") {
@@ -9012,10 +9555,11 @@ async function previewImport(_root, args, context) {
     }
     if (parsed.missingRequired.length) throw new DomainError(Codes.INVALID_INPUT, `The file has no column for: ${parsed.missingRequired.join(", ")}. Map those columns and try again.`, { field: "mapping", problems: parsed.missingRequired });
     if (parsed.rows.length > MAX_ROWS) throw new DomainError(Codes.INVALID_INPUT, `Split the file: at most ${MAX_ROWS} rows per batch.`);
+    const species = await speciesList(context.prisma);
     const fileHash = (0, import_node_crypto8.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
     const seen = /* @__PURE__ */ new Set();
     const results = parsed.rows.map((r) => {
-      const errors = validateRow(args.entity, r.values);
+      const errors = validateRow(args.entity, r.values, species);
       const key2 = rowKey(args.entity, r.values);
       if (key2 && seen.has(key2)) errors.push("Duplicate of an earlier row in this file.");
       seen.add(key2);
@@ -9045,7 +9589,8 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
   const sys2 = `${batch.system}:${batch.entity}`;
   const key2 = rowKey(batch.entity, row);
   const base = { rowNumber, externalId: key2, errors: [] };
-  const errors = validateRow(batch.entity, row);
+  const species = await speciesList(uow.tx);
+  const errors = validateRow(batch.entity, row, species);
   if (errors.length) return { ...base, result: "failed", errors };
   const existing = await findMapped(uow, sys2, RECORD_TYPE[batch.entity], key2);
   if (existing) return { ...base, result: "skipped_existing", recordType: RECORD_TYPE[batch.entity], recordId: existing.recordId };
@@ -9091,9 +9636,10 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
     case "patients": {
       const owner = await findMapped(uow, `${batch.system}:clients`, "Client", row.clientExternalId);
       if (!owner) return { ...base, result: "failed", errors: [`Client ${row.clientExternalId} has not been imported yet; import clients first.`] };
-      const species = await uow.tx.species.findUnique({ where: { code: SPECIES_ALIASES[row.species.trim().toLowerCase()] }, select: { id: true } });
-      if (!species) return { ...base, result: "failed", errors: [`Species "${row.species}" is not set up.`] };
-      const breed = row.breed ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: row.breed.trim(), mode: "insensitive" } }, select: { id: true } }) : null;
+      const code = importSpeciesCode(row.species, species);
+      const speciesRow = code ? await uow.tx.species.findUnique({ where: { code }, select: { id: true } }) : null;
+      if (!speciesRow) return { ...base, result: "failed", errors: [`Species "${row.species}" is not set up.`] };
+      const breed = row.breed ? await uow.tx.breed.findFirst({ where: { speciesId: speciesRow.id, name: { equals: row.breed.trim(), mode: "insensitive" } }, select: { id: true } }) : null;
       const { sex, reproductiveStatus } = importSex(row.sex ?? "");
       const dob = row.dateOfBirth ? importDate(row.dateOfBirth) : null;
       const deceased = row.deceased ? truthy(row.deceased) : false;
@@ -9104,7 +9650,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
         if (clash) return { ...base, result: "failed", errors: [`Microchip ${chip} is already on ${clash.patient?.ref ?? "another patient"}.`] };
       }
       const ref = await nextSerial(uow.tx, "P");
-      const patient = await uow.tx.patient.create({ data: { ref, name: row.name.trim(), kind: "individual", speciesId: species.id, breedId: breed?.id ?? null, sex, reproductiveStatus, dateOfBirth: dob ? /* @__PURE__ */ new Date(`${dob}T00:00:00Z`) : null, dobEstimated: false, status: deceased ? "deceased" : "active", deceasedAt: deceased ? uow.now : null, codeStatus: "unspecified" } });
+      const patient = await uow.tx.patient.create({ data: { ref, name: row.name.trim(), kind: "individual", speciesId: speciesRow.id, breedId: breed?.id ?? null, sex, reproductiveStatus, dateOfBirth: dob ? /* @__PURE__ */ new Date(`${dob}T00:00:00Z`) : null, dobEstimated: false, status: deceased ? "deceased" : "active", deceasedAt: deceased ? uow.now : null, codeStatus: "unspecified" } });
       await uow.tx.patientOwnership.create({ data: { patientId: patient.id, clientId: owner.recordId, role: "primary", effectiveFrom: uow.now, basis: "import", recordedById: actorUserId(actor) } });
       if (chip) await uow.tx.microchip.create({ data: { patientId: patient.id, number: chip, standard: microchipStandard(chip), active: true } });
       await mapExternal(uow, sys2, "Patient", patient.id, key2);
@@ -9196,7 +9742,7 @@ async function applyImport(_root, args, context) {
           }));
           results.push(r);
         } catch (error) {
-          const message = error instanceof DomainError ? error.message : error.message?.split("\n").pop()?.slice(0, 240) ?? "Failed.";
+          const message = error instanceof DomainError ? error.message : invariantError(error)?.message ?? "The row could not be saved.";
           await prisma.importRow.create({ data: { batchId: batch.id, rowNumber, externalId: rowKey(batch.entity, values) || `row-${rowNumber}`, result: "failed", errors: [message] } });
           results.push({ rowNumber, externalId: "", result: "failed", errors: [message] });
         }
@@ -9283,12 +9829,13 @@ function extendGraphqlSchema(baseSchema) {
         rejectScribeDraft(draftId: ID!, reason: String!, idempotencyKey: String!): JSON
         placeOrder(encounterId: ID!, kind: String!, description: String, drugId: ID, route: String, frequency: String, quantity: String, quantityUnit: String, dose: JSON, extralabel: Boolean, sheet: JSON, idempotencyKey: String!): JSON
         cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        reverseAdministration(administrationId: ID!, reason: String!, witnessId: ID, idempotencyKey: String!): JSON
         completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
         admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
         moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
         dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
-        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, idempotencyKey: String!): JSON
+        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, idempotencyKey: String!): JSON
         skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
         openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON
@@ -9297,7 +9844,8 @@ function extendGraphqlSchema(baseSchema) {
         closeAnaesthesia(recordId: ID!, expectedVersion: Int!, complications: String, idempotencyKey: String!): JSON
         saveSurgeryReport(encounterId: ID!, procedure: String!, technique: String, findings: String, closure: String, sutures: String, specimens: String, assistantId: ID, idempotencyKey: String!): JSON
         saveDentalChart(encounterId: ID!, teeth: JSON!, idempotencyKey: String!): JSON
-        administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, idempotencyKey: String!): JSON
+        administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
+        reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
         recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
         suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
@@ -9368,6 +9916,7 @@ function extendGraphqlSchema(baseSchema) {
         rejectScribeDraft: op(rejectScribeDraft),
         placeOrder: op(placeOrder),
         cancelOrder: op(cancelOrder),
+        reverseAdministration: op(reverseAdministration),
         completeOrder: op(completeOrder),
         recordAdministration: op(recordAdministration),
         admitPatient: op(admitPatient),
@@ -9383,6 +9932,7 @@ function extendGraphqlSchema(baseSchema) {
         saveSurgeryReport: op(saveSurgeryReport),
         saveDentalChart: op(saveDentalChart),
         administerVaccine: op(administerVaccine),
+        reverseVaccineAdministration: op(reverseVaccineAdministration),
         recordOutsideVaccine: op(recordOutsideVaccine),
         suppressReminder: op(suppressReminder),
         addManualReminder: op(addManualReminder),

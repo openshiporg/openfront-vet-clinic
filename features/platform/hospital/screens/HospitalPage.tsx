@@ -37,12 +37,13 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
   const from = new Date(now.getTime() - 2 * 3_600_000);
   const to = new Date(now.getTime() + 24 * 3_600_000);
   const [data, tz] = await Promise.all([
-    q<{ wards: { id: string; name: string; kind: string; cages: { id: string; code: string; size: string }[] }[]; hospitalStays: Stay[]; staffMembers: { id: string; displayName: string }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null }[]; encounters: { id: string; ref: string; patient: { name: string } | null }[] }>(`
+    q<{ wards: { id: string; name: string; kind: string; cages: { id: string; code: string; size: string }[] }[]; hospitalStays: Stay[]; witnesses: { id: string; displayName: string }[]; staffMembers: { id: string; displayName: string }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null }[]; encounters: { id: string; ref: string; patient: { name: string } | null }[] }>(`
       query H($loc: ID!) {
         wards(where: { location: { id: { equals: $loc } } }, orderBy: { name: asc }) { id name kind cages(where: { active: { equals: true } }, orderBy: { code: asc }) { id code size } }
         hospitalStays(where: { location: { id: { equals: $loc } }, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, orderBy: { admittedAt: asc }) {
           id ref status codeStatus reason admittedAt version patient { id name species { name } alerts(where: { active: { equals: true } }) { severity text } }
           cage { id code ward { name } } attendingDvm { displayName } encounter { id ref } }
+        witnesses: staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt"] } }, orderBy: { displayName: asc }) { id displayName }
         staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt", "assistant"] } }, orderBy: { displayName: asc }) { id displayName }
         inventoryLots(where: { status: { equals: "available" }, location: { id: { equals: $loc } }, NOT: { drug: null } }, orderBy: { expiresOn: asc }) { id lotNumber expiresOn drug { id } }
         csContainers(where: { status: { equals: "open" }, location: { id: { equals: $loc } } }, orderBy: { ref: asc }) { id ref product { id } }
@@ -146,10 +147,11 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
                     ...(drug && !cs ? [{ name: 'lotId', label: 'Lot', width: 'lg' as const, options: data.inventoryLots.filter(l => l.drug?.id === drug.id && l.expiresOn.slice(0, 10) >= now.toISOString().slice(0, 10)).map(l => ({ value: l.id, label: `${l.lotNumber} · expires ${calendarDay(l.expiresOn)}` })) }] : []),
                     ...(cs ? [
                       { name: 'csContainerId', label: 'Controlled container', width: 'lg' as const, options: data.csContainers.filter(c => c.product?.id === drug!.id).map(c => ({ value: c.id, label: c.ref })) },
-                      { name: 'witnessId', label: 'Witness', width: 'lg' as const, options: [{ value: '', label: 'No witness' }, ...data.staffMembers.map(s => ({ value: s.id, label: s.displayName }))] },
+                      { name: 'witnessId', label: 'Witness', width: 'lg' as const, options: [{ value: '', label: 'No witness' }, ...data.witnesses.map(s => ({ value: s.id, label: s.displayName }))] },
                       { name: 'wasteQty', label: 'Wasted (mL)', width: 'sm' as const },
                     ] : []),
                     { name: 'observation', label: 'Observation', width: 'lg' as const, placeholder: 'Ate half, BAR' },
+                    ...(Date.parse(t.dueAt) > now.getTime() ? [{ name: 'earlyReason', label: 'Reason if early (veterinarian)', width: 'lg' as const }] : []),
                   ]} />
                 <ActionButton op="skipTreatmentTask" vars={{ taskId: t.id, expectedVersion: t.version }} paths={[path]} ask="Why is this treatment skipped?">Skip</ActionButton>
               </div>

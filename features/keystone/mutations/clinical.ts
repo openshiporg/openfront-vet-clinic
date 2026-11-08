@@ -37,6 +37,20 @@ export async function staffById(uow: UnitOfWork, id: string): Promise<StaffRow> 
   return staff
 }
 
+/**
+ * A controlled-substance witness (B2): an active staff member, not the person giving the dose, whose
+ * role holds canWitnessControlled (a veterinarian or credentialed technician) and whose access has
+ * not expired. Front-desk or kennel staff can never witness.
+ */
+export async function witnessFor(uow: UnitOfWork, witnessId: string, administratorId: string): Promise<StaffRow> {
+  if (witnessId === administratorId) throw new DomainError(Codes.GUARD_FAILED, 'The witness must be someone other than the person giving the dose.', { field: 'witnessId' })
+  const staff = await uow.tx.staffMember.findUnique({ where: { id: witnessId }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true, user: { select: { accessExpiresAt: true, role: { select: { canWitnessControlled: true } } } } } })
+  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, 'Witness not found.', { field: 'witnessId' })
+  const expired = staff.user?.accessExpiresAt && staff.user.accessExpiresAt <= uow.now
+  if (!staff.user?.role?.canWitnessControlled || expired) throw new DomainError(Codes.NOT_AUTHORIZED, `${staff.displayName} is not authorised to witness controlled drugs. Ask a veterinarian or a credentialed technician.`, { field: 'witnessId' })
+  return { id: staff.id, kind: staff.kind, displayName: staff.displayName, homeLocationId: staff.homeLocationId }
+}
+
 export async function activePatient(uow: UnitOfWork, patientId: string) {
   const patient = await uow.tx.patient.findUnique({
     where: { id: patientId },

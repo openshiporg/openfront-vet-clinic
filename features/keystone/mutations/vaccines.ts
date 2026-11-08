@@ -1,5 +1,6 @@
 import { command } from '../lib/command'
 import { auditCreate, transition } from '../lib/cas'
+import { advisoryLock } from '../lib/db'
 import { actorUserId } from '../lib/actor'
 import { DomainError, Codes } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
@@ -31,7 +32,12 @@ async function activeRulesFor(uow: UnitOfWork, productId: string, speciesId: str
 
 /** Satisfy open reminders of `typeId` and schedule the next one; idempotent on sourceKey. */
 async function satisfyAndSchedule(uow: UnitOfWork, input: { patientId: string; locationId: string; typeId: string; sourceKey: string; nextDueOn: string; rule: RuleRow | null; vaccineAdministrationId?: string | null; staffId: string | null; note?: string; on: string }) {
-  const open = await uow.tx.patientReminder.findMany({ where: { patientId: input.patientId, typeId: input.typeId, status: { in: ['scheduled', 'due', 'overdue', 'lapsed'] } }, select: { id: true, status: true } })
+  const nextDue = new Date(`${input.nextDueOn}T00:00:00Z`)
+  // M4: older evidence (an outside record, a back-dated entry) never satisfies a reminder that a newer
+  // dose already pushed past it, and never schedules an earlier due date over the newer one.
+  const newer = await uow.tx.patientReminder.findFirst({ where: { patientId: input.patientId, typeId: input.typeId, status: { not: 'suppressed' }, dueOn: { gt: nextDue } }, orderBy: { dueOn: 'desc' }, select: { id: true, dueOn: true } })
+  if (newer) return { satisfied: 0, nextReminderId: newer.id, nextDueOn: day(newer.dueOn)!, superseded: true }
+  const open = await uow.tx.patientReminder.findMany({ where: { patientId: input.patientId, typeId: input.typeId, status: { in: ['scheduled', 'due', 'overdue', 'lapsed'] }, dueOn: { lte: nextDue } }, select: { id: true, status: true } })
   for (const r of open) {
     await uow.tx.reminderSatisfaction.create({ data: { reminderId: r.id, sourceKey: input.sourceKey, vaccineAdministrationId: input.vaccineAdministrationId ?? null, note: input.note ?? '', recordedById: input.staffId, at: uow.now } })
     await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: 'satisfied', version: { increment: 1 } } })
@@ -43,10 +49,17 @@ async function satisfyAndSchedule(uow: UnitOfWork, input: { patientId: string; l
     create: { patientId: input.patientId, locationId: input.locationId, typeId: input.typeId, ruleId: rule?.id ?? null, protocolVersionId: rule?.protocolVersionId ?? null, dueOn: new Date(`${input.nextDueOn}T00:00:00Z`), status, source: input.vaccineAdministrationId ? 'vaccine' : 'manual', sourceKey: input.sourceKey },
     update: {},
   })
-  return { satisfied: open.length, nextReminderId: next.id, nextDueOn: input.nextDueOn }
+  return { satisfied: open.length, nextReminderId: next.id, nextDueOn: input.nextDueOn, superseded: false }
 }
 
-export async function administerVaccine(_root: unknown, args: { encounterId: string; productId: string; lotId: string; route?: string | null; site: string; supervisingDvmId?: string | null; tagNumber?: string | null; idempotencyKey: string }, context: Ctx) {
+/** Doses that count: not a reversal row and not reversed since (M5). */
+const liveDose = { source: { not: 'reversal' }, from_VaccineAdministration_reverses: { none: {} } } as const
+/** A prior rabies dose counts toward the booster duration only when it is at least this old (the compendium's 9–12 month booster window, M3). */
+export const RABIES_BOOSTER_MIN_DAYS = 270
+/** A second dose of the same product this soon is a likely duplicate; a veterinarian may override with a reason (except on the same day). */
+export const VACCINE_REPEAT_MIN_DAYS = 14
+
+export async function administerVaccine(_root: unknown, args: { encounterId: string; productId: string; lotId: string; route?: string | null; site: string; supervisingDvmId?: string | null; tagNumber?: string | null; repeatReason?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canAdminister'], tool: 'vaccine.administer', humanOnly: true }, args, async actor => {
     const site = text(args.site, 'site', 100)
     const result = await command(context.prisma, { name: 'vaccine.administer', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
@@ -74,8 +87,17 @@ export async function administerVaccine(_root: unknown, args: { encounterId: str
       if (problems.length) throw new DomainError(Codes.GUARD_FAILED, problems.join(' '), { problems })
       const licence = product.isRabies ? await requireLicence(uow.tx, { staffMemberId: (staff.kind === 'dvm' ? staff : supervising!).id, locationId: enc.locationId!, action: 'examine', at: uow.now }) : null
 
-      const priorDoses = await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, productId: product.id } })
-      const priorRabies = product.isRabies ? await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, product: { isRabies: true } } }) : 0
+      // M3: a repeat of the same product the same day is refused; within VACCINE_REPEAT_MIN_DAYS it needs a vet's reason.
+      const recent = await uow.tx.vaccineAdministration.findFirst({ where: { patientId: patient.id, productId: product.id, ...liveDose, administeredOn: { gt: new Date(`${addDays(on, -VACCINE_REPEAT_MIN_DAYS)}T00:00:00Z`) } }, orderBy: { administeredOn: 'desc' }, select: { administeredOn: true } })
+      if (recent && day(recent.administeredOn) === on) throw new DomainError(Codes.GUARD_FAILED, `${patient.name ?? 'This patient'} already had ${product.name} today. Reverse that dose first if it was recorded by mistake.`, { reason: 'repeat_same_day' })
+      const repeatReason = args.repeatReason?.trim() ?? ''
+      if (recent) {
+        if (staff.kind !== 'dvm' && !(supervising && repeatReason)) throw new DomainError(Codes.GUARD_FAILED, `${product.name} was given on ${day(recent.administeredOn)}; a repeat within ${VACCINE_REPEAT_MIN_DAYS} days needs a veterinarian and a reason.`, { reason: 'repeat_too_soon' })
+        if (repeatReason.length < 8) throw new DomainError(Codes.INVALID_INPUT, `${product.name} was given on ${day(recent.administeredOn)}; give the reason for repeating it (at least 8 characters).`, { field: 'repeatReason', reason: 'repeat_too_soon' })
+      }
+      const priorDoses = await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, productId: product.id, ...liveDose } })
+      // Only a dose old enough to be a booster interval counts toward the longer duration (never one from the same visit).
+      const priorRabies = product.isRabies ? await uow.tx.vaccineAdministration.count({ where: { patientId: patient.id, product: { isRabies: true }, ...liveDose, administeredOn: { lte: new Date(`${addDays(on, -RABIES_BOOSTER_MIN_DAYS)}T00:00:00Z`) } } }) : 0
       const rules = await activeRulesFor(uow, product.id, patient.speciesId ?? null)
       const rule = rules[0] ?? null
       const series = inInitialSeries(rule?.schedule as never, day(patient.dateOfBirth), on)
@@ -96,7 +118,7 @@ export async function administerVaccine(_root: unknown, args: { encounterId: str
       const typeId = rule?.satisfiesId ?? product.reminderTypeId
       if (typeId) reminder = await satisfyAndSchedule(uow, { patientId: patient.id, locationId: enc.locationId!, typeId, sourceKey: `VA:${va.id}`, nextDueOn: dueNextOn, rule, vaccineAdministrationId: va.id, staffId: staff.id, on })
       await markInProgress(uow, enc)
-      auditCreate(uow, actor, 'VaccineAdministration', va.id, 'vaccine.administered', { product: product.name, lotNumber: lot!.lotNumber, dueNextOn, durationReason: duration.reason, certificate: certificate?.ref ?? null, reminder })
+      auditCreate(uow, actor, 'VaccineAdministration', va.id, 'vaccine.administered', { product: product.name, lotNumber: lot!.lotNumber, dueNextOn, durationReason: duration.reason, certificate: certificate?.ref ?? null, reminder, repeatReason: recent ? repeatReason : null })
       return { id: va.id, dueNextOn, durationMonths: duration.months, durationReason: duration.reason, certificate, reminder, verified: rabiesPack?.verified ?? true }
     })
     return { replay: result.replay, ...result.value }
@@ -157,11 +179,54 @@ export async function recordOutsideVaccine(_root: unknown, args: { patientId: st
       // A rabies dose from elsewhere is honoured for the reminder at the label duration only; the
       // certificate is the other clinic's to issue (verify local acceptance rules per county).
       const nextDueOn = dueDate(args.administeredOn, { months: product.licensedDoiMonths, weeks: 0 })
+      // M4: evidence older than a dose already on file is kept as history only; it never moves the reminder.
+      const latest = await uow.tx.vaccineAdministration.findFirst({ where: { patientId: patient.id, ...(product.reminderTypeId ? { product: { reminderTypeId: product.reminderTypeId } } : { productId: product.id }), ...liveDose, administeredOn: { gte: new Date(`${args.administeredOn}T00:00:00Z`) } }, orderBy: { administeredOn: 'desc' }, select: { administeredOn: true } })
       const typeId = rule?.satisfiesId ?? product.reminderTypeId
       if (!typeId) throw new DomainError(Codes.GUARD_FAILED, `${product.name} has no reminder type to satisfy.`)
-      const r = await satisfyAndSchedule(uow, { patientId: patient.id, locationId, typeId, sourceKey: `OUT:${patient.id}:${product.id}:${args.administeredOn}`, nextDueOn, rule, staffId: staff.id, note: `Given elsewhere on ${args.administeredOn}${args.lotNumber ? `, lot ${args.lotNumber}` : ''}. ${note}`, on })
-      uow.audit({ eventType: 'vaccine.outside_recorded', entityType: 'Patient', entityId: patient.id, actorUserId: actorUserId(actor), after: { product: product.name, administeredOn: args.administeredOn, nextDueOn } })
+      const evidence = `Given elsewhere on ${args.administeredOn}${args.lotNumber ? `, lot ${args.lotNumber}` : ''}. ${note}`
+      const r = latest
+        ? { satisfied: 0, nextReminderId: null, nextDueOn: null, superseded: true, newerDoseOn: day(latest.administeredOn) }
+        : await satisfyAndSchedule(uow, { patientId: patient.id, locationId, typeId, sourceKey: `OUT:${patient.id}:${product.id}:${args.administeredOn}`, nextDueOn, rule, staffId: staff.id, note: evidence, on })
+      uow.audit({ eventType: 'vaccine.outside_recorded', entityType: 'Patient', entityId: patient.id, actorUserId: actorUserId(actor), after: { product: product.name, administeredOn: args.administeredOn, nextDueOn, evidence, superseded: r.superseded } })
       return r
+    })
+    return { replay: result.replay, ...result.value }
+  })
+}
+
+/**
+ * Reverse a vaccine administration (M5): a veterinarian, with a reason. The dose row is never changed;
+ * a reversal row points at it. The certificate it issued is marked void (kept, never deleted), the
+ * reminder it scheduled is suppressed and any reminder it satisfied is reopened.
+ */
+export async function reverseVaccineAdministration(_root: unknown, args: { vaccineAdministrationId: string; reason: string; idempotencyKey: string }, context: Ctx) {
+  return gated(context, { permissions: ['canWriteRecord', 'canOrder'], tool: 'vaccine.reverse', humanOnly: true }, args, async actor => {
+    const reason = text(args.reason, 'reason', 300)
+    if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, 'Give the reason for the reversal (at least 8 characters).', { field: 'reason' })
+    const result = await command(context.prisma, { name: 'vaccine.reverse', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
+      const staff = await staffOf(uow, actor)
+      if (staff.kind !== 'dvm') throw new DomainError(Codes.NOT_AUTHORIZED, 'Only a veterinarian can reverse a vaccine.')
+      await advisoryLock(uow.tx, `vaccine-reverse:${args.vaccineAdministrationId}`)
+      const va = await uow.tx.vaccineAdministration.findUnique({ where: { id: args.vaccineAdministrationId }, include: { product: { select: { name: true } }, certificate: { select: { id: true, ref: true } } } })
+      if (!va) throw new DomainError(Codes.NOT_FOUND, 'Vaccine administration not found.')
+      if (va.source === 'reversal') throw new DomainError(Codes.GUARD_FAILED, 'That row is itself a reversal.')
+      if (await uow.tx.vaccineAdministration.count({ where: { reversesId: va.id } })) throw new DomainError(Codes.GUARD_FAILED, `This ${va.product?.name ?? 'vaccine'} dose was already reversed.`, { reason: 'already_reversed' })
+      const { id: _id, createdAt: _c, product: _p, certificate: _cert, certificateId: _ci, administrationId: _a, reason: _r, reversesId: _rv, ...copy } = va as typeof va & { createdAt?: Date }
+      const row = await uow.tx.vaccineAdministration.create({ data: { ...copy, policyVersions: (va.policyVersions ?? []) as never, source: 'reversal', reversesId: va.id, reason, vaccinatedById: staff.id } })
+      if (va.certificate) await uow.tx.rabiesCertificate.update({ where: { id: va.certificate.id }, data: { voidedAt: uow.now, voidReason: reason } })
+      const scheduled = await uow.tx.patientReminder.updateMany({ where: { sourceKey: `VA:${va.id}`, status: { not: 'suppressed' } }, data: { status: 'suppressed', suppressedReason: `Vaccine reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } })
+      const satisfied = await uow.tx.reminderSatisfaction.findMany({ where: { OR: [{ vaccineAdministrationId: va.id }, { sourceKey: `VA:${va.id}` }] }, select: { reminderId: true } })
+      let reopened = 0
+      for (const s of satisfied) {
+        const r = await uow.tx.patientReminder.findUnique({ where: { id: s.reminderId! }, select: { id: true, status: true, dueOn: true, sourceKey: true, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } } } })
+        if (!r || r.status !== 'satisfied' || r.sourceKey === `VA:${va.id}`) continue
+        const { on } = await locationDay(uow, (await uow.tx.patientReminder.findUnique({ where: { id: r.id }, select: { locationId: true } }))!.locationId!, uow.now)
+        const status = reminderStatusOn({ dueOn: day(r.dueOn)!, status: 'scheduled' }, { leadDays: r.rule?.leadDays ?? 30, graceDays: r.rule?.graceDays ?? 30, lapseDays: r.rule?.lapseDays ?? 180 }, on)
+        await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status, version: { increment: 1 } } })
+        reopened++
+      }
+      auditCreate(uow, actor, 'VaccineAdministration', row.id, 'vaccine.reversed', { reverses: va.id, product: va.product?.name ?? null, certificate: va.certificate?.ref ?? null, reason, remindersSuppressed: scheduled.count, remindersReopened: reopened })
+      return { id: row.id, reverses: va.id, certificateVoided: va.certificate?.ref ?? null, remindersSuppressed: scheduled.count, remindersReopened: reopened }
     })
     return { replay: result.replay, ...result.value }
   })

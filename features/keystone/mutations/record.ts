@@ -141,6 +141,15 @@ export async function recordVitals(_root: unknown, args: { encounterId: string; 
         crtSeconds: decOrNull(args.crtSeconds, 'crtSeconds'), painScore: intOrNull(args.painScore, 'painScore', 0, 10), bodyConditionScore: intOrNull(args.bodyConditionScore, 'bodyConditionScore', 1, 9),
         mentation: args.mentation ?? null, hydrationPct: decOrNull(args.hydrationPct, 'hydrationPct'), at: uow.now, byId: staff.id,
       }
+      // M7: the same plausible ranges as the CHECK VitalsObservation_ranges, refused here with a clear message.
+      if (args.temperatureUnit && !['F', 'C'].includes(args.temperatureUnit)) throw new DomainError(Codes.INVALID_INPUT, 'Temperature unit is °F or °C.', { field: 'temperatureUnit' })
+      if (data.temperature !== null) {
+        const t = Number(data.temperature)
+        const [lo, hi] = data.temperatureUnit === 'F' ? [80, 115] : [26, 46]
+        if (t < lo || t > hi) throw new DomainError(Codes.INVALID_INPUT, `Temperature ${data.temperature} °${data.temperatureUnit} is outside ${lo}–${hi} °${data.temperatureUnit}. Check the reading and the unit.`, { field: 'temperature' })
+      }
+      if (data.crtSeconds !== null && Number(data.crtSeconds) > 10) throw new DomainError(Codes.INVALID_INPUT, 'Capillary refill time is 0–10 seconds.', { field: 'crtSeconds' })
+      if (data.hydrationPct !== null && Number(data.hydrationPct) > 20) throw new DomainError(Codes.INVALID_INPUT, 'Dehydration is 0–20 %.', { field: 'hydrationPct' })
       if (![data.temperature, data.heartRate, data.respRate, data.mucousMembranes, data.crtSeconds, data.painScore, data.bodyConditionScore, data.mentation, data.hydrationPct].some(v => v !== null)) {
         throw new DomainError(Codes.INVALID_INPUT, 'Enter at least one vital sign.')
       }
@@ -378,9 +387,10 @@ export async function addAddendum(_root: unknown, args: { encounterId: string; s
 
 async function voidBlockers(uow: UnitOfWork, encounterId: string) {
   const [orders, administrations, vaccines] = await Promise.all([
-    uow.tx.clinicalOrder.count({ where: { encounterId, status: { not: 'cancelled' } } }),
-    uow.tx.administration.count({ where: { encounterId } }),
-    uow.tx.vaccineAdministration.count({ where: { encounterId } }),
+    uow.tx.clinicalOrder.count({ where: { encounterId, status: { notIn: ['cancelled', 'reversed'] } } }),
+    // Doses still standing: neither a reversal row nor reversed since (M5).
+    uow.tx.administration.count({ where: { encounterId, reversesId: null, from_Administration_reverses: { none: {} } } }),
+    uow.tx.vaccineAdministration.count({ where: { encounterId, reversesId: null, from_VaccineAdministration_reverses: { none: {} } } }),
   ])
   const blockers: string[] = []
   if (orders) blockers.push(`${orders} active order${orders === 1 ? '' : 's'}`)

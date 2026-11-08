@@ -8944,6 +8944,7 @@ type CsLogEntry {
   occurredAt: DateTime
   recordedAt: DateTime
   actor: StaffMember
+  witness: StaffMember
   patient: Patient
   client: Client
   clientSnapshot: JSON
@@ -8975,6 +8976,7 @@ input CsLogEntryWhereInput {
   occurredAt: DateTimeFilter
   recordedAt: DateTimeFilter
   actor: StaffMemberWhereInput
+  witness: StaffMemberWhereInput
   patient: PatientWhereInput
   client: ClientWhereInput
   reverses: CsLogEntryWhereInput
@@ -9010,6 +9012,7 @@ input CsLogEntryUpdateInput {
   occurredAt: DateTime
   recordedAt: DateTime
   actor: StaffMemberRelateToOneForUpdateInput
+  witness: StaffMemberRelateToOneForUpdateInput
   patient: PatientRelateToOneForUpdateInput
   client: ClientRelateToOneForUpdateInput
   clientSnapshot: JSON
@@ -9048,6 +9051,7 @@ input CsLogEntryCreateInput {
   occurredAt: DateTime
   recordedAt: DateTime
   actor: StaffMemberRelateToOneForCreateInput
+  witness: StaffMemberRelateToOneForCreateInput
   patient: PatientRelateToOneForCreateInput
   client: ClientRelateToOneForCreateInput
   clientSnapshot: JSON
@@ -12561,6 +12565,8 @@ type VaccineAdministration {
   policyVersions: JSON
   certificate: RabiesCertificate
   source: String
+  reverses: VaccineAdministration
+  reason: String
 }
 
 input VaccineAdministrationWhereUniqueInput {
@@ -12590,6 +12596,8 @@ input VaccineAdministrationWhereInput {
   supervisingDvm: StaffMemberWhereInput
   certificate: RabiesCertificateWhereInput
   source: StringFilter
+  reverses: VaccineAdministrationWhereInput
+  reason: StringFilter
 }
 
 input VaccineAdministrationOrderByInput {
@@ -12604,6 +12612,7 @@ input VaccineAdministrationOrderByInput {
   durationMonths: OrderDirection
   dueNextOn: OrderDirection
   source: OrderDirection
+  reason: OrderDirection
 }
 
 input VaccineAdministrationUpdateInput {
@@ -12626,11 +12635,19 @@ input VaccineAdministrationUpdateInput {
   policyVersions: JSON
   certificate: RabiesCertificateRelateToOneForUpdateInput
   source: String
+  reverses: VaccineAdministrationRelateToOneForUpdateInput
+  reason: String
 }
 
 input RabiesCertificateRelateToOneForUpdateInput {
   create: RabiesCertificateCreateInput
   connect: RabiesCertificateWhereUniqueInput
+  disconnect: Boolean
+}
+
+input VaccineAdministrationRelateToOneForUpdateInput {
+  create: VaccineAdministrationCreateInput
+  connect: VaccineAdministrationWhereUniqueInput
   disconnect: Boolean
 }
 
@@ -12659,11 +12676,18 @@ input VaccineAdministrationCreateInput {
   policyVersions: JSON
   certificate: RabiesCertificateRelateToOneForCreateInput
   source: String
+  reverses: VaccineAdministrationRelateToOneForCreateInput
+  reason: String
 }
 
 input RabiesCertificateRelateToOneForCreateInput {
   create: RabiesCertificateCreateInput
   connect: RabiesCertificateWhereUniqueInput
+}
+
+input VaccineAdministrationRelateToOneForCreateInput {
+  create: VaccineAdministrationCreateInput
+  connect: VaccineAdministrationWhereUniqueInput
 }
 
 type RabiesCertificate {
@@ -12685,6 +12709,8 @@ type RabiesCertificate {
   reportedTo: String
   reportedAt: DateTime
   policyVersions: JSON
+  voidedAt: DateTime
+  voidReason: String
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -12709,6 +12735,8 @@ input RabiesCertificateWhereInput {
   document: ClinicalDocumentWhereInput
   reportedTo: StringFilter
   reportedAt: DateTimeNullableFilter
+  voidedAt: DateTimeNullableFilter
+  voidReason: StringFilter
   createdAt: DateTimeFilter
   updatedAt: DateTimeFilter
 }
@@ -12723,6 +12751,8 @@ input RabiesCertificateOrderByInput {
   tagJurisdiction: OrderDirection
   reportedTo: OrderDirection
   reportedAt: OrderDirection
+  voidedAt: OrderDirection
+  voidReason: OrderDirection
   createdAt: OrderDirection
   updatedAt: OrderDirection
 }
@@ -12745,6 +12775,8 @@ input RabiesCertificateUpdateInput {
   reportedTo: String
   reportedAt: DateTime
   policyVersions: JSON
+  voidedAt: DateTime
+  voidReason: String
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -12772,6 +12804,8 @@ input RabiesCertificateCreateInput {
   reportedTo: String
   reportedAt: DateTime
   policyVersions: JSON
+  voidedAt: DateTime
+  voidReason: String
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -13328,12 +13362,6 @@ input PatientReminderRelateToOneForUpdateInput {
   disconnect: Boolean
 }
 
-input VaccineAdministrationRelateToOneForUpdateInput {
-  create: VaccineAdministrationCreateInput
-  connect: VaccineAdministrationWhereUniqueInput
-  disconnect: Boolean
-}
-
 input ReminderSatisfactionUpdateArgs {
   where: ReminderSatisfactionWhereUniqueInput!
   data: ReminderSatisfactionUpdateInput!
@@ -13353,11 +13381,6 @@ input ReminderSatisfactionCreateInput {
 input PatientReminderRelateToOneForCreateInput {
   create: PatientReminderCreateInput
   connect: PatientReminderWhereUniqueInput
-}
-
-input VaccineAdministrationRelateToOneForCreateInput {
-  create: VaccineAdministrationCreateInput
-  connect: VaccineAdministrationWhereUniqueInput
 }
 
 type AdverseEventReport {
@@ -14874,12 +14897,13 @@ type Mutation {
   rejectScribeDraft(draftId: ID!, reason: String!, idempotencyKey: String!): JSON
   placeOrder(encounterId: ID!, kind: String!, description: String, drugId: ID, route: String, frequency: String, quantity: String, quantityUnit: String, dose: JSON, extralabel: Boolean, sheet: JSON, idempotencyKey: String!): JSON
   cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+  reverseAdministration(administrationId: ID!, reason: String!, witnessId: ID, idempotencyKey: String!): JSON
   completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
   admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
   moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
   dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
-  completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, idempotencyKey: String!): JSON
+  completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, idempotencyKey: String!): JSON
   skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
   rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
   openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON
@@ -14888,7 +14912,8 @@ type Mutation {
   closeAnaesthesia(recordId: ID!, expectedVersion: Int!, complications: String, idempotencyKey: String!): JSON
   saveSurgeryReport(encounterId: ID!, procedure: String!, technique: String, findings: String, closure: String, sutures: String, specimens: String, assistantId: ID, idempotencyKey: String!): JSON
   saveDentalChart(encounterId: ID!, teeth: JSON!, idempotencyKey: String!): JSON
-  administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, idempotencyKey: String!): JSON
+  administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
+  reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
   recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
   suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
   addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON

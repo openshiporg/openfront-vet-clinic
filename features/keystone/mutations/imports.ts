@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { command } from '../lib/command'
+import { command, invariantError } from '../lib/command'
 import { auditCreate } from '../lib/cas'
 import { actorUserId, type Actor } from '../lib/actor'
 import { DomainError, Codes } from '../lib/errors'
@@ -9,7 +9,7 @@ import { toJsonValue } from '../lib/canonical'
 import { dec, toKg, toScale } from '../lib/decimal'
 import { contactHash, microchipStandard, normaliseContact } from '../domain/contact'
 import { addMonths } from '../domain/vaccines'
-import { importDate, importSex, pimsSource, SPECIES_ALIASES, truthy, type ImportEntity, type Mapping, type PimsSystem, type Row } from '../../integrations/pims'
+import { importDate, importSex, importSpeciesCode, pimsSource, truthy, type ImportEntity, type Mapping, type PimsSystem, type Row } from '../../integrations/pims'
 import { gated } from './agentGuard'
 import { revisionHash, signedContentHash } from '../domain/record'
 import type { Ctx } from './clinical'
@@ -43,8 +43,11 @@ function rowKey(entity: ImportEntity, row: Row) {
 
 const RECORD_TYPE: Record<ImportEntity, string> = { clients: 'Client', patients: 'Patient', weights: 'WeightMeasurement', vaccinations: 'PatientReminder', reminders: 'PatientReminder', consults: 'Encounter' }
 
-/** Row checks that need no database. */
-function validateRow(entity: ImportEntity, row: Row): string[] {
+type SpeciesRow = { code: string; name: string }
+const speciesList = (tx: { species: { findMany: (a: { select: { code: true; name: true } }) => Promise<SpeciesRow[]> } }) => tx.species.findMany({ select: { code: true, name: true } })
+
+/** Row checks against the practice's set-up (species); preview and apply run the same checks, so they agree. */
+function validateRow(entity: ImportEntity, row: Row, species: SpeciesRow[]): string[] {
   const errors: string[] = []
   const need = (f: string, label: string) => { if (!row[f]?.trim()) errors.push(`${label} is empty.`) }
   if (entity === 'clients') {
@@ -54,7 +57,7 @@ function validateRow(entity: ImportEntity, row: Row): string[] {
   }
   if (entity === 'patients') {
     need('externalId', 'Patient id'); need('clientExternalId', 'Client id'); need('name', 'Name')
-    if (!SPECIES_ALIASES[(row.species ?? '').trim().toLowerCase()]) errors.push(`Unknown species "${row.species}".`)
+    if (!importSpeciesCode(row.species ?? '', species)) errors.push(`Species "${row.species ?? ''}" is not set up here (${species.map(s => s.name).join(', ') || 'no species yet'}).`)
     if (row.dateOfBirth && !importDate(row.dateOfBirth)) errors.push(`Date of birth "${row.dateOfBirth}" is not a date.`)
   }
   if (entity === 'weights') {
@@ -84,10 +87,11 @@ export async function previewImport(_root: unknown, args: { system: PimsSystem; 
     }
     if (parsed.missingRequired.length) throw new DomainError(Codes.INVALID_INPUT, `The file has no column for: ${parsed.missingRequired.join(', ')}. Map those columns and try again.`, { field: 'mapping', problems: parsed.missingRequired })
     if (parsed.rows.length > MAX_ROWS) throw new DomainError(Codes.INVALID_INPUT, `Split the file: at most ${MAX_ROWS} rows per batch.`)
+    const species = await speciesList(context.prisma as never)
     const fileHash = createHash('sha256').update(args.csv ?? JSON.stringify(parsed.rows)).digest('hex')
     const seen = new Set<string>()
     const results = parsed.rows.map(r => {
-      const errors = validateRow(args.entity, r.values)
+      const errors = validateRow(args.entity, r.values, species)
       const key = rowKey(args.entity, r.values)
       if (key && seen.has(key)) errors.push('Duplicate of an earlier row in this file.')
       seen.add(key)
@@ -120,7 +124,8 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
   const sys = `${batch.system}:${batch.entity}`
   const key = rowKey(batch.entity, row)
   const base = { rowNumber, externalId: key, errors: [] as string[] }
-  const errors = validateRow(batch.entity, row)
+  const species = await speciesList(uow.tx as never)
+  const errors = validateRow(batch.entity, row, species)
   if (errors.length) return { ...base, result: 'failed', errors }
   const existing = await findMapped(uow, sys, RECORD_TYPE[batch.entity], key)
   if (existing) return { ...base, result: 'skipped_existing', recordType: RECORD_TYPE[batch.entity], recordId: existing.recordId }
@@ -161,9 +166,10 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
     case 'patients': {
       const owner = await findMapped(uow, `${batch.system}:clients`, 'Client', row.clientExternalId)
       if (!owner) return { ...base, result: 'failed', errors: [`Client ${row.clientExternalId} has not been imported yet; import clients first.`] }
-      const species = await uow.tx.species.findUnique({ where: { code: SPECIES_ALIASES[row.species.trim().toLowerCase()] }, select: { id: true } })
-      if (!species) return { ...base, result: 'failed', errors: [`Species "${row.species}" is not set up.`] }
-      const breed = row.breed ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: row.breed.trim(), mode: 'insensitive' } }, select: { id: true } }) : null
+      const code = importSpeciesCode(row.species, species)
+      const speciesRow = code ? await uow.tx.species.findUnique({ where: { code }, select: { id: true } }) : null
+      if (!speciesRow) return { ...base, result: 'failed', errors: [`Species "${row.species}" is not set up.`] }
+      const breed = row.breed ? await uow.tx.breed.findFirst({ where: { speciesId: speciesRow.id, name: { equals: row.breed.trim(), mode: 'insensitive' } }, select: { id: true } }) : null
       const { sex, reproductiveStatus } = importSex(row.sex ?? '')
       const dob = row.dateOfBirth ? importDate(row.dateOfBirth) : null
       const deceased = row.deceased ? truthy(row.deceased) : false
@@ -174,7 +180,7 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
         if (clash) return { ...base, result: 'failed', errors: [`Microchip ${chip} is already on ${clash.patient?.ref ?? 'another patient'}.`] }
       }
       const ref = await nextSerial(uow.tx, 'P')
-      const patient = await uow.tx.patient.create({ data: { ref, name: row.name.trim(), kind: 'individual', speciesId: species.id, breedId: breed?.id ?? null, sex, reproductiveStatus, dateOfBirth: dob ? new Date(`${dob}T00:00:00Z`) : null, dobEstimated: false, status: deceased ? 'deceased' : 'active', deceasedAt: deceased ? uow.now : null, codeStatus: 'unspecified' } })
+      const patient = await uow.tx.patient.create({ data: { ref, name: row.name.trim(), kind: 'individual', speciesId: speciesRow.id, breedId: breed?.id ?? null, sex, reproductiveStatus, dateOfBirth: dob ? new Date(`${dob}T00:00:00Z`) : null, dobEstimated: false, status: deceased ? 'deceased' : 'active', deceasedAt: deceased ? uow.now : null, codeStatus: 'unspecified' } })
       await uow.tx.patientOwnership.create({ data: { patientId: patient.id, clientId: owner.recordId, role: 'primary', effectiveFrom: uow.now, basis: 'import', recordedById: actorUserId(actor) } })
       if (chip) await uow.tx.microchip.create({ data: { patientId: patient.id, number: chip, standard: microchipStandard(chip), active: true } })
       await mapExternal(uow, sys, 'Patient', patient.id, key)
@@ -278,7 +284,7 @@ export async function applyImport(_root: unknown, args: { batchId: string; idemp
           }))
           results.push(r)
         } catch (error) {
-          const message = error instanceof DomainError ? error.message : (error as Error).message?.split('\n').pop()?.slice(0, 240) ?? 'Failed.'
+          const message = error instanceof DomainError ? error.message : (invariantError(error)?.message ?? 'The row could not be saved.')
           await prisma.importRow.create({ data: { batchId: batch.id, rowNumber, externalId: rowKey(batch.entity as ImportEntity, values) || `row-${rowNumber}`, result: 'failed', errors: [message] } })
           results.push({ rowNumber, externalId: '', result: 'failed', errors: [message] })
         }

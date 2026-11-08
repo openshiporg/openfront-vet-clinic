@@ -25,6 +25,27 @@ describe('dose', () => {
     expect(verifyDose(a, base)).toBe(true)
     expect(verifyDose(a, { ...base, weightKg: '12.5' })).toBe(false)
   })
+  it('checks the range after converting units and the per-basis (B1)', () => {
+    // Otis 49.4 lb = 22.4 kg: 2000 mcg/kg is 2 mg/kg, ten times the 0.2 mg/kg ceiling.
+    const otis = { ...base, weightKg: '22.407' }
+    const mcg = calculateDose({ ...otis, doseAmount: '2000', doseUnit: 'mcg' })
+    expect(blockingWarnings(mcg.warnings).map(w => w.code)).toEqual(['above_range'])
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '150', doseUnit: 'mcg' }).warnings)).toEqual([])
+    // A formulary range written per lb is converted to per kg before comparing.
+    const perLb = { ...meloxicam, doseRanges: { canine: { min: '0.05', max: '0.09', unit: 'mg', per: 'lb' as const } } }
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '0.18', product: perLb }).warnings)).toEqual([])
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '0.4', product: perLb }).warnings).map(w => w.code)).toEqual(['above_range'])
+    // A mL-based dose converts through the concentration: 0.04 mL/kg × 5 mg/mL = 0.2 mg/kg (in range).
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '0.04', doseUnit: 'mL' }).warnings)).toEqual([])
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '0.1', doseUnit: 'mL' }).warnings).map(w => w.code)).toEqual(['above_range'])
+    // Per animal: 50 mg for a 22.4 kg dog is 2.2 mg/kg.
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '50', dosePer: 'animal' }).warnings).map(w => w.code)).toEqual(['above_range'])
+  })
+  it('refuses an unknown per-basis or unit', () => {
+    expect(() => calculateDose({ ...base, dosePer: 'lb' as never })).toThrow(/2\.2046/)
+    expect(() => calculateDose({ ...base, dosePer: 'cow' as never })).toThrow(RangeError)
+    expect(() => calculateDose({ ...base, doseUnit: 'grain' as never })).toThrow(RangeError)
+  })
   it('converts mcg doses against a mg/mL concentration', () => {
     const r = calculateDose({ ...base, doseAmount: '200', doseUnit: 'mcg', product: { ...meloxicam, doseRanges: null } })
     expect(r.computedQty).toBe('0.496000')

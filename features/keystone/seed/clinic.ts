@@ -234,7 +234,7 @@ export async function seedClinic(uow: UnitOfWork, actor: Actor) {
     for (const c of containers) {
       await tx.csContainer.create({ data: { id: c.id, ref: c.ref, productId: c.productId, locationId: c.locationId, deaRegistrationId: c.dea, lotNumber: c.lot, lotExpiresOn: DAY('2027-09-30'), status: 'open', labelQty: c.label, labelUnit: c.unit, openedAt: new Date(now.getTime() - 3 * 86_400_000), openedById: 'seed_staff_lopez', budAt: new Date(now.getTime() + 25 * 86_400_000) } })
       await appendCsEntry(tx, { containerId: c.id, type: 'receive', qtySigned: c.label, unit: c.unit, occurredAt: new Date(now.getTime() - 3 * 86_400_000), actorId: 'seed_staff_lopez', reason: 'Opening balance' }, now)
-      await appendCsEntry(tx, { containerId: c.id, type: 'administer', qtySigned: dec(c.used).negated(), unit: c.unit, occurredAt: new Date(now.getTime() - 2 * 86_400_000), actorId: 'seed_staff_lopez', patientId: homes[0].pets[0].id, clientId: homes[0].id, reason: 'Premedication' }, now)
+      await appendCsEntry(tx, { containerId: c.id, type: 'administer', qtySigned: dec(c.used).negated(), unit: c.unit, occurredAt: new Date(now.getTime() - 2 * 86_400_000), actorId: 'seed_staff_lopez', witnessId: 'seed_staff_okafor', patientId: homes[0].pets[0].id, clientId: homes[0].id, reason: 'Premedication' }, now)
     }
     auditCreate(uow, actor, 'CsContainer', 'seed_cs', 'cs.containers_opened', { containers: containers.map(c => c.ref) }, meta)
     count('csContainers', containers.length)

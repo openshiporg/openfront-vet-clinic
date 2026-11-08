@@ -41,6 +41,32 @@ export function taskStatusAt(task: { dueAt: Date; status: string; graceMinutes: 
   return 'scheduled'
 }
 
+/** A scheduled task may be done from this many minutes before it is due (the same hour it shows as due). */
+export const TASK_EARLY_MINUTES = 60
+
+/**
+ * B3: may this task be done now? Too early (before its window opens) needs a veterinarian's reason;
+ * a second dose of the same order inside half the interval is never allowed (the database refuses it
+ * too). Returns the problem, or null.
+ */
+export function taskWindowProblem(input: { frequency: string; dueAt: Date; now: Date; lastDoneAt: Date | null; earlyOverride: boolean; timeZone?: string }): { code: 'too_early' | 'too_soon'; message: string } | null {
+  const hhmm = (d: Date) => new Intl.DateTimeFormat('en-US', { timeZone: input.timeZone ?? 'UTC', hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' }).format(d)
+  const hours = FREQUENCY_HOURS[input.frequency] ?? null
+  if (input.lastDoneAt && hours) {
+    const minGapMs = (hours * HOUR) / 2
+    const since = input.now.getTime() - input.lastDoneAt.getTime()
+    if (since < minGapMs) {
+      const next = new Date(input.lastDoneAt.getTime() + minGapMs)
+      return { code: 'too_soon', message: `A ${input.frequency} dose was already given ${Math.round(since / 60_000)} minutes ago; the next one cannot be given before ${hhmm(next)}.` }
+    }
+  }
+  const opens = input.dueAt.getTime() - TASK_EARLY_MINUTES * 60_000
+  if (input.now.getTime() < opens && !input.earlyOverride) {
+    return { code: 'too_early', message: `This task is due ${hhmm(input.dueAt)}; it can be done from ${hhmm(new Date(opens))}. A veterinarian can give it early with a reason.` }
+  }
+  return null
+}
+
 /** Anaesthesia: the longest gap between readings while monitoring, in minutes (standard ≤ 5). */
 export function longestMonitoringGapMinutes(readings: Date[], start: Date, end: Date): number {
   const points = [start, ...readings.filter(r => r >= start && r <= end).sort((a, b) => a.getTime() - b.getTime()), end]

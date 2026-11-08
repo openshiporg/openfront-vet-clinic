@@ -131,6 +131,7 @@ export const CsLogEntry = list({
     occurredAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
     recordedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
     actor: relationship({ ref: 'StaffMember', ...readOnly }),
+    witness: relationship({ ref: 'StaffMember', ...readOnly }),
     patient: relationship({ ref: 'Patient', ...readOnly }),
     client: relationship({ ref: 'Client', ...readOnly }),
     clientSnapshot: json({ ...readOnly }),

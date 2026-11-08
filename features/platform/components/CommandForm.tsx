@@ -181,6 +181,17 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     required(v, 'orderId');
     return { orderId: v.orderId, route: v.route || undefined, site: v.site?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, qty: v.qty?.trim() || undefined };
   },
+  /** M5: a veterinarian reverses a dose (wrong patient, not actually given); the original stays on record. */
+  reverseAdministration: (v) => {
+    required(v, 'administrationId', 'reason');
+    if (v.reason.trim().length < 8) throw new Error('Reason: say why in a few words (at least 8 characters).');
+    return { administrationId: v.administrationId, reason: v.reason.trim(), witnessId: v.witnessId || undefined };
+  },
+  reverseVaccineAdministration: (v) => {
+    required(v, 'vaccineAdministrationId', 'reason');
+    if (v.reason.trim().length < 8) throw new Error('Reason: say why in a few words (at least 8 characters).');
+    return { vaccineAdministrationId: v.vaccineAdministrationId, reason: v.reason.trim() };
+  },
   admitPatient: (v) => { required(v, 'encounterId', 'cageId', 'codeStatus'); return { encounterId: v.encounterId, cageId: v.cageId, codeStatus: v.codeStatus, reason: v.reason?.trim() || undefined }; },
   moveCage: (v) => { required(v, 'stayId', 'cageId'); return { stayId: v.stayId, cageId: v.cageId }; },
   dischargePatient: (v) => {
@@ -190,7 +201,7 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
   },
   completeTreatmentTask: (v) => {
     required(v, 'taskId', 'expectedVersion');
-    return { taskId: v.taskId, expectedVersion: Number(v.expectedVersion), observation: v.observation?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined };
+    return { taskId: v.taskId, expectedVersion: Number(v.expectedVersion), observation: v.observation?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, earlyReason: v.earlyReason?.trim() || undefined };
   },
   openAnaesthesia: (v) => {
     required(v, 'encounterId', 'procedure', 'asaStatus');
@@ -207,7 +218,7 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
   saveSurgeryReport: (v) => { required(v, 'encounterId', 'procedure'); return { encounterId: v.encounterId, procedure: v.procedure.trim(), technique: v.technique?.trim() || undefined, findings: v.findings?.trim() || undefined, closure: v.closure?.trim() || undefined, sutures: v.sutures?.trim() || undefined }; },
   administerVaccine: (v) => {
     required(v, 'encounterId', 'productId', 'lotId', 'site');
-    return { encounterId: v.encounterId, productId: v.productId, lotId: v.lotId, site: v.site.trim(), route: v.route || undefined, supervisingDvmId: v.supervisingDvmId || undefined, tagNumber: v.tagNumber?.trim() || undefined };
+    return { encounterId: v.encounterId, productId: v.productId, lotId: v.lotId, site: v.site.trim(), route: v.route || undefined, supervisingDvmId: v.supervisingDvmId || undefined, tagNumber: v.tagNumber?.trim() || undefined, repeatReason: v.repeatReason?.trim() || undefined };
   },
   recordOutsideVaccine: (v) => {
     required(v, 'patientId', 'productId', 'administeredOn', 'evidenceNote');

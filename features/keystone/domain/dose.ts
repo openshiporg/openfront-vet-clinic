@@ -15,10 +15,13 @@ import { dec, Decimal, toBpsInt, toScale, ZERO, type DecimalInput } from '../lib
  * sensitivities, weight age, and rounding deviation. A `block` needs a recorded override reason.
  */
 
-export const DOSE_CALC_VERSION = 'dose-2026.11-1'
+export const DOSE_CALC_VERSION = 'dose-2026.11-2'
 
 export type DoseUnit = 'mg' | 'mcg' | 'g' | 'mL' | 'IU' | 'unit' | 'tablet' | 'capsule' | 'dose'
 export type DosePer = 'kg' | 'm2' | 'animal'
+export const DOSE_PERS: readonly DosePer[] = ['kg', 'm2', 'animal']
+export const DOSE_UNITS: readonly DoseUnit[] = ['mg', 'mcg', 'g', 'mL', 'IU', 'unit', 'tablet', 'capsule', 'dose']
+const KG_PER_LB = '0.45359237'
 
 export type DoseProduct = {
   id?: string | null
@@ -30,7 +33,7 @@ export type DoseProduct = {
   concentration?: DecimalInput | null
   concentrationUnit?: string | null
   measurableIncrement?: DecimalInput | null
-  doseRanges?: Record<string, { min?: string; max?: string; unit: string; per: DosePer }> | null
+  doseRanges?: Record<string, { min?: string; max?: string; unit: string; per: DosePer | 'lb' }> | null
   cautionFlags?: string[] | null
 }
 
@@ -122,6 +125,9 @@ export function calculateDose(input: DoseInput): DoseResult {
   if (weightKg.lte(0)) throw new RangeError('A dose needs a positive weight.')
   const doseAmount = dec(input.doseAmount)
   if (doseAmount.lte(0)) throw new RangeError('A dose rate must be positive.')
+  // Every basis is explicit: an unknown one (e.g. per lb) is never treated as per animal.
+  if (!(DOSE_PERS as readonly string[]).includes(input.dosePer)) throw new RangeError(`"${input.dosePer}" is not a dose basis: dose per kg, per m² or per animal (1 mg/lb = 2.2046 mg/kg).`)
+  if (!(DOSE_UNITS as readonly string[]).includes(input.doseUnit)) throw new RangeError(`"${input.doseUnit}" is not a dose unit.`)
   if (input.maxWeightAgeHours != null && input.weightAgeHours != null && input.weightAgeHours > input.maxWeightAgeHours) {
     warnings.push({ code: 'weight_stale', severity: 'block', message: `The weight is ${input.weightAgeHours} hours old; this context allows ${input.maxWeightAgeHours}. Weigh the patient or record why the old weight is used.` })
   }
@@ -175,9 +181,19 @@ export function calculateDose(input: DoseInput): DoseResult {
     }
 
     const range = product.doseRanges?.[input.species]
-    if (range && range.unit === input.doseUnit && range.per === input.dosePer) {
-      if (range.max && doseAmount.gt(range.max)) warnings.push({ code: 'above_range', severity: 'block', message: `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer} is above the formulary maximum for a ${input.species} (${range.max}).` })
-      if (range.min && doseAmount.lt(range.min)) warnings.push({ code: 'below_range', severity: 'warn', message: `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer} is below the formulary minimum for a ${input.species} (${range.min}).` })
+    if (range) {
+      // Compare in the formulary's own unit and basis: the total in its unit, divided by its basis.
+      const conc = product.concentration != null ? dec(product.concentration) : null
+      const rate = rateInRangeBasis(total, input.doseUnit, range, weightKg, input.species, conc && conc.gt(0) ? conc : null, numeratorUnit(product.concentrationUnit))
+      const shown = `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer}`
+      if (!rate) {
+        warnings.push({ code: 'range_unconvertible', severity: 'block', message: `${shown} cannot be compared with the formulary range (${range.unit}/${range.per}); enter the dose in ${range.unit}/${range.per}.` })
+      } else {
+        const asRange = `${toScale(rate, 4).replace(/\.?0+$/, '')} ${range.unit}/${range.per}`
+        const same = range.unit === input.doseUnit && range.per === input.dosePer
+        if (range.max && rate.gt(range.max)) warnings.push({ code: 'above_range', severity: 'block', message: `${shown}${same ? '' : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` })
+        if (range.min && rate.lt(range.min)) warnings.push({ code: 'below_range', severity: 'warn', message: `${shown}${same ? '' : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` })
+      }
     } else if (product.doseRanges && !range) {
       warnings.push({ code: 'no_species_range', severity: 'warn', message: `The formulary has no ${input.species} dose range for ${product.genericName}; check the dose against a current reference.` })
     }
@@ -216,6 +232,27 @@ export function calculateDose(input: DoseInput): DoseResult {
     calcVersion: DOSE_CALC_VERSION,
   }
   return { ...body, hash: sha256(canonicalJson({ input: { ...input, product: product ? { ...product, id: product.id ?? null } : null }, output: body })) }
+}
+
+/**
+ * The dose rate expressed in a formulary range's unit and basis, or null when it cannot be: mass
+ * units convert exactly (mcg/mg/g), a volume converts through the product concentration, and the
+ * total is divided by the range's basis (kg, lb, m² or one animal) for this patient.
+ */
+function rateInRangeBasis(total: Decimal, unit: string, range: { unit: string; per: string }, weightKg: Decimal, species: string, concentration: Decimal | null, concentrationUnit: string | null): Decimal | null {
+  let amount: Decimal | null = null
+  if (unit === range.unit) amount = total
+  else if (MASS_TO_MG[unit] && MASS_TO_MG[range.unit]) amount = convertAmount(total, unit, range.unit)
+  else if (unit === 'mL' && concentration && concentrationUnit && MASS_TO_MG[concentrationUnit] && MASS_TO_MG[range.unit]) amount = convertAmount(total.times(concentration), concentrationUnit, range.unit)
+  if (!amount) return null
+  if (range.per === 'animal') return amount
+  if (range.per === 'kg') return amount.div(weightKg)
+  if (range.per === 'lb') return amount.div(weightKg.div(KG_PER_LB))
+  if (range.per === 'm2') {
+    if (!BSA_CONSTANTS[species]) return null
+    return amount.div(bodySurfaceArea(weightKg, species).m2)
+  }
+  return null
 }
 
 /** Recompute a stored dose from its inputs and compare byte for byte (SCHEMA §5.2 CHECK). */

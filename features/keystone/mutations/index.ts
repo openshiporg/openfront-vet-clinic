@@ -90,12 +90,13 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         rejectScribeDraft(draftId: ID!, reason: String!, idempotencyKey: String!): JSON
         placeOrder(encounterId: ID!, kind: String!, description: String, drugId: ID, route: String, frequency: String, quantity: String, quantityUnit: String, dose: JSON, extralabel: Boolean, sheet: JSON, idempotencyKey: String!): JSON
         cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
+        reverseAdministration(administrationId: ID!, reason: String!, witnessId: ID, idempotencyKey: String!): JSON
         completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
         admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
         moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
         dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
-        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, idempotencyKey: String!): JSON
+        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, idempotencyKey: String!): JSON
         skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
         openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON
@@ -104,7 +105,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         closeAnaesthesia(recordId: ID!, expectedVersion: Int!, complications: String, idempotencyKey: String!): JSON
         saveSurgeryReport(encounterId: ID!, procedure: String!, technique: String, findings: String, closure: String, sutures: String, specimens: String, assistantId: ID, idempotencyKey: String!): JSON
         saveDentalChart(encounterId: ID!, teeth: JSON!, idempotencyKey: String!): JSON
-        administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, idempotencyKey: String!): JSON
+        administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
+        reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
         recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
         suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
@@ -175,6 +177,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         rejectScribeDraft: op(scribe.rejectScribeDraft),
         placeOrder: op(treatment.placeOrder),
         cancelOrder: op(treatment.cancelOrder),
+        reverseAdministration: op(treatment.reverseAdministration),
         completeOrder: op(treatment.completeOrder),
         recordAdministration: op(treatment.recordAdministration),
         admitPatient: op(treatment.admitPatient),
@@ -190,6 +193,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         saveSurgeryReport: op(treatment.saveSurgeryReport),
         saveDentalChart: op(treatment.saveDentalChart),
         administerVaccine: op(vaccines.administerVaccine),
+        reverseVaccineAdministration: op(vaccines.reverseVaccineAdministration),
         recordOutsideVaccine: op(vaccines.recordOutsideVaccine),
         suppressReminder: op(vaccines.suppressReminder),
         addManualReminder: op(vaccines.addManualReminder),

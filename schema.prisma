@@ -775,6 +775,7 @@ model StaffMember {
   from_Prescription_prescriber              Prescription[]          @relation("Prescription_prescriber")
   from_CsContainer_openedBy                 CsContainer[]           @relation("CsContainer_openedBy")
   from_CsLogEntry_actor                     CsLogEntry[]            @relation("CsLogEntry_actor")
+  from_CsLogEntry_witness                   CsLogEntry[]            @relation("CsLogEntry_witness")
   from_Encounter_attendingDvm               Encounter[]             @relation("Encounter_attendingDvm")
   from_Encounter_participants               Encounter[]             @relation("Encounter_participants")
   from_Encounter_signedBy                   Encounter[]             @relation("Encounter_signedBy")
@@ -2243,6 +2244,8 @@ model CsLogEntry {
   recordedAt                        DateTime
   actor                             StaffMember?     @relation("CsLogEntry_actor", fields: [actorId], references: [id])
   actorId                           String?          @map("actor")
+  witness                           StaffMember?     @relation("CsLogEntry_witness", fields: [witnessId], references: [id])
+  witnessId                         String?          @map("witness")
   patient                           Patient?         @relation("CsLogEntry_patient", fields: [patientId], references: [id])
   patientId                         String?          @map("patient")
   client                            Client?          @relation("CsLogEntry_client", fields: [clientId], references: [id])
@@ -2260,6 +2263,7 @@ model CsLogEntry {
   @@index([containerId])
   @@index([deaRegistrationId])
   @@index([actorId])
+  @@index([witnessId])
   @@index([patientId])
   @@index([clientId])
   @@index([reversesId])
@@ -3138,36 +3142,40 @@ model VaccineProduct {
 }
 
 model VaccineAdministration {
-  id                                              String                 @id @default(cuid())
-  administration                                  Administration?        @relation("VaccineAdministration_administration", fields: [administrationId], references: [id])
-  administrationId                                String?                @map("administration")
-  patient                                         Patient?               @relation("VaccineAdministration_patient", fields: [patientId], references: [id])
-  patientId                                       String?                @map("patient")
-  encounter                                       Encounter?             @relation("VaccineAdministration_encounter", fields: [encounterId], references: [id])
-  encounterId                                     String?                @map("encounter")
-  product                                         VaccineProduct?        @relation("VaccineAdministration_product", fields: [productId], references: [id])
-  productId                                       String?                @map("product")
-  lot                                             InventoryLot?          @relation("VaccineAdministration_lot", fields: [lotId], references: [id])
-  lotId                                           String?                @map("lot")
-  lotNumber                                       String                 @default("")
-  lotExpiresOn                                    DateTime               @postgresql.Date
+  id                                              String                  @id @default(cuid())
+  administration                                  Administration?         @relation("VaccineAdministration_administration", fields: [administrationId], references: [id])
+  administrationId                                String?                 @map("administration")
+  patient                                         Patient?                @relation("VaccineAdministration_patient", fields: [patientId], references: [id])
+  patientId                                       String?                 @map("patient")
+  encounter                                       Encounter?              @relation("VaccineAdministration_encounter", fields: [encounterId], references: [id])
+  encounterId                                     String?                 @map("encounter")
+  product                                         VaccineProduct?         @relation("VaccineAdministration_product", fields: [productId], references: [id])
+  productId                                       String?                 @map("product")
+  lot                                             InventoryLot?           @relation("VaccineAdministration_lot", fields: [lotId], references: [id])
+  lotId                                           String?                 @map("lot")
+  lotNumber                                       String                  @default("")
+  lotExpiresOn                                    DateTime                @postgresql.Date
   doseSeries                                      Int
-  isInitialSeries                                 Boolean                @default(false)
+  isInitialSeries                                 Boolean                 @default(false)
   route                                           String
-  site                                            String                 @default("")
-  administeredOn                                  DateTime               @postgresql.Date
+  site                                            String                  @default("")
+  administeredOn                                  DateTime                @postgresql.Date
   durationMonths                                  Int
-  dueNextOn                                       DateTime               @postgresql.Date
-  vaccinatedBy                                    StaffMember?           @relation("VaccineAdministration_vaccinatedBy", fields: [vaccinatedById], references: [id])
-  vaccinatedById                                  String?                @map("vaccinatedBy")
-  supervisingDvm                                  StaffMember?           @relation("VaccineAdministration_supervisingDvm", fields: [supervisingDvmId], references: [id])
-  supervisingDvmId                                String?                @map("supervisingDvm")
+  dueNextOn                                       DateTime                @postgresql.Date
+  vaccinatedBy                                    StaffMember?            @relation("VaccineAdministration_vaccinatedBy", fields: [vaccinatedById], references: [id])
+  vaccinatedById                                  String?                 @map("vaccinatedBy")
+  supervisingDvm                                  StaffMember?            @relation("VaccineAdministration_supervisingDvm", fields: [supervisingDvmId], references: [id])
+  supervisingDvmId                                String?                 @map("supervisingDvm")
   policyVersions                                  Json?
-  certificate                                     RabiesCertificate?     @relation("VaccineAdministration_certificate", fields: [certificateId], references: [id])
-  certificateId                                   String?                @map("certificate")
+  certificate                                     RabiesCertificate?      @relation("VaccineAdministration_certificate", fields: [certificateId], references: [id])
+  certificateId                                   String?                 @map("certificate")
   source                                          String
-  from_ReminderSatisfaction_vaccineAdministration ReminderSatisfaction[] @relation("ReminderSatisfaction_vaccineAdministration")
-  from_AdverseEventReport_vaccineAdministration   AdverseEventReport[]   @relation("AdverseEventReport_vaccineAdministration")
+  reverses                                        VaccineAdministration?  @relation("VaccineAdministration_reverses", fields: [reversesId], references: [id])
+  reversesId                                      String?                 @map("reverses")
+  reason                                          String                  @default("")
+  from_VaccineAdministration_reverses             VaccineAdministration[] @relation("VaccineAdministration_reverses")
+  from_ReminderSatisfaction_vaccineAdministration ReminderSatisfaction[]  @relation("ReminderSatisfaction_vaccineAdministration")
+  from_AdverseEventReport_vaccineAdministration   AdverseEventReport[]    @relation("AdverseEventReport_vaccineAdministration")
 
   @@index([administrationId])
   @@index([patientId])
@@ -3177,6 +3185,7 @@ model VaccineAdministration {
   @@index([vaccinatedById])
   @@index([supervisingDvmId])
   @@index([certificateId])
+  @@index([reversesId])
 }
 
 model RabiesCertificate {
@@ -3200,6 +3209,8 @@ model RabiesCertificate {
   reportedTo                             String
   reportedAt                             DateTime?
   policyVersions                         Json?
+  voidedAt                               DateTime?
+  voidReason                             String                  @default("")
   createdAt                              DateTime                @default(now())
   updatedAt                              DateTime                @default(now()) @updatedAt
   from_VaccineAdministration_certificate VaccineAdministration[] @relation("VaccineAdministration_certificate")

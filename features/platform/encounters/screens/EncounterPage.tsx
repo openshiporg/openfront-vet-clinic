@@ -20,7 +20,7 @@ type Enc = {
   vitals: { id: string; at: string; temperature: string | null; temperatureUnit: string; heartRate: number | null; respRate: number | null; mucousMembranes: string; crtSeconds: string | null; painScore: number | null; by: Staff }[];
   findings: { id: string; system: string; status: string; text: string }[];
   diagnoses: { id: string; term: string; certainty: string; code: { code: string } | null }[];
-  orders: { id: string; ref: string; kind: string; description: string; status: string; route: string; frequency: string; version: number; warnings: { code: string; message?: string }[] | null; overrideReason: string; drug: { id: string; csSchedule: string } | null; orderedBy: Staff; administrations: { id: string; qty: string | null; unit: string; givenAt: string; givenBy: Staff; witness: Staff; lotNumber: string }[] }[];
+  orders: { id: string; ref: string; kind: string; description: string; status: string; route: string; frequency: string; version: number; warnings: { code: string; message?: string }[] | null; overrideReason: string; drug: { id: string; csSchedule: string } | null; orderedBy: Staff; administrations: { id: string; qty: string | null; unit: string; givenAt: string; givenBy: Staff; witness: Staff; lotNumber: string; reason: string; reverses: { id: string } | null }[] }[];
 };
 
 /**
@@ -32,7 +32,7 @@ type Enc = {
 export default async function EncounterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [data, tz] = await Promise.all([
-    q<{ encounter: Enc | null; drugProducts: { id: string; displayName: string; csSchedule: string }[]; diagnosisCodes: { id: string; code: string; term: string }[]; staffMembers: { id: string; displayName: string; kind: string }[]; vaccineProducts: { id: string; name: string; isRabies: boolean }[]; vaccineLots: { id: string; lotNumber: string; expiresOn: string; vaccine: { id: string } | null; location: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null; location: { id: string } | null }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null; location: { id: string } | null }[]; scribeSessions: { id: string; status: string; clientConsent: { id: string } | null; drafts: { id: string; status: string; sections: { kind: string; body: string }[] | null; acceptedBlocks: number[] | null; version: number }[] }[]; anaesthesiaRecords: { id: string; ref: string; status: string; asaStatus: string; procedure: string }[]; practiceSettings: { features: Record<string, boolean> | null } | null; vaccineAdministrations: { id: string; lotNumber: string; site: string; doseSeries: number; dueNextOn: string | null; product: { name: string } | null; vaccinatedBy: Staff; certificate: { id: string; ref: string; tagNumber: string } | null }[] }>(`
+    q<{ encounter: Enc | null; drugProducts: { id: string; displayName: string; csSchedule: string }[]; diagnosisCodes: { id: string; code: string; term: string }[]; witnesses: { id: string; displayName: string }[]; staffMembers: { id: string; displayName: string; kind: string }[]; vaccineProducts: { id: string; name: string; isRabies: boolean }[]; vaccineLots: { id: string; lotNumber: string; expiresOn: string; vaccine: { id: string } | null; location: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null; location: { id: string } | null }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null; location: { id: string } | null }[]; scribeSessions: { id: string; status: string; clientConsent: { id: string } | null; drafts: { id: string; status: string; sections: { kind: string; body: string }[] | null; acceptedBlocks: number[] | null; version: number }[] }[]; anaesthesiaRecords: { id: string; ref: string; status: string; asaStatus: string; procedure: string }[]; practiceSettings: { features: Record<string, boolean> | null } | null; vaccineAdministrations: { id: string; source: string; reason: string; lotNumber: string; site: string; doseSeries: number; dueNextOn: string | null; product: { name: string } | null; vaccinatedBy: Staff; reverses: { id: string } | null; certificate: { id: string; ref: string; tagNumber: string; voidedAt: string | null } | null }[] }>(`
       query E($id: ID!) {
         encounter(where: { id: $id }) {
           id ref kind status reason version startedAt submittedAt signedAt contentHash completeness voidReason
@@ -46,10 +46,11 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
           findings { id system status text }
           diagnoses { id term certainty code { code } }
           orders(orderBy: { createdAt: asc }) { id ref kind description status route frequency version warnings overrideReason drug { id csSchedule } orderedBy { id displayName }
-            administrations(orderBy: { givenAt: asc }) { id qty unit givenAt givenBy { id displayName } witness { id displayName } lotNumber } }
+            administrations(orderBy: { givenAt: asc }) { id qty unit givenAt givenBy { id displayName } witness { id displayName } lotNumber reason reverses { id } } }
         }
         drugProducts(where: { active: { equals: true } }, orderBy: { displayName: asc }) { id displayName csSchedule }
         diagnosisCodes(where: { active: { equals: true } }, orderBy: { term: asc }) { id code term }
+        witnesses: staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt"] } }, orderBy: { displayName: asc }) { id displayName }
         staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt", "assistant"] } }, orderBy: { displayName: asc }) { id displayName kind }
         vaccineProducts(where: { active: { equals: true } }, orderBy: { name: asc }) { id name isRabies }
         vaccineLots: inventoryLots(where: { status: { equals: "available" }, NOT: { vaccine: null } }, orderBy: { expiresOn: asc }) { id lotNumber expiresOn vaccine { id } location { id } }
@@ -58,7 +59,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
         scribeSessions(where: { encounter: { id: { equals: $id } } }, orderBy: { createdAt: desc }) { id status clientConsent { id } drafts(orderBy: { createdAt: desc }) { id status sections acceptedBlocks version } }
         anaesthesiaRecords(where: { encounter: { id: { equals: $id } } }, orderBy: { createdAt: desc }) { id ref status asaStatus procedure }
         practiceSettings { features }
-        vaccineAdministrations(where: { encounter: { id: { equals: $id } } }, orderBy: { administeredOn: asc }) { id lotNumber site doseSeries dueNextOn product { name } vaccinatedBy { id displayName } certificate { id ref tagNumber } }
+        vaccineAdministrations(where: { encounter: { id: { equals: $id } } }, orderBy: { administeredOn: asc }) { id source reason lotNumber site doseSeries dueNextOn product { name } vaccinatedBy { id displayName } reverses { id } certificate { id ref tagNumber voidedAt } }
       }`, { id }).catch(() => null),
     practiceTimeZone(),
   ]);
@@ -187,13 +188,30 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
               <Status value={o.status} />
             </div>
             {(o.warnings ?? []).map(w => <p key={w.code} className={`rounded-md border px-3 py-1.5 text-xs ${ALERT_TONE.warning}`}>{DOSE_WARNING[w.code] ?? w.message ?? label(w.code)}{o.overrideReason ? ` Override: ${o.overrideReason}` : ''}</p>)}
-            {o.administrations.map(a => <Meta key={a.id}>Given {a.qty ? `${quantity(a.qty)} ${a.unit}` : ''} by {a.givenBy?.displayName}{a.witness ? `, witnessed by ${a.witness.displayName}` : ''}{a.lotNumber ? ` · lot ${a.lotNumber}` : ''} · {when(a.givenAt, tz, 'dayTime')}</Meta>)}
+            {o.administrations.map(a => {
+              const reversal = Boolean(a.reverses);
+              const reversed = !reversal && o.administrations.some(r => r.reverses?.id === a.id);
+              return (
+                <div key={a.id} className="space-y-1">
+                  <Meta>{reversal ? `Reversed ${a.qty ? `${quantity(a.qty.replace(/^-/, ''))} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'} · ${a.reason}` : `Given ${a.qty ? `${quantity(a.qty)} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'}${a.witness ? `, witnessed by ${a.witness.displayName}` : ''}${a.lotNumber ? ` · lot ${a.lotNumber}` : ''}`}{reversed ? ' · reversed' : ''} · {when(a.givenAt, tz, 'dayTime')}</Meta>
+                  {!reversal && !reversed && e.status !== 'voided' ? (
+                    <Reverse>
+                      <CommandForm op="reverseAdministration" build="reverseAdministration" submit="Reverse this dose" fixed={{ administrationId: a.id }} paths={paths}
+                        fields={[
+                          { name: 'reason', label: 'Why (veterinarian only)', width: 'lg', placeholder: 'Recorded on the wrong patient' },
+                          ...(o.drug && o.drug.csSchedule !== 'none' ? [{ name: 'witnessId', label: 'Witness', options: [{ value: '', label: 'No witness' }, ...data.witnesses.map(s => ({ value: s.id, label: s.displayName }))] }] : []),
+                        ]} />
+                    </Reverse>
+                  ) : null}
+                </div>
+              );
+            })}
             {o.status === 'ordered' || o.status === 'in_progress' ? (
               o.drug ? (
                 <CommandForm op="recordAdministration" build="recordAdministration" submit="Record given" fixed={{ orderId: o.id }} paths={paths}
                   fields={o.drug.csSchedule !== 'none' ? [
                     { name: 'csContainerId', label: 'Controlled container', width: 'lg', options: data.csContainers.filter(c => c.product?.id === o.drug!.id && c.location?.id === locId).map(c => ({ value: c.id, label: c.ref })) },
-                    { name: 'witnessId', label: 'Witness', options: [{ value: '', label: 'No witness' }, ...people.map(s => ({ value: s.id, label: s.displayName }))] },
+                    { name: 'witnessId', label: 'Witness', options: [{ value: '', label: 'No witness' }, ...data.witnesses.map(s => ({ value: s.id, label: s.displayName }))] },
                     { name: 'wasteQty', label: 'Wasted (mL)', width: 'sm', placeholder: '0' },
                     { name: 'site', label: 'Site', placeholder: 'left cephalic' },
                   ] : [
@@ -228,15 +246,26 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
       </Section>
 
       <Section title="Vaccines">
-        {data.vaccineAdministrations.map(v => (
-          <Row key={v.id}>
-            <div className="min-w-0">
-              <p className="text-sm">{v.product?.name ?? 'Vaccine'}</p>
-              <Meta>Dose {v.doseSeries} · lot {v.lotNumber}{v.site ? ` · ${v.site}` : ''} · {v.vaccinatedBy?.displayName ?? 'unknown'}{v.dueNextOn ? ` · next due ${calendarDay(v.dueNextOn)}` : ''}</Meta>
+        {data.vaccineAdministrations.filter(v => v.source !== 'reversal').map(v => {
+          const reversal = data.vaccineAdministrations.find(r => r.reverses?.id === v.id);
+          return (
+            <div key={v.id} className="space-y-1 border-b py-2 last:border-b-0">
+              <Row>
+                <div className="min-w-0">
+                  <p className={`text-sm ${reversal ? 'text-muted-foreground line-through' : ''}`}>{v.product?.name ?? 'Vaccine'}</p>
+                  <Meta>Dose {v.doseSeries} · lot {v.lotNumber}{v.site ? ` · ${v.site}` : ''} · {v.vaccinatedBy?.displayName ?? 'unknown'}{!reversal && v.dueNextOn ? ` · next due ${calendarDay(v.dueNextOn)}` : ''}{reversal ? ` · reversed: ${reversal.reason}` : ''}</Meta>
+                </div>
+                {v.certificate ? <Link href={`/dashboard/platform/vaccines/certificates/${v.certificate.id}`} className="inline-flex min-h-11 shrink-0 items-center text-xs underline">Certificate {v.certificate.ref}{v.certificate.tagNumber ? ` · tag ${v.certificate.tagNumber}` : ''}{v.certificate.voidedAt ? ' · void' : ''}</Link> : null}
+              </Row>
+              {!reversal && e.status !== 'voided' ? (
+                <Reverse>
+                  <CommandForm op="reverseVaccineAdministration" build="reverseVaccineAdministration" submit="Reverse this vaccine" fixed={{ vaccineAdministrationId: v.id }} paths={paths}
+                    fields={[{ name: 'reason', label: 'Why (veterinarian only)', width: 'lg', placeholder: 'Second dose entered in error' }]} />
+                </Reverse>
+              ) : null}
             </div>
-            {v.certificate ? <Link href={`/dashboard/platform/vaccines/certificates/${v.certificate.id}`} className="shrink-0 text-xs underline">Certificate {v.certificate.ref}{v.certificate.tagNumber ? ` · tag ${v.certificate.tagNumber}` : ''}</Link> : null}
-          </Row>
-        ))}
+          );
+        })}
         {open ? (
           <CommandForm op="administerVaccine" build="administerVaccine" submit="Record vaccine" fixed={{ encounterId: e.id }} paths={paths}
             fields={[
@@ -245,6 +274,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
               { name: 'site', label: 'Site', placeholder: 'right hindlimb SC' },
               { name: 'supervisingDvmId', label: 'Supervising DVM', width: 'lg', options: [{ value: '', label: 'I am the veterinarian' }, ...dvms.map(s => ({ value: s.id, label: s.displayName }))] },
               { name: 'tagNumber', label: 'Rabies tag', width: 'sm' },
+              { name: 'repeatReason', label: 'Reason if repeating within 14 days', width: 'lg' },
             ]} />
         ) : null}
         <p className="text-xs text-muted-foreground">A rabies vaccine issues its certificate from this same entry; expired lots and under-age patients are refused. <Link href={`/dashboard/platform/vaccines?patient=${p.id}`} className="underline">Vaccine history and reminders</Link>.</p>
@@ -336,5 +366,15 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
       ) : null}
       <p className="text-xs text-muted-foreground">Opening this record is recorded in the <Link href="/dashboard/platform/read-audit" className="underline">read audit</Link>.</p>
     </Page>
+  );
+}
+
+/** A collapsed correction form: reversals are rare and veterinarian-only, so they stay out of the way. */
+function Reverse({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Reverse…</summary>
+      <div className="pt-1">{children}</div>
+    </details>
   );
 }

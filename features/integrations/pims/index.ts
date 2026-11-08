@@ -142,21 +142,41 @@ export function parseExport(system: PimsSystem, entity: ImportEntity, csv: strin
 export function importDate(value: string): string | null {
   const v = value.trim()
   if (!v) return null
+  const real = (iso: string) => { const d = new Date(`${iso}T00:00:00Z`); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null }
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v)
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  if (m) return real(`${m[1]}-${m[2]}-${m[3]}`)
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(v)
   if (m) {
     const year = m[3].length === 2 ? (Number(m[3]) > 50 ? 1900 : 2000) + Number(m[3]) : Number(m[3])
-    const iso = `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`
-    const d = new Date(`${iso}T00:00:00Z`)
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null
+    return real(`${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`)
   }
   return null
 }
 
+/**
+ * Export spellings → the practice's Species.code (seed codes: canine, feline, rabbit, ferret,
+ * bearded_dragon, cockatiel). Anything not here is matched against the species code or name in the
+ * database (importSpeciesCode), so a practice that adds a species needs no code change.
+ */
 export const SPECIES_ALIASES: Record<string, string> = {
-  canine: 'dog', dog: 'dog', k9: 'dog', feline: 'cat', cat: 'cat', equine: 'horse', horse: 'horse', rabbit: 'rabbit', lagomorph: 'rabbit',
-  avian: 'bird', bird: 'bird', ferret: 'ferret', reptile: 'reptile', 'pocket pet': 'small_mammal', rodent: 'small_mammal',
+  canine: 'canine', dog: 'canine', k9: 'canine', 'k-9': 'canine', puppy: 'canine',
+  feline: 'feline', cat: 'feline', kitten: 'feline',
+  rabbit: 'rabbit', lagomorph: 'rabbit', bunny: 'rabbit',
+  ferret: 'ferret', mustelid: 'ferret',
+  'bearded dragon': 'bearded_dragon', 'pogona vitticeps': 'bearded_dragon',
+  cockatiel: 'cockatiel',
+  equine: 'equine', horse: 'equine',
+}
+
+/** The species code a row's species text resolves to, given the codes and names set up here; null when none. */
+export function importSpeciesCode(value: string, species: { code: string; name: string }[]): string | null {
+  const v = norm(value)
+  if (!v) return null
+  const codes = new Set(species.map(s => s.code))
+  const alias = SPECIES_ALIASES[v]
+  if (alias && codes.has(alias)) return alias
+  const hit = species.find(s => s.code.toLowerCase() === v || s.code.toLowerCase().replace(/_/g, ' ') === v || norm(s.name) === v)
+  return hit?.code ?? null
 }
 
 export function importSex(value: string): { sex: string; reproductiveStatus: string } {

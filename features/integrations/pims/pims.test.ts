@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { importDate, importSex, mapHeaders, parseCsv, parseExport } from './index'
+import { importDate, importSex, importSpeciesCode, mapHeaders, parseCsv, parseExport } from './index'
+import { SPECIES } from '../../keystone/seed/clinicData'
 
 describe('PIMS CSV import', () => {
   it('parses RFC 4180 quoting, CRLF and embedded newlines', () => {
@@ -19,11 +20,25 @@ describe('PIMS CSV import', () => {
     expect(importDate('3/19/2014')).toBe('2014-03-19')
     expect(importDate('2014-03-19T00:00:00')).toBe('2014-03-19')
     expect(importDate('2/30/2024')).toBeNull()
+    expect(importDate('2026-02-30')).toBeNull()
     expect(importDate('03/19/14')).toBe('2014-03-19')
   })
   it('normalises sex codes', () => {
     expect(importSex('FS')).toEqual({ sex: 'female', reproductiveStatus: 'spayed' })
     expect(importSex('Male Neutered')).toEqual({ sex: 'male', reproductiveStatus: 'neutered' })
     expect(importSex('?')).toEqual({ sex: 'unknown', reproductiveStatus: 'unknown' })
+  })
+  it('resolves export species to the seeded species codes (B5)', () => {
+    const seeded = SPECIES.map(s => ({ code: s.code, name: s.name }))
+    expect(importSpeciesCode('Canine', seeded)).toBe('canine')
+    expect(importSpeciesCode('Dog', seeded)).toBe('canine')
+    expect(importSpeciesCode('FELINE', seeded)).toBe('feline')
+    expect(importSpeciesCode('cat', seeded)).toBe('feline')
+    expect(importSpeciesCode('Bearded Dragon', seeded)).toBe('bearded_dragon')
+    expect(importSpeciesCode('Rabbit', seeded)).toBe('rabbit')
+    // Every alias that names a seeded species points at a code that exists.
+    for (const s of seeded) expect(importSpeciesCode(s.name, seeded)).toBe(s.code)
+    expect(importSpeciesCode('Horse', seeded)).toBeNull()
+    expect(importSpeciesCode('', seeded)).toBeNull()
   })
 })

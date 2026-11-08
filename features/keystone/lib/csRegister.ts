@@ -19,6 +19,10 @@ export type CsEntryInput = {
   actorId: string
   patientId?: string | null
   clientId?: string | null
+  /** The second person who watched the draw or the waste (required for waste and Schedule II administer). */
+  witnessId?: string | null
+  /** A contra entry names the entry it corrects (reversal of an administration). */
+  reversesId?: string | null
   reason?: string
   id?: string
 }
@@ -33,12 +37,16 @@ export async function appendCsEntry(tx: Tx, input: CsEntryInput, now: Date) {
   const ref = await nextReference(tx, 'CS', now)
   const ciiRef = schedule === 'CII' || schedule === 'CIIN' ? await nextReference(tx, 'CII', now) : null
   const qty = toScale(dec(input.qtySigned), 'qty')
-  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null }
+  const witnessId = input.witnessId ?? null
+  if ((input.type === 'waste' || (input.type === 'administer' && ciiRef)) && !witnessId) throw new Error(`A ${input.type === 'waste' ? 'waste' : 'Schedule II'} register entry needs a witness`)
+  if (witnessId && witnessId === input.actorId) throw new Error('The witness must be someone other than the person recording the entry')
+  // The witness joins the hashed body only when present, so entries written before it existed still verify.
+  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null, ...(witnessId ? { witnessId } : {}), ...(input.reversesId ? { reversesId: input.reversesId } : {}) }
   const hash = sha256(`${prevHash}\n${canonicalJson(body)}`)
   return tx.csLogEntry.create({
     data: {
       ...(input.id ? { id: input.id } : {}), ref, ciiRef, containerId: container.id, deaRegistrationId: container.deaRegistrationId, schedule, type: input.type, qtySigned: qty, unit: input.unit,
-      occurredAt: input.occurredAt, recordedAt: now, actorId: input.actorId, patientId: input.patientId ?? null, clientId: input.clientId ?? null, reason: input.reason ?? '', prevHash, hash,
+      occurredAt: input.occurredAt, recordedAt: now, actorId: input.actorId, witnessId, reversesId: input.reversesId ?? null, patientId: input.patientId ?? null, clientId: input.clientId ?? null, reason: input.reason ?? '', prevHash, hash,
     },
   })
 }

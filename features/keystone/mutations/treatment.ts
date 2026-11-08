@@ -9,12 +9,12 @@ import { toJsonValue } from '../lib/canonical'
 import { appendCsEntry, containerBalance } from '../lib/csRegister'
 import { requireLicence } from '../domain/licensure'
 import { resolvePolicy } from '../domain/policy'
-import { blockingWarnings, calculateDose, quantityToGive, type DoseInput, type DoseUnit, type DosePer } from '../domain/dose'
-import { dueTimes, sheetFrequency, taskStatusAt } from '../domain/treatment'
+import { blockingWarnings, calculateDose, quantityToGive, DOSE_PERS, DOSE_UNITS, type DoseInput, type DoseUnit, type DosePer } from '../domain/dose'
+import { dueTimes, sheetFrequency, taskStatusAt, taskWindowProblem } from '../domain/treatment'
 import { ROUTES } from '../models/treatment'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
-import { activePatient, chartableEncounter, day, decimalText, latestWeight, locationDay, markInProgress, practiceSettings, staffById, staffOf, text, type Ctx, type StaffRow } from './clinical'
+import { activePatient, chartableEncounter, day, decimalText, latestWeight, locationDay, markInProgress, practiceSettings, staffById, staffOf, text, witnessFor, type Ctx, type StaffRow } from './clinical'
 
 /*
  * Orders, administrations, hospital stays, the treatment sheet and anaesthesia (SM§6–§7,
@@ -28,7 +28,14 @@ const LICENSED_ORDER: Record<string, string> = { medication: 'prescribe', proced
 
 type DoseArgs = { doseAmount: string; doseUnit: DoseUnit; dosePer: DosePer; weightId?: string | null; context?: 'outpatient' | 'inpatient' | 'anaesthesia' | null; manualOverrideQty?: string | null; overrideReason?: string | null }
 
+/** The basis and unit are closed lists: an unknown basis ("lb") is refused, never read as per animal. */
+export function checkDoseArgs(args: { doseUnit: unknown; dosePer: unknown }) {
+  if (!(DOSE_PERS as readonly unknown[]).includes(args.dosePer)) throw new DomainError(Codes.INVALID_INPUT, 'Dose per kg, per m² or per animal. For a per-lb dose, multiply by 2.2046 to get per kg.', { field: 'dosePer' })
+  if (!(DOSE_UNITS as readonly unknown[]).includes(args.doseUnit)) throw new DomainError(Codes.INVALID_INPUT, 'Choose the dose unit.', { field: 'doseUnit' })
+}
+
 async function doseFor(uow: UnitOfWork, patientId: string, drugId: string, args: DoseArgs, staff: StaffRow) {
+  checkDoseArgs(args)
   const patient = await activePatient(uow, patientId)
   const drug = await uow.tx.drugProduct.findUnique({ where: { id: drugId } })
   if (!drug || !drug.active) throw new DomainError(Codes.NOT_FOUND, 'Drug not found.')
@@ -49,8 +56,9 @@ async function doseFor(uow: UnitOfWork, patientId: string, drugId: string, args:
   try { result = calculateDose(input) } catch (error) { throw new DomainError(Codes.INVALID_INPUT, (error as Error).message, { field: 'doseAmount' }) }
   const blocks = blockingWarnings(result.warnings)
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
-    throw new DomainError(Codes.GUARD_FAILED, `${blocks.map(b => b.message).join(' ')} To go ahead, record an override reason.`, { reason: 'dose_blocked', problems: result.warnings })
+    throw new DomainError(Codes.GUARD_FAILED, `${blocks.map(b => b.message).join(' ')} To go ahead, a veterinarian records an override reason.`, { reason: 'dose_blocked', problems: result.warnings })
   }
+  if (blocks.length && staff.kind !== 'dvm') throw new DomainError(Codes.GUARD_FAILED, `${blocks.map(b => b.message).join(' ')} Only a veterinarian can override this.`, { reason: 'dose_blocked', problems: result.warnings })
   const row = await uow.tx.doseCalculation.create({
     data: {
       patientId, weightId: weight.id, weightKg: result.weightKg, weightAgeHours: weight.ageHours, doseAmount: result.doseAmount, doseUnit: result.doseUnit, dosePer: result.dosePer,
@@ -66,6 +74,7 @@ async function doseFor(uow: UnitOfWork, patientId: string, drugId: string, args:
 /** Preview a dose without saving (the order form shows it live). */
 export async function previewDose(_root: unknown, args: DoseArgs & { patientId: string; drugId: string }, context: Ctx) {
   return gated(context, { permissions: ['canOrder', 'canReadClinical'], tool: 'dose.preview', humanOnly: true }, args, async () => {
+    checkDoseArgs(args)
     const prisma = context.prisma
     const patient = await prisma.patient.findUnique({ where: { id: args.patientId }, select: { species: { select: { code: true } }, breed: { select: { geneticFlags: true } } } })
     const drug = await prisma.drugProduct.findUnique({ where: { id: args.drugId } })
@@ -216,14 +225,16 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
     const waste = args.wasteQty ? dec(decimalText(args.wasteQty, 'wasteQty')) : dec(0)
     const balance = await containerBalance(uow.tx, container.id)
     if (balance.lt(dec(qty).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`)
-    if (drug!.requiresWitnessOnAdminister || waste.gt(0)) {
-      if (!args.witnessId) throw new DomainError(Codes.INVALID_INPUT, 'A second person must witness this controlled drug.', { field: 'witnessId' })
-      if (args.witnessId === staff.id) throw new DomainError(Codes.GUARD_FAILED, 'The witness must be someone else.')
-      witnessId = (await staffById(uow, args.witnessId)).id
+    const scheduleII = drug!.csSchedule === 'CII' || drug!.csSchedule === 'CIIN'
+    // A witness is any second authorised person who is not the administrator (B2); it is recorded
+    // on the register entry itself, not only on the administration.
+    if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id
+    if ((drug!.requiresWitnessOnAdminister || scheduleII || waste.gt(0)) && !witnessId) {
+      throw new DomainError(Codes.INVALID_INPUT, waste.gt(0) ? 'Wasting a controlled drug needs a witness.' : 'A second person must witness this controlled drug.', { field: 'witnessId' })
     }
-    const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: 'administer', qtySigned: dec(qty).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: order.patientId, reason: order.ref }, uow.now)
+    const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: 'administer', qtySigned: dec(qty).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: order.ref }, uow.now)
     csEntryId = entry.id
-    if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: 'waste', qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: order.patientId, reason: `Waste on ${order.ref}, witnessed` }, uow.now)).id
+    if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: 'waste', qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: `Waste on ${order.ref}` }, uow.now)).id
     lotNumber = container.lotNumber
     lotExpiresOn = container.lotExpiresOn
   } else if (args.lotId) {
@@ -250,6 +261,57 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
   return { id: row.id, qty: row.qty.toString(), unit, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId }
 }
 
+/**
+ * Reverse an administration (M5): a veterinarian, with a reason. The original row never changes; a
+ * new row with a negative quantity points at it. A controlled dose gets a contra register entry
+ * (type adjust, positive, reverses the original) in the same transaction. When no live dose is left
+ * the order is marked reversed and its treatment-sheet tasks stop.
+ */
+export async function reverseAdministration(_root: unknown, args: { administrationId: string; reason: string; witnessId?: string | null; idempotencyKey: string }, context: Ctx) {
+  return gated(context, { permissions: ['canOrder', 'canAdminister'], tool: 'order.reverse_administration', humanOnly: true }, args, async actor => {
+    const reason = text(args.reason, 'reason', 300)
+    if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, 'Give the reason for the reversal (at least 8 characters).', { field: 'reason' })
+    const result = await command(context.prisma, { name: 'order.reverse_administration', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
+      const staff = await staffOf(uow, actor)
+      if (staff.kind !== 'dvm') throw new DomainError(Codes.NOT_AUTHORIZED, 'Only a veterinarian can reverse an administration.')
+      const original = await uow.tx.administration.findUnique({ where: { id: args.administrationId }, include: { csLogEntry: { select: { id: true, ref: true, qtySigned: true, unit: true, containerId: true } }, wasteLogEntry: { select: { ref: true } } } })
+      if (!original) throw new DomainError(Codes.NOT_FOUND, 'Administration not found.')
+      if (original.reversesId) throw new DomainError(Codes.GUARD_FAILED, 'That row is itself a reversal.')
+      const order = await lockRow<{ id: string; ref: string; status: string; version: number }>(uow.tx, 'ClinicalOrder', original.orderId!)
+      if (await uow.tx.administration.count({ where: { reversesId: original.id } })) throw new DomainError(Codes.GUARD_FAILED, 'This dose was already reversed.', { reason: 'already_reversed' })
+      let contraId: string | null = null
+      let witnessId: string | null = null
+      if (original.csLogEntry) {
+        if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id
+        await lockRow(uow.tx, 'CsContainer', original.csLogEntry.containerId!)
+        // The drug was not given: the register gets it back with a contra entry naming the original.
+        contraId = (await appendCsEntry(uow.tx, { containerId: original.csLogEntry.containerId!, type: 'adjust', qtySigned: dec(original.csLogEntry.qtySigned.toString()).neg(), unit: original.csLogEntry.unit ?? 'mL', occurredAt: uow.now, actorId: staff.id, witnessId, patientId: original.patientId, reversesId: original.csLogEntry.id, reason: `Reversal of ${original.csLogEntry.ref} on ${order.ref}: ${reason}`.slice(0, 300) }, uow.now)).id
+      }
+      const row = await uow.tx.administration.create({
+        data: {
+          orderId: original.orderId, patientId: original.patientId, encounterId: original.encounterId, lotId: original.lotId, lotNumber: original.lotNumber, lotExpiresOn: original.lotExpiresOn,
+          csContainerId: original.csContainerId, csLogEntryId: contraId, qty: toScale(dec(original.qty.toString()).neg(), 'qty'), unit: original.unit, route: original.route, site: original.site,
+          givenById: staff.id, witnessId, givenAt: uow.now, reversesId: original.id, reason,
+        },
+      })
+      const live = await uow.tx.administration.count({ where: { orderId: order.id, reversesId: null, from_Administration_reverses: { none: {} } } })
+      let orderStatus = order.status
+      if (!live && ['ordered', 'in_progress'].includes(order.status)) {
+        const t = await transition(uow, { model: 'ClinicalOrder', id: order.id, from: ['ordered', 'in_progress'], to: 'reversed', expectedVersion: order.version, actor, eventType: 'order.reversed', reason, data: { cancelReason: `Doses reversed: ${reason}`.slice(0, 300) } })
+        orderStatus = String(t.status)
+        const sheets = await uow.tx.treatmentSheetOrder.findMany({ where: { orderId: order.id, active: true }, select: { id: true } })
+        for (const s of sheets) {
+          await uow.tx.treatmentSheetOrder.update({ where: { id: s.id }, data: { active: false, endAt: uow.now, version: { increment: 1 } } })
+          await uow.tx.treatmentTask.updateMany({ where: { sheetOrderId: s.id, status: { in: ['scheduled', 'due', 'overdue'] } }, data: { status: 'skipped', skipReason: `Order reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } })
+        }
+      }
+      auditCreate(uow, actor, 'Administration', row.id, 'order.administration_reversed', { reverses: original.id, orderRef: order.ref, qty: original.qty.toString(), contraCsLogEntryId: contraId, reason, orderStatus })
+      return { id: row.id, reverses: original.id, contraCsLogEntryId: contraId, orderStatus }
+    })
+    return { replay: result.replay, ...result.value }
+  })
+}
+
 export async function completeOrder(_root: unknown, args: { orderId: string; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canOrder', 'canAdminister'], tool: 'order.complete', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'order.complete', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
@@ -263,6 +325,12 @@ export async function completeOrder(_root: unknown, args: { orderId: string; exp
 
 // ── Hospital stays and the treatment sheet ─────────────────────────────────────────────────
 
+/** M7: a cage holds one patient. Checked here (the advisory lock serialises callers) so the user gets a clear refusal; the EXCLUDE constraint CageAssignment_no_overlap still backs it. */
+async function cageFree(uow: UnitOfWork, cage: { id: string; code: string }) {
+  const taken = await uow.tx.cageAssignment.findFirst({ where: { cageId: cage.id, toAt: null }, select: { stay: { select: { ref: true, patient: { select: { name: true } } } } } })
+  if (taken) throw new DomainError(Codes.GUARD_FAILED, `Cage ${cage.code} is occupied${taken.stay?.patient?.name ? ` by ${taken.stay.patient.name}` : ''} (${taken.stay?.ref ?? 'another stay'}). Choose a free cage.`, { reason: 'cage_occupied' })
+}
+
 export async function admitPatient(_root: unknown, args: { encounterId: string; cageId: string; codeStatus: 'full' | 'closed_chest_only' | 'dnr'; reason?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canOrder'], tool: 'stay.admit', humanOnly: true }, args, async actor => {
     if (!['full', 'closed_chest_only', 'dnr'].includes(args.codeStatus)) throw new DomainError(Codes.INVALID_INPUT, 'Record the CPR code status.', { field: 'codeStatus' })
@@ -274,6 +342,7 @@ export async function admitPatient(_root: unknown, args: { encounterId: string; 
       const cage = await uow.tx.cage.findUnique({ where: { id: args.cageId }, select: { id: true, code: true, active: true, ward: { select: { locationId: true } } } })
       if (!cage || !cage.active) throw new DomainError(Codes.NOT_FOUND, 'Cage not found.')
       if (cage.ward?.locationId !== enc.locationId) throw new DomainError(Codes.GUARD_FAILED, 'That cage is at another location.')
+      await cageFree(uow, cage)
       const live = await uow.tx.hospitalStay.findFirst({ where: { patientId: enc.patientId, status: { in: ['admitted', 'in_care', 'ready_for_discharge'] } }, select: { ref: true } })
       if (live) throw new DomainError(Codes.GUARD_FAILED, `The patient is already admitted (${live.ref}).`)
       const ref = await nextReference(uow.tx, 'STAY', uow.now)
@@ -300,6 +369,7 @@ export async function moveCage(_root: unknown, args: { stayId: string; cageId: s
       await advisoryLock(uow.tx, `cage:${args.cageId}`)
       const cage = await uow.tx.cage.findUnique({ where: { id: args.cageId }, select: { id: true, code: true, active: true, ward: { select: { locationId: true } } } })
       if (!cage || !cage.active || cage.ward?.locationId !== stay.locationId) throw new DomainError(Codes.NOT_FOUND, 'Cage not found at this location.')
+      await cageFree(uow, cage)
       await uow.tx.cageAssignment.updateMany({ where: { stayId: stay.id, toAt: null }, data: { toAt: uow.now } })
       await uow.tx.cageAssignment.create({ data: { stayId: stay.id, cageId: cage.id, fromAt: uow.now } })
       await uow.tx.hospitalStay.update({ where: { id: stay.id }, data: { cageId: cage.id, version: { increment: 1 } } })
@@ -381,20 +451,32 @@ export async function runTreatmentSheetJob(uow: UnitOfWork) {
   return { sheets: sheets.length, created, due, overdue }
 }
 
-export async function completeTreatmentTask(_root: unknown, args: { taskId: string; expectedVersion: number; observation?: string | null; qty?: string | null; lotId?: string | null; csContainerId?: string | null; witnessId?: string | null; wasteQty?: string | null; idempotencyKey: string }, context: Ctx) {
+export async function completeTreatmentTask(_root: unknown, args: { taskId: string; expectedVersion: number; observation?: string | null; qty?: string | null; lotId?: string | null; csContainerId?: string | null; witnessId?: string | null; wasteQty?: string | null; earlyReason?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canAdminister'], tool: 'treatment.complete', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'treatment.complete', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const staff = await staffOf(uow, actor)
-      const task = await lockRow<{ id: string; status: string; version: number; sheetOrderId: string }>(uow.tx, 'TreatmentTask', args.taskId)
+      const task = await lockRow<{ id: string; status: string; version: number; sheetOrderId: string; dueAt: Date }>(uow.tx, 'TreatmentTask', args.taskId)
       if (task.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, 'This task changed since you loaded it.', { currentVersion: task.version })
       if (!['scheduled', 'due', 'overdue'].includes(task.status)) throw new DomainError(Codes.INVALID_TRANSITION, `This task is already ${task.status}.`)
-      const sheet = await uow.tx.treatmentSheetOrder.findUniqueOrThrow({ where: { id: task.sheetOrderId }, select: { order: { select: { id: true, kind: true, drugId: true } } } })
+      // Serialise every completion on the same sheet line, so two nurses can't both give the dose.
+      await lockRow(uow.tx, 'TreatmentSheetOrder', task.sheetOrderId)
+      const sheet = await uow.tx.treatmentSheetOrder.findUniqueOrThrow({ where: { id: task.sheetOrderId }, select: { frequency: true, order: { select: { id: true, kind: true, drugId: true, locationId: true } } } })
+      // B3: only inside the task's window; never a second dose inside the interval.
+      const earlyReason = args.earlyReason?.trim() ?? ''
+      if (earlyReason && staff.kind !== 'dvm') throw new DomainError(Codes.NOT_AUTHORIZED, 'Only a veterinarian can give a scheduled dose early.', { field: 'earlyReason' })
+      if (earlyReason && earlyReason.length < 8) throw new DomainError(Codes.INVALID_INPUT, 'Say why the dose is given early.', { field: 'earlyReason' })
+      const lastDone = await uow.tx.treatmentTask.findFirst({ where: { sheetOrderId: task.sheetOrderId, status: 'done', id: { not: task.id } }, orderBy: { doneAt: 'desc' }, select: { doneAt: true } })
+      const loc = sheet.order?.locationId ? await uow.tx.location.findUnique({ where: { id: sheet.order.locationId }, select: { timeZone: true } }) : null
+      const problem = taskWindowProblem({ frequency: sheet.frequency, dueAt: task.dueAt, now: uow.now, lastDoneAt: lastDone?.doneAt ?? null, earlyOverride: Boolean(earlyReason), timeZone: loc?.timeZone })
+      if (problem) throw new DomainError(Codes.GUARD_FAILED, problem.message, { reason: problem.code })
       let administrationId: string | null = null
       if (sheet.order?.kind === 'medication' || sheet.order?.drugId) {
         administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id })).id
       }
-      await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: 'done', doneById: staff.id, doneAt: uow.now, administrationId, observation: args.observation ? ({ note: text(args.observation, 'observation', 2000) } as never) : undefined, version: { increment: 1 } } })
-      auditCreate(uow, actor, 'TreatmentTask', task.id, 'treatment.done', { administrationId })
+      const note = args.observation ? text(args.observation, 'observation', 2000) : ''
+      const observation = note || earlyReason ? ({ ...(note ? { note } : {}), ...(earlyReason ? { earlyReason, earlyBy: staff.id } : {}) } as never) : undefined
+      await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: 'done', doneById: staff.id, doneAt: uow.now, administrationId, observation, version: { increment: 1 } } })
+      auditCreate(uow, actor, 'TreatmentTask', task.id, 'treatment.done', { administrationId, early: Boolean(earlyReason) }, { reason: earlyReason || null })
       return { id: task.id, status: 'done', administrationId }
     })
     return { replay: result.replay, ...result.value }
@@ -463,17 +545,25 @@ export async function openAnaesthesia(_root: unknown, args: { encounterId: strin
   })
 }
 
-const ANAESTHESIA_STEPS: Record<string, { from: string[]; to: string; field: 'inductionAt' | 'intubatedAt' | 'extubatedAt' | 'recoveryEndAt' }> = {
+/**
+ * B4: induction → intubation → extubation, each recorded once. Extubation needs a recorded
+ * intubation; a time already recorded is never overwritten (the database refuses both too).
+ */
+const ANAESTHESIA_STEPS: Record<string, { from: string[]; to: string; field: 'inductionAt' | 'intubatedAt' | 'extubatedAt'; needs?: 'inductionAt' | 'intubatedAt' }> = {
   induce: { from: ['open'], to: 'monitoring', field: 'inductionAt' },
-  intubate: { from: ['monitoring'], to: 'monitoring', field: 'intubatedAt' },
-  extubate: { from: ['monitoring'], to: 'recovery', field: 'extubatedAt' },
+  intubate: { from: ['monitoring'], to: 'monitoring', field: 'intubatedAt', needs: 'inductionAt' },
+  extubate: { from: ['monitoring'], to: 'recovery', field: 'extubatedAt', needs: 'intubatedAt' },
 }
+const STEP_LABEL = { inductionAt: 'Induction', intubatedAt: 'Intubation', extubatedAt: 'Extubation' } as const
 
 export async function anaesthesiaEvent(_root: unknown, args: { recordId: string; event: 'induce' | 'intubate' | 'extubate'; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canAdminister'], tool: 'anaesthesia.event', humanOnly: true }, args, async actor => {
     const step = ANAESTHESIA_STEPS[args.event]
     if (!step) throw new DomainError(Codes.INVALID_INPUT, 'Unknown anaesthesia event.', { field: 'event' })
     const result = await command(context.prisma, { name: 'anaesthesia.event', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
+      const rec = await lockRow<{ id: string; ref: string; inductionAt: Date | null; intubatedAt: Date | null; extubatedAt: Date | null }>(uow.tx, 'AnaesthesiaRecord', args.recordId)
+      if (rec[step.field]) throw new DomainError(Codes.INVALID_TRANSITION, `${STEP_LABEL[step.field]} was already recorded on ${rec.ref}; times are never overwritten.`, { reason: 'already_recorded' })
+      if (step.needs && !rec[step.needs]) throw new DomainError(Codes.INVALID_TRANSITION, `Record ${STEP_LABEL[step.needs].toLowerCase()} before ${STEP_LABEL[step.field].toLowerCase()}.`, { reason: 'out_of_order' })
       const row = await transition(uow, { model: 'AnaesthesiaRecord', id: args.recordId, from: step.from, to: step.to, expectedVersion: args.expectedVersion, actor, eventType: `anaesthesia.${args.event}`, data: { [step.field]: uow.now } })
       return { id: row.id, status: row.status, version: row.version }
     })
@@ -490,8 +580,10 @@ export async function recordMonitoring(_root: unknown, args: { recordId: string;
       if (!['monitoring', 'recovery'].includes(rec.status)) throw new DomainError(Codes.GUARD_FAILED, `Monitoring is recorded after induction; the record is ${rec.status}.`)
       const int = (v: unknown, f: string, max: number) => (v === null || v === undefined || v === '' ? null : Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= max ? Number(v) : (() => { throw new DomainError(Codes.INVALID_INPUT, `${f} is out of range.`, { field: f }) })())
       const d = (v: unknown, f: string) => (v === null || v === undefined || v === '' ? null : decimalText(v, f))
+      // Body temperature under anaesthesia in °C: 25–45 (the database CHECK MonitoringReading_ranges holds the same).
+      const tempC = (v: unknown) => { const t = d(v, 'tempC'); if (t !== null && (dec(t).lt(25) || dec(t).gt(45))) throw new DomainError(Codes.INVALID_INPUT, `Temperature ${t} °C is out of range (25–45 °C). Was it entered in °F?`, { field: 'tempC' }); return t }
       const row = await uow.tx.monitoringReading.create({
-        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, 'hr', 500), rr: int(args.rr, 'rr', 300), spo2: int(args.spo2, 'spo2', 100), etco2: int(args.etco2, 'etco2', 150), sbp: int(args.sbp, 'sbp', 400), dbp: int(args.dbp, 'dbp', 300), map: int(args.map, 'map', 300), tempC: d(args.tempC, 'tempC'), agentPct: d(args.agentPct, 'agentPct'), o2FlowLpm: d(args.o2FlowLpm, 'o2FlowLpm'), fluidsRateMlHr: d(args.fluidsRateMlHr, 'fluidsRateMlHr'), notes: text(args.notes ?? '', 'notes', 500, false), byId: staff.id },
+        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, 'hr', 500), rr: int(args.rr, 'rr', 300), spo2: int(args.spo2, 'spo2', 100), etco2: int(args.etco2, 'etco2', 150), sbp: int(args.sbp, 'sbp', 400), dbp: int(args.dbp, 'dbp', 300), map: int(args.map, 'map', 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, 'agentPct'), o2FlowLpm: d(args.o2FlowLpm, 'o2FlowLpm'), fluidsRateMlHr: d(args.fluidsRateMlHr, 'fluidsRateMlHr'), notes: text(args.notes ?? '', 'notes', 500, false), byId: staff.id },
       })
       auditCreate(uow, actor, 'MonitoringReading', row.id, 'anaesthesia.reading', { recordId: rec.id })
       return { id: row.id }
