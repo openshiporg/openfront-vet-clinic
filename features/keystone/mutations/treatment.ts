@@ -223,15 +223,15 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
     if (container.lotExpiresOn && day(container.lotExpiresOn)! < on) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} expired on ${day(container.lotExpiresOn)}.`)
     if (container.budAt && container.budAt < uow.now) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} is past its beyond-use date.`)
     const waste = args.wasteQty ? dec(decimalText(args.wasteQty, 'wasteQty')) : dec(0)
-    const balance = await containerBalance(uow.tx, container.id)
-    if (balance.lt(dec(qty).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`)
     const scheduleII = drug!.csSchedule === 'CII' || drug!.csSchedule === 'CIIN'
     // A witness is any second authorised person who is not the administrator (B2); it is recorded
-    // on the register entry itself, not only on the administration.
+    // on the register entry itself, not only on the administration. Who may act is checked before stock.
     if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id
     if ((drug!.requiresWitnessOnAdminister || scheduleII || waste.gt(0)) && !witnessId) {
       throw new DomainError(Codes.INVALID_INPUT, waste.gt(0) ? 'Wasting a controlled drug needs a witness.' : 'A second person must witness this controlled drug.', { field: 'witnessId' })
     }
+    const balance = await containerBalance(uow.tx, container.id)
+    if (balance.lt(dec(qty).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`)
     const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: 'administer', qtySigned: dec(qty).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: order.ref }, uow.now)
     csEntryId = entry.id
     if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: 'waste', qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: `Waste on ${order.ref}` }, uow.now)).id
