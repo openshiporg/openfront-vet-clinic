@@ -141,6 +141,9 @@ describe.skipIf(!hasTestDatabase)('Phase 2 review fixes (database)', () => {
     await expect(administerVaccine(null, { encounterId: enc.id, productId: 'seed_vx_rabies3_k9', lotId: 'seed_lot_rab_main', site: 'Left hindlimb SC', tagNumber: '26-118805', idempotencyKey: uniqueKey('vx') }, okafor)).rejects.toMatchObject({ code: 'GUARD_FAILED', details: { reason: 'repeat_same_day' } })
     const cert = await prisma.rabiesCertificate.findFirstOrThrow({ where: { patientId: 'seed_pet_025_2' } })
     await expect(prisma.rabiesCertificate.create({ data: { ref: 'RAB-2026-990001', patientId: DOG, vaccinatedOn: new Date(), durationMonths: 12, nextDueOn: new Date(Date.now() + 365 * 86_400_000), tagNumber: '26-118804', tagJurisdiction: cert.tagJurisdiction, reportedTo: 'none' } })).rejects.toSatisfy(e => /RabiesCertificate_tag_unique|Unique constraint/i.test(pg(e)))
+    // The document worker links the rendered PDF to the certificate (the signed-record trigger must allow it).
+    await prisma.rabiesCertificate.update({ where: { id: cert.id }, data: { updatedAt: new Date() } })
+    await expect(prisma.rabiesCertificate.update({ where: { id: cert.id }, data: { voidedAt: new Date() } })).rejects.toSatisfy(e => /RabiesCertificate_void_reason/.test(pg(e)))
     const va = await prisma.vaccineAdministration.findUniqueOrThrow({ where: { id: first.id } })
     await expect(prisma.vaccineAdministration.create({ data: { ...va, id: undefined, createdAt: undefined, certificateId: null, reason: '', reversesId: null, policyVersions: [] } as never })).rejects.toSatisfy(e => /already given to the patient that day/.test(pg(e)))
   }, 120_000)
