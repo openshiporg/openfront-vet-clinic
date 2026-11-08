@@ -170,6 +170,14 @@ export type HouseholdSeed = {
   people: { id: string; firstName: string; lastName: string; relationship: string; dob: string; phone: string | null; email: string }[]
   pets: PetSeed[]; status?: string; source?: string
 }
+/** Typical adult weight range by breed (kg), so a seeded Chihuahua weighs like one: doses are calculated from it. */
+const BREED_KG: Record<string, [number, number]> = {
+  'Labrador Retriever': [25, 36], 'Golden Retriever': [25, 34], 'German Shepherd': [24, 40], 'French Bulldog': [8, 13], 'Border Collie': [13, 20], 'Rough Collie': [18, 29],
+  'Australian Shepherd': [16, 30], Dachshund: [7, 14], Beagle: [9, 14], Boxer: [25, 32], Chihuahua: [1.5, 3], 'Pit Bull Terrier': [14, 30], 'Siberian Husky': [16, 27],
+  'Poodle (Standard)': [18, 30], 'Poodle (Miniature)': [4, 8], 'Shih Tzu': [4, 7.5], 'Yorkshire Terrier': [2, 3.5], 'Cavalier King Charles Spaniel': [5.5, 8.5], 'Great Dane': [50, 80], 'Mixed Breed': [8, 30],
+  'Domestic Shorthair': [3.5, 6], 'Domestic Longhair': [3.5, 6], 'Maine Coon': [5.5, 9], Siamese: [3, 5], Ragdoll: [4.5, 8], Bengal: [3.5, 6.5], Persian: [3.5, 5.5], 'British Shorthair': [4, 7.5], Sphynx: [3, 5],
+}
+
 export type PetSeed = {
   id: string; name: string; species: string; breed: string; sex: string; repro: string; dob: string; colour: string; weightsKg: string[]; microchip: string | null; status?: string
   alerts?: { kind: string; severity: string; text: string }[]; diedOn?: string
@@ -210,7 +218,8 @@ export function households(): HouseholdSeed[] {
       const name = species === 'canine' ? DOGS[(i + p * 5) % DOGS.length] : species === 'feline' ? CATS[(i + p * 3) % CATS.length] : pick(['Clover', 'Bandit', 'Spike', 'Kiwi'])
       const breed = species === 'canine' ? pick(dogBreeds) : species === 'feline' ? pick(catBreeds) : SPECIES.find(s => s.code === species)!.breeds[0]
       const year = 2012 + Math.floor(r() * 14)
-      const base = species === 'canine' ? 6 + r() * 34 : species === 'feline' ? 3 + r() * 4 : species === 'rabbit' ? 1.2 + r() : species === 'ferret' ? 0.7 + r() * 0.6 : species === 'bearded_dragon' ? 0.35 + r() * 0.15 : 0.08 + r() * 0.02
+      const [lo, hi] = BREED_KG[breed] ?? (species === 'canine' ? [8, 30] : [3, 6])
+      const base = species === 'canine' || species === 'feline' ? lo + r() * (hi - lo) : species === 'rabbit' ? 1.2 + r() : species === 'ferret' ? 0.7 + r() * 0.6 : species === 'bearded_dragon' ? 0.35 + r() * 0.15 : 0.08 + r() * 0.02
       // Integer grams (3 places of kg) or tens of grams (2 places), then an exact decimal string.
       const weights = [94, 98, 100].map(pct => {
         const places = base < 1 ? 3 : 2
@@ -233,6 +242,12 @@ export function households(): HouseholdSeed[] {
   out[7].pets[0].alerts = [{ kind: 'behaviour_caution', severity: 'warn', text: 'Bites when restrained: muzzle on arrival, two-person handling.' }]
   const nsaidCat = out[9].pets.find(p => p.species === 'feline') ?? out[9].pets[0]
   Object.assign(nsaidCat, { species: 'feline', breed: 'Domestic Shorthair', name: 'Saffron', alerts: [{ kind: 'drug_sensitivity', severity: 'block', text: 'NSAID intolerance (acute kidney injury after meloxicam, 2025). No NSAIDs.' }] })
+  // An override changes the species or breed, so give those pets that breed's weights too.
+  for (const pet of [collie, nsaidCat]) {
+    const [lo, hi] = BREED_KG[pet.breed] ?? [3, 6]
+    const mid = (lo + hi) / 2
+    pet.weightsKg = [94, 98, 100].map(pct => toScale(dec(Math.round(mid * pct)).div(100), 2))
+  }
   out[12].pets[0].alerts = [{ kind: 'allergy', severity: 'warn', text: 'Vaccine reaction (facial swelling) after leptospirosis vaccine: pre-medicate and split vaccines.' }]
   // A pet that died: its owner is never sent "due" messages again.
   Object.assign(out[15].pets[0], { status: 'deceased', diedOn: '2026-09-18' })

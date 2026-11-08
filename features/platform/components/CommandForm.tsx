@@ -13,7 +13,7 @@ import { pillClass } from './ActionButton';
  * once per intent and reused on retry, like ActionButton.
  */
 
-export type Field = { name: string; label: string; placeholder?: string; defaultValue?: string; options?: { value: string; label: string }[]; hint?: string; width?: 'sm' | 'md' | 'lg' };
+export type Field = { name: string; label: string; placeholder?: string; defaultValue?: string; options?: { value: string; label: string }[]; hint?: string; width?: 'sm' | 'md' | 'lg' | 'full'; multiline?: number };
 
 export function CommandForm({ op, fields, fixed = {}, build, submit, paths, confirm, className }: {
   op: string;
@@ -58,12 +58,14 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
       }}
     >
       {fields.map((f) => (
-        <label key={f.name} className={cn('flex min-w-0 max-w-full flex-col gap-1 text-xs text-muted-foreground', f.width === 'lg' ? 'w-full sm:w-80' : f.options ? (f.width === 'sm' ? 'w-auto min-w-24' : 'w-auto min-w-36') : f.width === 'sm' ? 'w-24' : 'w-36')}>
+        <label key={f.name} className={cn('flex min-w-0 max-w-full flex-col gap-1 text-xs text-muted-foreground', f.width === 'full' ? 'w-full' : f.width === 'lg' ? 'w-full sm:w-96' : f.options ? (f.width === 'sm' ? 'w-auto min-w-24' : 'w-auto min-w-36') : f.width === 'sm' ? 'w-24' : 'w-36')}>
           {f.label}
           {f.options ? (
             <select className="h-8 w-full max-w-full rounded-md border bg-background pl-2 pr-7 text-sm text-foreground" value={values[f.name]} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
               {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+          ) : f.multiline ? (
+            <textarea rows={f.multiline} className="w-full rounded-md border bg-background px-2 py-1.5 text-sm leading-relaxed text-foreground" value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
           ) : (
             <input className="h-8 rounded-md border bg-background px-2 font-mono text-sm text-foreground" value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
           )}
@@ -81,6 +83,7 @@ function summaryOf(data: unknown): string {
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== 'object') return 'Done.';
   if (d.duplicate === true) return 'Already recorded a few minutes ago; kept the one reading.';
+  if (typeof d.ref === 'string') return `${d.ref} · ${label(String(d.status ?? 'done'))}`;
   if (typeof d.reference === 'string') return `${d.reference} · ${label(String(d.status ?? 'done'))}`;
   if (typeof d.status === 'string') return d.status === 'pending' ? 'Sent for approval.' : `Done · ${label(d.status)}.`;
   return 'Done.';
@@ -139,6 +142,94 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
   addPatientAlert: (v) => {
     required(v, 'patientId', 'kind', 'severity', 'text');
     return { patientId: v.patientId, kind: v.kind, severity: v.severity, text: v.text.trim() };
+  },
+  // ── Phase 2: the medical record ──
+  openEncounter: (v) => {
+    required(v, 'patientId', 'locationId', 'kind');
+    return { patientId: v.patientId, locationId: v.locationId, kind: v.kind, reason: v.reason?.trim() || undefined, attendingDvmId: v.attendingDvmId || undefined, appointmentId: v.appointmentId || undefined };
+  },
+  saveSoapSection: (v) => {
+    required(v, 'encounterId', 'kind', 'body');
+    return { encounterId: v.encounterId, kind: v.kind, body: v.body.trim(), ...(v.expectedVersion ? { expectedVersion: Number(v.expectedVersion) } : {}), ...(v.ordinal ? { ordinal: Number(v.ordinal) } : {}) };
+  },
+  recordVitals: (v) => {
+    required(v, 'encounterId');
+    const n = (name: string, field: string, min: number, max: number) => (v[name]?.trim() ? ints(v[name], field, min, max) : undefined);
+    const d = (name: string, field: string) => { const t = v[name]?.trim(); if (!t) return undefined; if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) throw new Error(`${field}: a number like 101.5`); return t; };
+    const out = { encounterId: v.encounterId, temperature: d('temperature', 'Temperature'), temperatureUnit: v.temperature?.trim() ? (v.temperatureUnit || 'F') : undefined, heartRate: n('heartRate', 'Heart rate', 10, 400), respRate: n('respRate', 'Respiratory rate', 2, 200), painScore: n('painScore', 'Pain score', 0, 10), mucousMembranes: v.mucousMembranes?.trim() || undefined, crtSeconds: d('crtSeconds', 'CRT') };
+    if (Object.values(out).filter(x => x !== undefined).length <= 1) throw new Error('Enter at least one reading.');
+    return out;
+  },
+  setExamFinding: (v) => { required(v, 'encounterId', 'system', 'status'); return { encounterId: v.encounterId, system: v.system, status: v.status, text: v.text?.trim() || undefined }; },
+  addDiagnosis: (v) => {
+    required(v, 'encounterId', 'certainty');
+    if (!v.codeId && !v.term?.trim()) throw new Error('Choose a diagnosis or type one.');
+    return { encounterId: v.encounterId, codeId: v.codeId || undefined, term: v.codeId ? undefined : v.term.trim(), certainty: v.certainty, addToProblems: v.addToProblems === 'yes' };
+  },
+  addAddendum: (v) => { required(v, 'encounterId', 'sectionKind', 'reason', 'body'); return { encounterId: v.encounterId, sectionKind: v.sectionKind, reason: v.reason.trim(), body: v.body.trim() }; },
+  /** A medication order: the dose is typed per kg (or m², or per animal); the server calculates from the recorded weight. */
+  placeOrder: (v) => {
+    required(v, 'encounterId', 'kind');
+    if (v.kind !== 'medication') { required(v, 'description'); return { encounterId: v.encounterId, kind: v.kind, description: v.description.trim() }; }
+    required(v, 'drugId', 'doseAmount', 'route', 'frequency');
+    if (!/^\d{1,5}(\.\d{1,6})?$/.test(v.doseAmount.trim())) throw new Error('Dose: a number like 2.2');
+    const dose = { doseAmount: v.doseAmount.trim(), doseUnit: v.doseUnit || 'mg', dosePer: v.dosePer || 'kg', ...(v.overrideReason?.trim() ? { overrideReason: v.overrideReason.trim() } : {}) };
+    const sheet = v.stayId ? { stayId: v.stayId, frequency: v.frequency, durationHours: v.durationHours ? ints(v.durationHours, 'Duration', 1, 720) : null } : undefined;
+    return { encounterId: v.encounterId, kind: 'medication', drugId: v.drugId, route: v.route, frequency: v.frequency, dose, ...(v.quantity?.trim() ? { quantity: v.quantity.trim(), quantityUnit: v.quantityUnit || '' } : {}), ...(sheet ? { sheet } : {}), extralabel: v.extralabel === 'yes' };
+  },
+  recordAdministration: (v) => {
+    required(v, 'orderId');
+    return { orderId: v.orderId, route: v.route || undefined, site: v.site?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, qty: v.qty?.trim() || undefined };
+  },
+  admitPatient: (v) => { required(v, 'encounterId', 'cageId', 'codeStatus'); return { encounterId: v.encounterId, cageId: v.cageId, codeStatus: v.codeStatus, reason: v.reason?.trim() || undefined }; },
+  moveCage: (v) => { required(v, 'stayId', 'cageId'); return { stayId: v.stayId, cageId: v.cageId }; },
+  dischargePatient: (v) => {
+    required(v, 'stayId', 'expectedVersion', 'instructions');
+    if (v.recheckOn?.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(v.recheckOn.trim())) throw new Error('Recheck: use YYYY-MM-DD.');
+    return { stayId: v.stayId, expectedVersion: Number(v.expectedVersion), instructions: v.instructions.trim(), recheckOn: v.recheckOn?.trim() || undefined };
+  },
+  completeTreatmentTask: (v) => {
+    required(v, 'taskId', 'expectedVersion');
+    return { taskId: v.taskId, expectedVersion: Number(v.expectedVersion), observation: v.observation?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined };
+  },
+  openAnaesthesia: (v) => {
+    required(v, 'encounterId', 'procedure', 'asaStatus');
+    if (v.consentConfirmed !== 'yes') throw new Error('Confirm the signed anaesthesia consent first.');
+    return { encounterId: v.encounterId, procedure: v.procedure.trim(), asaStatus: v.asaStatus, fastingConfirmed: v.fastingConfirmed === 'yes', consentConfirmed: true, anaesthetistId: v.anaesthetistId || undefined };
+  },
+  recordMonitoring: (v) => {
+    required(v, 'recordId');
+    const n = (name: string, field: string, min: number, max: number) => (v[name]?.trim() ? ints(v[name], field, min, max) : undefined);
+    const d = (name: string, field: string) => { const t = v[name]?.trim(); if (!t) return undefined; if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) throw new Error(`${field}: a number like 37.8`); return t; };
+    return { recordId: v.recordId, hr: n('hr', 'Heart rate', 10, 400), rr: n('rr', 'Resp. rate', 0, 200), spo2: n('spo2', 'SpO₂', 0, 100), etco2: n('etco2', 'EtCO₂', 0, 150), sbp: n('sbp', 'Systolic', 0, 400), map: n('map', 'MAP', 0, 300), tempC: d('tempC', 'Temperature'), agentPct: d('agentPct', 'Agent %'), notes: v.notes?.trim() || undefined };
+  },
+  closeAnaesthesia: (v) => { required(v, 'recordId', 'expectedVersion'); return { recordId: v.recordId, expectedVersion: Number(v.expectedVersion), complications: v.complications?.trim() || undefined }; },
+  saveSurgeryReport: (v) => { required(v, 'encounterId', 'procedure'); return { encounterId: v.encounterId, procedure: v.procedure.trim(), technique: v.technique?.trim() || undefined, findings: v.findings?.trim() || undefined, closure: v.closure?.trim() || undefined, sutures: v.sutures?.trim() || undefined }; },
+  administerVaccine: (v) => {
+    required(v, 'encounterId', 'productId', 'lotId', 'site');
+    return { encounterId: v.encounterId, productId: v.productId, lotId: v.lotId, site: v.site.trim(), route: v.route || undefined, supervisingDvmId: v.supervisingDvmId || undefined, tagNumber: v.tagNumber?.trim() || undefined };
+  },
+  recordOutsideVaccine: (v) => {
+    required(v, 'patientId', 'productId', 'administeredOn', 'evidenceNote');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.administeredOn.trim())) throw new Error('Given on: use YYYY-MM-DD.');
+    return { patientId: v.patientId, productId: v.productId, administeredOn: v.administeredOn.trim(), lotNumber: v.lotNumber?.trim() || undefined, evidenceNote: v.evidenceNote.trim() };
+  },
+  addManualReminder: (v) => {
+    required(v, 'patientId', 'typeId', 'dueOn');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.dueOn.trim())) throw new Error('Due: use YYYY-MM-DD.');
+    return { patientId: v.patientId, typeId: v.typeId, dueOn: v.dueOn.trim() };
+  },
+  startScribeSession: (v) => {
+    required(v, 'encounterId');
+    if (v.staffAcknowledged !== 'yes') throw new Error('Confirm that the team in the room knows the visit is being recorded.');
+    return { encounterId: v.encounterId, clientConsent: v.clientConsent === 'yes', consentMethod: v.clientConsent === 'yes' ? 'verbal_recorded' : undefined, staffAcknowledged: true };
+  },
+  draftScribeSession: (v) => { required(v, 'sessionId', 'pastedTranscript'); return { sessionId: v.sessionId, pastedTranscript: v.pastedTranscript.trim() }; },
+  rejectScribeDraft: (v) => { required(v, 'draftId', 'reason'); return { draftId: v.draftId, reason: v.reason.trim() }; },
+  previewImport: (v) => {
+    required(v, 'system', 'entity', 'locationId', 'csv');
+    if (v.csv.length > 5_000_000) throw new Error('The file is over 5 MB; split it or use the ezyVet API source.');
+    return { system: v.system, entity: v.entity, locationId: v.locationId, fileName: v.fileName?.trim() || undefined, csv: v.csv, source: 'manual-csv' };
   },
   killSwitch: (v) => ({ agentId: v.agentId, killSwitch: v.killSwitch === 'on', reason: v.reason?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }),
 };

@@ -17,18 +17,23 @@ type P = {
   vcprs: { id: string; scope: string; status: string; establishedAt: string; expiresAt: string; dvm: { displayName: string } | null; location: { name: string } | null }[];
   insurancePolicies: { policyNumber: string; plan: string; insurer: { name: string } | null }[];
 };
+type Extra = {
+  encounters: { id: string; ref: string; kind: string; status: string; reason: string; startedAt: string; attendingDvm: { displayName: string } | null; diagnoses: { term: string }[] }[];
+  problems: { id: string; term: string; status: string; chronic: boolean }[];
+  patientReminders: { id: string; dueOn: string; status: string; type: { name: string } | null }[];
+};
 
 const SEVERITY_TONE: Record<string, string> = { block: ALERT_TONE.critical, warn: ALERT_TONE.warning, info: ALERT_TONE.info };
 
 /**
  * The patient chart header (BUILD-PLAN P1): alerts on every header, the VCPR in force (a lapsed one
  * says so: prescribing needs a new exam), weight history, microchip and owners. Reading it writes a
- * ReadAudit row (PHI-grade). The full chart (SOAP, problems, meds, vaccines) arrives in Phase 2.
+ * ReadAudit row (PHI-grade). Phase 2 adds the problem list, the visit timeline and reminders due.
  */
 export default async function PatientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [data, tz] = await Promise.all([
-    q<{ patient: P | null; appointments: { id: string; ref: string; startsAt: string; status: string; appointmentType: { name: string } | null }[] }>(`
+    q<Extra & { patient: P | null; appointments: { id: string; ref: string; startsAt: string; status: string; appointmentType: { name: string } | null }[] }>(`
       query P($id: ID!) {
         patient(where: { id: $id }) {
           id ref name kind status sex reproductiveStatus dateOfBirth dobEstimated colourMarkings deceasedAt codeStatus groupSize version
@@ -40,8 +45,11 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
           vcprs(orderBy: { expiresAt: desc }, take: 5) { id scope status establishedAt expiresAt dvm { displayName } location { name } }
           insurancePolicies { policyNumber plan insurer { name } }
         }
+        encounters(where: { patient: { id: { equals: $id } } }, orderBy: { startedAt: desc }, take: 30) { id ref kind status reason startedAt attendingDvm { displayName } diagnoses { term } }
+        problems(where: { patient: { id: { equals: $id } }, status: { equals: "active" } }) { id term status chronic }
+        patientReminders(where: { patient: { id: { equals: $id } }, status: { in: ["scheduled", "due", "overdue"] } }, orderBy: { dueOn: asc }, take: 10) { id dueOn status type { name } }
         appointments(where: { patients: { some: { patient: { id: { equals: $id } } } } }, orderBy: { startsAt: desc }, take: 12) { id ref startsAt status appointmentType { name } }
-      }`, { id }).catch(() => ({ patient: null, appointments: [] })),
+      }`, { id }).catch(() => ({ patient: null, appointments: [], encounters: [], problems: [], patientReminders: [] })),
     practiceTimeZone(),
   ]);
   const p = data.patient;
@@ -79,6 +87,22 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         <Stat name="Microchip" value={chip ? <span className="font-mono text-sm">{chip.number}</span> : 'none'} />
         <Stat name="Preferred DVM" value={p.preferredDvm?.displayName ?? '—'} />
       </div>
+      <Section title="Problems">
+        {data.problems.length ? data.problems.map(pr => <Row key={pr.id}><span>{pr.term}</span><Meta>{pr.chronic ? 'chronic' : 'active'}</Meta></Row>) : <Empty>No active problems.</Empty>}
+      </Section>
+      <Section title="Visit records" aside={<Link className="text-xs underline" href={`/dashboard/platform/vaccines?patient=${p.id}`}>Vaccines and reminders</Link>}>
+        {data.encounters.length ? data.encounters.map(e => (
+          <Row key={e.id} href={`/dashboard/platform/encounters/${e.id}`}>
+            <div className="min-w-0 flex-1"><span className="font-mono text-xs">{e.ref}</span> {title(e.kind)}{e.reason ? ` · ${e.reason}` : ''}<Meta>{when(e.startedAt, tz, 'day')} · {e.attendingDvm?.displayName ?? 'no attending vet'}{e.diagnoses.length ? ` · ${e.diagnoses.map(d => d.term).join(', ')}` : ''}</Meta></div>
+            <Status value={e.status} />
+          </Row>
+        )) : <Empty>No visit records yet.</Empty>}
+      </Section>
+      {data.patientReminders.length ? (
+        <Section title="Reminders due">
+          {data.patientReminders.map(r => <Row key={r.id}><span>{r.type?.name}</span><Meta>{calendarDay(r.dueOn)} · {label(r.status)}</Meta></Row>)}
+        </Section>
+      ) : null}
       <Section title="Owners">
         {owners.map(o => o.client ? (
           <Row key={o.client.id} href={`/dashboard/platform/clients/${o.client.id}`}><span>{o.client.displayName}</span><Meta>{o.client.ref} · {label(o.role)} since {when(o.effectiveFrom, tz, 'day')}</Meta></Row>

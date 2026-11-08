@@ -115,7 +115,7 @@ async function issueRabiesCertificate(uow: UnitOfWork, input: { patientId: strin
   const snapshot: Record<string, string | null> = {
     owner_name_address: owner ? `${owner.displayName}, ${[owner.addressLine1, owner.city, owner.stateCode, owner.postalCode].filter(Boolean).join(', ')}` : null,
     animal_name_species_breed_sex_age_colour: [patient.name, patient.species?.name, patient.breed?.name ?? 'mixed', `${patient.sex} ${patient.reproductiveStatus ?? ''}`.trim(), patient.dateOfBirth ? `born ${day(patient.dateOfBirth)}` : null, patient.colourMarkings || null].every(Boolean)
-      ? [patient.name, patient.species?.name, patient.breed?.name ?? 'mixed', `${patient.sex} ${patient.reproductiveStatus ?? ''}`.trim(), `born ${day(patient.dateOfBirth)}`, patient.colourMarkings].join(', ') : null,
+      ? [patient.name, patient.species?.name, patient.breed?.name ?? 'mixed', `${patient.sex} ${patient.reproductiveStatus ?? ''}`.trim(), `born ${calendarDayText(day(patient.dateOfBirth)!)}`, patient.colourMarkings].join(', ') : null,
     microchip: patient.microchips[0]?.number ?? 'none recorded',
     vaccine_manufacturer_product_lot: `${input.product.manufacturer}, ${input.product.name}${input.product.usdaProductCode ? ` (USDA ${input.product.usdaProductCode})` : ''}, lot ${input.lotNumber}`,
     date_given: input.on,

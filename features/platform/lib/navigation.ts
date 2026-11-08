@@ -1,6 +1,6 @@
 import {
-  Activity, BookOpenCheck, Bot, CalendarDays, ClipboardCheck, ClipboardList, Eye, FileLock2, HeartPulse, IdCard, Inbox, LucideIcon, MessageSquare,
-  PawPrint, Phone, Pill, Scale, Settings, ShieldCheck, Stethoscope, Users, Warehouse,
+  Activity, BedDouble, BookOpenCheck, Bot, CalendarDays, ClipboardCheck, ClipboardList, Eye, FileLock2, HeartPulse, IdCard, Inbox, LucideIcon, MessageSquare,
+  PawPrint, Phone, Pill, Scale, Settings, ShieldCheck, Stethoscope, Syringe, Upload, Users, Warehouse,
 } from 'lucide-react'
 
 export interface PlatformNavItem {
@@ -35,6 +35,8 @@ export const platformNavItems: PlatformNavItem[] = [
   { title: 'Patients', href: '/platform/patients', color: 'emerald', description: 'Patients with alerts, weights and VCPR.', icon: PawPrint, group: 'clients' },
 
   { title: 'Encounters', href: '/platform/encounters', color: 'blue', description: 'SOAP records and signing.', icon: Stethoscope, group: 'medical' },
+  { title: 'Hospital', href: '/platform/hospital', color: 'emerald', description: 'Wards, cages and the treatment sheet.', icon: BedDouble, group: 'medical' },
+  { title: 'Vaccines', href: '/platform/vaccines', color: 'amber', description: 'Vaccines, rabies certificates and reminders.', icon: Syringe, group: 'medical' },
   { title: 'Prescriptions', href: '/platform/prescriptions', color: 'violet', description: 'Prescriptions and the refill queue.', icon: Pill, group: 'medical' },
   { title: 'Controlled substances', href: '/platform/controlled', color: 'rose', description: 'Register, counts, discrepancies, PDMP.', icon: FileLock2, group: 'medical' },
   { title: 'Inventory', href: '/platform/inventory', color: 'cyan', description: 'Items, lots, orders and counts.', icon: Warehouse, group: 'medical' },
@@ -49,6 +51,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { title: 'Compliance', href: '/platform/compliance', color: 'rose', description: 'Clocks, tasks and incidents.', icon: ShieldCheck, group: 'admin' },
   { title: 'Read audit', href: '/platform/read-audit', color: 'slate', description: 'Who read which client or patient record.', icon: Eye, group: 'admin' },
   { title: 'Audit log', href: '/platform/audit', color: 'slate', description: 'Hash-chained audit events and chain verification.', icon: BookOpenCheck, group: 'admin' },
+  { title: 'Import', href: '/platform/imports', color: 'slate', description: 'Bring records over from Avimark or ezyVet.', icon: Upload, group: 'admin' },
   { title: 'Practice settings', href: '/platform/settings', color: 'slate', description: 'Practice, locations, calendars and controls.', icon: Settings, group: 'admin' },
 ]
 
@@ -56,6 +59,7 @@ export const platformNavItems: PlatformNavItem[] = [
 export const SHIPPED_ROUTES = new Set<string>([
   '/platform/today', '/platform/approvals', '/platform/schedule', '/platform/whiteboard', '/platform/waitlist', '/platform/clients',
   '/platform/patients', '/platform/calls', '/platform/messages', '/platform/records-requests', '/platform/agents', '/platform/team', '/platform/policies', '/platform/compliance', '/platform/read-audit', '/platform/audit', '/platform/settings',
+  '/platform/encounters', '/platform/hospital', '/platform/vaccines', '/platform/imports',
 ])
 
 const shipped = platformNavItems.filter(item => SHIPPED_ROUTES.has(item.href))

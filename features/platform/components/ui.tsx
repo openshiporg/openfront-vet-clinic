@@ -3,10 +3,10 @@ import { cn } from '@/lib/utils';
 import { PageContainer } from '@/features/dashboard/components/PageContainer';
 import { label } from '../lib/format';
 
-const GREEN = ['active', 'published', 'approved', 'confirmed', 'checked_in', 'completed', 'checked_out', 'delivered', 'signed', 'done', 'ok', 'applied', 'paid', 'dispensed', 'administered', 'verified', 'resolved', 'released', 'ready', 'booked']
-const AMBER = ['pending', 'requested', 'draft', 'open', 'scheduled', 'in_room', 'in_progress', 'in_treatment', 'waiting', 'sent', 'queued', 'leased', 'unknown', 'paused', 'unverified', 'investigating', 'partially_paid', 'held', 'transferring']
-const BLUE = ['expired', 'superseded', 'waived', 'withdrawn', 'cancelled_by_client']
-const RED = ['rejected', 'cancelled', 'failed', 'dead', 'revoked', 'suspended', 'surrendered', 'no_show', 'overdue', 'deceased', 'killed', 'blocked', 'retired', 'denied', 'urgent']
+const GREEN = ['active', 'published', 'approved', 'confirmed', 'checked_in', 'completed', 'checked_out', 'delivered', 'signed', 'done', 'ok', 'applied', 'paid', 'dispensed', 'administered', 'verified', 'resolved', 'released', 'ready', 'booked', 'rendered', 'accepted', 'satisfied', 'discharged', 'closed', 'available']
+const AMBER = ['pending', 'requested', 'draft', 'open', 'scheduled', 'in_room', 'in_progress', 'in_treatment', 'waiting', 'sent', 'queued', 'leased', 'unknown', 'paused', 'unverified', 'investigating', 'partially_paid', 'held', 'transferring', 'pending_signature', 'ordered', 'due', 'admitted', 'in_care', 'monitoring', 'recovery', 'ready_for_discharge', 'proposed', 'partly_accepted', 'recording', 'transcribing', 'drafted', 'received', 'validated', 'applying', 'pending_render']
+const BLUE = ['expired', 'superseded', 'waived', 'withdrawn', 'cancelled_by_client', 'suppressed', 'transferred', 'discarded', 'reversed']
+const RED = ['rejected', 'cancelled', 'failed', 'dead', 'revoked', 'suspended', 'surrendered', 'no_show', 'overdue', 'deceased', 'killed', 'blocked', 'retired', 'denied', 'urgent', 'voided', 'lapsed', 'skipped', 'quarantined']
 const DOT: Record<string, string> = Object.fromEntries([
   ...GREEN.map(v => [v, 'bg-emerald-500']), ...AMBER.map(v => [v, 'bg-amber-500']), ...BLUE.map(v => [v, 'bg-blue-500']), ...RED.map(v => [v, 'bg-red-500']),
 ])

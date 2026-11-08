@@ -92,6 +92,15 @@ const WORDS: Record<string, string> = {
   general_practice: 'general practice', checked_in: 'checked in', in_progress: 'in progress', ready_for_checkout: 'ready for checkout', no_show: 'no-show',
   refill_request: 'refill request', records_request: 'records request', callback_task: 'callback task', full_time: 'full-time', part_time: 'part-time',
   emergency_now: 'emergency now', urgent_today: 'urgent today', routine: 'routine',
+  // the medical record and treatment (Phase 2)
+  pending_signature: 'waiting for signature', pending_render: 'being prepared', inpatient_day: 'inpatient day', phone_consult: 'phone consult', records_import: 'imported record', tech_visit: 'technician visit',
+  surgery_report: 'surgery report', dental_chart: 'dental chart', anaesthesia_summary: 'anaesthesia summary', gi: 'gastrointestinal', not_examined: 'not examined', abnormal: 'abnormal', normal: 'normal',
+  po: 'by mouth (PO)', iv: 'intravenous (IV)', im: 'intramuscular (IM)', sc: 'subcutaneous (SC)', io: 'intraosseous (IO)', intranasal: 'intranasal', transdermal: 'transdermal',
+  sid: 'once daily (SID)', bid: 'twice daily (BID)', tid: 'three times daily (TID)', qid: 'four times daily (QID)', prn: 'as needed (PRN)', cri: 'constant-rate infusion (CRI)', once: 'once',
+  q1h: 'every hour', q2h: 'every 2 hours', q4h: 'every 4 hours', q6h: 'every 6 hours', q8h: 'every 8 hours', q12h: 'every 12 hours', q24h: 'every 24 hours',
+  full: 'full CPR', closed_chest_only: 'closed-chest CPR only', dnr: 'do not resuscitate (DNR)', in_care: 'in care', admitted: 'admitted',
+  partly_accepted: 'partly accepted', proposed: 'proposed', transcribing: 'transcribing', drafting: 'drafting', ezyvet: 'ezyVet', avimark: 'Avimark', manual_csv: 'CSV file',
+  external_evidence: 'outside proof', ordered: 'ordered', applying: 'applying', validated: 'checked',
 }
 
 export const label = (value: string | null | undefined) => (value ? (WORDS[value] ?? value.replaceAll('_', ' ')) : '')
