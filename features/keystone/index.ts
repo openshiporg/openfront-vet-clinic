@@ -8,6 +8,7 @@ import { sendPasswordResetEmail } from "./lib/mail";
 import { withMcpBearerSessions } from "./mcp-oauth/session";
 import { isSignedIn, permissionNames, type Session } from "./access";
 import { addDatabaseConstraints } from "./prismaConstraints";
+import { throwKeystonePrismaErrors } from './lib/keystonePrismaErrors'
 
 const databaseURL = process.env.DATABASE_URL || "file:./keystone.db";
 
@@ -66,6 +67,7 @@ export default withAuth(
       provider: "postgresql",
       url: databaseURL,
       extendPrismaSchema: addDatabaseConstraints,
+      extendPrismaClient: throwKeystonePrismaErrors,
     },
     lists: models,
     storage: {
