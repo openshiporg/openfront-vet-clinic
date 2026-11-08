@@ -35,8 +35,8 @@ export function Page({ title, crumbs = [], children }: { title: string; crumbs?:
 
 export function Tabs({ items, active }: { items: { key: string; label: string; href: string; count?: number }[]; active: string }) {
   return (
-    <div className="max-w-full overflow-x-auto">
-      <div className="inline-flex gap-1 rounded-lg bg-muted p-1">
+    <div className="max-w-full">
+      <div className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1">
         {items.map((i) => (
           <Link key={i.key} href={i.href} className={cn('whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium', i.key === active ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
             {i.label}{i.count !== undefined ? <span className="ml-1.5 font-mono text-xs text-muted-foreground">{i.count}</span> : null}
