@@ -21,9 +21,9 @@ function expiry(today: string, expiresOn: string) {
 export default async function TeamPage() {
   const [data, tz] = await Promise.all([
     q<{ staffMembers: Staff[]; deaRegistrations: Dea[] | null }>(`{
-      staffMembers(orderBy: { displayName: asc }, take: 200) { id displayName kind credentials employment active homeLocation { code } locations { code }
-        licenses { id kind stateCode licenseNumber status expiresOn verificationSource } user { accessExpiresAt role { name } } }
-      deaRegistrations(orderBy: { expiresOn: asc }) { id registrationNumber registrantName registrantKind schedules expiresOn status location { code name } staffMember { displayName } }
+      staffMembers(orderBy: { displayName: asc }, take: 200) { id displayName kind credentials employment active homeLocation { code } locations(take: 10) { code }
+        licenses(take: 10) { id kind stateCode licenseNumber status expiresOn verificationSource } user { accessExpiresAt role { name } } }
+      deaRegistrations(orderBy: { expiresOn: asc }, take: 100) { id registrationNumber registrantName registrantKind schedules expiresOn status location { code name } staffMember { displayName } }
     }`),
     practiceTimeZone(),
   ]);

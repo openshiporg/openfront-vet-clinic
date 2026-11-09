@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { q, practiceTimeZone, corrections } from '../../lib/server';
 import { when, eventText } from '../../lib/format';
 import { Page, Row, Empty, Meta, Section, Stat } from '../../components/ui';
+import { keystoneClient } from '@/features/dashboard/lib/keystoneClient';
 
 type Event = { id: string; seq: number; at: string; eventType: string; entityType: string; entityId: string; reason: string; hash: string; prevHash: string; actorUser: { name: string } | null; actorAgent: { name: string } | null; approver: { name: string } | null };
 type Verify = { ok: boolean; count: number; lastSeq: number; lastHash: string; brokenAtSeq: number | null; problem: string | null };
@@ -14,6 +15,11 @@ export default async function AuditPage({ searchParams }: { searchParams?: Promi
   const before = /^\d+$/.test(params.before ?? '') ? Number.parseInt(params.before!, 10) : null;
   const entity = (params.entity ?? '').replace(/[^A-Za-z0-9_:-]/g, '').slice(0, 120);
   const where = { AND: [...(before ? [{ seq: { lt: before } }] : []), ...(entity ? [{ OR: [{ entityId: { equals: entity } }, { entityType: { equals: entity } }] }] : [])] };
+  // Review r6 #1: a role without audit read (DVM, RVT, front desk) gets a page that says so, not a 500.
+  const me = await keystoneClient<{ authenticatedItem: { role: { canReadAudit: boolean | null } | null } | null }>(`{ authenticatedItem { ... on User { role { canReadAudit } } } }`);
+  if (!me.success || !me.data.authenticatedItem?.role?.canReadAudit) {
+    return <Page title="Audit log"><Empty>Reading the audit log needs the audit-read permission (owner or practice manager).</Empty></Page>;
+  }
   const [data, tz] = await Promise.all([
     q<{ auditEvents: Event[]; auditEventsCount: number; verifyAuditChain: Verify }>(`query Audit($where: AuditEventWhereInput!, $take: Int!) {
       auditEvents(where: $where, orderBy: { seq: desc }, take: $take) { id seq at eventType entityType entityId reason hash prevHash actorUser { name } actorAgent { name } approver { name } }

@@ -7,6 +7,7 @@ import { DOSE_WARNING, EXAM_SYSTEMS, FREQUENCIES, ORDER_KINDS, ROUTES, SECTION_K
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
 import { ActionButton } from '../../components/ActionButton';
+import { ENCOUNTER_QUERY } from './encounterQuery';
 import { AcceptDraft } from '../components/AcceptDraft';
 
 type Staff = { id: string; displayName: string } | null;
@@ -32,35 +33,7 @@ type Enc = {
 export default async function EncounterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [data, tz] = await Promise.all([
-    q<{ encounter: Enc | null; drugProducts: { id: string; displayName: string; csSchedule: string }[]; diagnosisCodes: { id: string; code: string; term: string }[]; witnesses: { id: string; displayName: string }[]; staffMembers: { id: string; displayName: string; kind: string }[]; vaccineProducts: { id: string; name: string; isRabies: boolean }[]; vaccineLots: { id: string; lotNumber: string; expiresOn: string; vaccine: { id: string } | null; location: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null; location: { id: string } | null }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null; location: { id: string } | null }[]; scribeSessions: { id: string; status: string; clientConsent: { id: string } | null; drafts: { id: string; status: string; sections: { kind: string; body: string }[] | null; acceptedBlocks: number[] | null; version: number }[] }[]; anaesthesiaRecords: { id: string; ref: string; status: string; asaStatus: string; procedure: string }[]; practiceSettings: { features: Record<string, boolean> | null } | null; vaccineAdministrations: { id: string; source: string; reason: string; lotNumber: string; site: string; doseSeries: number; dueNextOn: string | null; product: { name: string } | null; vaccinatedBy: Staff; reverses: { id: string } | null; certificate: { id: string; ref: string; tagNumber: string; voidedAt: string | null } | null }[] }>(`
-      query E($id: ID!) {
-        encounter(where: { id: $id }) {
-          id ref kind status reason version startedAt submittedAt signedAt contentHash completeness voidReason
-          patient { id ref name status dateOfBirth sex reproductiveStatus species { code name } breed { name }
-            alerts(where: { active: { equals: true } }) { id severity kind text }
-            weights(orderBy: { measuredAt: desc }, take: 1) { id value unit valueKg measuredAt } }
-          location { id name } attendingDvm { id displayName } signedBy { id displayName } stay { id ref status }
-          sections(orderBy: [{ kind: asc }, { ordinal: asc }]) { id kind ordinal body source version lockedAt lastAuthor { id displayName } revisionsCount }
-          addenda(orderBy: { signedAt: asc }) { id sectionKind reason body signedAt authorIsDvm author { id displayName } }
-          vitals(orderBy: { at: desc }) { id at temperature temperatureUnit heartRate respRate mucousMembranes crtSeconds painScore by { id displayName } }
-          findings { id system status text }
-          diagnoses { id term certainty code { code } }
-          orders(orderBy: { createdAt: asc }) { id ref kind description status route frequency version warnings overrideReason drug { id csSchedule } orderedBy { id displayName }
-            administrations(orderBy: { givenAt: asc }) { id qty unit givenAt givenBy { id displayName } witness { id displayName } lotNumber reason qtyOverrideReason reverses { id } } }
-        }
-        drugProducts(where: { active: { equals: true } }, orderBy: { displayName: asc }) { id displayName csSchedule }
-        diagnosisCodes(where: { active: { equals: true } }, orderBy: { term: asc }) { id code term }
-        witnesses: staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt"] } }, orderBy: { displayName: asc }) { id displayName }
-        staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt", "assistant"] } }, orderBy: { displayName: asc }) { id displayName kind }
-        vaccineProducts(where: { active: { equals: true } }, orderBy: { name: asc }) { id name isRabies }
-        vaccineLots: inventoryLots(where: { status: { equals: "available" }, NOT: { vaccine: null } }, orderBy: { expiresOn: asc }) { id lotNumber expiresOn vaccine { id } location { id } }
-        csContainers(where: { status: { equals: "open" } }, orderBy: { ref: asc }) { id ref product { id } location { id } }
-        inventoryLots(where: { status: { equals: "available" }, NOT: { drug: null } }, orderBy: { expiresOn: asc }) { id lotNumber expiresOn drug { id } location { id } }
-        scribeSessions(where: { encounter: { id: { equals: $id } } }, orderBy: { createdAt: desc }) { id status clientConsent { id } drafts(orderBy: { createdAt: desc }) { id status sections acceptedBlocks version } }
-        anaesthesiaRecords(where: { encounter: { id: { equals: $id } } }, orderBy: { createdAt: desc }) { id ref status asaStatus procedure }
-        practiceSettings { features }
-        vaccineAdministrations(where: { encounter: { id: { equals: $id } } }, orderBy: { administeredOn: asc }) { id source reason lotNumber site doseSeries dueNextOn product { name } vaccinatedBy { id displayName } reverses { id } certificate { id ref tagNumber voidedAt } }
-      }`, { id }).catch(() => null),
+    q<{ encounter: Enc | null; drugProducts: { id: string; displayName: string; csSchedule: string }[]; diagnosisCodes: { id: string; code: string; term: string }[]; witnesses: { id: string; displayName: string }[]; staffMembers: { id: string; displayName: string; kind: string }[]; vaccineProducts: { id: string; name: string; isRabies: boolean }[]; vaccineLots: { id: string; lotNumber: string; expiresOn: string; vaccine: { id: string } | null; location: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null; location: { id: string } | null }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null; location: { id: string } | null }[]; scribeSessions: { id: string; status: string; clientConsent: { id: string } | null; drafts: { id: string; status: string; sections: { kind: string; body: string }[] | null; acceptedBlocks: number[] | null; version: number }[] }[]; anaesthesiaRecords: { id: string; ref: string; status: string; asaStatus: string; procedure: string }[]; practiceSettings: { features: Record<string, boolean> | null } | null; vaccineAdministrations: { id: string; source: string; reason: string; lotNumber: string; site: string; doseSeries: number; dueNextOn: string | null; product: { name: string } | null; vaccinatedBy: Staff; reverses: { id: string } | null; certificate: { id: string; ref: string; tagNumber: string; voidedAt: string | null } | null }[] }>(ENCOUNTER_QUERY, { id }),
     practiceTimeZone(),
   ]);
   const e = data?.encounter;

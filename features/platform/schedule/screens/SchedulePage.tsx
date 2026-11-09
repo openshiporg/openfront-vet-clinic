@@ -13,7 +13,7 @@ type Appt = {
   reservations: { resource: { name: string } | null }[];
 };
 
-const FIELDS = 'id ref startsAt endsAt status channel version reason appointmentType { name colour } provider { id displayName } client { id displayName } patients { patient { id name } } reservations { resource { name } }';
+const FIELDS = 'id ref startsAt endsAt status channel version reason appointmentType { name colour } provider { id displayName } client { id displayName } patients(take: 4) { patient { id name } } reservations(take: 4) { resource { name } }';
 const PATHS = ['/dashboard/platform/schedule', '/dashboard/platform/today'];
 
 /**
@@ -27,8 +27,8 @@ export default async function SchedulePage({ searchParams }: { searchParams?: Pr
   const date = validDate(sp.date, todayIn(tz));
   const { from, to } = dayBounds(date, tz);
   const meta = await q<{ locations: { id: string; code: string; name: string; kind: string | null }[]; appointmentTypes: { id: string; name: string; requestOnly: boolean; durationMinutes: number }[] }>(`{
-    locations(where: { active: { equals: true } }, orderBy: { code: asc }) { id code name kind }
-    appointmentTypes(where: { active: { equals: true } }, orderBy: { name: asc }) { id name requestOnly durationMinutes }
+    locations(where: { active: { equals: true } }, orderBy: { code: asc }, take: 50) { id code name kind }
+    appointmentTypes(where: { active: { equals: true } }, orderBy: { name: asc }, take: 200) { id name requestOnly durationMinutes }
   }`);
   const location = await defaultLocation(meta.locations, sp.location);
   const view = sp.view === 'requested' ? 'requested' : 'day';

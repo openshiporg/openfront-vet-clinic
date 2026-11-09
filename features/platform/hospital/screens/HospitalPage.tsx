@@ -36,7 +36,7 @@ const CODE_TONE: Record<string, string> = { dnr: 'text-red-700 dark:text-red-300
  */
 export default async function HospitalPage({ searchParams }: { searchParams?: Promise<{ location?: string; stay?: string }> }) {
   const sp = (await searchParams) ?? {};
-  const base = await q<{ locations: { id: string; name: string; kind: string | null }[] }>(`{ locations(where: { active: { equals: true } }, orderBy: { code: asc }) { id name kind } }`);
+  const base = await q<{ locations: { id: string; name: string; kind: string | null }[] }>(`{ locations(where: { active: { equals: true } }, orderBy: { code: asc }, take: 50) { id name kind } }`);
   const location = await defaultLocation(base.locations, sp.location);
   const locId = location?.id ?? '';
   const now = new Date();
@@ -45,14 +45,14 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
   const [data, tz] = await Promise.all([
     q<{ wards: { id: string; name: string; kind: string; cages: { id: string; code: string; size: string }[] }[]; hospitalStays: Stay[]; witnesses: { id: string; displayName: string }[]; staffMembers: { id: string; displayName: string }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { id: string } | null }[]; csContainers: { id: string; ref: string; product: { id: string } | null }[]; encounters: { id: string; ref: string; patient: { name: string } | null }[] }>(`
       query H($loc: ID!) {
-        wards(where: { location: { id: { equals: $loc } } }, orderBy: { name: asc }) { id name kind cages(where: { active: { equals: true } }, orderBy: { code: asc }) { id code size } }
-        hospitalStays(where: { location: { id: { equals: $loc } }, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, orderBy: { admittedAt: asc }) {
-          id ref status codeStatus reason admittedAt version patient { id name species { name } alerts(where: { active: { equals: true } }) { severity text } }
+        wards(where: { location: { id: { equals: $loc } } }, orderBy: { name: asc }, take: 20) { id name kind cages(where: { active: { equals: true } }, orderBy: { code: asc }, take: 60) { id code size } }
+        hospitalStays(where: { location: { id: { equals: $loc } }, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, orderBy: { admittedAt: asc }, take: 100) {
+          id ref status codeStatus reason admittedAt version patient { id name species { name } alerts(where: { active: { equals: true } }, take: 10) { severity text } }
           cage { id code ward { name } } attendingDvm { displayName } encounter { id ref } }
-        witnesses: staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt"] } }, orderBy: { displayName: asc }) { id displayName }
-        staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt", "assistant"] } }, orderBy: { displayName: asc }) { id displayName }
-        inventoryLots(where: { status: { equals: "available" }, location: { id: { equals: $loc } }, NOT: { drug: null } }, orderBy: { expiresOn: asc }) { id lotNumber expiresOn drug { id } }
-        csContainers(where: { status: { equals: "open" }, location: { id: { equals: $loc } } }, orderBy: { ref: asc }) { id ref product { id } }
+        witnesses: staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt"] } }, orderBy: { displayName: asc }, take: 100) { id displayName }
+        staffMembers(where: { active: { equals: true }, kind: { in: ["dvm", "rvt", "assistant"] } }, orderBy: { displayName: asc }, take: 100) { id displayName }
+        inventoryLots(where: { status: { equals: "available" }, location: { id: { equals: $loc } }, NOT: { drug: null } }, orderBy: { expiresOn: asc }, take: 300) { id lotNumber expiresOn drug { id } }
+        csContainers(where: { status: { equals: "open" }, location: { id: { equals: $loc } } }, orderBy: { ref: asc }, take: 100) { id ref product { id } }
         encounters(where: { location: { id: { equals: $loc } }, status: { in: ["open", "in_progress"] }, stay: null }, orderBy: { startedAt: desc }, take: 50) { id ref patient { name } }
       }`, { loc: locId }),
     practiceTimeZone(),
@@ -64,8 +64,8 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
   const TASK = 'id dueAt status version doneAt observation skipReason doneBy { displayName } sheetOrder { id frequency instructions order { id ref description drug { id csSchedule } } }';
   const sheet = stay ? await q<{ treatmentTasks: Task[]; missed: Task[] }>(`
       query T($stay: ID!, $from: DateTime!, $to: DateTime!, $since: DateTime!) {
-        treatmentTasks(where: { stay: { id: { equals: $stay } }, dueAt: { gte: $from, lt: $to } }, orderBy: { dueAt: asc }) { ${TASK} }
-        missed: treatmentTasks(where: { stay: { id: { equals: $stay } }, status: { equals: "missed" }, dueAt: { gte: $since } }, orderBy: { dueAt: desc }) { ${TASK} }
+        treatmentTasks(where: { stay: { id: { equals: $stay } }, dueAt: { gte: $from, lt: $to } }, orderBy: { dueAt: asc }, take: 300) { ${TASK} }
+        missed: treatmentTasks(where: { stay: { id: { equals: $stay } }, status: { equals: "missed" }, dueAt: { gte: $since } }, orderBy: { dueAt: desc }, take: 100) { ${TASK} }
       }`, { stay: stay.id, from: from.toISOString(), to: to.toISOString(), since: new Date(now.getTime() - 24 * 3_600_000).toISOString() }) : null;
   const tasks = sheet?.treatmentTasks ?? [];
   // Missed doses fall off the left of the grid soon after; they stay listed here for a day.

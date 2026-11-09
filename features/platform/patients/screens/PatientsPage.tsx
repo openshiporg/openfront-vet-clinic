@@ -28,7 +28,7 @@ export default async function PatientsPage({ searchParams }: { searchParams?: Pr
       query Pts(${text ? '$t: String!, $chip: String!, ' : ''}$now: DateTime!, $skip: Int!) {
         patients(where: ${where}, orderBy: { name: asc }, take: ${PAGE}, skip: $skip) {
           id ref name status sex reproductiveStatus dateOfBirth species { name } breed { name }
-          alerts(where: { active: { equals: true } }) { id severity text }
+          alerts(where: { active: { equals: true } }, take: 10) { id severity text }
           vcprs(where: { status: { equals: "active" }, expiresAt: { gt: $now } }, take: 1) { id expiresAt }
           ownerships(where: { effectiveTo: null }, take: 1) { id client { id displayName } }
         }

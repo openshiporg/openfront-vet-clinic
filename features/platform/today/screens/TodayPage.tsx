@@ -26,11 +26,11 @@ export default async function TodayPage() {
   const tz = await practiceTimeZone();
   const today = todayIn(tz);
   const { from, to } = dayBounds(today, tz);
-  const data = await q<{ appointments: Appt[]; whiteboardEntries: { status: string }[]; callRecords: Call[]; tasks: Task[]; requested: number; refills: number; records: number }>(`
+  const data = await q<{ appointments: (Omit<Appt, 'patients'> & { patients: { patient: { id: string; name: string } | null }[] })[]; whiteboardEntries: { status: string }[]; callRecords: Call[]; tasks: Task[]; requested: number; refills: number; records: number }>(`
     query Today($from: DateTime!, $to: DateTime!) {
       appointments(where: { startsAt: { gte: $from, lt: $to } }, orderBy: { startsAt: asc }, take: 300) {
         id ref startsAt status channel version reason appointmentType { name } provider { displayName } location { code } client { id displayName }
-        patients { patient { id name alerts(where: { active: { equals: true } }) { id severity text } } }
+        patients(take: 10) { patient { id name } }
       }
       whiteboardEntries(where: { status: { notIn: ["discharged"] } }, take: 300) { status }
       callRecords(where: { startedAt: { gte: $from, lt: $to } }, orderBy: { startedAt: desc }, take: 100) { id ref answeredBy disposition status startedAt client { displayName } }
@@ -39,7 +39,16 @@ export default async function TodayPage() {
       refills: refillRequestsCount(where: { status: { in: ["received", "in_review"] } })
       records: recordsRequestsCount(where: { status: { in: ["received", "verifying_authority", "approved"] } })
     }`, { from, to });
-  const appts = data.appointments;
+  // Review r6 #1: alerts are read flat for the day's patients (not nested per appointment), so the
+  // query stays inside the breadth limit and check-in still sees every alert it must acknowledge.
+  const patientIds = [...new Set(data.appointments.flatMap(a => a.patients.map(p => p.patient?.id).filter((id): id is string => !!id)))];
+  const alertsBy = new Map<string, { id: string; severity: string; text: string }[]>();
+  if (patientIds.length) {
+    const al = await q<{ patientAlerts: { id: string; severity: string; text: string; patient: { id: string } | null }[] }>(`
+      query TodayAlerts($ids: [ID!]!) { patientAlerts(where: { active: { equals: true }, patient: { id: { in: $ids } } }, orderBy: { createdAt: desc }, take: 500) { id severity text patient { id } } }`, { ids: patientIds });
+    for (const x of al.patientAlerts) if (x.patient) alertsBy.set(x.patient.id, [...(alertsBy.get(x.patient.id) ?? []), x]);
+  }
+  const appts: Appt[] = data.appointments.map(a => ({ ...a, patients: a.patients.map(p => ({ patient: p.patient ? { ...p.patient, alerts: alertsBy.get(p.patient.id) ?? [] } : null })) }));
   const open = appts.filter(a => OPEN.includes(a.status));
   const done = appts.filter(a => !OPEN.includes(a.status));
   const ai = data.callRecords.filter(c => c.answeredBy === 'ai');

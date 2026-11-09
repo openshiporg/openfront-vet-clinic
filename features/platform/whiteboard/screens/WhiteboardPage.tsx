@@ -27,10 +27,10 @@ export default async function WhiteboardPage({ searchParams }: { searchParams?: 
   const sp = (await searchParams) ?? {};
   const [data, tz] = await Promise.all([
     q<{ whiteboardEntries: Entry[]; locations: { id: string; name: string; kind: string | null }[] }>(`{
-      locations(where: { active: { equals: true } }, orderBy: { code: asc }) { id name kind }
+      locations(where: { active: { equals: true } }, orderBy: { code: asc }, take: 50) { id name kind }
       whiteboardEntries(where: { status: { notIn: ["discharged"] } }, orderBy: { since: asc }, take: 300) {
         id status version since flags location { id name } room { name } assignedDvm { displayName } assignedTech { displayName }
-        patient { id name species { name } alerts(where: { active: { equals: true } }) { severity text } }
+        patient { id name species { name } alerts(where: { active: { equals: true } }, take: 10) { severity text } }
         appointment { ref appointmentType { name } client { displayName } }
       }
     }`),

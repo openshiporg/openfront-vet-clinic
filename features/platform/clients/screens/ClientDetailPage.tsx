@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { q, practiceTimeZone } from '../../lib/server';
 import { when, label, money } from '../../lib/format';
 import { ageText, todayIn } from '../../lib/clinic';
-import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
+import { Page, Row, Empty, Status, Meta, Section, Stat, LoadError } from '../../components/ui';
 import { ActionButton } from '../../components/ActionButton';
 
 type Detail = {
@@ -22,20 +22,23 @@ type Detail = {
 /** Household 360: people and their rights, contact points with consent history, pets, visits, calls, suppressions. */
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, tz] = await Promise.all([
+  const [res, tz] = await Promise.all([
     q<{ client: Detail | null; appointments: Detail['appointments']; suppressions: Detail['suppressions']; callRecords: Detail['calls'] }>(`
       query C($id: ID!) { client(where: { id: $id }) {
         id ref displayName kind status source version creditLimitMinor addressLine1 city stateCode postalCode createdAt primaryLocation { name }
-        people(orderBy: { isPrimary: desc }) { id firstName lastName relationship isPrimary canBook canApproveTreatment canReceiveRecords canPay canAuthoriseEuthanasia
-          contactPoints { id kind value isPrimary canText status consents(orderBy: { at: desc }, take: 5) { purpose action method at } } }
-        ownerships(where: { effectiveTo: null }) { role effectiveFrom patient { id ref name status sex reproductiveStatus dateOfBirth species { name } breed { name } alerts(where: { active: { equals: true } }) { severity text } } }
+        people(orderBy: { isPrimary: desc }, take: 10) { id firstName lastName relationship isPrimary canBook canApproveTreatment canReceiveRecords canPay canAuthoriseEuthanasia
+          contactPoints(take: 10) { id kind value isPrimary canText status consents(orderBy: { at: desc }, take: 5) { purpose action method at } } }
+        ownerships(where: { effectiveTo: null }, take: 50) { role effectiveFrom patient { id ref name status sex reproductiveStatus dateOfBirth species { name } breed { name } alerts(where: { active: { equals: true } }, take: 10) { severity text } } }
       }
       appointments(where: { client: { id: { equals: $id } } }, orderBy: { startsAt: desc }, take: 20) { id ref startsAt status channel appointmentType { name } }
       suppressions(where: { client: { id: { equals: $id } } }, take: 20) { id reason active contactPoint { value } patient { name } }
       callRecords(where: { client: { id: { equals: $id } } }, orderBy: { startedAt: desc }, take: 10) { id ref startedAt answeredBy disposition }
-      }`, { id }).catch(() => ({ client: null, appointments: [], suppressions: [], callRecords: [] })),
+      }`, { id }).then(d => ({ ok: true as const, d }), (error: unknown) => ({ ok: false as const, error })),
     practiceTimeZone(),
   ]);
+  // Review r6 #1: a failed read shows its error; only a client that is not there (or not visible) is a 404.
+  if (!res.ok) return <LoadError title="Client" error={res.error} />;
+  const data = res.d;
   if (!data.client) notFound();
   const c: Detail = { ...data.client, appointments: data.appointments, suppressions: data.suppressions, calls: data.callRecords };
   const today = todayIn(tz);

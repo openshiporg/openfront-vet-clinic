@@ -78,3 +78,16 @@ export function Stat({ name, value }: { name: string; value: React.ReactNode }) 
 }
 
 export const Meta = ({ children }: { children: React.ReactNode }) => <span className="block min-w-0 break-words text-xs text-muted-foreground">{children}</span>;
+
+/** Review r6 #1: a screen whose read failed says so (with the server's reason), never "not found". */
+export function LoadError({ title, error }: { title: string; error: unknown }) {
+  const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+  return (
+    <Page title={title}>
+      <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+        <p className="font-medium">This page could not be loaded.</p>
+        <p className="mt-1 break-words">{message}</p>
+      </div>
+    </Page>
+  );
+}

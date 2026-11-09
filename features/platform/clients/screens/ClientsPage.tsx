@@ -25,11 +25,11 @@ export default async function ClientsPage({ searchParams }: { searchParams?: Pro
   const search = text ? `OR: [{ displayName: { contains: $t, mode: insensitive } }, { ref: { equals: $t } }, { people: { some: { contactPoints: { some: { value: { contains: $c, mode: insensitive } } } } } }]` : '';
   const data = await q<{ clients: Client[]; count: number; active: number; prospect: number; inactive: number; locations: { id: string; kind: string | null }[] }>(`
     query Clients(${text ? '$t: String!, $c: String!, ' : ''}$skip: Int!, $status: [String!]) {
-      locations(where: { active: { equals: true } }, orderBy: { code: asc }) { id kind }
+      locations(where: { active: { equals: true } }, orderBy: { code: asc }, take: 50) { id kind }
       clients(where: { status: { in: $status } ${search ? `, ${search}` : ''} }, orderBy: { displayName: asc }, take: ${PAGE}, skip: $skip) {
         id ref displayName kind status source city
-        people(where: { isPrimary: { equals: true } }) { id firstName lastName isPrimary contactPoints(where: { isPrimary: { equals: true } }) { id kind value } }
-        ownerships(where: { effectiveTo: null }) { id patient { id name status species { name } } }
+        people(where: { isPrimary: { equals: true } }, take: 1) { id firstName lastName isPrimary contactPoints(where: { isPrimary: { equals: true } }, take: 2) { id kind value } }
+        ownerships(where: { effectiveTo: null }, take: 10) { id patient { id name status species { name } } }
       }
       count: clientsCount(where: { status: { in: $status } ${search ? `, ${search}` : ''} })
       active: clientsCount(where: { status: { equals: "active" } })

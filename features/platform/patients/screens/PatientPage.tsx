@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { q, practiceTimeZone } from '../../lib/server';
 import { when, label, title, options, weight, calendarDay } from '../../lib/format';
 import { ALERT_TONE, ageText, todayIn } from '../../lib/clinic';
-import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
+import { Page, Row, Empty, Status, Meta, Section, Stat, LoadError } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
 
 type P = {
@@ -32,26 +32,29 @@ const SEVERITY_TONE: Record<string, string> = { block: ALERT_TONE.critical, warn
  */
 export default async function PatientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, tz] = await Promise.all([
+  const [res, tz] = await Promise.all([
     q<Extra & { patient: P | null; appointments: { id: string; ref: string; startsAt: string; status: string; appointmentType: { name: string } | null }[] }>(`
       query P($id: ID!) {
         patient(where: { id: $id }) {
           id ref name kind status sex reproductiveStatus dateOfBirth dobEstimated colourMarkings deceasedAt codeStatus groupSize version
           species { name defaultWeightUnit } breed { name geneticFlags } preferredDvm { displayName }
-          ownerships(orderBy: { effectiveFrom: desc }) { role effectiveFrom effectiveTo client { id ref displayName } }
-          alerts(where: { active: { equals: true } }, orderBy: { createdAt: desc }) { id kind severity text createdAt }
+          ownerships(orderBy: { effectiveFrom: desc }, take: 20) { role effectiveFrom effectiveTo client { id ref displayName } }
+          alerts(where: { active: { equals: true } }, orderBy: { createdAt: desc }, take: 50) { id kind severity text createdAt }
           weights(orderBy: { measuredAt: desc }, take: 12) { id value unit valueKg method bodyConditionScore measuredAt }
-          microchips { number standard registry active }
+          microchips(take: 10) { number standard registry active }
           vcprs(orderBy: { expiresAt: desc }, take: 5) { id scope status establishedAt expiresAt dvm { displayName } location { name } }
-          insurancePolicies { policyNumber plan insurer { name } }
+          insurancePolicies(take: 10) { policyNumber plan insurer { name } }
         }
-        encounters(where: { patient: { id: { equals: $id } } }, orderBy: { startedAt: desc }, take: 30) { id ref kind status reason startedAt attendingDvm { displayName } diagnoses { term } }
-        problems(where: { patient: { id: { equals: $id } }, status: { equals: "active" } }) { id term status chronic }
+        encounters(where: { patient: { id: { equals: $id } } }, orderBy: { startedAt: desc }, take: 30) { id ref kind status reason startedAt attendingDvm { displayName } diagnoses(take: 5) { term } }
+        problems(where: { patient: { id: { equals: $id } }, status: { equals: "active" } }, take: 100) { id term status chronic }
         patientReminders(where: { patient: { id: { equals: $id } }, status: { in: ["scheduled", "due", "overdue"] } }, orderBy: { dueOn: asc }, take: 10) { id dueOn status type { name } }
         appointments(where: { patients: { some: { patient: { id: { equals: $id } } } } }, orderBy: { startsAt: desc }, take: 12) { id ref startsAt status appointmentType { name } }
-      }`, { id }).catch(() => ({ patient: null, appointments: [], encounters: [], problems: [], patientReminders: [] })),
+      }`, { id }).then(d => ({ ok: true as const, d }), (error: unknown) => ({ ok: false as const, error })),
     practiceTimeZone(),
   ]);
+  // Review r6 #1: a failed read shows its error; only a patient that is not there (or not visible) is a 404.
+  if (!res.ok) return <LoadError title="Patient" error={res.error} />;
+  const data = res.d;
   const p = data.patient;
   if (!p) notFound();
   const today = todayIn(tz);

@@ -20,7 +20,7 @@ const PATHS = ['/dashboard/platform/agents'];
 export default async function AgentsPage() {
   const [data, tz] = await Promise.all([
     q<{ agentIdentities: Agent[]; agentActions: Action[]; practiceSettings: { features: Record<string, boolean> | null } | null; refused: number; ok: number }>(`{
-      agentIdentities(orderBy: { name: asc }) { id name kind model provider status killSwitch version limits owner { name } oauthApp { clientId status } grants(orderBy: { scope: asc }) { id scope status createdAt revokedAt } }
+      agentIdentities(orderBy: { name: asc }, take: 50) { id name kind model provider status killSwitch version limits owner { name } oauthApp { clientId status } grants(orderBy: { scope: asc }, take: 50) { id scope status createdAt revokedAt } }
       agentActions(orderBy: { at: desc }, take: 40) { id tool outcome errorCode at agent { name } }
       practiceSettings { features }
       ok: agentActionsCount(where: { outcome: { equals: "ok" } })

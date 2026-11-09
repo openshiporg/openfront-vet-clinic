@@ -17,7 +17,7 @@ export default async function WaitlistPage() {
   const [data, tz] = await Promise.all([
     q<{ waitlistEntries: Entry[]; tasks: { id: string; title: string; createdAt: string }[] }>(`{
       waitlistEntries(orderBy: { createdAt: asc }, take: 200) {
-        id urgency status note createdAt offerExpiresAt preferredWindows client { id displayName } patients { id name } location { name } appointmentType { name } bookedAppointment { ref startsAt }
+        id urgency status note createdAt offerExpiresAt preferredWindows client { id displayName } patients(take: 5) { id name } location { name } appointmentType { name } bookedAppointment { ref startsAt }
       }
       tasks(where: { kind: { equals: "follow_up" }, subjectType: { equals: "Appointment" }, status: { in: ["open", "in_progress"] } }, orderBy: { createdAt: desc }, take: 20) { id title createdAt }
     }`),
