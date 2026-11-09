@@ -1,6 +1,7 @@
 import { list } from '@keystone-6/core'
 import { allOperations, denyAll } from '@keystone-6/core/access'
-import { calendarDay, checkbox, password, relationship, select, text, timestamp } from '@keystone-6/core/fields'
+import { calendarDay, checkbox, password, select, text, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
 import { trackingFields } from './trackingFields'
 
 import { isSignedIn, permissions, rules } from '../access'

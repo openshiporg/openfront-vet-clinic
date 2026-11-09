@@ -1,5 +1,6 @@
 import { list } from '@keystone-6/core'
-import { calendarDay, checkbox, integer, json, relationship, select, text, timestamp } from '@keystone-6/core/fields'
+import { calendarDay, checkbox, integer, json, select, text, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
 import { permissions } from '../access'
 import { choice, fixedChoice, lifecycle, minor, readOnly, systemText, versionField } from './domainFields'
 import { governed, immutable, managed, serverOnly } from './listAccess'

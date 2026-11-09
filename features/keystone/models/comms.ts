@@ -1,5 +1,6 @@
 import { list } from '@keystone-6/core'
-import { checkbox, integer, json, relationship, text, timestamp } from '@keystone-6/core/fields'
+import { checkbox, integer, json, text, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
 import { choice, fixedChoice, lifecycle, readOnly, systemText, versionField } from './domainFields'
 import { governed, immutable, managed, serverOnly } from './listAccess'
 import { trackingFields } from './trackingFields'

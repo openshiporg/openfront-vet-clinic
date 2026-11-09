@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto'
-import { canonicalJson } from '../lib/canonical'
+import { keyedPayloadHash } from '../lib/canonical'
 import { actorAgentId, requirePermission, type Actor } from '../lib/actor'
 import { DomainError, Codes, isDomainError } from '../lib/errors'
 import type { Permission } from '../access'
@@ -16,7 +15,7 @@ type Ctx = { session: unknown; prisma: any }
 
 export type Gate = { permissions: Permission[]; scope?: string; tool: string; agentOnly?: boolean; humanOnly?: boolean }
 
-const argsHash = (args: unknown) => createHash('sha256').update(canonicalJson(args ?? {})).digest('hex')
+const argsHash = (args: unknown) => keyedPayloadHash(args ?? {}, 'agent-action-args')
 
 async function logAgentAction(prisma: any, actor: Actor, tool: string, args: unknown, outcome: string, errorCode: string | null) {
   const agentId = actorAgentId(actor)

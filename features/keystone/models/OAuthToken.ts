@@ -1,5 +1,6 @@
 import { list } from "@keystone-6/core";
-import { text, timestamp, select, json, relationship } from "@keystone-6/core/fields";
+import { text, timestamp, select, json } from "@keystone-6/core/fields"
+import { relationship } from "./guardedRelationship"
 import { permissions } from "../access";
 import { trackingFields } from "./trackingFields";
 import { digestToken } from "../mcp-oauth/core";
@@ -60,6 +61,14 @@ export const OAuthToken = list({
     redirectUri: text({
       ui: {
         description: "The redirect URI used during authorization",
+      },
+    }),
+    agentId: text({
+      access: { create: () => false, update: () => false },
+      ui: {
+        createView: { fieldMode: "hidden" },
+        itemView: { fieldMode: "read" },
+        description: "The AI agent this token acts as (set when issued to an app bound to an agent; empty for a person's own connection). A token with an agent never acts as the person who approved it.",
       },
     }),
     resource: text({

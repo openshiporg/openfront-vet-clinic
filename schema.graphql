@@ -306,7 +306,7 @@ type Role {
   canBreakGlass: Boolean
   createdAt: DateTime
   updatedAt: DateTime
-  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
+  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
   assignedToCount(where: UserWhereInput! = {}): Int
 }
 
@@ -625,7 +625,6 @@ type OAuthApp {
   id: ID!
   name: String
   clientId: String
-  clientSecret: String
   tokenEndpointAuthMethod: String
   redirectUris: JSON
   scopes: JSON
@@ -655,7 +654,6 @@ input OAuthAppWhereInput {
   id: IDFilter
   name: StringFilter
   clientId: StringFilter
-  clientSecret: StringFilter
   tokenEndpointAuthMethod: StringNullableFilter
   webhookUrl: StringFilter
   status: StringNullableFilter
@@ -674,7 +672,6 @@ input OAuthAppOrderByInput {
   id: OrderDirection
   name: OrderDirection
   clientId: OrderDirection
-  clientSecret: OrderDirection
   tokenEndpointAuthMethod: OrderDirection
   webhookUrl: OrderDirection
   status: OrderDirection
@@ -744,6 +741,7 @@ type OAuthToken {
   user: User
   scopes: JSON
   redirectUri: String
+  agentId: String
   resource: String
   expiresAt: DateTime
   isRevoked: String
@@ -772,6 +770,7 @@ input OAuthTokenWhereInput {
   clientId: StringFilter
   user: UserWhereInput
   redirectUri: StringFilter
+  agentId: StringFilter
   resource: StringFilter
   expiresAt: DateTimeNullableFilter
   isRevoked: StringNullableFilter
@@ -791,6 +790,7 @@ input OAuthTokenOrderByInput {
   token: OrderDirection
   clientId: OrderDirection
   redirectUri: OrderDirection
+  agentId: OrderDirection
   resource: OrderDirection
   expiresAt: OrderDirection
   isRevoked: OrderDirection
@@ -811,6 +811,7 @@ input OAuthTokenUpdateInput {
   user: UserRelateToOneForUpdateInput
   scopes: JSON
   redirectUri: String
+  agentId: String
   resource: String
   expiresAt: DateTime
   isRevoked: String
@@ -842,6 +843,7 @@ input OAuthTokenCreateInput {
   user: UserRelateToOneForCreateInput
   scopes: JSON
   redirectUri: String
+  agentId: String
   resource: String
   expiresAt: DateTime
   isRevoked: String
@@ -871,9 +873,9 @@ type AgentIdentity {
   killSwitch: Boolean
   limits: JSON
   oauthApp: OAuthApp
-  grants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
+  grants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
   grantsCount(where: AgentToolGrantWhereInput! = {}): Int
-  runs(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
+  runs(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
   runsCount(where: AgentRunWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -1188,7 +1190,7 @@ type ApprovalRequest {
   status: String
   expiresAt: DateTime
   consumedAt: DateTime
-  decisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
+  decisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
   decisionsCount(where: ApprovalDecisionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -1500,9 +1502,9 @@ type BusinessCalendar {
   weekendDays: JSON
   regularOpen: String
   regularClose: String
-  composedOf(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
+  composedOf(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
   composedOfCount(where: BusinessCalendarWhereInput! = {}): Int
-  exceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
+  exceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
   exceptionsCount(where: CalendarExceptionWhereInput! = {}): Int
   coverageThrough: CalendarDay
   source: String
@@ -2496,7 +2498,7 @@ type DeaRegistration {
   expiresOn: CalendarDay
   stateCsRegistration: String
   csosCertificateRef: String
-  powersOfAttorney(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
+  powersOfAttorney(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
   powersOfAttorneyCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int
   status: String
   version: Int
@@ -2705,7 +2707,7 @@ type Location {
   calendar: BusinessCalendar
   openHours: JSON
   emergencyCoverage: String
-  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
+  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
   deaRegistrationsCount(where: DeaRegistrationWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -3093,10 +3095,10 @@ type StaffMember {
   credentials: String
   employment: String
   homeLocation: Location
-  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
+  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
   locationsCount(where: LocationWhereInput! = {}): Int
   colour: String
-  licenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
+  licenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
   licensesCount(where: ProfessionalLicenseWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -3647,7 +3649,7 @@ type PolicyPack {
   name: String
   kind: String
   jurisdiction: String
-  versions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
+  versions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
   versionsCount(where: PolicyVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -4228,9 +4230,9 @@ type Client {
   accountFlags: JSON
   taxExempt: Boolean
   mergedInto: Client
-  people(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
+  people(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
   peopleCount(where: ClientPersonWhereInput! = {}): Int
-  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
+  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
   ownershipsCount(where: PatientOwnershipWhereInput! = {}): Int
   source: String
   version: Int
@@ -4407,7 +4409,7 @@ type ClientPerson {
   preferredLanguage: String
   user: User
   identityVerifiedAt: DateTime
-  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
+  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
   contactPointsCount(where: ContactPointWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -4682,12 +4684,11 @@ type ContactPoint {
   person: ClientPerson
   kind: String
   value: String
-  valueHash: String
   isPrimary: Boolean
   verifiedAt: DateTime
   canText: Boolean
   status: String
-  consents(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
+  consents(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
   consentsCount(where: ConsentRecordWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -4706,7 +4707,6 @@ input ContactPointWhereInput {
   person: ClientPersonWhereInput
   kind: StringFilter
   value: StringFilter
-  valueHash: StringFilter
   isPrimary: BooleanFilter
   verifiedAt: DateTimeNullableFilter
   canText: BooleanFilter
@@ -4727,7 +4727,6 @@ input ContactPointOrderByInput {
   id: OrderDirection
   kind: OrderDirection
   value: OrderDirection
-  valueHash: OrderDirection
   isPrimary: OrderDirection
   verifiedAt: OrderDirection
   canText: OrderDirection
@@ -4741,7 +4740,6 @@ input ContactPointUpdateInput {
   person: ClientPersonRelateToOneForUpdateInput
   kind: String
   value: String
-  valueHash: String
   isPrimary: Boolean
   verifiedAt: DateTime
   canText: Boolean
@@ -4774,7 +4772,6 @@ input ContactPointCreateInput {
   person: ClientPersonRelateToOneForCreateInput
   kind: String
   value: String
-  valueHash: String
   isPrimary: Boolean
   verifiedAt: DateTime
   canText: Boolean
@@ -4900,17 +4897,17 @@ type Patient {
   groupSize: Int
   mergedInto: Patient
   photo: Document
-  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
+  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
   ownershipsCount(where: PatientOwnershipWhereInput! = {}): Int
-  alerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
+  alerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
   alertsCount(where: PatientAlertWhereInput! = {}): Int
-  weights(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
+  weights(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
   weightsCount(where: WeightMeasurementWhereInput! = {}): Int
-  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
+  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
   microchipsCount(where: MicrochipWhereInput! = {}): Int
-  vcprs(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
+  vcprs(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
   vcprsCount(where: VcprRecordWhereInput! = {}): Int
-  insurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
+  insurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
   insurancePoliciesCount(where: PetInsurancePolicyWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5149,7 +5146,7 @@ type PatientAlert {
   text: String
   active: Boolean
   createdBy: User
-  acknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
+  acknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
   acknowledgementsCount(where: AlertAcknowledgementWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5500,7 +5497,7 @@ type RecordsRequest {
   policyVersion: PolicyVersion
   callRecord: CallRecord
   createdByAgent: AgentIdentity
-  releases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
+  releases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
   releasesCount(where: RecordsReleaseWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5919,7 +5916,7 @@ type Species {
   module: String
   defaultWeightUnit: String
   vitalsReference: JSON
-  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
+  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
   breedsCount(where: BreedWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -6296,13 +6293,13 @@ type Appointment {
   confirmedAt: DateTime
   checkedInAt: DateTime
   completedAt: DateTime
-  patients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
+  patients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
   patientsCount(where: AppointmentPatientWhereInput! = {}): Int
-  segments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
+  segments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
   segmentsCount(where: AppointmentSegmentWhereInput! = {}): Int
-  reservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
+  reservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
   reservationsCount(where: ResourceReservationWhereInput! = {}): Int
-  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
+  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
   providerReservationsCount(where: ProviderReservationWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -6603,7 +6600,7 @@ type AppointmentSegment {
   resource: Resource
   staff: StaffMember
   status: String
-  transitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
+  transitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
   transitionsCount(where: SegmentTransitionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -6712,7 +6709,7 @@ type AppointmentType {
   category: String
   durationMinutes: Int
   segments: JSON
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   requiredResourceKinds: JSON
   providerKinds: JSON
@@ -7298,7 +7295,7 @@ type TriageProtocol {
   id: ID!
   code: String
   name: String
-  versions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
+  versions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
   versionsCount(where: TriageProtocolVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -7467,7 +7464,7 @@ input TriageProtocolRelateToOneForCreateInput {
 type WaitlistEntry {
   id: ID!
   client: Client
-  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
+  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
   patientsCount(where: PatientWhereInput! = {}): Int
   location: Location
   appointmentType: AppointmentType
@@ -7960,7 +7957,7 @@ type CommsThread {
   status: String
   assignedTo: StaffMember
   lastMessageAt: DateTime
-  messages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
+  messages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
   messagesCount(where: CommsMessageWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -8562,7 +8559,7 @@ type Prescription {
   signedAt: DateTime
   licenseEvaluation: LicenseEvaluation
   policyVersion: PolicyVersion
-  lines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
+  lines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
   linesCount(where: PrescriptionLineWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -8825,7 +8822,7 @@ type CsContainer {
   openedAt: DateTime
   openedBy: StaffMember
   budAt: DateTime
-  entries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
+  entries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
   entriesCount(where: CsLogEntryWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -9088,7 +9085,7 @@ type Encounter {
   status: String
   reason: String
   attendingDvm: StaffMember
-  participants(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
+  participants(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
   participantsCount(where: StaffMemberWhereInput! = {}): Int
   weightUsed: WeightMeasurement
   startedAt: DateTime
@@ -9105,17 +9102,17 @@ type Encounter {
   voidReason: String
   voidApproval: ApprovalRequest
   importedFrom: String
-  sections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
+  sections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
   sectionsCount(where: SoapSectionWhereInput! = {}): Int
-  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
+  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
   addendaCount(where: AddendumWhereInput! = {}): Int
-  vitals(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
+  vitals(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
   vitalsCount(where: VitalsObservationWhereInput! = {}): Int
-  findings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
+  findings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
   findingsCount(where: PhysicalExamFindingWhereInput! = {}): Int
-  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
+  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
   diagnosesCount(where: DiagnosisWhereInput! = {}): Int
-  orders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
+  orders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
   ordersCount(where: ClinicalOrderWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -9434,7 +9431,7 @@ type SoapSection {
   structured: JSON
   source: String
   lastAuthor: StaffMember
-  revisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
+  revisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
   revisionsCount(where: SoapSectionRevisionWhereInput! = {}): Int
   lockedAt: DateTime
   version: Int
@@ -9889,7 +9886,7 @@ type DiagnosisCode {
   codeSystem: String
   code: String
   term: String
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -10445,7 +10442,7 @@ type ScribeSession {
   modelProvider: String
   modelRef: String
   status: String
-  drafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
+  drafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
   draftsCount(where: ScribeDraftWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -10797,7 +10794,7 @@ type ClinicalOrder {
   overrideReason: String
   warnings: JSON
   cancelReason: String
-  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
+  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
   administrationsCount(where: AdministrationWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11377,7 +11374,7 @@ type Ward {
   location: Location
   name: String
   kind: String
-  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
+  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
   cagesCount(where: CageWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -11536,9 +11533,9 @@ type HospitalStay {
   codeStatus: String
   attendingDvm: StaffMember
   reason: String
-  assignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
+  assignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
   assignmentsCount(where: CageAssignmentWhereInput! = {}): Int
-  sheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
+  sheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
   sheetOrdersCount(where: TreatmentSheetOrderWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11746,7 +11743,7 @@ type TreatmentSheetOrder {
   materialisedThrough: DateTime
   graceMinutes: Int
   active: Boolean
-  tasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
+  tasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
   tasksCount(where: TreatmentTaskWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11975,7 +11972,7 @@ type AnaesthesiaRecord {
   status: String
   complications: String
   closedBy: StaffMember
-  readings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
+  readings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
   readingsCount(where: MonitoringReadingWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -12456,7 +12453,7 @@ type VaccineProduct {
   name: String
   manufacturer: String
   antigens: JSON
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   licensedDoiMonths: Int
   minAgeWeeks: Int
@@ -12886,7 +12883,7 @@ type ReminderProtocol {
   code: String
   name: String
   species: Species
-  versions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
+  versions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
   versionsCount(where: ReminderProtocolVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -12964,7 +12961,7 @@ type ReminderProtocolVersion {
   protocol: ReminderProtocol
   label: String
   versionNumber: Int
-  rules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
+  rules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
   rulesCount(where: ReminderRuleWhereInput! = {}): Int
   sourceRefs: JSON
   verified: Boolean
@@ -13082,7 +13079,7 @@ type ReminderRule {
   id: ID!
   protocolVersion: ReminderProtocolVersion
   code: String
-  triggerVaccines(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
+  triggerVaccines(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
   triggerVaccinesCount(where: VaccineProductWhereInput! = {}): Int
   triggerServiceCode: String
   satisfies: ReminderType
@@ -13201,7 +13198,7 @@ type PatientReminder {
   source: String
   sourceKey: String
   lastNotifiedAt: DateTime
-  satisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
+  satisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
   satisfactionsCount(where: ReminderSatisfactionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -13505,7 +13502,6 @@ type ImportBatch {
   entity: String
   location: Location
   fileName: String
-  fileHash: String
   status: String
   rowsTotal: Int
   rowsCreated: Int
@@ -13514,7 +13510,7 @@ type ImportBatch {
   mapping: JSON
   startedBy: User
   finishedAt: DateTime
-  rows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
+  rows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
   rowsCount(where: ImportRowWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -13537,7 +13533,6 @@ input ImportBatchWhereInput {
   entity: StringFilter
   location: LocationWhereInput
   fileName: StringFilter
-  fileHash: StringFilter
   status: StringFilter
   rowsTotal: IntNullableFilter
   rowsCreated: IntNullableFilter
@@ -13564,7 +13559,6 @@ input ImportBatchOrderByInput {
   channel: OrderDirection
   entity: OrderDirection
   fileName: OrderDirection
-  fileHash: OrderDirection
   status: OrderDirection
   rowsTotal: OrderDirection
   rowsCreated: OrderDirection
@@ -13583,7 +13577,6 @@ input ImportBatchUpdateInput {
   entity: String
   location: LocationRelateToOneForUpdateInput
   fileName: String
-  fileHash: String
   status: String
   rowsTotal: Int
   rowsCreated: Int
@@ -13617,7 +13610,6 @@ input ImportBatchCreateInput {
   entity: String
   location: LocationRelateToOneForCreateInput
   fileName: String
-  fileHash: String
   status: String
   rowsTotal: Int
   rowsCreated: Int
@@ -13797,11 +13789,10 @@ type AgentRun {
   startedAt: DateTime
   endedAt: DateTime
   status: String
-  promptHash: String
   toolCalls: JSON
   costMeta: JSON
   callRecordId: String
-  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
+  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
   proposalsCount(where: ProposalWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -13821,7 +13812,6 @@ input AgentRunWhereInput {
   startedAt: DateTimeNullableFilter
   endedAt: DateTimeNullableFilter
   status: StringFilter
-  promptHash: StringFilter
   callRecordId: StringFilter
   proposals: ProposalManyRelationFilter
   version: IntFilter
@@ -13840,7 +13830,6 @@ input AgentRunOrderByInput {
   startedAt: OrderDirection
   endedAt: OrderDirection
   status: OrderDirection
-  promptHash: OrderDirection
   callRecordId: OrderDirection
   version: OrderDirection
   createdAt: OrderDirection
@@ -13852,7 +13841,6 @@ input AgentRunUpdateInput {
   startedAt: DateTime
   endedAt: DateTime
   status: String
-  promptHash: String
   toolCalls: JSON
   costMeta: JSON
   callRecordId: String
@@ -13879,7 +13867,6 @@ input AgentRunCreateInput {
   startedAt: DateTime
   endedAt: DateTime
   status: String
-  promptHash: String
   toolCalls: JSON
   costMeta: JSON
   callRecordId: String
@@ -13899,7 +13886,6 @@ type AgentAction {
   agent: AgentIdentity
   run: AgentRun
   tool: String
-  argsHash: String
   outcome: String
   errorCode: String
   auditEventId: String
@@ -13918,7 +13904,6 @@ input AgentActionWhereInput {
   agent: AgentIdentityWhereInput
   run: AgentRunWhereInput
   tool: StringFilter
-  argsHash: StringFilter
   outcome: StringFilter
   errorCode: StringFilter
   auditEventId: StringFilter
@@ -13928,7 +13913,6 @@ input AgentActionWhereInput {
 input AgentActionOrderByInput {
   id: OrderDirection
   tool: OrderDirection
-  argsHash: OrderDirection
   outcome: OrderDirection
   errorCode: OrderDirection
   auditEventId: OrderDirection
@@ -13939,7 +13923,6 @@ input AgentActionUpdateInput {
   agent: AgentIdentityRelateToOneForUpdateInput
   run: AgentRunRelateToOneForUpdateInput
   tool: String
-  argsHash: String
   outcome: String
   errorCode: String
   auditEventId: String
@@ -13955,7 +13938,6 @@ input AgentActionCreateInput {
   agent: AgentIdentityRelateToOneForCreateInput
   run: AgentRunRelateToOneForCreateInput
   tool: String
-  argsHash: String
   outcome: String
   errorCode: String
   auditEventId: String
@@ -14890,6 +14872,8 @@ type Mutation {
   requestRefill(input: JSON!, idempotencyKey: String!): JSON
   requestRecords(input: JSON!, idempotencyKey: String!): JSON
   setAgentKillSwitch(agentId: ID!, killSwitch: Boolean!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  bindAgentApp(agentId: ID!, oauthAppId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  unbindAgentApp(agentId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   openEncounter(patientId: ID!, locationId: ID!, kind: String!, appointmentId: ID, reason: String, attendingDvmId: ID, idempotencyKey: String!): JSON
   saveSoapSection(encounterId: ID!, kind: String!, ordinal: Int, body: String!, structured: JSON, templateId: ID, expectedVersion: Int, idempotencyKey: String!): JSON
   recordVitals(encounterId: ID!, temperature: String, temperatureUnit: String, heartRate: Int, respRate: Int, mucousMembranes: String, crtSeconds: String, painScore: Int, bodyConditionScore: Int, mentation: String, hydrationPct: String, idempotencyKey: String!): JSON
@@ -14961,400 +14945,400 @@ enum PasswordResetRedemptionErrorCode {
 
 type Query {
   user(where: UserWhereUniqueInput!): User
-  users(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
+  users(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
   usersCount(where: UserWhereInput! = {}): Int
   role(where: RoleWhereUniqueInput!): Role
-  roles(where: RoleWhereInput! = {}, orderBy: [RoleOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RoleWhereUniqueInput): [Role!]
+  roles(where: RoleWhereInput! = {}, orderBy: [RoleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RoleWhereUniqueInput): [Role!]
   rolesCount(where: RoleWhereInput! = {}): Int
   oAuthApp(where: OAuthAppWhereUniqueInput!): OAuthApp
-  oAuthApps(where: OAuthAppWhereInput! = {}, orderBy: [OAuthAppOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OAuthAppWhereUniqueInput): [OAuthApp!]
+  oAuthApps(where: OAuthAppWhereInput! = {}, orderBy: [OAuthAppOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: OAuthAppWhereUniqueInput): [OAuthApp!]
   oAuthAppsCount(where: OAuthAppWhereInput! = {}): Int
   oAuthToken(where: OAuthTokenWhereUniqueInput!): OAuthToken
-  oAuthTokens(where: OAuthTokenWhereInput! = {}, orderBy: [OAuthTokenOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OAuthTokenWhereUniqueInput): [OAuthToken!]
+  oAuthTokens(where: OAuthTokenWhereInput! = {}, orderBy: [OAuthTokenOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: OAuthTokenWhereUniqueInput): [OAuthToken!]
   oAuthTokensCount(where: OAuthTokenWhereInput! = {}): Int
   agentIdentity(where: AgentIdentityWhereUniqueInput!): AgentIdentity
-  agentIdentities(where: AgentIdentityWhereInput! = {}, orderBy: [AgentIdentityOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentIdentityWhereUniqueInput): [AgentIdentity!]
+  agentIdentities(where: AgentIdentityWhereInput! = {}, orderBy: [AgentIdentityOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentIdentityWhereUniqueInput): [AgentIdentity!]
   agentIdentitiesCount(where: AgentIdentityWhereInput! = {}): Int
   approvalDecision(where: ApprovalDecisionWhereUniqueInput!): ApprovalDecision
-  approvalDecisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
+  approvalDecisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
   approvalDecisionsCount(where: ApprovalDecisionWhereInput! = {}): Int
   approvalPolicy(where: ApprovalPolicyWhereUniqueInput!): ApprovalPolicy
-  approvalPolicies(where: ApprovalPolicyWhereInput! = {}, orderBy: [ApprovalPolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalPolicyWhereUniqueInput): [ApprovalPolicy!]
+  approvalPolicies(where: ApprovalPolicyWhereInput! = {}, orderBy: [ApprovalPolicyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ApprovalPolicyWhereUniqueInput): [ApprovalPolicy!]
   approvalPoliciesCount(where: ApprovalPolicyWhereInput! = {}): Int
   approvalRequest(where: ApprovalRequestWhereUniqueInput!): ApprovalRequest
-  approvalRequests(where: ApprovalRequestWhereInput! = {}, orderBy: [ApprovalRequestOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ApprovalRequestWhereUniqueInput): [ApprovalRequest!]
+  approvalRequests(where: ApprovalRequestWhereInput! = {}, orderBy: [ApprovalRequestOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ApprovalRequestWhereUniqueInput): [ApprovalRequest!]
   approvalRequestsCount(where: ApprovalRequestWhereInput! = {}): Int
   auditEvent(where: AuditEventWhereUniqueInput!): AuditEvent
-  auditEvents(where: AuditEventWhereInput! = {}, orderBy: [AuditEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AuditEventWhereUniqueInput): [AuditEvent!]
+  auditEvents(where: AuditEventWhereInput! = {}, orderBy: [AuditEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AuditEventWhereUniqueInput): [AuditEvent!]
   auditEventsCount(where: AuditEventWhereInput! = {}): Int
   breakGlassEvent(where: BreakGlassEventWhereUniqueInput!): BreakGlassEvent
-  breakGlassEvents(where: BreakGlassEventWhereInput! = {}, orderBy: [BreakGlassEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BreakGlassEventWhereUniqueInput): [BreakGlassEvent!]
+  breakGlassEvents(where: BreakGlassEventWhereInput! = {}, orderBy: [BreakGlassEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BreakGlassEventWhereUniqueInput): [BreakGlassEvent!]
   breakGlassEventsCount(where: BreakGlassEventWhereInput! = {}): Int
   businessCalendar(where: BusinessCalendarWhereUniqueInput!): BusinessCalendar
-  businessCalendars(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
+  businessCalendars(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
   businessCalendarsCount(where: BusinessCalendarWhereInput! = {}): Int
   calendarException(where: CalendarExceptionWhereUniqueInput!): CalendarException
-  calendarExceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
+  calendarExceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
   calendarExceptionsCount(where: CalendarExceptionWhereInput! = {}): Int
   document(where: DocumentWhereUniqueInput!): Document
-  documents(where: DocumentWhereInput! = {}, orderBy: [DocumentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DocumentWhereUniqueInput): [Document!]
+  documents(where: DocumentWhereInput! = {}, orderBy: [DocumentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DocumentWhereUniqueInput): [Document!]
   documentsCount(where: DocumentWhereInput! = {}): Int
   externalId(where: ExternalIdWhereUniqueInput!): ExternalId
-  externalIds(where: ExternalIdWhereInput! = {}, orderBy: [ExternalIdOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExternalIdWhereUniqueInput): [ExternalId!]
+  externalIds(where: ExternalIdWhereInput! = {}, orderBy: [ExternalIdOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ExternalIdWhereUniqueInput): [ExternalId!]
   externalIdsCount(where: ExternalIdWhereInput! = {}): Int
   integrationConnection(where: IntegrationConnectionWhereUniqueInput!): IntegrationConnection
-  integrationConnections(where: IntegrationConnectionWhereInput! = {}, orderBy: [IntegrationConnectionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: IntegrationConnectionWhereUniqueInput): [IntegrationConnection!]
+  integrationConnections(where: IntegrationConnectionWhereInput! = {}, orderBy: [IntegrationConnectionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: IntegrationConnectionWhereUniqueInput): [IntegrationConnection!]
   integrationConnectionsCount(where: IntegrationConnectionWhereInput! = {}): Int
   notification(where: NotificationWhereUniqueInput!): Notification
-  notifications(where: NotificationWhereInput! = {}, orderBy: [NotificationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: NotificationWhereUniqueInput): [Notification!]
+  notifications(where: NotificationWhereInput! = {}, orderBy: [NotificationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: NotificationWhereUniqueInput): [Notification!]
   notificationsCount(where: NotificationWhereInput! = {}): Int
   outboxEvent(where: OutboxEventWhereUniqueInput!): OutboxEvent
-  outboxEvents(where: OutboxEventWhereInput! = {}, orderBy: [OutboxEventOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OutboxEventWhereUniqueInput): [OutboxEvent!]
+  outboxEvents(where: OutboxEventWhereInput! = {}, orderBy: [OutboxEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: OutboxEventWhereUniqueInput): [OutboxEvent!]
   outboxEventsCount(where: OutboxEventWhereInput! = {}): Int
   providerObservation(where: ProviderObservationWhereUniqueInput!): ProviderObservation
-  providerObservations(where: ProviderObservationWhereInput! = {}, orderBy: [ProviderObservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProviderObservationWhereUniqueInput): [ProviderObservation!]
+  providerObservations(where: ProviderObservationWhereInput! = {}, orderBy: [ProviderObservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProviderObservationWhereUniqueInput): [ProviderObservation!]
   providerObservationsCount(where: ProviderObservationWhereInput! = {}): Int
   readAudit(where: ReadAuditWhereUniqueInput!): ReadAudit
-  readAudits(where: ReadAuditWhereInput! = {}, orderBy: [ReadAuditOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReadAuditWhereUniqueInput): [ReadAudit!]
+  readAudits(where: ReadAuditWhereInput! = {}, orderBy: [ReadAuditOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReadAuditWhereUniqueInput): [ReadAudit!]
   readAuditsCount(where: ReadAuditWhereInput! = {}): Int
   scheduledJob(where: ScheduledJobWhereUniqueInput!): ScheduledJob
-  scheduledJobs(where: ScheduledJobWhereInput! = {}, orderBy: [ScheduledJobOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ScheduledJobWhereUniqueInput): [ScheduledJob!]
+  scheduledJobs(where: ScheduledJobWhereInput! = {}, orderBy: [ScheduledJobOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScheduledJobWhereUniqueInput): [ScheduledJob!]
   scheduledJobsCount(where: ScheduledJobWhereInput! = {}): Int
   deaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!): DeaPowerOfAttorney
-  deaPowerOfAttorneys(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
+  deaPowerOfAttorneys(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
   deaPowerOfAttorneysCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int
   deaRegistration(where: DeaRegistrationWhereUniqueInput!): DeaRegistration
-  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
+  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
   deaRegistrationsCount(where: DeaRegistrationWhereInput! = {}): Int
   licenseEvaluation(where: LicenseEvaluationWhereUniqueInput!): LicenseEvaluation
-  licenseEvaluations(where: LicenseEvaluationWhereInput! = {}, orderBy: [LicenseEvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LicenseEvaluationWhereUniqueInput): [LicenseEvaluation!]
+  licenseEvaluations(where: LicenseEvaluationWhereInput! = {}, orderBy: [LicenseEvaluationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LicenseEvaluationWhereUniqueInput): [LicenseEvaluation!]
   licenseEvaluationsCount(where: LicenseEvaluationWhereInput! = {}): Int
   location(where: LocationWhereUniqueInput!): Location
-  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
+  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
   locationsCount(where: LocationWhereInput! = {}): Int
   practiceSettings(where: PracticeSettingsWhereUniqueInput! = {id: 1}): PracticeSettings
-  practiceSettingsItems(where: PracticeSettingsWhereInput! = {id: {equals: 1}}, orderBy: [PracticeSettingsOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PracticeSettingsWhereUniqueInput): [PracticeSettings!]
+  practiceSettingsItems(where: PracticeSettingsWhereInput! = {id: {equals: 1}}, orderBy: [PracticeSettingsOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PracticeSettingsWhereUniqueInput): [PracticeSettings!]
   practiceSettingsItemsCount(where: PracticeSettingsWhereInput! = {id: {equals: 1}}): Int
   professionalLicense(where: ProfessionalLicenseWhereUniqueInput!): ProfessionalLicense
-  professionalLicenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
+  professionalLicenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
   professionalLicensesCount(where: ProfessionalLicenseWhereInput! = {}): Int
   staffMember(where: StaffMemberWhereUniqueInput!): StaffMember
-  staffMembers(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
+  staffMembers(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
   staffMembersCount(where: StaffMemberWhereInput! = {}): Int
   complianceTask(where: ComplianceTaskWhereUniqueInput!): ComplianceTask
-  complianceTasks(where: ComplianceTaskWhereInput! = {}, orderBy: [ComplianceTaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ComplianceTaskWhereUniqueInput): [ComplianceTask!]
+  complianceTasks(where: ComplianceTaskWhereInput! = {}, orderBy: [ComplianceTaskOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ComplianceTaskWhereUniqueInput): [ComplianceTask!]
   complianceTasksCount(where: ComplianceTaskWhereInput! = {}): Int
   incident(where: IncidentWhereUniqueInput!): Incident
-  incidents(where: IncidentWhereInput! = {}, orderBy: [IncidentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: IncidentWhereUniqueInput): [Incident!]
+  incidents(where: IncidentWhereInput! = {}, orderBy: [IncidentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: IncidentWhereUniqueInput): [Incident!]
   incidentsCount(where: IncidentWhereInput! = {}): Int
   legalHold(where: LegalHoldWhereUniqueInput!): LegalHold
-  legalHolds(where: LegalHoldWhereInput! = {}, orderBy: [LegalHoldOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LegalHoldWhereUniqueInput): [LegalHold!]
+  legalHolds(where: LegalHoldWhereInput! = {}, orderBy: [LegalHoldOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LegalHoldWhereUniqueInput): [LegalHold!]
   legalHoldsCount(where: LegalHoldWhereInput! = {}): Int
   note(where: NoteWhereUniqueInput!): Note
-  notes(where: NoteWhereInput! = {}, orderBy: [NoteOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: NoteWhereUniqueInput): [Note!]
+  notes(where: NoteWhereInput! = {}, orderBy: [NoteOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: NoteWhereUniqueInput): [Note!]
   notesCount(where: NoteWhereInput! = {}): Int
   policyBinding(where: PolicyBindingWhereUniqueInput!): PolicyBinding
-  policyBindings(where: PolicyBindingWhereInput! = {}, orderBy: [PolicyBindingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyBindingWhereUniqueInput): [PolicyBinding!]
+  policyBindings(where: PolicyBindingWhereInput! = {}, orderBy: [PolicyBindingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PolicyBindingWhereUniqueInput): [PolicyBinding!]
   policyBindingsCount(where: PolicyBindingWhereInput! = {}): Int
   policyPack(where: PolicyPackWhereUniqueInput!): PolicyPack
-  policyPacks(where: PolicyPackWhereInput! = {}, orderBy: [PolicyPackOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyPackWhereUniqueInput): [PolicyPack!]
+  policyPacks(where: PolicyPackWhereInput! = {}, orderBy: [PolicyPackOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PolicyPackWhereUniqueInput): [PolicyPack!]
   policyPacksCount(where: PolicyPackWhereInput! = {}): Int
   policyVersion(where: PolicyVersionWhereUniqueInput!): PolicyVersion
-  policyVersions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
+  policyVersions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
   policyVersionsCount(where: PolicyVersionWhereInput! = {}): Int
   retentionPolicy(where: RetentionPolicyWhereUniqueInput!): RetentionPolicy
-  retentionPolicies(where: RetentionPolicyWhereInput! = {}, orderBy: [RetentionPolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RetentionPolicyWhereUniqueInput): [RetentionPolicy!]
+  retentionPolicies(where: RetentionPolicyWhereInput! = {}, orderBy: [RetentionPolicyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RetentionPolicyWhereUniqueInput): [RetentionPolicy!]
   retentionPoliciesCount(where: RetentionPolicyWhereInput! = {}): Int
   tag(where: TagWhereUniqueInput!): Tag
-  tags(where: TagWhereInput! = {}, orderBy: [TagOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TagWhereUniqueInput): [Tag!]
+  tags(where: TagWhereInput! = {}, orderBy: [TagOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TagWhereUniqueInput): [Tag!]
   tagsCount(where: TagWhereInput! = {}): Int
   task(where: TaskWhereUniqueInput!): Task
-  tasks(where: TaskWhereInput! = {}, orderBy: [TaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TaskWhereUniqueInput): [Task!]
+  tasks(where: TaskWhereInput! = {}, orderBy: [TaskOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TaskWhereUniqueInput): [Task!]
   tasksCount(where: TaskWhereInput! = {}): Int
   alertAcknowledgement(where: AlertAcknowledgementWhereUniqueInput!): AlertAcknowledgement
-  alertAcknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
+  alertAcknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
   alertAcknowledgementsCount(where: AlertAcknowledgementWhereInput! = {}): Int
   breed(where: BreedWhereUniqueInput!): Breed
-  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
+  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
   breedsCount(where: BreedWhereInput! = {}): Int
   client(where: ClientWhereUniqueInput!): Client
-  clients(where: ClientWhereInput! = {}, orderBy: [ClientOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClientWhereUniqueInput): [Client!]
+  clients(where: ClientWhereInput! = {}, orderBy: [ClientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClientWhereUniqueInput): [Client!]
   clientsCount(where: ClientWhereInput! = {}): Int
   clientPerson(where: ClientPersonWhereUniqueInput!): ClientPerson
-  clientPeople(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
+  clientPeople(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
   clientPeopleCount(where: ClientPersonWhereInput! = {}): Int
   colourMarking(where: ColourMarkingWhereUniqueInput!): ColourMarking
-  colourMarkings(where: ColourMarkingWhereInput! = {}, orderBy: [ColourMarkingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ColourMarkingWhereUniqueInput): [ColourMarking!]
+  colourMarkings(where: ColourMarkingWhereInput! = {}, orderBy: [ColourMarkingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ColourMarkingWhereUniqueInput): [ColourMarking!]
   colourMarkingsCount(where: ColourMarkingWhereInput! = {}): Int
   consentRecord(where: ConsentRecordWhereUniqueInput!): ConsentRecord
-  consentRecords(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
+  consentRecords(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
   consentRecordsCount(where: ConsentRecordWhereInput! = {}): Int
   contactPoint(where: ContactPointWhereUniqueInput!): ContactPoint
-  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
+  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
   contactPointsCount(where: ContactPointWhereInput! = {}): Int
   microchip(where: MicrochipWhereUniqueInput!): Microchip
-  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
+  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
   microchipsCount(where: MicrochipWhereInput! = {}): Int
   patient(where: PatientWhereUniqueInput!): Patient
-  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
+  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
   patientsCount(where: PatientWhereInput! = {}): Int
   patientAlert(where: PatientAlertWhereUniqueInput!): PatientAlert
-  patientAlerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
+  patientAlerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
   patientAlertsCount(where: PatientAlertWhereInput! = {}): Int
   patientOwnership(where: PatientOwnershipWhereUniqueInput!): PatientOwnership
-  patientOwnerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
+  patientOwnerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
   patientOwnershipsCount(where: PatientOwnershipWhereInput! = {}): Int
   petInsurancePolicy(where: PetInsurancePolicyWhereUniqueInput!): PetInsurancePolicy
-  petInsurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
+  petInsurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
   petInsurancePoliciesCount(where: PetInsurancePolicyWhereInput! = {}): Int
   recordsRelease(where: RecordsReleaseWhereUniqueInput!): RecordsRelease
-  recordsReleases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
+  recordsReleases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
   recordsReleasesCount(where: RecordsReleaseWhereInput! = {}): Int
   recordsRequest(where: RecordsRequestWhereUniqueInput!): RecordsRequest
-  recordsRequests(where: RecordsRequestWhereInput! = {}, orderBy: [RecordsRequestOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RecordsRequestWhereUniqueInput): [RecordsRequest!]
+  recordsRequests(where: RecordsRequestWhereInput! = {}, orderBy: [RecordsRequestOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecordsRequestWhereUniqueInput): [RecordsRequest!]
   recordsRequestsCount(where: RecordsRequestWhereInput! = {}): Int
   referralHospital(where: ReferralHospitalWhereUniqueInput!): ReferralHospital
-  referralHospitals(where: ReferralHospitalWhereInput! = {}, orderBy: [ReferralHospitalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReferralHospitalWhereUniqueInput): [ReferralHospital!]
+  referralHospitals(where: ReferralHospitalWhereInput! = {}, orderBy: [ReferralHospitalOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReferralHospitalWhereUniqueInput): [ReferralHospital!]
   referralHospitalsCount(where: ReferralHospitalWhereInput! = {}): Int
   referringVet(where: ReferringVetWhereUniqueInput!): ReferringVet
-  referringVets(where: ReferringVetWhereInput! = {}, orderBy: [ReferringVetOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReferringVetWhereUniqueInput): [ReferringVet!]
+  referringVets(where: ReferringVetWhereInput! = {}, orderBy: [ReferringVetOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReferringVetWhereUniqueInput): [ReferringVet!]
   referringVetsCount(where: ReferringVetWhereInput! = {}): Int
   refillRequest(where: RefillRequestWhereUniqueInput!): RefillRequest
-  refillRequests(where: RefillRequestWhereInput! = {}, orderBy: [RefillRequestOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RefillRequestWhereUniqueInput): [RefillRequest!]
+  refillRequests(where: RefillRequestWhereInput! = {}, orderBy: [RefillRequestOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RefillRequestWhereUniqueInput): [RefillRequest!]
   refillRequestsCount(where: RefillRequestWhereInput! = {}): Int
   species(where: SpeciesWhereUniqueInput!): Species
-  speciesList(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  speciesList(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesListCount(where: SpeciesWhereInput! = {}): Int
   thirdPartyPayer(where: ThirdPartyPayerWhereUniqueInput!): ThirdPartyPayer
-  thirdPartyPayers(where: ThirdPartyPayerWhereInput! = {}, orderBy: [ThirdPartyPayerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ThirdPartyPayerWhereUniqueInput): [ThirdPartyPayer!]
+  thirdPartyPayers(where: ThirdPartyPayerWhereInput! = {}, orderBy: [ThirdPartyPayerOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ThirdPartyPayerWhereUniqueInput): [ThirdPartyPayer!]
   thirdPartyPayersCount(where: ThirdPartyPayerWhereInput! = {}): Int
   vcprRecord(where: VcprRecordWhereUniqueInput!): VcprRecord
-  vcprRecords(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
+  vcprRecords(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
   vcprRecordsCount(where: VcprRecordWhereInput! = {}): Int
   weightMeasurement(where: WeightMeasurementWhereUniqueInput!): WeightMeasurement
-  weightMeasurements(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
+  weightMeasurements(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
   weightMeasurementsCount(where: WeightMeasurementWhereInput! = {}): Int
   appointment(where: AppointmentWhereUniqueInput!): Appointment
-  appointments(where: AppointmentWhereInput! = {}, orderBy: [AppointmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentWhereUniqueInput): [Appointment!]
+  appointments(where: AppointmentWhereInput! = {}, orderBy: [AppointmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentWhereUniqueInput): [Appointment!]
   appointmentsCount(where: AppointmentWhereInput! = {}): Int
   appointmentPatient(where: AppointmentPatientWhereUniqueInput!): AppointmentPatient
-  appointmentPatients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
+  appointmentPatients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
   appointmentPatientsCount(where: AppointmentPatientWhereInput! = {}): Int
   appointmentSegment(where: AppointmentSegmentWhereUniqueInput!): AppointmentSegment
-  appointmentSegments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
+  appointmentSegments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
   appointmentSegmentsCount(where: AppointmentSegmentWhereInput! = {}): Int
   appointmentType(where: AppointmentTypeWhereUniqueInput!): AppointmentType
-  appointmentTypes(where: AppointmentTypeWhereInput! = {}, orderBy: [AppointmentTypeOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AppointmentTypeWhereUniqueInput): [AppointmentType!]
+  appointmentTypes(where: AppointmentTypeWhereInput! = {}, orderBy: [AppointmentTypeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentTypeWhereUniqueInput): [AppointmentType!]
   appointmentTypesCount(where: AppointmentTypeWhereInput! = {}): Int
   providerReservation(where: ProviderReservationWhereUniqueInput!): ProviderReservation
-  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
+  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
   providerReservationsCount(where: ProviderReservationWhereInput! = {}): Int
   resource(where: ResourceWhereUniqueInput!): Resource
-  resources(where: ResourceWhereInput! = {}, orderBy: [ResourceOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ResourceWhereUniqueInput): [Resource!]
+  resources(where: ResourceWhereInput! = {}, orderBy: [ResourceOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ResourceWhereUniqueInput): [Resource!]
   resourcesCount(where: ResourceWhereInput! = {}): Int
   resourceReservation(where: ResourceReservationWhereUniqueInput!): ResourceReservation
-  resourceReservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
+  resourceReservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
   resourceReservationsCount(where: ResourceReservationWhereInput! = {}): Int
   segmentTransition(where: SegmentTransitionWhereUniqueInput!): SegmentTransition
-  segmentTransitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
+  segmentTransitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
   segmentTransitionsCount(where: SegmentTransitionWhereInput! = {}): Int
   staffSchedule(where: StaffScheduleWhereUniqueInput!): StaffSchedule
-  staffSchedules(where: StaffScheduleWhereInput! = {}, orderBy: [StaffScheduleOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: StaffScheduleWhereUniqueInput): [StaffSchedule!]
+  staffSchedules(where: StaffScheduleWhereInput! = {}, orderBy: [StaffScheduleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StaffScheduleWhereUniqueInput): [StaffSchedule!]
   staffSchedulesCount(where: StaffScheduleWhereInput! = {}): Int
   triageAssessment(where: TriageAssessmentWhereUniqueInput!): TriageAssessment
-  triageAssessments(where: TriageAssessmentWhereInput! = {}, orderBy: [TriageAssessmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TriageAssessmentWhereUniqueInput): [TriageAssessment!]
+  triageAssessments(where: TriageAssessmentWhereInput! = {}, orderBy: [TriageAssessmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TriageAssessmentWhereUniqueInput): [TriageAssessment!]
   triageAssessmentsCount(where: TriageAssessmentWhereInput! = {}): Int
   triageProtocol(where: TriageProtocolWhereUniqueInput!): TriageProtocol
-  triageProtocols(where: TriageProtocolWhereInput! = {}, orderBy: [TriageProtocolOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TriageProtocolWhereUniqueInput): [TriageProtocol!]
+  triageProtocols(where: TriageProtocolWhereInput! = {}, orderBy: [TriageProtocolOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TriageProtocolWhereUniqueInput): [TriageProtocol!]
   triageProtocolsCount(where: TriageProtocolWhereInput! = {}): Int
   triageProtocolVersion(where: TriageProtocolVersionWhereUniqueInput!): TriageProtocolVersion
-  triageProtocolVersions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
+  triageProtocolVersions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
   triageProtocolVersionsCount(where: TriageProtocolVersionWhereInput! = {}): Int
   waitlistEntry(where: WaitlistEntryWhereUniqueInput!): WaitlistEntry
-  waitlistEntries(where: WaitlistEntryWhereInput! = {}, orderBy: [WaitlistEntryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WaitlistEntryWhereUniqueInput): [WaitlistEntry!]
+  waitlistEntries(where: WaitlistEntryWhereInput! = {}, orderBy: [WaitlistEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WaitlistEntryWhereUniqueInput): [WaitlistEntry!]
   waitlistEntriesCount(where: WaitlistEntryWhereInput! = {}): Int
   whiteboardEntry(where: WhiteboardEntryWhereUniqueInput!): WhiteboardEntry
-  whiteboardEntries(where: WhiteboardEntryWhereInput! = {}, orderBy: [WhiteboardEntryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WhiteboardEntryWhereUniqueInput): [WhiteboardEntry!]
+  whiteboardEntries(where: WhiteboardEntryWhereInput! = {}, orderBy: [WhiteboardEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WhiteboardEntryWhereUniqueInput): [WhiteboardEntry!]
   whiteboardEntriesCount(where: WhiteboardEntryWhereInput! = {}): Int
   callRecord(where: CallRecordWhereUniqueInput!): CallRecord
-  callRecords(where: CallRecordWhereInput! = {}, orderBy: [CallRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CallRecordWhereUniqueInput): [CallRecord!]
+  callRecords(where: CallRecordWhereInput! = {}, orderBy: [CallRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CallRecordWhereUniqueInput): [CallRecord!]
   callRecordsCount(where: CallRecordWhereInput! = {}): Int
   commsMessage(where: CommsMessageWhereUniqueInput!): CommsMessage
-  commsMessages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
+  commsMessages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
   commsMessagesCount(where: CommsMessageWhereInput! = {}): Int
   commsThread(where: CommsThreadWhereUniqueInput!): CommsThread
-  commsThreads(where: CommsThreadWhereInput! = {}, orderBy: [CommsThreadOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CommsThreadWhereUniqueInput): [CommsThread!]
+  commsThreads(where: CommsThreadWhereInput! = {}, orderBy: [CommsThreadOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CommsThreadWhereUniqueInput): [CommsThread!]
   commsThreadsCount(where: CommsThreadWhereInput! = {}): Int
   knowledgeBaseEntry(where: KnowledgeBaseEntryWhereUniqueInput!): KnowledgeBaseEntry
-  knowledgeBaseEntries(where: KnowledgeBaseEntryWhereInput! = {}, orderBy: [KnowledgeBaseEntryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: KnowledgeBaseEntryWhereUniqueInput): [KnowledgeBaseEntry!]
+  knowledgeBaseEntries(where: KnowledgeBaseEntryWhereInput! = {}, orderBy: [KnowledgeBaseEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: KnowledgeBaseEntryWhereUniqueInput): [KnowledgeBaseEntry!]
   knowledgeBaseEntriesCount(where: KnowledgeBaseEntryWhereInput! = {}): Int
   messageTemplate(where: MessageTemplateWhereUniqueInput!): MessageTemplate
-  messageTemplates(where: MessageTemplateWhereInput! = {}, orderBy: [MessageTemplateOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MessageTemplateWhereUniqueInput): [MessageTemplate!]
+  messageTemplates(where: MessageTemplateWhereInput! = {}, orderBy: [MessageTemplateOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MessageTemplateWhereUniqueInput): [MessageTemplate!]
   messageTemplatesCount(where: MessageTemplateWhereInput! = {}): Int
   publicAppointmentType(where: PublicAppointmentTypeWhereUniqueInput!): PublicAppointmentType
-  publicAppointmentTypes(where: PublicAppointmentTypeWhereInput! = {}, orderBy: [PublicAppointmentTypeOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PublicAppointmentTypeWhereUniqueInput): [PublicAppointmentType!]
+  publicAppointmentTypes(where: PublicAppointmentTypeWhereInput! = {}, orderBy: [PublicAppointmentTypeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PublicAppointmentTypeWhereUniqueInput): [PublicAppointmentType!]
   publicAppointmentTypesCount(where: PublicAppointmentTypeWhereInput! = {}): Int
   publicSiteProfile(where: PublicSiteProfileWhereUniqueInput! = {id: 1}): PublicSiteProfile
-  publicSiteProfiles(where: PublicSiteProfileWhereInput! = {id: {equals: 1}}, orderBy: [PublicSiteProfileOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PublicSiteProfileWhereUniqueInput): [PublicSiteProfile!]
+  publicSiteProfiles(where: PublicSiteProfileWhereInput! = {id: {equals: 1}}, orderBy: [PublicSiteProfileOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PublicSiteProfileWhereUniqueInput): [PublicSiteProfile!]
   publicSiteProfilesCount(where: PublicSiteProfileWhereInput! = {id: {equals: 1}}): Int
   suppression(where: SuppressionWhereUniqueInput!): Suppression
-  suppressions(where: SuppressionWhereInput! = {}, orderBy: [SuppressionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SuppressionWhereUniqueInput): [Suppression!]
+  suppressions(where: SuppressionWhereInput! = {}, orderBy: [SuppressionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SuppressionWhereUniqueInput): [Suppression!]
   suppressionsCount(where: SuppressionWhereInput! = {}): Int
   drugProduct(where: DrugProductWhereUniqueInput!): DrugProduct
-  drugProducts(where: DrugProductWhereInput! = {}, orderBy: [DrugProductOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DrugProductWhereUniqueInput): [DrugProduct!]
+  drugProducts(where: DrugProductWhereInput! = {}, orderBy: [DrugProductOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DrugProductWhereUniqueInput): [DrugProduct!]
   drugProductsCount(where: DrugProductWhereInput! = {}): Int
   prescription(where: PrescriptionWhereUniqueInput!): Prescription
-  prescriptions(where: PrescriptionWhereInput! = {}, orderBy: [PrescriptionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PrescriptionWhereUniqueInput): [Prescription!]
+  prescriptions(where: PrescriptionWhereInput! = {}, orderBy: [PrescriptionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PrescriptionWhereUniqueInput): [Prescription!]
   prescriptionsCount(where: PrescriptionWhereInput! = {}): Int
   prescriptionLine(where: PrescriptionLineWhereUniqueInput!): PrescriptionLine
-  prescriptionLines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
+  prescriptionLines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
   prescriptionLinesCount(where: PrescriptionLineWhereInput! = {}): Int
   csContainer(where: CsContainerWhereUniqueInput!): CsContainer
-  csContainers(where: CsContainerWhereInput! = {}, orderBy: [CsContainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CsContainerWhereUniqueInput): [CsContainer!]
+  csContainers(where: CsContainerWhereInput! = {}, orderBy: [CsContainerOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsContainerWhereUniqueInput): [CsContainer!]
   csContainersCount(where: CsContainerWhereInput! = {}): Int
   csLogEntry(where: CsLogEntryWhereUniqueInput!): CsLogEntry
-  csLogEntries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
+  csLogEntries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
   csLogEntriesCount(where: CsLogEntryWhereInput! = {}): Int
   encounter(where: EncounterWhereUniqueInput!): Encounter
-  encounters(where: EncounterWhereInput! = {}, orderBy: [EncounterOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EncounterWhereUniqueInput): [Encounter!]
+  encounters(where: EncounterWhereInput! = {}, orderBy: [EncounterOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EncounterWhereUniqueInput): [Encounter!]
   encountersCount(where: EncounterWhereInput! = {}): Int
   soapSection(where: SoapSectionWhereUniqueInput!): SoapSection
-  soapSections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
+  soapSections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
   soapSectionsCount(where: SoapSectionWhereInput! = {}): Int
   soapSectionRevision(where: SoapSectionRevisionWhereUniqueInput!): SoapSectionRevision
-  soapSectionRevisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
+  soapSectionRevisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
   soapSectionRevisionsCount(where: SoapSectionRevisionWhereInput! = {}): Int
   addendum(where: AddendumWhereUniqueInput!): Addendum
-  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
+  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
   addendaCount(where: AddendumWhereInput! = {}): Int
   vitalsObservation(where: VitalsObservationWhereUniqueInput!): VitalsObservation
-  vitalsObservations(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
+  vitalsObservations(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
   vitalsObservationsCount(where: VitalsObservationWhereInput! = {}): Int
   physicalExamFinding(where: PhysicalExamFindingWhereUniqueInput!): PhysicalExamFinding
-  physicalExamFindings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
+  physicalExamFindings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
   physicalExamFindingsCount(where: PhysicalExamFindingWhereInput! = {}): Int
   diagnosisCode(where: DiagnosisCodeWhereUniqueInput!): DiagnosisCode
-  diagnosisCodes(where: DiagnosisCodeWhereInput! = {}, orderBy: [DiagnosisCodeOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DiagnosisCodeWhereUniqueInput): [DiagnosisCode!]
+  diagnosisCodes(where: DiagnosisCodeWhereInput! = {}, orderBy: [DiagnosisCodeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DiagnosisCodeWhereUniqueInput): [DiagnosisCode!]
   diagnosisCodesCount(where: DiagnosisCodeWhereInput! = {}): Int
   problem(where: ProblemWhereUniqueInput!): Problem
-  problems(where: ProblemWhereInput! = {}, orderBy: [ProblemOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProblemWhereUniqueInput): [Problem!]
+  problems(where: ProblemWhereInput! = {}, orderBy: [ProblemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProblemWhereUniqueInput): [Problem!]
   problemsCount(where: ProblemWhereInput! = {}): Int
   diagnosis(where: DiagnosisWhereUniqueInput!): Diagnosis
-  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
+  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
   diagnosesCount(where: DiagnosisWhereInput! = {}): Int
   clinicalAttachment(where: ClinicalAttachmentWhereUniqueInput!): ClinicalAttachment
-  clinicalAttachments(where: ClinicalAttachmentWhereInput! = {}, orderBy: [ClinicalAttachmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClinicalAttachmentWhereUniqueInput): [ClinicalAttachment!]
+  clinicalAttachments(where: ClinicalAttachmentWhereInput! = {}, orderBy: [ClinicalAttachmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClinicalAttachmentWhereUniqueInput): [ClinicalAttachment!]
   clinicalAttachmentsCount(where: ClinicalAttachmentWhereInput! = {}): Int
   clinicalDocument(where: ClinicalDocumentWhereUniqueInput!): ClinicalDocument
-  clinicalDocuments(where: ClinicalDocumentWhereInput! = {}, orderBy: [ClinicalDocumentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClinicalDocumentWhereUniqueInput): [ClinicalDocument!]
+  clinicalDocuments(where: ClinicalDocumentWhereInput! = {}, orderBy: [ClinicalDocumentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClinicalDocumentWhereUniqueInput): [ClinicalDocument!]
   clinicalDocumentsCount(where: ClinicalDocumentWhereInput! = {}): Int
   recordTemplate(where: RecordTemplateWhereUniqueInput!): RecordTemplate
-  recordTemplates(where: RecordTemplateWhereInput! = {}, orderBy: [RecordTemplateOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RecordTemplateWhereUniqueInput): [RecordTemplate!]
+  recordTemplates(where: RecordTemplateWhereInput! = {}, orderBy: [RecordTemplateOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecordTemplateWhereUniqueInput): [RecordTemplate!]
   recordTemplatesCount(where: RecordTemplateWhereInput! = {}): Int
   glossary(where: GlossaryWhereUniqueInput!): Glossary
-  glossaries(where: GlossaryWhereInput! = {}, orderBy: [GlossaryOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: GlossaryWhereUniqueInput): [Glossary!]
+  glossaries(where: GlossaryWhereInput! = {}, orderBy: [GlossaryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: GlossaryWhereUniqueInput): [Glossary!]
   glossariesCount(where: GlossaryWhereInput! = {}): Int
   scribeSession(where: ScribeSessionWhereUniqueInput!): ScribeSession
-  scribeSessions(where: ScribeSessionWhereInput! = {}, orderBy: [ScribeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ScribeSessionWhereUniqueInput): [ScribeSession!]
+  scribeSessions(where: ScribeSessionWhereInput! = {}, orderBy: [ScribeSessionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScribeSessionWhereUniqueInput): [ScribeSession!]
   scribeSessionsCount(where: ScribeSessionWhereInput! = {}): Int
   scribeDraft(where: ScribeDraftWhereUniqueInput!): ScribeDraft
-  scribeDrafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
+  scribeDrafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
   scribeDraftsCount(where: ScribeDraftWhereInput! = {}): Int
   referral(where: ReferralWhereUniqueInput!): Referral
-  referrals(where: ReferralWhereInput! = {}, orderBy: [ReferralOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReferralWhereUniqueInput): [Referral!]
+  referrals(where: ReferralWhereInput! = {}, orderBy: [ReferralOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReferralWhereUniqueInput): [Referral!]
   referralsCount(where: ReferralWhereInput! = {}): Int
   clinicalOrder(where: ClinicalOrderWhereUniqueInput!): ClinicalOrder
-  clinicalOrders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
+  clinicalOrders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
   clinicalOrdersCount(where: ClinicalOrderWhereInput! = {}): Int
   doseCalculation(where: DoseCalculationWhereUniqueInput!): DoseCalculation
-  doseCalculations(where: DoseCalculationWhereInput! = {}, orderBy: [DoseCalculationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DoseCalculationWhereUniqueInput): [DoseCalculation!]
+  doseCalculations(where: DoseCalculationWhereInput! = {}, orderBy: [DoseCalculationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DoseCalculationWhereUniqueInput): [DoseCalculation!]
   doseCalculationsCount(where: DoseCalculationWhereInput! = {}): Int
   inventoryLot(where: InventoryLotWhereUniqueInput!): InventoryLot
-  inventoryLots(where: InventoryLotWhereInput! = {}, orderBy: [InventoryLotOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: InventoryLotWhereUniqueInput): [InventoryLot!]
+  inventoryLots(where: InventoryLotWhereInput! = {}, orderBy: [InventoryLotOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: InventoryLotWhereUniqueInput): [InventoryLot!]
   inventoryLotsCount(where: InventoryLotWhereInput! = {}): Int
   administration(where: AdministrationWhereUniqueInput!): Administration
-  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
+  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
   administrationsCount(where: AdministrationWhereInput! = {}): Int
   ward(where: WardWhereUniqueInput!): Ward
-  wards(where: WardWhereInput! = {}, orderBy: [WardOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WardWhereUniqueInput): [Ward!]
+  wards(where: WardWhereInput! = {}, orderBy: [WardOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WardWhereUniqueInput): [Ward!]
   wardsCount(where: WardWhereInput! = {}): Int
   cage(where: CageWhereUniqueInput!): Cage
-  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
+  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
   cagesCount(where: CageWhereInput! = {}): Int
   hospitalStay(where: HospitalStayWhereUniqueInput!): HospitalStay
-  hospitalStays(where: HospitalStayWhereInput! = {}, orderBy: [HospitalStayOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: HospitalStayWhereUniqueInput): [HospitalStay!]
+  hospitalStays(where: HospitalStayWhereInput! = {}, orderBy: [HospitalStayOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: HospitalStayWhereUniqueInput): [HospitalStay!]
   hospitalStaysCount(where: HospitalStayWhereInput! = {}): Int
   cageAssignment(where: CageAssignmentWhereUniqueInput!): CageAssignment
-  cageAssignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
+  cageAssignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
   cageAssignmentsCount(where: CageAssignmentWhereInput! = {}): Int
   treatmentSheetOrder(where: TreatmentSheetOrderWhereUniqueInput!): TreatmentSheetOrder
-  treatmentSheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
+  treatmentSheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
   treatmentSheetOrdersCount(where: TreatmentSheetOrderWhereInput! = {}): Int
   treatmentTask(where: TreatmentTaskWhereUniqueInput!): TreatmentTask
-  treatmentTasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
+  treatmentTasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
   treatmentTasksCount(where: TreatmentTaskWhereInput! = {}): Int
   anaesthesiaRecord(where: AnaesthesiaRecordWhereUniqueInput!): AnaesthesiaRecord
-  anaesthesiaRecords(where: AnaesthesiaRecordWhereInput! = {}, orderBy: [AnaesthesiaRecordOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AnaesthesiaRecordWhereUniqueInput): [AnaesthesiaRecord!]
+  anaesthesiaRecords(where: AnaesthesiaRecordWhereInput! = {}, orderBy: [AnaesthesiaRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AnaesthesiaRecordWhereUniqueInput): [AnaesthesiaRecord!]
   anaesthesiaRecordsCount(where: AnaesthesiaRecordWhereInput! = {}): Int
   monitoringReading(where: MonitoringReadingWhereUniqueInput!): MonitoringReading
-  monitoringReadings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
+  monitoringReadings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
   monitoringReadingsCount(where: MonitoringReadingWhereInput! = {}): Int
   surgeryReport(where: SurgeryReportWhereUniqueInput!): SurgeryReport
-  surgeryReports(where: SurgeryReportWhereInput! = {}, orderBy: [SurgeryReportOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: SurgeryReportWhereUniqueInput): [SurgeryReport!]
+  surgeryReports(where: SurgeryReportWhereInput! = {}, orderBy: [SurgeryReportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SurgeryReportWhereUniqueInput): [SurgeryReport!]
   surgeryReportsCount(where: SurgeryReportWhereInput! = {}): Int
   dentalChart(where: DentalChartWhereUniqueInput!): DentalChart
-  dentalCharts(where: DentalChartWhereInput! = {}, orderBy: [DentalChartOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DentalChartWhereUniqueInput): [DentalChart!]
+  dentalCharts(where: DentalChartWhereInput! = {}, orderBy: [DentalChartOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DentalChartWhereUniqueInput): [DentalChart!]
   dentalChartsCount(where: DentalChartWhereInput! = {}): Int
   dischargeInstruction(where: DischargeInstructionWhereUniqueInput!): DischargeInstruction
-  dischargeInstructions(where: DischargeInstructionWhereInput! = {}, orderBy: [DischargeInstructionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: DischargeInstructionWhereUniqueInput): [DischargeInstruction!]
+  dischargeInstructions(where: DischargeInstructionWhereInput! = {}, orderBy: [DischargeInstructionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DischargeInstructionWhereUniqueInput): [DischargeInstruction!]
   dischargeInstructionsCount(where: DischargeInstructionWhereInput! = {}): Int
   vaccineProduct(where: VaccineProductWhereUniqueInput!): VaccineProduct
-  vaccineProducts(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
+  vaccineProducts(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
   vaccineProductsCount(where: VaccineProductWhereInput! = {}): Int
   vaccineAdministration(where: VaccineAdministrationWhereUniqueInput!): VaccineAdministration
-  vaccineAdministrations(where: VaccineAdministrationWhereInput! = {}, orderBy: [VaccineAdministrationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: VaccineAdministrationWhereUniqueInput): [VaccineAdministration!]
+  vaccineAdministrations(where: VaccineAdministrationWhereInput! = {}, orderBy: [VaccineAdministrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VaccineAdministrationWhereUniqueInput): [VaccineAdministration!]
   vaccineAdministrationsCount(where: VaccineAdministrationWhereInput! = {}): Int
   rabiesCertificate(where: RabiesCertificateWhereUniqueInput!): RabiesCertificate
-  rabiesCertificates(where: RabiesCertificateWhereInput! = {}, orderBy: [RabiesCertificateOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: RabiesCertificateWhereUniqueInput): [RabiesCertificate!]
+  rabiesCertificates(where: RabiesCertificateWhereInput! = {}, orderBy: [RabiesCertificateOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RabiesCertificateWhereUniqueInput): [RabiesCertificate!]
   rabiesCertificatesCount(where: RabiesCertificateWhereInput! = {}): Int
   reminderType(where: ReminderTypeWhereUniqueInput!): ReminderType
-  reminderTypes(where: ReminderTypeWhereInput! = {}, orderBy: [ReminderTypeOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderTypeWhereUniqueInput): [ReminderType!]
+  reminderTypes(where: ReminderTypeWhereInput! = {}, orderBy: [ReminderTypeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderTypeWhereUniqueInput): [ReminderType!]
   reminderTypesCount(where: ReminderTypeWhereInput! = {}): Int
   reminderProtocol(where: ReminderProtocolWhereUniqueInput!): ReminderProtocol
-  reminderProtocols(where: ReminderProtocolWhereInput! = {}, orderBy: [ReminderProtocolOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderProtocolWhereUniqueInput): [ReminderProtocol!]
+  reminderProtocols(where: ReminderProtocolWhereInput! = {}, orderBy: [ReminderProtocolOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderProtocolWhereUniqueInput): [ReminderProtocol!]
   reminderProtocolsCount(where: ReminderProtocolWhereInput! = {}): Int
   reminderProtocolVersion(where: ReminderProtocolVersionWhereUniqueInput!): ReminderProtocolVersion
-  reminderProtocolVersions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
+  reminderProtocolVersions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
   reminderProtocolVersionsCount(where: ReminderProtocolVersionWhereInput! = {}): Int
   reminderRule(where: ReminderRuleWhereUniqueInput!): ReminderRule
-  reminderRules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
+  reminderRules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
   reminderRulesCount(where: ReminderRuleWhereInput! = {}): Int
   patientReminder(where: PatientReminderWhereUniqueInput!): PatientReminder
-  patientReminders(where: PatientReminderWhereInput! = {}, orderBy: [PatientReminderOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PatientReminderWhereUniqueInput): [PatientReminder!]
+  patientReminders(where: PatientReminderWhereInput! = {}, orderBy: [PatientReminderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientReminderWhereUniqueInput): [PatientReminder!]
   patientRemindersCount(where: PatientReminderWhereInput! = {}): Int
   reminderSatisfaction(where: ReminderSatisfactionWhereUniqueInput!): ReminderSatisfaction
-  reminderSatisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
+  reminderSatisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
   reminderSatisfactionsCount(where: ReminderSatisfactionWhereInput! = {}): Int
   adverseEventReport(where: AdverseEventReportWhereUniqueInput!): AdverseEventReport
-  adverseEventReports(where: AdverseEventReportWhereInput! = {}, orderBy: [AdverseEventReportOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AdverseEventReportWhereUniqueInput): [AdverseEventReport!]
+  adverseEventReports(where: AdverseEventReportWhereInput! = {}, orderBy: [AdverseEventReportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AdverseEventReportWhereUniqueInput): [AdverseEventReport!]
   adverseEventReportsCount(where: AdverseEventReportWhereInput! = {}): Int
   importBatch(where: ImportBatchWhereUniqueInput!): ImportBatch
-  importBatches(where: ImportBatchWhereInput! = {}, orderBy: [ImportBatchOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ImportBatchWhereUniqueInput): [ImportBatch!]
+  importBatches(where: ImportBatchWhereInput! = {}, orderBy: [ImportBatchOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImportBatchWhereUniqueInput): [ImportBatch!]
   importBatchesCount(where: ImportBatchWhereInput! = {}): Int
   importRow(where: ImportRowWhereUniqueInput!): ImportRow
-  importRows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
+  importRows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
   importRowsCount(where: ImportRowWhereInput! = {}): Int
   agentToolGrant(where: AgentToolGrantWhereUniqueInput!): AgentToolGrant
-  agentToolGrants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
+  agentToolGrants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
   agentToolGrantsCount(where: AgentToolGrantWhereInput! = {}): Int
   agentRun(where: AgentRunWhereUniqueInput!): AgentRun
-  agentRuns(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
+  agentRuns(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
   agentRunsCount(where: AgentRunWhereInput! = {}): Int
   agentAction(where: AgentActionWhereUniqueInput!): AgentAction
-  agentActions(where: AgentActionWhereInput! = {}, orderBy: [AgentActionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AgentActionWhereUniqueInput): [AgentAction!]
+  agentActions(where: AgentActionWhereInput! = {}, orderBy: [AgentActionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentActionWhereUniqueInput): [AgentAction!]
   agentActionsCount(where: AgentActionWhereInput! = {}): Int
   proposal(where: ProposalWhereUniqueInput!): Proposal
-  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
+  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
   proposalsCount(where: ProposalWhereInput! = {}): Int
   keystone: KeystoneMeta!
   authenticatedItem: AuthenticatedItem

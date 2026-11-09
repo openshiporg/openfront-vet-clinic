@@ -17,6 +17,10 @@ import { keystoneContext } from '@/features/keystone/context';
 import { authorizeMcpRequest } from '@/features/keystone/mcp-oauth/http';
 import { internalGraphqlEndpoint } from '@/features/keystone/lib/internal-origin';
 import { DOMAIN_TOOLS, runDomainTool } from '@/features/keystone/mcp';
+import { buildListRead, listQueryAllowlist, MAX_TAKE, QueryInputError } from '@/features/keystone/mcp/safeQuery';
+
+// Generated list queries MCP may read (never custom queries, never never-for-agents lists).
+const LIST_READS = listQueryAllowlist((keystoneContext as any).__internal.lists);
 
 // Get simple type name for display
 function getSimpleTypeName(type: any): string {
@@ -30,14 +34,14 @@ function getSimpleTypeName(type: any): string {
 }
 
 // Execute GraphQL query as the caller: their session cookie, or their MCP OAuth bearer token
-async function executeGraphQL(query: string, graphqlEndpoint: string, auth: Record<string, string>): Promise<any> {
+async function executeGraphQL(query: string, graphqlEndpoint: string, auth: Record<string, string>, variables?: Record<string, unknown>): Promise<any> {
   const response = await fetch(graphqlEndpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...auth,
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, variables }),
   });
 
   const result = await response.json();
@@ -134,20 +138,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
         }
       }, {
         name: 'queryData',
-        description: 'Execute a GraphQL query to get actual data from the system',
+        description: `Read rows of one list as you (your role decides what you see). At most ${MAX_TAKE} rows per call; page with offset.`,
         inputSchema: {
           type: 'object',
           properties: {
             operation: {
               type: 'string',
-              description: 'The GraphQL operation name (e.g., "users", "patients", "roles")'
+              description: 'A list query name from listModels (e.g., "patients", "clients", "appointments")'
             },
             fields: {
               type: 'string',
-              description: 'The fields to select (e.g., "id name email" or "id title description")'
-            }
+              description: 'Field names to return, nested with braces (e.g., "id name species { name }"). No arguments or aliases; at most 4 levels.'
+            },
+            limit: { type: 'integer', minimum: 1, maximum: MAX_TAKE, description: `Rows to return (default 25, at most ${MAX_TAKE})` },
+            offset: { type: 'integer', minimum: 0, description: 'Rows to skip, for paging' }
           },
-          required: ['operation', 'fields']
+          required: ['operation', 'fields'],
+          additionalProperties: false
         }
       }, {
         name: 'searchModels',
@@ -204,10 +211,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
             },
             fields: {
               type: 'string',
-              description: 'The fields to return from matching items (e.g., "id name email" or "id title description")'
-            }
+              description: 'Field names to return from matching items (e.g., "id name email"). No arguments or aliases; at most 4 levels.'
+            },
+            limit: { type: 'integer', minimum: 1, maximum: MAX_TAKE, description: `Rows to return (default 10, at most ${MAX_TAKE})` }
           },
-          required: ['modelName', 'searchQuery', 'fields']
+          required: ['modelName', 'searchQuery', 'fields'],
+          additionalProperties: false
         }
       }];
       
@@ -295,19 +304,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
         }
         
         if (name === 'queryData') {
-          const { operation, fields } = args;
-          
-          // Build a simple GraphQL query
-          const queryString = `
-            query ${operation.charAt(0).toUpperCase() + operation.slice(1)} {
-              ${operation} {
-                ${fields}
-              }
-            }
-          `.trim();
-          
-          // Execute the query
-          const result = await executeGraphQL(queryString, graphqlEndpoint, auth);
+          // F3: allowlisted list query, rebuilt selection, capped rows; runs as the caller.
+          const built = buildListRead(LIST_READS, { operation: args?.operation, fields: args?.fields, limit: args?.limit, offset: args?.offset }, schema);
+          const result = await executeGraphQL(built.query, graphqlEndpoint, auth, built.variables);
           
           return new Response(JSON.stringify({
             jsonrpc: '2.0',
@@ -546,7 +545,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
         }
         
         if (name === 'modelSpecificSearch') {
-          const { modelName, searchQuery, fields, limit = 10 } = args;
+          const { modelName, searchQuery, fields, limit } = args ?? {};
           
           // Get all types from schema to find the correct model
           const typeMap = schema.getTypeMap();
@@ -640,42 +639,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
             availableFields = Object.keys(modelFields);
           }
           
-          // Build search conditions using only fields that exist on the model
-          const searchConditions = [];
-          const searchTerm = searchQuery.trim();
-          
-          // Add ID search (exact match) - ID should always exist
-          if (searchTerm && availableFields.includes('id')) {
-            searchConditions.push(`{ id: { equals: "${searchTerm}" } }`);
-          }
-          
-          // Add text field search (case-insensitive contains) for fields that exist
-          const commonSearchFields = ['name', 'title', 'label', 'description', 'email'];
+          // Search text goes in as a variable; the selection and row cap go through the same F3 checks.
+          const searchTerm = String(searchQuery ?? '').trim().slice(0, 200);
+          const searchConditions: Record<string, unknown>[] = [];
+          if (searchTerm && availableFields.includes('id')) searchConditions.push({ id: { equals: searchTerm } });
+          const commonSearchFields = ['name', 'title', 'label', 'description', 'email', 'displayName', 'ref'];
           const validSearchFields = commonSearchFields.filter(field => availableFields.includes(field));
-          
           for (const fieldName of validSearchFields) {
-            searchConditions.push(`{ ${fieldName}: { contains: "${searchTerm}", mode: insensitive } }`);
+            searchConditions.push(fieldName === 'ref' ? { ref: { equals: searchTerm } } : { [fieldName]: { contains: searchTerm, mode: 'insensitive' } });
           }
-          
-          // Build the GraphQL query manually to avoid JSON.stringify issues with enums
-          let whereClause = '';
-          if (searchConditions.length > 0) {
-            whereClause = `where: { OR: [${searchConditions.join(', ')}] },`;
-          }
-          
-          const queryString = `
-            query Search${foundModel} {
-              ${operationName}(
-                ${whereClause}
-                take: ${limit}
-              ) {
-                ${fields}
-              }
-            }
-          `.trim();
-          
-          // Execute the search query
-          const result = await executeGraphQL(queryString, graphqlEndpoint, auth);
+          const built = buildListRead(LIST_READS, { operation: operationName, fields, limit: limit ?? 10, where: searchConditions.length ? { OR: searchConditions } : {} }, schema);
+          const result = await executeGraphQL(built.query, graphqlEndpoint, auth, built.variables);
           
           return new Response(JSON.stringify({
             jsonrpc: '2.0',
@@ -689,7 +663,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
                   operationName,
                   availableFields,
                   validSearchFields,
-                  queryUsed: queryString,
                   results: result,
                   total: result?.data?.[operationName]?.length || 0
                 }, null, 2),
@@ -720,9 +693,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
           jsonrpc: '2.0',
           id: body.id,
           result: {
+            isError: true,
             content: [{
               type: 'text',
-              text: `Error executing ${name}: ${error}`,
+              text: error instanceof QueryInputError ? `Refused: ${error.message}` : `Error executing ${name}: ${error}`,
             }],
           }
         }), {

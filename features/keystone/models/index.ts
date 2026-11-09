@@ -14,6 +14,7 @@ import * as treatment from './treatment'
 import * as preventive from './preventive'
 import * as imports from './imports'
 import { AgentToolGrant, AgentRun, AgentAction, Proposal } from './agents'
+import { registerListAccess } from './guardedRelationship'
 
 export const models = {
   User,
@@ -80,5 +81,18 @@ export const models = {
   AgentAction,
   Proposal,
 }
+
+/**
+ * F3 (review r3b): no list query returns more than API_MAX_TAKE rows in one call (take:100000
+ * returned 10k rows). The busiest screens ask for 400–500 (pickers, the notes overlay); everything
+ * else pages. MCP reads are capped lower again (mcp/safeQuery.ts MAX_TAKE).
+ */
+export const API_MAX_TAKE = 500
+for (const list of Object.values(models) as { graphql?: Record<string, unknown> }[]) {
+  list.graphql = { ...(list.graphql ?? {}), maxTake: API_MAX_TAKE }
+}
+
+// Relationship filter/order access follows each target list's read access (guardedRelationship.ts).
+registerListAccess(models as never)
 
 export default models

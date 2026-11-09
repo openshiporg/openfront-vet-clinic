@@ -1,6 +1,7 @@
 import { list } from '@keystone-6/core'
-import { json, relationship, timestamp } from '@keystone-6/core/fields'
-import { fixedChoice, lifecycle, readOnly, systemText, versionField } from './domainFields'
+import { json, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
+import { fixedChoice, lifecycle, readOnly, systemText, versionField, hiddenHash } from './domainFields'
 import { governed } from './listAccess'
 import { trackingFields } from './trackingFields'
 
@@ -36,13 +37,13 @@ export const AgentToolGrant = list({
 
 export const AgentRun = list({
   access: governed('canAccessDashboard'),
-  ui: { labelField: 'promptHash', listView: { initialColumns: ['agent', 'status', 'startedAt', 'endedAt'] } },
+  ui: { labelField: 'callRecordId', listView: { initialColumns: ['agent', 'status', 'startedAt', 'endedAt'] } },
   fields: {
     agent: relationship({ ref: 'AgentIdentity.runs', ...readOnly }),
     startedAt: timestamp({ defaultValue: { kind: 'now' }, ...readOnly }),
     endedAt: timestamp({ ...readOnly }),
     status: lifecycle(['started', 'completed', 'failed', 'aborted']),
-    promptHash: systemText(),
+    promptHash: hiddenHash(),
     toolCalls: json({ ...readOnly, ui: { ...readOnly.ui, description: 'Tool names and argument hashes, never raw arguments.' } }),
     costMeta: json({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
@@ -80,7 +81,7 @@ export const AgentAction = list({
     agent: relationship({ ref: 'AgentIdentity', ...readOnly }),
     run: relationship({ ref: 'AgentRun', ...readOnly }),
     tool: systemText({ indexed: true, required: true }),
-    argsHash: systemText(),
+    argsHash: hiddenHash(),
     outcome: fixedChoice(['ok', 'scope_denied', 'never_allowed', 'guard_failed', 'error', 'killed']),
     errorCode: systemText(),
     auditEventId: systemText(),

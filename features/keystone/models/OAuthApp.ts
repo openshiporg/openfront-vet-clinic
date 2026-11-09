@@ -41,6 +41,10 @@ export const OAuthApp = list({
       access: {
         read: () => false,
       },
+      // A digest is still an oracle if it can be filtered or sorted on; never through the API.
+      isFilterable: false,
+      isOrderable: false,
+      graphql: { omit: { read: true } },
       hooks: {
         resolveInput: ({ resolvedData }) => {
           if (resolvedData.clientSecret) {

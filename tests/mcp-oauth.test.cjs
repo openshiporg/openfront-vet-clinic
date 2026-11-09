@@ -40,7 +40,7 @@ function sandbox({ env = { SESSION_SECRET: 'unit-test-secret-unit-test-secret-01
 
 /** Just enough Prisma for the OAuth lists: equality, `in`, `gt`/`lt`, transactions. */
 function fakePrisma() {
-  const tables = { oAuthApp: [], oAuthToken: [] };
+  const tables = { oAuthApp: [], oAuthToken: [], agentIdentity: [] };
   const matches = (row, where = {}) => Object.entries(where).every(([key, condition]) => {
     if (condition && typeof condition === 'object' && !(condition instanceof Date)) {
       if ('in' in condition) return condition.in.includes(row[key]);
@@ -51,6 +51,7 @@ function fakePrisma() {
   });
   const model = name => ({
     async findUnique({ where }) { return tables[name].find(row => matches(row, where)) ?? null; },
+    async findFirst({ where } = {}) { return tables[name].find(row => matches(row, where)) ?? null; },
     async findMany({ where, take } = {}) { return tables[name].filter(row => matches(row, where)).slice(0, take ?? Infinity); },
     async create({ data }) {
       if (data.token && tables[name].some(row => row.token === data.token)) throw new Error('unique');
@@ -66,7 +67,7 @@ function fakePrisma() {
       return { count: before - tables[name].length };
     },
   });
-  const prisma = { tables, oAuthApp: model('oAuthApp'), oAuthToken: model('oAuthToken') };
+  const prisma = { tables, oAuthApp: model('oAuthApp'), oAuthToken: model('oAuthToken'), agentIdentity: model('agentIdentity') };
   prisma.$transaction = async fn => fn(prisma);
   return prisma;
 }
@@ -75,6 +76,7 @@ const STAFF_ROLE = { id: 'r1', name: 'Admin', canManageClients: true, canManageS
   canEditOtherPeople: true, canManagePeople: true, canManageRoles: true, canAccessDashboard: true };
 const USERS = {
   customer: { id: 'customer', name: 'Cass Customer', email: 'cass@cedarcreekvet.com', role: null },
+  agent_user_agent1: { id: 'agent_user_agent1', name: 'Agent (agent)', email: 'agent@agents.invalid', role: { id: 'ai_agent', name: 'AI Agent' } },
   staff: { id: 'staff', name: 'Sam Staff', email: 'sam@cedarcreekvet.com', role: STAFF_ROLE },
 };
 
@@ -93,6 +95,8 @@ function fakeKeystone(load) {
   const db = {
     OAuthToken: { findOne: ({ where }) => prisma.oAuthToken.findUnique({ where }) },
     OAuthApp: { findOne: ({ where }) => prisma.oAuthApp.findUnique({ where }) },
+    // Keystone's relationship filter `oauthApp: { id: { equals } }` over the mock's agent table.
+    AgentIdentity: { findMany: ({ where }) => prisma.agentIdentity.findMany({ where: { oauthAppId: where.oauthApp.id.equals } }) },
   };
   const base = { prisma, db, sudo: () => base };
   const keystoneContext = {
@@ -427,4 +431,80 @@ test('the sign-in screen signs people in through Keystone and returns to the sam
   // Account creation follows the starter's existing PUBLIC_SIGNUPS_ALLOWED switch (off here).
   const signup = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', form: { intent: 'signup', email: 'n@cedarcreekvet.com', password: 'pw', name: 'N' } }));
   assert.equal(signup.status, 403);
+});
+
+const refreshWith = (h, client_id, refresh_token) => h.routes.tokenPOST(h.keystoneContext, req('/oauth/token', { method: 'POST', form: { grant_type: 'refresh_token', client_id, refresh_token } }));
+const bindAgent = (h, client_id, over = {}) => {
+  const app = h.prisma.tables.oAuthApp.find(row => row.clientId === client_id);
+  const agent = { id: 'agent1', oauthAppId: app.id, status: 'active', killSwitch: false, ...over };
+  h.prisma.tables.agentIdentity.push(agent);
+  return agent;
+};
+
+test('revoking an access token also ends its refresh token', async () => {
+  const h = harness();
+  const { client_id, tokens } = await connect(h, 'customer');
+  const revoke = await h.routes.revokePOST(h.keystoneContext, req('/oauth/revoke', { method: 'POST', form: { token: tokens.access_token, client_id } }));
+  assert.equal(revoke.status, 200);
+  assert.equal(await sessionFor(h, tokens.access_token), undefined);
+  const refreshed = await refreshWith(h, client_id, tokens.refresh_token);
+  assert.equal(refreshed.status, 400, 'the refresh token cannot mint a new access token');
+  assert.equal((await refreshed.json()).error, 'invalid_grant');
+  assert.ok(h.prisma.tables.oAuthToken.every(row => row.isRevoked === 'true'));
+});
+
+test('a token approved while the app is bound to an agent acts as that agent and carries its id', async () => {
+  const h = harness();
+  const { client_id } = await register(h.routes, h.keystoneContext);
+  bindAgent(h, client_id);
+  const query = authorizeQuery(client_id);
+  const page = await (await h.routes.authorizeGET(h.keystoneContext, req(`/oauth/authorize?${query}`, { cookie: 'customer' }))).text();
+  const ticket = /name="ticket" value="([^"]+)"/.exec(page)[1];
+  const decision = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', cookie: 'customer', form: { intent: 'approve', ticket, allow_write: '1' } }));
+  assert.equal(decision.status, 303, 'approval works with an agent table present');
+  const code = new URL(decision.headers.get('location')).searchParams.get('code');
+  assert.equal(h.prisma.tables.oAuthToken.find(row => row.tokenType === 'authorization_code').agentId, 'agent1');
+  const exchanged = await h.routes.tokenPOST(h.keystoneContext, req('/oauth/token', { method: 'POST', form: { grant_type: 'authorization_code', client_id, code, redirect_uri: CALLBACK, code_verifier: verifier } }));
+  assert.equal(exchanged.status, 200);
+  const tokens = await exchanged.json();
+  assert.ok(h.prisma.tables.oAuthToken.filter(row => row.tokenType !== 'authorization_code').every(row => row.agentId === 'agent1'));
+  const session = await sessionFor(h, tokens.access_token);
+  assert.equal(session.itemId, 'agent_user_agent1', 'the agent, never the approving person');
+  assert.equal(session.mcp.agentId, 'agent1');
+});
+
+test('refresh rotation keeps the agent; unbinding or rebinding ends every token and the refresh is refused', async () => {
+  for (const change of ['unbind', 'rebind', 'paused']) {
+    const h = harness();
+    const { client_id } = await register(h.routes, h.keystoneContext);
+    const agent = bindAgent(h, client_id);
+    const query = authorizeQuery(client_id);
+    const page = await (await h.routes.authorizeGET(h.keystoneContext, req(`/oauth/authorize?${query}`, { cookie: 'customer' }))).text();
+    const ticket = /name="ticket" value="([^"]+)"/.exec(page)[1];
+    const decision = await h.routes.authorizePOST(h.keystoneContext, req(`/oauth/authorize?${query}`, { method: 'POST', cookie: 'customer', form: { intent: 'approve', ticket } }));
+    const code = new URL(decision.headers.get('location')).searchParams.get('code');
+    const first = await (await h.routes.tokenPOST(h.keystoneContext, req('/oauth/token', { method: 'POST', form: { grant_type: 'authorization_code', client_id, code, redirect_uri: CALLBACK, code_verifier: verifier } }))).json();
+
+    const rotated = await (await refreshWith(h, client_id, first.refresh_token)).json();
+    assert.equal((await sessionFor(h, rotated.access_token)).itemId, 'agent_user_agent1', 'rotation keeps the agent');
+
+    if (change === 'unbind') h.prisma.tables.agentIdentity.length = 0;
+    if (change === 'rebind') agent.id = 'agent2';
+    if (change === 'paused') agent.status = 'paused';
+    assert.equal(await sessionFor(h, rotated.access_token), undefined, `${change}: the old token never becomes the approving person`);
+    if (change === 'paused') continue;
+    const refused = await refreshWith(h, client_id, rotated.refresh_token);
+    assert.equal(refused.status, 400, `${change}: refresh refused`);
+    assert.equal((await refused.json()).error, 'invalid_grant');
+    assert.ok(h.prisma.tables.oAuthToken.every(row => row.isRevoked === 'true'), `${change}: the connection is ended`);
+  }
+});
+
+test('a token from before the app was bound to an agent has no access', async () => {
+  const h = harness();
+  const { client_id, tokens } = await connect(h, 'customer');
+  assert.equal((await sessionFor(h, tokens.access_token)).itemId, 'customer');
+  bindAgent(h, client_id);
+  assert.equal(await sessionFor(h, tokens.access_token), undefined, 'a token with no agent on a bound app is refused');
+  assert.equal((await refreshWith(h, client_id, tokens.refresh_token)).status, 400);
 });

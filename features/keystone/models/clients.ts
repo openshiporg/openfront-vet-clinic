@@ -1,6 +1,7 @@
 import { list } from '@keystone-6/core'
-import { calendarDay, checkbox, integer, json, relationship, text, timestamp } from '@keystone-6/core/fields'
-import { choice, fixedChoice, geo, lifecycle, minor, rate, readOnly, systemText, versionField, wt, WEIGHT_UNITS } from './domainFields'
+import { calendarDay, checkbox, integer, json, text, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
+import { choice, fixedChoice, geo, lifecycle, minor, rate, readOnly, systemText, versionField, wt, WEIGHT_UNITS, hiddenHash } from './domainFields'
 import { governed, immutable, managed } from './listAccess'
 import { trackingFields } from './trackingFields'
 
@@ -70,8 +71,8 @@ export const ContactPoint = list({
     person: relationship({ ref: 'ClientPerson.contactPoints', ...readOnly }),
     kind: fixedChoice(['mobile', 'landline', 'email']),
     value: systemText({ required: true }),
-    /** sha256 of the normalised value: duplicate detection and caller lookup without scanning PII. */
-    valueHash: systemText({ indexed: true, required: true }),
+    /** Hash of the normalised value: duplicate detection and caller lookup. Server-only (a phone number is guessable). */
+    valueHash: hiddenHash({ indexed: true, required: true }),
     isPrimary: checkbox({ ...readOnly, defaultValue: false }),
     verifiedAt: timestamp({ ...readOnly }),
     canText: checkbox({ ...readOnly, defaultValue: false }),

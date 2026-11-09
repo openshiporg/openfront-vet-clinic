@@ -11,11 +11,17 @@ export async function actorFor(context: { session: unknown; prisma: any }): Prom
   const person = actorFromSession(context.session as never)
   const marker = mcpSessionMarker(context.session)
   if (!marker) return person
+  // A session that carries an agent marker is that agent or it is nothing: never the approving person.
+  // An app that is bound to an agent is the agent even if the marker is missing (defence in depth;
+  // session.ts already refuses a person's token on a bound app).
   const agent = await context.prisma.agentIdentity.findFirst({
-    where: { oauthApp: { clientId: { equals: marker.clientId } } },
-    select: { id: true, name: true, status: true, ownerId: true, grants: { where: { status: 'active' }, select: { scope: true } } },
+    where: { ...(marker.agentId ? { id: marker.agentId } : {}), oauthApp: { clientId: { equals: marker.clientId } } },
+    select: { id: true, name: true, status: true, killSwitch: true, ownerId: true, grants: { where: { status: 'active' }, select: { scope: true } } },
   })
-  if (!agent) return person
+  if (!agent) {
+    if (marker.agentId) throw new DomainError(Codes.NOT_AUTHORIZED, 'This connection is no longer linked to an agent. Reconnect the app.')
+    return person
+  }
   if (agent.status !== 'active') throw new DomainError(Codes.NOT_AUTHORIZED, `The agent ${agent.name} is ${agent.status}.`)
   return { kind: 'agent', agentId: agent.id, ownerUserId: agent.ownerId, name: agent.name, scopes: new Set(agent.grants.map((g: { scope: string }) => g.scope)) }
 }

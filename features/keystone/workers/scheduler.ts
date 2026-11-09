@@ -49,6 +49,16 @@ export async function ensureClinicSetup(db: Db) {
   }
 }
 
+/** Prefix of the heartbeat rows /api/health reads: one ScheduledJob row per scheduler loop. */
+export const TICK_PREFIX = 'scheduler.'
+
+/** Each tick leaves a heartbeat (ScheduledJob kind scheduler.<loop>), so health can say the loops run. */
+async function recordTick(db: Db, name: string, ms: number, error: string | null, at = new Date()) {
+  const kind = `${TICK_PREFIX}${name}`
+  const data = { intervalSeconds: Math.round(ms / 1000), lastRunAt: at, nextRunAt: new Date(at.getTime() + ms), status: error ? 'failed' : 'idle', leaseKey: '', lastError: error ?? '' }
+  await db.scheduledJob.upsert({ where: { kind }, create: { kind, ...data }, update: data }).catch(() => undefined)
+}
+
 export function startScheduler(db: Db, log: (line: string) => void = line => console.log(line)): Started {
   const g = globalThis as Record<symbol, Started | undefined>
   if (g[KEY]) return g[KEY]!
@@ -60,9 +70,12 @@ export function startScheduler(db: Db, log: (line: string) => void = line => con
       busy.add(name)
       try {
         const result = await run()
+        await recordTick(db, name, ms, null)
         if (process.env.VC_SCHEDULER_LOG === 'verbose') log(`[scheduler] ${name} ${JSON.stringify(result).slice(0, 400)}`)
       } catch (error) {
-        log(`[scheduler] ${name} failed: ${error instanceof Error ? error.message.split('\n').pop()!.slice(0, 200) : 'error'}`)
+        const message = error instanceof Error ? error.message.split('\n').pop()!.slice(0, 200) : 'error'
+        await recordTick(db, name, ms, message)
+        log(`[scheduler] ${name} failed: ${message}`)
       } finally {
         busy.delete(name)
       }

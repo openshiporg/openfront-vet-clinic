@@ -99,6 +99,7 @@ export const ROLES: RoleSeed[] = [
   },
   { id: 'seed_role_bookkeeper', name: 'Bookkeeper', description: 'Invoices, payments, statements, exports, period close.', permissions: [...DASH, 'canTakePayments', 'canPostInvoices', 'canViewFinance', 'canManagePayments'] },
   { id: 'seed_role_agent_owner', name: 'Agent Owner', description: 'Owns AI agent identities and requests their grants; a second person approves.', permissions: [...DASH, 'canManageAgents'] },
+  { id: 'seed_role_ai_agent', name: 'AI Agent', description: 'Least privilege for AI agents. Holds no permission: an agent acts only through its tool grants and never inherits the person who connected it.', permissions: [] },
 ]
 
 export type StaffSeed = {

@@ -1,3 +1,4 @@
+import { ensureAgentUser } from '../mutations/agents'
 import { auditCreate } from '../lib/cas'
 import type { Actor } from '../lib/actor'
 import type { UnitOfWork } from '../lib/unitOfWork'
@@ -112,6 +113,7 @@ export async function seedClinic(uow: UnitOfWork, actor: Actor) {
   if (!(await tx.agentIdentity.findUnique({ where: { id: 'seed_agent_reception' }, select: { id: true } }))) {
     await tx.oAuthApp.create({ data: { id: 'seed_oauth_reception', name: 'Cedar Creek AI receptionist (voice runtime)', clientId: 'ccah-voice-receptionist', tokenEndpointAuthMethod: 'none', redirectUris: ['https://voice.cedarcreekvet.com/oauth/callback'], scopes: ['mcp:read', 'mcp:write'], status: 'active', description: 'The voice runtime signs in as this client; its token acts as the receptionist agent, never as a person.' } })
     await tx.agentIdentity.create({ data: { id: 'seed_agent_reception', name: 'Cedar Creek AI receptionist', kind: 'voice_receptionist', model: 'operator-selected (OpenRouter)', provider: 'openrouter', ownerId: 'seed_user_park', status: 'active', killSwitch: false, limits: { toolCallsPerRun: 40, maxBookingsPerCall: 3 }, oauthAppId: 'seed_oauth_reception' } })
+    await ensureAgentUser(tx, { id: 'seed_agent_reception', name: 'Cedar Creek AI receptionist' })
     const scopes = ['reception.read', 'reception.book', 'reception.register', 'triage.run', 'pharmacy.intake', 'records.request']
     await tx.agentToolGrant.createMany({ data: scopes.map(scope => ({ id: `seed_grant_reception_${scope.replace('.', '_')}`, agentId: 'seed_agent_reception', scope, status: 'active', constraints: { locations: ['seed_loc_main', 'seed_loc_elkgrove'] } })) })
     auditCreate(uow, actor, 'AgentIdentity', 'seed_agent_reception', 'agent.created', { kind: 'voice_receptionist', owner: 'seed_user_park', scopes, note: 'aiVoice feature is off until a practice-controls change is approved' }, meta)

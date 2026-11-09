@@ -258,12 +258,47 @@ var import_config = require("dotenv/config");
 // features/keystone/models/User.ts
 var import_core = require("@keystone-6/core");
 var import_access = require("@keystone-6/core/access");
-var import_fields2 = require("@keystone-6/core/fields");
+var import_fields3 = require("@keystone-6/core/fields");
+
+// features/keystone/models/guardedRelationship.ts
+var import_fields = require("@keystone-6/core/fields");
+var registry = /* @__PURE__ */ new Map();
+function registerListAccess(lists) {
+  for (const [key2, list18] of Object.entries(lists)) registry.set(key2, list18.access);
+}
+var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
+async function canReadWholeList(listKey, args) {
+  if (!registry.has(listKey)) return false;
+  const access = registry.get(listKey);
+  const base = { session: args.session, context: args.context, listKey, operation: "query" };
+  try {
+    if (typeof access === "function") return await access(base) === true;
+    const operation = access?.operation;
+    const query = typeof operation === "function" ? operation : operation?.query;
+    if (query === void 0) return false;
+    if (await call(query, base) !== true) return false;
+    const filter = access?.filter?.query;
+    if (filter === void 0) return true;
+    return await call(filter, base) === true;
+  } catch {
+    return false;
+  }
+}
+var relationFilterRule = (target) => (args) => canReadWholeList(target, args);
+var relationship = (config2) => {
+  const target = String(config2.ref).split(".")[0];
+  const rule2 = relationFilterRule(target);
+  return (0, import_fields.relationship)({
+    ...config2,
+    isFilterable: config2.isFilterable === false ? false : rule2,
+    isOrderable: config2.isOrderable === false ? false : rule2
+  });
+};
 
 // features/keystone/models/trackingFields.ts
-var import_fields = require("@keystone-6/core/fields");
+var import_fields2 = require("@keystone-6/core/fields");
 var trackingFields = {
-  createdAt: (0, import_fields.timestamp)({
+  createdAt: (0, import_fields2.timestamp)({
     access: { read: () => true, create: () => false, update: () => false },
     validation: { isRequired: true },
     defaultValue: { kind: "now" },
@@ -272,7 +307,7 @@ var trackingFields = {
       itemView: { fieldMode: "read" }
     }
   }),
-  updatedAt: (0, import_fields.timestamp)({
+  updatedAt: (0, import_fields2.timestamp)({
     access: { read: () => true, create: () => false, update: () => false },
     db: { updatedAt: true },
     validation: { isRequired: true },
@@ -415,12 +450,12 @@ var User = (0, import_core.list)({
     }
   },
   fields: {
-    name: (0, import_fields2.text)({
+    name: (0, import_fields3.text)({
       validation: {
         isRequired: true
       }
     }),
-    email: (0, import_fields2.text)({
+    email: (0, import_fields3.text)({
       isFilterable: false,
       isOrderable: false,
       isIndexed: "unique",
@@ -428,14 +463,14 @@ var User = (0, import_core.list)({
         isRequired: true
       }
     }),
-    password: (0, import_fields2.password)({
+    password: (0, import_fields3.password)({
       access: {
         read: import_access.denyAll,
         update: ({ session, item }) => permissions.canManagePeople({ session }) || session?.itemId === item.id
       },
       validation: { isRequired: true }
     }),
-    role: (0, import_fields2.relationship)({
+    role: relationship({
       ref: "Role.assignedTo",
       access: {
         create: permissions.canManagePeople,
@@ -447,20 +482,20 @@ var User = (0, import_core.list)({
         }
       }
     }),
-    kind: (0, import_fields2.select)({
+    kind: (0, import_fields3.select)({
       type: "enum",
       options: ["staff", "relief", "auditor", "administrator"].map((value) => ({ label: value, value })),
       defaultValue: "staff",
       access: { create: permissions.canManagePeople, update: permissions.canManagePeople }
     }),
-    title: (0, import_fields2.text)(),
-    staffMember: (0, import_fields2.relationship)({ ref: "StaffMember.user", ui: { description: "The clinical staff record (licences, schedules, DEA)." } }),
-    mfaEnrolled: (0, import_fields2.checkbox)({ defaultValue: false, access: { create: () => false, update: () => false } }),
-    accessExpiresAt: (0, import_fields2.timestamp)({
+    title: (0, import_fields3.text)(),
+    staffMember: relationship({ ref: "StaffMember.user", ui: { description: "The clinical staff record (licences, schedules, DEA)." } }),
+    mfaEnrolled: (0, import_fields3.checkbox)({ defaultValue: false, access: { create: () => false, update: () => false } }),
+    accessExpiresAt: (0, import_fields3.timestamp)({
       access: { create: permissions.canManagePeople, update: permissions.canManagePeople },
       ui: { description: "Time-boxed access for relief vets, auditors and temporary administrators." }
     }),
-    onboardingStatus: (0, import_fields2.select)({
+    onboardingStatus: (0, import_fields3.select)({
       options: ["not_started", "in_progress", "completed", "dismissed"].map((value) => ({ label: value.replaceAll("_", " "), value })),
       defaultValue: "not_started"
     }),
@@ -471,7 +506,7 @@ var User = (0, import_core.list)({
 // features/keystone/models/Role.ts
 var import_core2 = require("@keystone-6/core");
 var import_access3 = require("@keystone-6/core/access");
-var import_fields3 = require("@keystone-6/core/fields");
+var import_fields4 = require("@keystone-6/core/fields");
 var Role = (0, import_core2.list)({
   access: {
     operation: {
@@ -490,11 +525,11 @@ var Role = (0, import_core2.list)({
     }
   },
   fields: {
-    name: (0, import_fields3.text)({ validation: { isRequired: true } }),
-    description: (0, import_fields3.text)({ ui: { displayMode: "textarea" } }),
-    ...Object.fromEntries(permissionNames.map((name) => [name, (0, import_fields3.checkbox)({ defaultValue: false })])),
+    name: (0, import_fields4.text)({ validation: { isRequired: true } }),
+    description: (0, import_fields4.text)({ ui: { displayMode: "textarea" } }),
+    ...Object.fromEntries(permissionNames.map((name) => [name, (0, import_fields4.checkbox)({ defaultValue: false })])),
     ...trackingFields,
-    assignedTo: (0, import_fields3.relationship)({
+    assignedTo: relationship({
       ref: "User.role",
       many: true,
       ui: {
@@ -506,7 +541,7 @@ var Role = (0, import_core2.list)({
 
 // features/keystone/models/OAuthApp.ts
 var import_core3 = require("@keystone-6/core");
-var import_fields4 = require("@keystone-6/core/fields");
+var import_fields5 = require("@keystone-6/core/fields");
 
 // features/keystone/mcp-oauth/core.ts
 var import_node_crypto = __toESM(require("node:crypto"));
@@ -550,12 +585,12 @@ var OAuthApp = (0, import_core3.list)({
     }
   },
   fields: {
-    name: (0, import_fields4.text)({
+    name: (0, import_fields5.text)({
       validation: {
         isRequired: true
       }
     }),
-    clientId: (0, import_fields4.text)({
+    clientId: (0, import_fields5.text)({
       isIndexed: "unique",
       hooks: {
         resolveInput: ({ operation, resolvedData }) => {
@@ -571,10 +606,14 @@ var OAuthApp = (0, import_core3.list)({
         description: "Auto-generated unique identifier for your application."
       }
     }),
-    clientSecret: (0, import_fields4.text)({
+    clientSecret: (0, import_fields5.text)({
       access: {
         read: () => false
       },
+      // A digest is still an oracle if it can be filtered or sorted on; never through the API.
+      isFilterable: false,
+      isOrderable: false,
+      graphql: { omit: { read: true } },
       hooks: {
         resolveInput: ({ resolvedData }) => {
           if (resolvedData.clientSecret) {
@@ -589,7 +628,7 @@ var OAuthApp = (0, import_core3.list)({
         description: "Stored only as a digest. Public MCP clients have no secret."
       }
     }),
-    tokenEndpointAuthMethod: (0, import_fields4.select)({
+    tokenEndpointAuthMethod: (0, import_fields5.select)({
       options: [
         { label: "Client secret (POST)", value: "client_secret_post" },
         { label: "Client secret (Basic)", value: "client_secret_basic" },
@@ -600,24 +639,24 @@ var OAuthApp = (0, import_core3.list)({
         description: "How the app authenticates at the token endpoint. MCP clients are public (none)."
       }
     }),
-    redirectUris: (0, import_fields4.json)({
+    redirectUris: (0, import_fields5.json)({
       defaultValue: [],
       ui: {
         description: "Array of allowed redirect URIs for OAuth callbacks"
       }
     }),
-    scopes: (0, import_fields4.json)({
+    scopes: (0, import_fields5.json)({
       defaultValue: [...MCP_SCOPES],
       ui: {
         description: "Array of allowed OAuth scopes. MCP scopes only narrow the signed-in user's own access."
       }
     }),
-    webhookUrl: (0, import_fields4.text)({
+    webhookUrl: (0, import_fields5.text)({
       ui: {
         description: "URL to receive webhook notifications"
       }
     }),
-    status: (0, import_fields4.select)({
+    status: (0, import_fields5.select)({
       options: [
         { label: "Active", value: "active" },
         { label: "Suspended", value: "suspended" },
@@ -625,31 +664,31 @@ var OAuthApp = (0, import_core3.list)({
       ],
       defaultValue: "active"
     }),
-    installUrl: (0, import_fields4.text)({
+    installUrl: (0, import_fields5.text)({
       ui: {
         description: "URL where users can install this app"
       }
     }),
-    uninstallUrl: (0, import_fields4.text)({
+    uninstallUrl: (0, import_fields5.text)({
       ui: {
         description: "URL to handle app uninstallation"
       }
     }),
-    description: (0, import_fields4.text)({
+    description: (0, import_fields5.text)({
       ui: {
         displayMode: "textarea"
       }
     }),
-    metadata: (0, import_fields4.json)({
+    metadata: (0, import_fields5.json)({
       defaultValue: {},
       ui: {
         description: "Additional app-specific configuration and settings"
       }
     }),
-    developerEmail: (0, import_fields4.text)(),
-    privacyPolicyUrl: (0, import_fields4.text)(),
-    termsOfServiceUrl: (0, import_fields4.text)(),
-    supportUrl: (0, import_fields4.text)(),
+    developerEmail: (0, import_fields5.text)(),
+    privacyPolicyUrl: (0, import_fields5.text)(),
+    termsOfServiceUrl: (0, import_fields5.text)(),
+    supportUrl: (0, import_fields5.text)(),
     ...trackingFields
   },
   ui: {
@@ -662,7 +701,7 @@ var OAuthApp = (0, import_core3.list)({
 
 // features/keystone/models/OAuthToken.ts
 var import_core5 = require("@keystone-6/core");
-var import_fields5 = require("@keystone-6/core/fields");
+var import_fields6 = require("@keystone-6/core/fields");
 var digestTokenInput = {
   resolveInput: ({ resolvedData, fieldKey }) => resolvedData[fieldKey] ? digestToken(resolvedData[fieldKey]) : resolvedData[fieldKey]
 };
@@ -676,7 +715,7 @@ var OAuthToken = (0, import_core5.list)({
     }
   },
   fields: {
-    tokenType: (0, import_fields5.select)({
+    tokenType: (0, import_fields6.select)({
       options: [
         { label: "Authorization Code", value: "authorization_code" },
         { label: "Access Token", value: "access_token" },
@@ -686,7 +725,7 @@ var OAuthToken = (0, import_core5.list)({
         isRequired: true
       }
     }),
-    token: (0, import_fields5.text)({
+    token: (0, import_fields6.text)({
       access: { read: () => false },
       validation: {
         isRequired: true
@@ -694,78 +733,86 @@ var OAuthToken = (0, import_core5.list)({
       isIndexed: "unique",
       hooks: digestTokenInput
     }),
-    clientId: (0, import_fields5.text)({
+    clientId: (0, import_fields6.text)({
       validation: {
         isRequired: true
       },
       isIndexed: true
     }),
-    user: (0, import_fields5.relationship)({
+    user: relationship({
       ref: "User",
       ui: {
         description: "The user who authorized this token"
       }
     }),
-    scopes: (0, import_fields5.json)({
+    scopes: (0, import_fields6.json)({
       defaultValue: [],
       ui: {
         description: "Array of granted scopes"
       }
     }),
-    redirectUri: (0, import_fields5.text)({
+    redirectUri: (0, import_fields6.text)({
       ui: {
         description: "The redirect URI used during authorization"
       }
     }),
-    resource: (0, import_fields5.text)({
+    agentId: (0, import_fields6.text)({
+      access: { create: () => false, update: () => false },
+      ui: {
+        createView: { fieldMode: "hidden" },
+        itemView: { fieldMode: "read" },
+        description: "The AI agent this token acts as (set when issued to an app bound to an agent; empty for a person's own connection). A token with an agent never acts as the person who approved it."
+      }
+    }),
+    resource: (0, import_fields6.text)({
       ui: {
         description: "The MCP endpoint (RFC 8707 resource) this grant is for"
       }
     }),
-    expiresAt: (0, import_fields5.timestamp)({
+    expiresAt: (0, import_fields6.timestamp)({
       ui: {
         description: "When this token expires"
       }
     }),
-    isRevoked: (0, import_fields5.select)({
+    isRevoked: (0, import_fields6.select)({
       options: [
         { label: "Active", value: "false" },
         { label: "Revoked", value: "true" }
       ],
       defaultValue: "false"
     }),
-    authorizationCode: (0, import_fields5.text)({
+    authorizationCode: (0, import_fields6.text)({
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
         description: "The authorization code that was exchanged for this token (for access tokens)"
       }
     }),
-    refreshToken: (0, import_fields5.text)({
+    refreshToken: (0, import_fields6.text)({
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
         description: "Associated refresh token (for access tokens)"
       }
     }),
-    accessToken: (0, import_fields5.text)({
+    accessToken: (0, import_fields6.text)({
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
         description: "Associated access token (for refresh tokens)"
       }
     }),
-    state: (0, import_fields5.text)({
+    state: (0, import_fields6.text)({
       ui: {
         description: "OAuth state parameter for CSRF protection"
       }
     }),
-    codeChallenge: (0, import_fields5.text)({
+    codeChallenge: (0, import_fields6.text)({
       ui: {
         description: "PKCE code challenge"
       }
     }),
-    codeChallengeMethod: (0, import_fields5.select)({
+    codeChallengeMethod: (0, import_fields6.select)({
       options: [
         { label: "Plain", value: "plain" },
         { label: "SHA256", value: "S256" }
@@ -809,16 +856,16 @@ __export(platform_exports, {
   Sequence: () => Sequence
 });
 var import_core7 = require("@keystone-6/core");
-var import_fields7 = require("@keystone-6/core/fields");
+var import_fields8 = require("@keystone-6/core/fields");
 
 // features/keystone/models/domainFields.ts
-var import_fields6 = require("@keystone-6/core/fields");
-var minor = (options = {}) => (0, import_fields6.bigInt)({
+var import_fields7 = require("@keystone-6/core/fields");
+var minor = (options = {}) => (0, import_fields7.bigInt)({
   ...options.defaultValue !== void 0 ? { defaultValue: options.defaultValue } : {},
   validation: { isRequired: options.required ?? options.defaultValue !== void 0 },
   ...options.description ? { ui: { description: options.description } } : {}
 });
-var exact = (precision, scale) => (options = {}) => (0, import_fields6.decimal)({
+var exact = (precision, scale) => (options = {}) => (0, import_fields7.decimal)({
   precision,
   scale,
   validation: { isRequired: options.required ?? false },
@@ -832,7 +879,7 @@ var UNITS = ["mg", "mcg", "g", "kg", "mL", "L", "tablet", "capsule", "unit", "IU
 var unit = (initial = null) => choice(UNITS, initial);
 var WEIGHT_UNITS = ["kg", "lb", "g"];
 var option = (value) => ({ label: value.replaceAll("_", " ").replaceAll(".", " \xB7 "), value });
-var lifecycle = (values, initial = values[0]) => (0, import_fields6.select)({
+var lifecycle = (values, initial = values[0]) => (0, import_fields7.select)({
   type: "string",
   options: values.map(option),
   defaultValue: initial,
@@ -840,27 +887,36 @@ var lifecycle = (values, initial = values[0]) => (0, import_fields6.select)({
   access: { create: () => false, update: () => false },
   ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } }
 });
-var choice = (values, initial = values[0]) => (0, import_fields6.select)({
+var choice = (values, initial = values[0]) => (0, import_fields7.select)({
   type: "string",
   options: values.map(option),
   ...initial !== null ? { defaultValue: initial } : {},
   validation: { isRequired: initial !== null }
 });
-var versionField = () => (0, import_fields6.integer)({
+var versionField = () => (0, import_fields7.integer)({
   defaultValue: 0,
   validation: { isRequired: true },
   access: { create: () => false, update: () => false },
   ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } }
 });
-var systemText = (options = {}) => (0, import_fields6.text)({
+var systemText = (options = {}) => (0, import_fields7.text)({
   ...options.indexed ? { isIndexed: options.indexed } : {},
   ...options.nullable ? { db: { isNullable: true } } : {},
   validation: { isRequired: options.required ?? false },
   access: { create: () => false, update: () => false },
   ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } }
 });
+var hiddenHash = (options = {}) => (0, import_fields7.text)({
+  ...options.indexed ? { isIndexed: options.indexed } : {},
+  validation: { isRequired: options.required ?? false },
+  access: { read: () => false, create: () => false, update: () => false },
+  isFilterable: false,
+  isOrderable: false,
+  graphql: { omit: { read: true, create: true, update: true } },
+  ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "hidden" }, listView: { fieldMode: "hidden" } }
+});
 var readOnly = { access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } } };
-var fixedChoice = (values) => (0, import_fields6.select)({
+var fixedChoice = (values) => (0, import_fields7.select)({
   type: "string",
   options: values.map(option),
   validation: { isRequired: true },
@@ -886,17 +942,17 @@ var AgentIdentity = (0, import_core7.list)({
   access: { operation: { query: permissions.canAccessDashboard, create: permissions.canManageAgents, update: () => false, delete: () => false } },
   ui: { labelField: "name" },
   fields: {
-    name: (0, import_fields7.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    name: (0, import_fields8.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
     kind: choice(["voice_receptionist", "sms_receptionist", "scribe", "charge_capture", "insights", "external_mcp_client"], "voice_receptionist"),
-    model: (0, import_fields7.text)(),
-    provider: (0, import_fields7.text)(),
-    owner: (0, import_fields7.relationship)({ ref: "User" }),
+    model: (0, import_fields8.text)(),
+    provider: (0, import_fields8.text)(),
+    owner: relationship({ ref: "User" }),
     status: lifecycle(["active", "paused", "revoked"]),
-    killSwitch: (0, import_fields7.checkbox)({ ...readOnly, defaultValue: false, ui: { ...readOnly.ui, description: "On: every tool call is refused at once (setAgentKillSwitch)." } }),
-    limits: (0, import_fields7.json)({ ...readOnly, defaultValue: { toolCallsPerRun: 40 } }),
-    oauthApp: (0, import_fields7.relationship)({ ref: "OAuthApp" }),
-    grants: (0, import_fields7.relationship)({ ref: "AgentToolGrant.agent", many: true, ...readOnly }),
-    runs: (0, import_fields7.relationship)({ ref: "AgentRun.agent", many: true, ...readOnly }),
+    killSwitch: (0, import_fields8.checkbox)({ ...readOnly, defaultValue: false, ui: { ...readOnly.ui, description: "On: every tool call is refused at once (setAgentKillSwitch)." } }),
+    limits: (0, import_fields8.json)({ ...readOnly, defaultValue: { toolCallsPerRun: 40 } }),
+    oauthApp: relationship({ ref: "OAuthApp" }),
+    grants: relationship({ ref: "AgentToolGrant.agent", many: true, ...readOnly }),
+    runs: relationship({ ref: "AgentRun.agent", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -905,22 +961,22 @@ var AuditEvent = (0, import_core7.list)({
   access: immutable("canReadAudit"),
   ui: { labelField: "eventType", listView: { initialColumns: ["seq", "at", "eventType", "entityType", "entityId", "actorUser"], initialSort: { field: "seq", direction: "DESC" } } },
   fields: {
-    seq: (0, import_fields7.integer)({ isIndexed: "unique", validation: { isRequired: true }, ...readOnly }),
+    seq: (0, import_fields8.integer)({ isIndexed: "unique", validation: { isRequired: true }, ...readOnly }),
     eventKey: systemText({ indexed: "unique", required: true }),
     eventType: systemText({ indexed: true, required: true }),
     entityType: systemText({ indexed: true, required: true }),
     entityId: systemText({ indexed: true, required: true }),
-    actorUser: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
-    actorAgent: (0, import_fields7.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    approver: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
+    actorUser: relationship({ ref: "User", ...readOnly }),
+    actorAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    approver: relationship({ ref: "User", ...readOnly }),
     reason: systemText(),
-    before: (0, import_fields7.json)({ ...readOnly }),
-    after: (0, import_fields7.json)({ ...readOnly }),
-    metadata: (0, import_fields7.json)({ ...readOnly }),
+    before: (0, import_fields8.json)({ ...readOnly }),
+    after: (0, import_fields8.json)({ ...readOnly }),
+    metadata: (0, import_fields8.json)({ ...readOnly }),
     requestId: systemText(),
     prevHash: systemText({ required: true }),
     hash: systemText({ indexed: "unique", required: true }),
-    at: (0, import_fields7.timestamp)({ validation: { isRequired: true }, defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields8.timestamp)({ validation: { isRequired: true }, defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 var CommandReceipt = (0, import_core7.list)({
@@ -928,15 +984,15 @@ var CommandReceipt = (0, import_core7.list)({
   graphql: { omit: true },
   ui: { isHidden: true },
   fields: {
-    idempotencyKey: (0, import_fields7.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    command: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    principalKey: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    requestHash: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    requestParams: (0, import_fields7.json)(),
-    responseCode: (0, import_fields7.text)(),
-    responseBody: (0, import_fields7.json)(),
-    recoveryPoint: (0, import_fields7.text)({ defaultValue: "completed" }),
-    completedAt: (0, import_fields7.timestamp)({ defaultValue: { kind: "now" } }),
+    idempotencyKey: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    command: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    principalKey: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    requestHash: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    requestParams: (0, import_fields8.json)(),
+    responseCode: (0, import_fields8.text)(),
+    responseBody: (0, import_fields8.json)(),
+    recoveryPoint: (0, import_fields8.text)({ defaultValue: "completed" }),
+    completedAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" } }),
     ...trackingFields
   }
 });
@@ -948,15 +1004,15 @@ var OutboxEvent = (0, import_core7.list)({
     aggregateType: systemText({ required: true }),
     aggregateId: systemText({ indexed: true, required: true }),
     dedupeKey: systemText({ indexed: "unique", required: true }),
-    payload: (0, import_fields7.json)({ ...readOnly }),
+    payload: (0, import_fields8.json)({ ...readOnly }),
     status: lifecycle(["pending", "leased", "delivered", "failed", "dead"]),
-    attempts: (0, import_fields7.integer)({ defaultValue: 0, ...readOnly }),
-    nextAttemptAt: (0, import_fields7.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    attempts: (0, import_fields8.integer)({ defaultValue: 0, ...readOnly }),
+    nextAttemptAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
     leaseOwner: systemText(),
-    leaseExpiresAt: (0, import_fields7.timestamp)({ ...readOnly }),
-    fencingToken: (0, import_fields7.integer)({ defaultValue: 0, ...readOnly }),
+    leaseExpiresAt: (0, import_fields8.timestamp)({ ...readOnly }),
+    fencingToken: (0, import_fields8.integer)({ defaultValue: 0, ...readOnly }),
     lastError: systemText(),
-    deliveredAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    deliveredAt: (0, import_fields8.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
@@ -965,10 +1021,10 @@ var Lease = (0, import_core7.list)({
   graphql: { omit: true },
   ui: { isHidden: true },
   fields: {
-    key: (0, import_fields7.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    owner: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    fencingToken: (0, import_fields7.integer)({ defaultValue: 0, validation: { isRequired: true } }),
-    expiresAt: (0, import_fields7.timestamp)({ validation: { isRequired: true } }),
+    key: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    owner: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    fencingToken: (0, import_fields8.integer)({ defaultValue: 0, validation: { isRequired: true } }),
+    expiresAt: (0, import_fields8.timestamp)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
@@ -976,9 +1032,9 @@ var ScheduledJob = (0, import_core7.list)({
   access: governed("canManagePractice"),
   fields: {
     kind: systemText({ indexed: "unique", required: true }),
-    intervalSeconds: (0, import_fields7.integer)({ ...readOnly }),
-    nextRunAt: (0, import_fields7.timestamp)({ ...readOnly }),
-    lastRunAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    intervalSeconds: (0, import_fields8.integer)({ ...readOnly }),
+    nextRunAt: (0, import_fields8.timestamp)({ ...readOnly }),
+    lastRunAt: (0, import_fields8.timestamp)({ ...readOnly }),
     status: lifecycle(["idle", "running", "failed", "disabled"], "idle"),
     leaseKey: systemText(),
     lastError: systemText(),
@@ -990,8 +1046,8 @@ var Sequence = (0, import_core7.list)({
   graphql: { omit: true },
   ui: { isHidden: true },
   fields: {
-    key: (0, import_fields7.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    nextValue: (0, import_fields7.integer)({ defaultValue: 1, validation: { isRequired: true } })
+    key: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    nextValue: (0, import_fields8.integer)({ defaultValue: 1, validation: { isRequired: true } })
   }
 });
 var Notification = (0, import_core7.list)({
@@ -1003,13 +1059,13 @@ var Notification = (0, import_core7.list)({
     }
   },
   fields: {
-    recipient: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
+    recipient: relationship({ ref: "User", ...readOnly }),
     channel: choice(["in_app", "email"], "in_app"),
     template: systemText({ required: true }),
-    payload: (0, import_fields7.json)({ ...readOnly }),
+    payload: (0, import_fields8.json)({ ...readOnly }),
     status: lifecycle(["pending", "sent", "failed"]),
-    sentAt: (0, import_fields7.timestamp)({ ...readOnly }),
-    readAt: (0, import_fields7.timestamp)(),
+    sentAt: (0, import_fields8.timestamp)({ ...readOnly }),
+    readAt: (0, import_fields8.timestamp)(),
     ...trackingFields
   }
 });
@@ -1017,17 +1073,17 @@ var BusinessCalendar = (0, import_core7.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "code" },
   fields: {
-    code: (0, import_fields7.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    name: (0, import_fields7.text)(),
-    timeZone: (0, import_fields7.text)({ validation: { isRequired: true }, defaultValue: "America/Los_Angeles" }),
+    code: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    name: (0, import_fields8.text)(),
+    timeZone: (0, import_fields8.text)({ validation: { isRequired: true }, defaultValue: "America/Los_Angeles" }),
     kind: choice(["federal", "state", "location"], "location"),
-    weekendDays: (0, import_fields7.json)({ defaultValue: [0, 6] }),
-    regularOpen: (0, import_fields7.text)({ defaultValue: "08:00", ui: { description: "HH:mm local" } }),
-    regularClose: (0, import_fields7.text)({ defaultValue: "18:00", ui: { description: "HH:mm local" } }),
-    composedOf: (0, import_fields7.relationship)({ ref: "BusinessCalendar", many: true, ui: { description: "Holidays of these calendars also apply (a location calendar composes the federal one)." } }),
-    exceptions: (0, import_fields7.relationship)({ ref: "CalendarException.calendar", many: true }),
-    coverageThrough: (0, import_fields7.calendarDay)({ ui: { description: "Scheduling past this date is blocked." } }),
-    source: (0, import_fields7.text)({ ui: { description: "Where the holiday table came from and when it was checked." } }),
+    weekendDays: (0, import_fields8.json)({ defaultValue: [0, 6] }),
+    regularOpen: (0, import_fields8.text)({ defaultValue: "08:00", ui: { description: "HH:mm local" } }),
+    regularClose: (0, import_fields8.text)({ defaultValue: "18:00", ui: { description: "HH:mm local" } }),
+    composedOf: relationship({ ref: "BusinessCalendar", many: true, ui: { description: "Holidays of these calendars also apply (a location calendar composes the federal one)." } }),
+    exceptions: relationship({ ref: "CalendarException.calendar", many: true }),
+    coverageThrough: (0, import_fields8.calendarDay)({ ui: { description: "Scheduling past this date is blocked." } }),
+    source: (0, import_fields8.text)({ ui: { description: "Where the holiday table came from and when it was checked." } }),
     ...trackingFields
   }
 });
@@ -1035,12 +1091,12 @@ var CalendarException = (0, import_core7.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "date", listView: { initialColumns: ["calendar", "date", "kind", "closeAt", "note"] } },
   fields: {
-    calendar: (0, import_fields7.relationship)({ ref: "BusinessCalendar.exceptions" }),
-    date: (0, import_fields7.calendarDay)({ validation: { isRequired: true } }),
+    calendar: relationship({ ref: "BusinessCalendar.exceptions" }),
+    date: (0, import_fields8.calendarDay)({ validation: { isRequired: true } }),
     kind: choice(["holiday", "early_close", "special_open", "closed"], "holiday"),
-    openAt: (0, import_fields7.text)(),
-    closeAt: (0, import_fields7.text)(),
-    note: (0, import_fields7.text)(),
+    openAt: (0, import_fields8.text)(),
+    closeAt: (0, import_fields8.text)(),
+    note: (0, import_fields8.text)(),
     ...trackingFields
   }
 });
@@ -1048,12 +1104,12 @@ var ApprovalPolicy = (0, import_core7.list)({
   access: { operation: { query: permissions.canAccessDashboard, create: permissions.canManagePractice, update: () => false, delete: () => false } },
   ui: { labelField: "action" },
   fields: {
-    action: (0, import_fields7.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    description: (0, import_fields7.text)(),
-    requiredPermission: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    minApprovals: (0, import_fields7.integer)({ defaultValue: 1, validation: { min: 1 } }),
+    action: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    description: (0, import_fields8.text)(),
+    requiredPermission: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    minApprovals: (0, import_fields8.integer)({ defaultValue: 1, validation: { min: 1 } }),
     thresholdMinor: minor(),
-    expiresAfterMinutes: (0, import_fields7.integer)({ defaultValue: 1440 }),
+    expiresAfterMinutes: (0, import_fields8.integer)({ defaultValue: 1440 }),
     ...trackingFields
   }
 });
@@ -1065,15 +1121,15 @@ var ApprovalRequest = (0, import_core7.list)({
     summary: systemText(),
     targetList: systemText({ required: true }),
     targetId: systemText({ indexed: true, required: true }),
-    payload: (0, import_fields7.json)({ ...readOnly }),
+    payload: (0, import_fields8.json)({ ...readOnly }),
     payloadHash: systemText({ required: true }),
     requiredPermission: systemText({ required: true }),
-    requestedBy: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
-    requestedByAgent: (0, import_fields7.relationship)({ ref: "AgentIdentity", ...readOnly }),
+    requestedBy: relationship({ ref: "User", ...readOnly }),
+    requestedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     status: lifecycle(["pending", "approved", "rejected", "expired", "cancelled"]),
-    expiresAt: (0, import_fields7.timestamp)({ ...readOnly }),
-    consumedAt: (0, import_fields7.timestamp)({ ...readOnly, ui: { ...readOnly.ui, description: "When the approved action was carried out. An approval is used once." } }),
-    decisions: (0, import_fields7.relationship)({ ref: "ApprovalDecision.request", many: true, ...readOnly }),
+    expiresAt: (0, import_fields8.timestamp)({ ...readOnly }),
+    consumedAt: (0, import_fields8.timestamp)({ ...readOnly, ui: { ...readOnly.ui, description: "When the approved action was carried out. An approval is used once." } }),
+    decisions: relationship({ ref: "ApprovalDecision.request", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1081,27 +1137,27 @@ var ApprovalRequest = (0, import_core7.list)({
 var ApprovalDecision = (0, import_core7.list)({
   access: immutable("canAccessDashboard"),
   fields: {
-    request: (0, import_fields7.relationship)({ ref: "ApprovalRequest.decisions", ...readOnly }),
-    decidedBy: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
-    decision: (0, import_fields7.select)({ type: "string", options: ["approve", "reject"].map((value) => ({ label: value, value })), validation: { isRequired: true }, ...readOnly }),
+    request: relationship({ ref: "ApprovalRequest.decisions", ...readOnly }),
+    decidedBy: relationship({ ref: "User", ...readOnly }),
+    decision: (0, import_fields8.select)({ type: "string", options: ["approve", "reject"].map((value) => ({ label: value, value })), validation: { isRequired: true }, ...readOnly }),
     reason: systemText(),
-    at: (0, import_fields7.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 var Document = (0, import_core7.list)({
   access: governed("canAccessDashboard"),
   fields: {
-    title: (0, import_fields7.text)({ validation: { isRequired: true } }),
+    title: (0, import_fields8.text)({ validation: { isRequired: true } }),
     kind: choice(["dea_form", "licence", "policy", "consent", "certificate", "records_packet", "invoice", "statement", "report", "import", "other"], "other"),
     storageKey: systemText(),
     sha256: systemText(),
     mimeType: systemText(),
-    sizeBytes: (0, import_fields7.integer)({ ...readOnly }),
-    documentVersion: (0, import_fields7.integer)({ defaultValue: 1, ...readOnly }),
-    supersedes: (0, import_fields7.relationship)({ ref: "Document", ...readOnly }),
+    sizeBytes: (0, import_fields8.integer)({ ...readOnly }),
+    documentVersion: (0, import_fields8.integer)({ defaultValue: 1, ...readOnly }),
+    supersedes: relationship({ ref: "Document", ...readOnly }),
     visibility: choice(["internal", "client", "public"], "internal"),
-    retentionUntil: (0, import_fields7.calendarDay)(),
-    signedAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    retentionUntil: (0, import_fields8.calendarDay)(),
+    signedAt: (0, import_fields8.timestamp)({ ...readOnly }),
     esignEnvelopeId: systemText(),
     ...trackingFields
   }
@@ -1111,11 +1167,11 @@ var SecretBox = (0, import_core7.list)({
   graphql: { omit: true },
   ui: { isHidden: true },
   fields: {
-    purpose: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    ciphertext: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    iv: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    authTag: (0, import_fields7.text)({ validation: { isRequired: true } }),
-    keyVersion: (0, import_fields7.integer)({ defaultValue: 1 }),
+    purpose: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    ciphertext: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    iv: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    authTag: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    keyVersion: (0, import_fields8.integer)({ defaultValue: 1 }),
     ...trackingFields
   }
 });
@@ -1131,21 +1187,21 @@ var ReadAudit = (0, import_core7.list)({
     resourceType: systemText({ indexed: true, required: true }),
     resourceId: systemText({ indexed: true }),
     purpose: fixedChoice(["treatment", "operations", "records_request", "agent_tool", "audit", "break_glass"]),
-    fields: (0, import_fields7.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Field names returned (never values)." } }),
+    fields: (0, import_fields8.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Field names returned (never values)." } }),
     requestId: systemText(),
-    at: (0, import_fields7.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 var BreakGlassEvent = (0, import_core7.list)({
   access: governed("canReadAudit"),
   fields: {
-    user: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
+    user: relationship({ ref: "User", ...readOnly }),
     resourceType: systemText({ required: true }),
     resourceId: systemText({ required: true }),
     reason: systemText({ required: true }),
     status: lifecycle(["open", "reviewed", "escalated"]),
-    reviewedBy: (0, import_fields7.relationship)({ ref: "User", ...readOnly }),
-    reviewedAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    reviewedBy: relationship({ ref: "User", ...readOnly }),
+    reviewedAt: (0, import_fields8.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1157,9 +1213,9 @@ var ProviderObservation = (0, import_core7.list)({
     connectionId: systemText(),
     externalId: systemText({ indexed: true }),
     contentHash: systemText({ required: true }),
-    payload: (0, import_fields7.json)({ ...readOnly }),
-    receivedAt: (0, import_fields7.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    processedAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    payload: (0, import_fields8.json)({ ...readOnly }),
+    receivedAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    processedAt: (0, import_fields8.timestamp)({ ...readOnly }),
     status: lifecycle(["received", "processed", "ignored", "failed"]),
     ...trackingFields
   }
@@ -1172,12 +1228,12 @@ var IntegrationConnection = (0, import_core7.list)({
     area: fixedChoice(["payments", "telephony", "voice_agent", "lab", "imaging", "pharmacy", "pdmp", "csos", "cabinet", "insurance", "accounting", "payroll", "scribe", "crematory", "email"]),
     providerKey: systemText({ required: true }),
     mode: fixedChoice(["manual", "test", "live"]),
-    location: (0, import_fields7.relationship)({ ref: "Location", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     /** Name of the SecretBox entry holding the credential; the secret itself never leaves the server. */
     secretRef: systemText(),
-    capabilityProfile: (0, import_fields7.json)({ ...readOnly }),
+    capabilityProfile: (0, import_fields8.json)({ ...readOnly }),
     status: lifecycle(["active", "paused", "error", "retired"]),
-    lastHealthAt: (0, import_fields7.timestamp)({ ...readOnly }),
+    lastHealthAt: (0, import_fields8.timestamp)({ ...readOnly }),
     lastError: systemText(),
     version: versionField(),
     ...trackingFields
@@ -1206,31 +1262,31 @@ __export(practice_exports, {
   StaffMember: () => StaffMember
 });
 var import_core8 = require("@keystone-6/core");
-var import_fields8 = require("@keystone-6/core/fields");
+var import_fields9 = require("@keystone-6/core/fields");
 var PracticeSettings = (0, import_core8.list)({
   isSingleton: true,
   graphql: { plural: "PracticeSettingsItems" },
   access: { operation: { query: permissions.canAccessDashboard, create: permissions.canManagePractice, update: permissions.canManagePractice, delete: () => false } },
   fields: {
-    legalName: (0, import_fields8.text)({ validation: { isRequired: true }, defaultValue: "Openfront Vet Clinic" }),
-    displayName: (0, import_fields8.text)({ validation: { isRequired: true }, defaultValue: "Openfront Vet Clinic" }),
-    homeTimeZone: (0, import_fields8.text)({ defaultValue: "America/Los_Angeles", validation: { isRequired: true } }),
-    currencyCode: (0, import_fields8.text)({ defaultValue: "USD", validation: { isRequired: true, match: { regex: /^[A-Z]{3}$/ } } }),
-    medicalDirector: (0, import_fields8.relationship)({ ref: "StaffMember", ui: { description: "Registrant contact for controlled substances." } }),
-    estimateValidityDays: (0, import_fields8.integer)({ defaultValue: 30, validation: { min: 1, max: 365 } }),
-    estimateOverageToleranceBps: (0, import_fields8.integer)({ defaultValue: 0, validation: { min: 0, max: 1e4 } }),
+    legalName: (0, import_fields9.text)({ validation: { isRequired: true }, defaultValue: "Openfront Vet Clinic" }),
+    displayName: (0, import_fields9.text)({ validation: { isRequired: true }, defaultValue: "Openfront Vet Clinic" }),
+    homeTimeZone: (0, import_fields9.text)({ defaultValue: "America/Los_Angeles", validation: { isRequired: true } }),
+    currencyCode: (0, import_fields9.text)({ defaultValue: "USD", validation: { isRequired: true, match: { regex: /^[A-Z]{3}$/ } } }),
+    medicalDirector: relationship({ ref: "StaffMember", ui: { description: "Registrant contact for controlled substances." } }),
+    estimateValidityDays: (0, import_fields9.integer)({ defaultValue: 30, validation: { min: 1, max: 365 } }),
+    estimateOverageToleranceBps: (0, import_fields9.integer)({ defaultValue: 0, validation: { min: 0, max: 1e4 } }),
     electiveDepositPct: rate({ description: "Fraction of the estimate low end taken as a deposit for elective work (0.5 = 50%)." }),
     depositBasis: choice(["low", "high"], "low"),
-    noShowGraceMinutes: (0, import_fields8.integer)({ defaultValue: 15, validation: { min: 0, max: 240 } }),
-    unsignedRecordTaskHours: (0, import_fields8.integer)({ defaultValue: 24 }),
-    unsignedRecordEscalateHours: (0, import_fields8.integer)({ defaultValue: 72 }),
+    noShowGraceMinutes: (0, import_fields9.integer)({ defaultValue: 15, validation: { min: 0, max: 240 } }),
+    unsignedRecordTaskHours: (0, import_fields9.integer)({ defaultValue: 24 }),
+    unsignedRecordEscalateHours: (0, import_fields9.integer)({ defaultValue: 72 }),
     refundApprovalThresholdMinor: minor({ defaultValue: 25000n }),
-    discountApprovalThresholdBps: (0, import_fields8.integer)({ defaultValue: 1e3 }),
-    writeOffRequiresApproval: (0, import_fields8.checkbox)({ defaultValue: true }),
-    weightMaxAgeHours: (0, import_fields8.json)({ defaultValue: { anaesthesia: 24, inpatient: 72, outpatient: 720 } }),
-    features: (0, import_fields8.json)({ defaultValue: { boarding: true, grooming: true, wellnessPlans: true, insurance: true, aiVoice: false, scribe: false, multiLocation: true, pdmp: true, csos: false, drugCabinet: false } }),
+    discountApprovalThresholdBps: (0, import_fields9.integer)({ defaultValue: 1e3 }),
+    writeOffRequiresApproval: (0, import_fields9.checkbox)({ defaultValue: true }),
+    weightMaxAgeHours: (0, import_fields9.json)({ defaultValue: { anaesthesia: 24, inpatient: 72, outpatient: 720 } }),
+    features: (0, import_fields9.json)({ defaultValue: { boarding: true, grooming: true, wellnessPlans: true, insurance: true, aiVoice: false, scribe: false, multiLocation: true, pdmp: true, csos: false, drugCabinet: false } }),
     // Agents' owner can never be the checker of what the agent proposed (separation of duties).
-    strictAgentOwnerSoD: (0, import_fields8.checkbox)({ ...readOnly, defaultValue: true }),
+    strictAgentOwnerSoD: (0, import_fields9.checkbox)({ ...readOnly, defaultValue: true }),
     onboardingStatus: choice(["not_started", "in_progress", "completed", "dismissed"], "not_started"),
     version: versionField(),
     ...trackingFields
@@ -1240,24 +1296,24 @@ var Location = (0, import_core8.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "code", "kind", "stateCode", "timeZone", "active"] } },
   fields: {
-    name: (0, import_fields8.text)({ validation: { isRequired: true } }),
-    code: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9-]{3,24}$/, explanation: "Capital letters, digits and dashes." } } }),
+    name: (0, import_fields9.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields9.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9-]{3,24}$/, explanation: "Capital letters, digits and dashes." } } }),
     kind: choice(["general_practice", "emergency", "specialty", "wellness", "mobile"], "general_practice"),
-    addressLine1: (0, import_fields8.text)(),
-    addressLine2: (0, import_fields8.text)(),
-    city: (0, import_fields8.text)(),
-    postalCode: (0, import_fields8.text)(),
-    stateCode: (0, import_fields8.text)({ validation: { isRequired: true, match: { regex: /^US-[A-Z]{2}$/, explanation: "ISO 3166-2, e.g. US-CA." } } }),
+    addressLine1: (0, import_fields9.text)(),
+    addressLine2: (0, import_fields9.text)(),
+    city: (0, import_fields9.text)(),
+    postalCode: (0, import_fields9.text)(),
+    stateCode: (0, import_fields9.text)({ validation: { isRequired: true, match: { regex: /^US-[A-Z]{2}$/, explanation: "ISO 3166-2, e.g. US-CA." } } }),
     lat: geo(),
     lng: geo(),
-    timeZone: (0, import_fields8.text)({ validation: { isRequired: true }, defaultValue: "America/Los_Angeles" }),
-    phone: (0, import_fields8.text)(),
-    email: (0, import_fields8.text)(),
-    calendar: (0, import_fields8.relationship)({ ref: "BusinessCalendar" }),
-    openHours: (0, import_fields8.json)({ ui: { description: 'Per weekday open/close "HH:mm" in the location time zone.' } }),
+    timeZone: (0, import_fields9.text)({ validation: { isRequired: true }, defaultValue: "America/Los_Angeles" }),
+    phone: (0, import_fields9.text)(),
+    email: (0, import_fields9.text)(),
+    calendar: relationship({ ref: "BusinessCalendar" }),
+    openHours: (0, import_fields9.json)({ ui: { description: 'Per weekday open/close "HH:mm" in the location time zone.' } }),
     emergencyCoverage: choice(["none", "in_house", "referral"], "referral"),
-    deaRegistrations: (0, import_fields8.relationship)({ ref: "DeaRegistration.location", many: true, ...readOnly }),
-    active: (0, import_fields8.checkbox)({ defaultValue: true }),
+    deaRegistrations: relationship({ ref: "DeaRegistration.location", many: true, ...readOnly }),
+    active: (0, import_fields9.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -1268,14 +1324,14 @@ var DeaRegistration = (0, import_core8.list)({
     registrationNumber: systemText({ indexed: "unique", required: true }),
     registrantName: systemText({ required: true }),
     registrantKind: fixedChoice(["practitioner_individual", "practitioner_institution"]),
-    staffMember: (0, import_fields8.relationship)({ ref: "StaffMember", ...readOnly }),
-    location: (0, import_fields8.relationship)({ ref: "Location.deaRegistrations", ...readOnly }),
-    schedules: (0, import_fields8.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Schedules covered, e.g. ["2","2N","3","3N","4","5"].' } }),
-    issuedOn: (0, import_fields8.calendarDay)({ ...readOnly }),
-    expiresOn: (0, import_fields8.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    staffMember: relationship({ ref: "StaffMember", ...readOnly }),
+    location: relationship({ ref: "Location.deaRegistrations", ...readOnly }),
+    schedules: (0, import_fields9.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Schedules covered, e.g. ["2","2N","3","3N","4","5"].' } }),
+    issuedOn: (0, import_fields9.calendarDay)({ ...readOnly }),
+    expiresOn: (0, import_fields9.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     stateCsRegistration: systemText(),
     csosCertificateRef: systemText(),
-    powersOfAttorney: (0, import_fields8.relationship)({ ref: "DeaPowerOfAttorney.registration", many: true, ...readOnly }),
+    powersOfAttorney: relationship({ ref: "DeaPowerOfAttorney.registration", many: true, ...readOnly }),
     status: lifecycle(["active", "expired", "surrendered", "revoked"]),
     version: versionField(),
     ...trackingFields
@@ -1284,11 +1340,11 @@ var DeaRegistration = (0, import_core8.list)({
 var DeaPowerOfAttorney = (0, import_core8.list)({
   access: governed("canViewControlled"),
   fields: {
-    registration: (0, import_fields8.relationship)({ ref: "DeaRegistration.powersOfAttorney", ...readOnly }),
-    grantee: (0, import_fields8.relationship)({ ref: "StaffMember", ...readOnly }),
-    signedOn: (0, import_fields8.calendarDay)({ ...readOnly }),
-    revokedOn: (0, import_fields8.calendarDay)({ ...readOnly }),
-    document: (0, import_fields8.relationship)({ ref: "Document", ...readOnly }),
+    registration: relationship({ ref: "DeaRegistration.powersOfAttorney", ...readOnly }),
+    grantee: relationship({ ref: "StaffMember", ...readOnly }),
+    signedOn: (0, import_fields9.calendarDay)({ ...readOnly }),
+    revokedOn: (0, import_fields9.calendarDay)({ ...readOnly }),
+    document: relationship({ ref: "Document", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1296,16 +1352,16 @@ var StaffMember = (0, import_core8.list)({
   access: managed("canAccessDashboard", "canManagePeople"),
   ui: { labelField: "displayName", listView: { initialColumns: ["displayName", "kind", "credentials", "homeLocation", "employment", "active"] } },
   fields: {
-    user: (0, import_fields8.relationship)({ ref: "User.staffMember" }),
-    displayName: (0, import_fields8.text)({ validation: { isRequired: true } }),
+    user: relationship({ ref: "User.staffMember" }),
+    displayName: (0, import_fields9.text)({ validation: { isRequired: true } }),
     kind: choice(["dvm", "rvt", "assistant", "csr", "groomer", "manager", "inventory", "bookkeeper", "kennel"]),
-    credentials: (0, import_fields8.text)({ ui: { description: 'e.g. "DVM, DACVS".' } }),
+    credentials: (0, import_fields9.text)({ ui: { description: 'e.g. "DVM, DACVS".' } }),
     employment: choice(["employee", "relief", "contractor"], "employee"),
-    homeLocation: (0, import_fields8.relationship)({ ref: "Location" }),
-    locations: (0, import_fields8.relationship)({ ref: "Location", many: true }),
-    colour: (0, import_fields8.text)(),
-    licenses: (0, import_fields8.relationship)({ ref: "ProfessionalLicense.staffMember", many: true, ...readOnly }),
-    active: (0, import_fields8.checkbox)({ defaultValue: true }),
+    homeLocation: relationship({ ref: "Location" }),
+    locations: relationship({ ref: "Location", many: true }),
+    colour: (0, import_fields9.text)(),
+    licenses: relationship({ ref: "ProfessionalLicense.staffMember", many: true, ...readOnly }),
+    active: (0, import_fields9.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -1313,15 +1369,15 @@ var ProfessionalLicense = (0, import_core8.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "licenseNumber", listView: { initialColumns: ["staffMember", "kind", "stateCode", "licenseNumber", "status", "expiresOn"] } },
   fields: {
-    staffMember: (0, import_fields8.relationship)({ ref: "StaffMember.licenses", ...readOnly }),
+    staffMember: relationship({ ref: "StaffMember.licenses", ...readOnly }),
     kind: fixedChoice(["veterinarian", "registered_veterinary_technician", "veterinary_assistant_cs_permit", "groomer_cert"]),
     stateCode: systemText({ required: true }),
     licenseNumber: systemText({ required: true }),
-    issuedOn: (0, import_fields8.calendarDay)({ ...readOnly }),
-    expiresOn: (0, import_fields8.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    issuedOn: (0, import_fields9.calendarDay)({ ...readOnly }),
+    expiresOn: (0, import_fields9.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["active", "expired", "suspended", "revoked"]),
-    verifiedAt: (0, import_fields8.timestamp)({ ...readOnly }),
-    verifiedBy: (0, import_fields8.relationship)({ ref: "User", ...readOnly }),
+    verifiedAt: (0, import_fields9.timestamp)({ ...readOnly }),
+    verifiedBy: relationship({ ref: "User", ...readOnly }),
     verificationSource: systemText(),
     version: versionField(),
     ...trackingFields
@@ -1332,15 +1388,15 @@ var LicenseEvaluation = (0, import_core8.list)({
   ui: { listView: { initialColumns: ["action", "result", "staffMember", "location", "at"] } },
   fields: {
     action: systemText({ indexed: true, required: true }),
-    staffMember: (0, import_fields8.relationship)({ ref: "StaffMember", ...readOnly }),
-    location: (0, import_fields8.relationship)({ ref: "Location", ...readOnly }),
-    at: (0, import_fields8.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    onDate: (0, import_fields8.calendarDay)({ ...readOnly }),
-    license: (0, import_fields8.relationship)({ ref: "ProfessionalLicense", ...readOnly }),
-    deaRegistration: (0, import_fields8.relationship)({ ref: "DeaRegistration", ...readOnly }),
-    policyVersions: (0, import_fields8.json)({ ...readOnly }),
+    staffMember: relationship({ ref: "StaffMember", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    at: (0, import_fields9.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    onDate: (0, import_fields9.calendarDay)({ ...readOnly }),
+    license: relationship({ ref: "ProfessionalLicense", ...readOnly }),
+    deaRegistration: relationship({ ref: "DeaRegistration", ...readOnly }),
+    policyVersions: (0, import_fields9.json)({ ...readOnly }),
     result: fixedChoice(["allowed", "blocked"]),
-    findings: (0, import_fields8.json)({ ...readOnly })
+    findings: (0, import_fields9.json)({ ...readOnly })
   }
 });
 
@@ -1360,7 +1416,7 @@ __export(compliance_exports, {
   Task: () => Task
 });
 var import_core9 = require("@keystone-6/core");
-var import_fields9 = require("@keystone-6/core/fields");
+var import_fields10 = require("@keystone-6/core/fields");
 var POLICY_KINDS = [
   "medical_records",
   "vcpr",
@@ -1384,7 +1440,7 @@ var PolicyPack = (0, import_core9.list)({
     name: systemText({ required: true }),
     kind: fixedChoice(POLICY_KINDS),
     jurisdiction: systemText({ indexed: true, required: true }),
-    versions: (0, import_fields9.relationship)({ ref: "PolicyVersion.pack", many: true, ...readOnly }),
+    versions: relationship({ ref: "PolicyVersion.pack", many: true, ...readOnly }),
     ...trackingFields
   }
 });
@@ -1392,21 +1448,21 @@ var PolicyVersion = (0, import_core9.list)({
   access: immutable("canAccessDashboard"),
   ui: { labelField: "label", listView: { initialColumns: ["pack", "label", "status", "effectiveFrom", "effectiveTo", "verified"] } },
   fields: {
-    pack: (0, import_fields9.relationship)({ ref: "PolicyPack.versions", ...readOnly }),
+    pack: relationship({ ref: "PolicyPack.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields9.integer)({ ...readOnly, validation: { isRequired: true } }),
-    rules: (0, import_fields9.json)({ ...readOnly }),
+    versionNumber: (0, import_fields10.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rules: (0, import_fields10.json)({ ...readOnly }),
     rulesHash: systemText({ required: true }),
-    sourceRefs: (0, import_fields9.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Citations: [{ ref, title, url, section }]." } }),
-    verified: (0, import_fields9.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields9.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Rule paths still marked (verify)." } }),
-    verifiedAt: (0, import_fields9.timestamp)({ ...readOnly }),
-    effectiveFrom: (0, import_fields9.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    effectiveTo: (0, import_fields9.calendarDay)({ ...readOnly }),
+    sourceRefs: (0, import_fields10.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Citations: [{ ref, title, url, section }]." } }),
+    verified: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields10.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Rule paths still marked (verify)." } }),
+    verifiedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    effectiveFrom: (0, import_fields10.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    effectiveTo: (0, import_fields10.calendarDay)({ ...readOnly }),
     status: lifecycle(["draft", "published", "superseded"]),
-    approval: (0, import_fields9.relationship)({ ref: "ApprovalRequest", ...readOnly }),
-    publishedAt: (0, import_fields9.timestamp)({ ...readOnly }),
-    publishedBy: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
+    approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
+    publishedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    publishedBy: relationship({ ref: "User", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1414,9 +1470,9 @@ var PolicyVersion = (0, import_core9.list)({
 var PolicyBinding = (0, import_core9.list)({
   access: governed("canAccessDashboard"),
   fields: {
-    pack: (0, import_fields9.relationship)({ ref: "PolicyPack", ...readOnly }),
+    pack: relationship({ ref: "PolicyPack", ...readOnly }),
     scope: fixedChoice(["practice", "location"]),
-    location: (0, import_fields9.relationship)({ ref: "Location", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     layer: fixedChoice(["federal", "state", "local"]),
     ...trackingFields
   }
@@ -1446,16 +1502,16 @@ var ComplianceTask = (0, import_core9.list)({
     title: systemText({ required: true }),
     subjectType: systemText(),
     subjectId: systemText({ indexed: true }),
-    location: (0, import_fields9.relationship)({ ref: "Location", ...readOnly }),
-    startedAt: (0, import_fields9.timestamp)({ ...readOnly }),
-    dueAt: (0, import_fields9.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    startedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    dueAt: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     dedupeKey: systemText({ indexed: "unique", nullable: true }),
-    escalations: (0, import_fields9.json)({ ...readOnly }),
+    escalations: (0, import_fields10.json)({ ...readOnly }),
     status: lifecycle(["open", "done", "overdue", "waived"]),
-    evidence: (0, import_fields9.json)({ ...readOnly }),
-    policyVersion: (0, import_fields9.relationship)({ ref: "PolicyVersion", ...readOnly }),
-    completedAt: (0, import_fields9.timestamp)({ ...readOnly }),
-    completedBy: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
+    evidence: (0, import_fields10.json)({ ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
+    completedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    completedBy: relationship({ ref: "User", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1467,18 +1523,18 @@ var Task = (0, import_core9.list)({
     ref: systemText({ indexed: "unique", nullable: true }),
     kind: fixedChoice(["call_back", "refill_review", "result_review", "record_unsigned", "records_request", "registration_review", "follow_up", "agent_handoff", "general"]),
     title: systemText({ required: true }),
-    detail: (0, import_fields9.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    detail: (0, import_fields10.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     subjectType: systemText(),
     subjectId: systemText({ indexed: true }),
-    location: (0, import_fields9.relationship)({ ref: "Location", ...readOnly }),
-    assignee: (0, import_fields9.relationship)({ ref: "StaffMember", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    assignee: relationship({ ref: "StaffMember", ...readOnly }),
     roleName: systemText(),
     priority: fixedChoice(["urgent", "high", "normal", "low"]),
-    dueAt: (0, import_fields9.timestamp)({ ...readOnly }),
+    dueAt: (0, import_fields10.timestamp)({ ...readOnly }),
     status: lifecycle(["open", "in_progress", "done", "cancelled"]),
-    createdByAgent: (0, import_fields9.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    createdByUser: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
-    completedAt: (0, import_fields9.timestamp)({ ...readOnly }),
+    createdByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    createdByUser: relationship({ ref: "User", ...readOnly }),
+    completedAt: (0, import_fields10.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1488,7 +1544,7 @@ var Note = (0, import_core9.list)({
   fields: {
     subjectType: systemText({ required: true }),
     subjectId: systemText({ indexed: true, required: true }),
-    body: (0, import_fields9.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields10.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     visibility: fixedChoice(["staff", "clinical"]),
     /**
      * When set, the body supersedes the stored text of this field on the subject (an append-only
@@ -1496,8 +1552,8 @@ var Note = (0, import_core9.list)({
      * show the latest superseding note in place of the field; the original stays in the row and the audit trail.
      */
     supersedesField: systemText(),
-    author: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
-    authorAgent: (0, import_fields9.relationship)({ ref: "AgentIdentity", ...readOnly }),
+    author: relationship({ ref: "User", ...readOnly }),
+    authorAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1505,8 +1561,8 @@ var Tag = (0, import_core9.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    name: (0, import_fields9.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    colour: (0, import_fields9.text)(),
+    name: (0, import_fields10.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    colour: (0, import_fields10.text)(),
     appliesTo: fixedChoice(["client", "patient", "appointment", "any"]),
     ...trackingFields
   }
@@ -1518,10 +1574,10 @@ var LegalHold = (0, import_core9.list)({
     reason: systemText({ required: true }),
     subjectType: systemText({ required: true }),
     subjectId: systemText({ indexed: true, required: true }),
-    placedBy: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
-    placedAt: (0, import_fields9.timestamp)({ ...readOnly }),
-    releasedBy: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
-    releasedAt: (0, import_fields9.timestamp)({ ...readOnly }),
+    placedBy: relationship({ ref: "User", ...readOnly }),
+    placedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    releasedBy: relationship({ ref: "User", ...readOnly }),
+    releasedAt: (0, import_fields10.timestamp)({ ...readOnly }),
     status: lifecycle(["active", "released"]),
     version: versionField(),
     ...trackingFields
@@ -1531,9 +1587,9 @@ var RetentionPolicy = (0, import_core9.list)({
   access: governed("canAccessDashboard"),
   fields: {
     recordClass: systemText({ indexed: "unique", required: true }),
-    retainYears: (0, import_fields9.integer)({ ...readOnly, validation: { isRequired: true, min: 1 } }),
+    retainYears: (0, import_fields10.integer)({ ...readOnly, validation: { isRequired: true, min: 1 } }),
     from: fixedChoice(["last_visit", "record_date", "death", "account_closed"]),
-    policyVersion: (0, import_fields9.relationship)({ ref: "PolicyVersion", ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1544,9 +1600,9 @@ var Incident = (0, import_core9.list)({
     ref: systemText({ indexed: "unique", required: true }),
     kind: fixedChoice(["privacy", "security", "controlled_substance", "patient_safety", "other"]),
     title: systemText({ required: true }),
-    detail: (0, import_fields9.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
-    location: (0, import_fields9.relationship)({ ref: "Location", ...readOnly }),
-    discoveredAt: (0, import_fields9.timestamp)({ ...readOnly }),
+    detail: (0, import_fields10.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    discoveredAt: (0, import_fields10.timestamp)({ ...readOnly }),
     status: lifecycle(["open", "investigating", "reported", "closed"]),
     version: versionField(),
     ...trackingFields
@@ -1557,11 +1613,11 @@ var MachineCredential = (0, import_core9.list)({
   graphql: { omit: true },
   ui: { isHidden: true },
   fields: {
-    name: (0, import_fields9.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    purpose: (0, import_fields9.text)({ validation: { isRequired: true } }),
-    secretHash: (0, import_fields9.text)({ validation: { isRequired: true } }),
-    lastUsedAt: (0, import_fields9.timestamp)(),
-    revokedAt: (0, import_fields9.timestamp)(),
+    name: (0, import_fields10.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    purpose: (0, import_fields10.text)({ validation: { isRequired: true } }),
+    secretHash: (0, import_fields10.text)({ validation: { isRequired: true } }),
+    lastUsedAt: (0, import_fields10.timestamp)(),
+    revokedAt: (0, import_fields10.timestamp)(),
     ...trackingFields
   }
 });
@@ -1592,7 +1648,7 @@ __export(clients_exports, {
   WeightMeasurement: () => WeightMeasurement
 });
 var import_core10 = require("@keystone-6/core");
-var import_fields10 = require("@keystone-6/core/fields");
+var import_fields11 = require("@keystone-6/core/fields");
 var CLIENT_READ = ["canManageClients", "canBook", "canReadClientPII", "canReadClinical"];
 var PATIENT_READ = ["canReadClinical", "canBook", "canManagePatients", "canCheckIn"];
 var Client = (0, import_core10.list)({
@@ -1604,18 +1660,18 @@ var Client = (0, import_core10.list)({
     displayName: systemText({ required: true }),
     kind: fixedChoice(["individual", "household", "rescue", "shelter", "business", "government"]),
     status: lifecycle(["prospect", "active", "inactive", "merged", "closed"]),
-    primaryLocation: (0, import_fields10.relationship)({ ref: "Location", ...readOnly }),
+    primaryLocation: relationship({ ref: "Location", ...readOnly }),
     addressLine1: systemText(),
     addressLine2: systemText(),
     city: systemText(),
     stateCode: systemText(),
     postalCode: systemText(),
     creditLimitMinor: minor({ defaultValue: 0n }),
-    accountFlags: (0, import_fields10.json)({ ...readOnly, defaultValue: {}, ui: { ...readOnly.ui, description: "collections, cashOnly, noOnlineBooking, cautionClient (staff safety)." } }),
-    taxExempt: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    mergedInto: (0, import_fields10.relationship)({ ref: "Client", ...readOnly }),
-    people: (0, import_fields10.relationship)({ ref: "ClientPerson.client", many: true, ...readOnly }),
-    ownerships: (0, import_fields10.relationship)({ ref: "PatientOwnership.client", many: true, ...readOnly }),
+    accountFlags: (0, import_fields11.json)({ ...readOnly, defaultValue: {}, ui: { ...readOnly.ui, description: "collections, cashOnly, noOnlineBooking, cautionClient (staff safety)." } }),
+    taxExempt: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    mergedInto: relationship({ ref: "Client", ...readOnly }),
+    people: relationship({ ref: "ClientPerson.client", many: true, ...readOnly }),
+    ownerships: relationship({ ref: "PatientOwnership.client", many: true, ...readOnly }),
     source: fixedChoice(["csr", "portal", "ai_voice", "ai_sms", "import", "walk_in"]),
     version: versionField(),
     ...trackingFields
@@ -1625,21 +1681,21 @@ var ClientPerson = (0, import_core10.list)({
   access: governed([...CLIENT_READ]),
   ui: { labelField: "lastName", listView: { initialColumns: ["firstName", "lastName", "client", "relationship", "isPrimary"] } },
   fields: {
-    client: (0, import_fields10.relationship)({ ref: "Client.people", ...readOnly }),
+    client: relationship({ ref: "Client.people", ...readOnly }),
     firstName: systemText({ required: true }),
     lastName: systemText({ required: true }),
     relationship: fixedChoice(["owner", "co_owner", "family", "agent", "foster", "shelter_staff", "other"]),
-    isPrimary: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    canBook: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: true }),
-    canApproveTreatment: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    canReceiveRecords: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    canPay: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: true }),
-    canAuthoriseEuthanasia: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    dateOfBirth: (0, import_fields10.calendarDay)({ ...readOnly }),
+    isPrimary: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    canBook: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: true }),
+    canApproveTreatment: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    canReceiveRecords: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    canPay: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: true }),
+    canAuthoriseEuthanasia: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    dateOfBirth: (0, import_fields11.calendarDay)({ ...readOnly }),
     preferredLanguage: systemText(),
-    user: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
-    identityVerifiedAt: (0, import_fields10.timestamp)({ ...readOnly }),
-    contactPoints: (0, import_fields10.relationship)({ ref: "ContactPoint.person", many: true, ...readOnly }),
+    user: relationship({ ref: "User", ...readOnly }),
+    identityVerifiedAt: (0, import_fields11.timestamp)({ ...readOnly }),
+    contactPoints: relationship({ ref: "ContactPoint.person", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1648,16 +1704,16 @@ var ContactPoint = (0, import_core10.list)({
   access: governed([...CLIENT_READ]),
   ui: { labelField: "value", listView: { initialColumns: ["person", "kind", "value", "status", "canText"] } },
   fields: {
-    person: (0, import_fields10.relationship)({ ref: "ClientPerson.contactPoints", ...readOnly }),
+    person: relationship({ ref: "ClientPerson.contactPoints", ...readOnly }),
     kind: fixedChoice(["mobile", "landline", "email"]),
     value: systemText({ required: true }),
-    /** sha256 of the normalised value: duplicate detection and caller lookup without scanning PII. */
-    valueHash: systemText({ indexed: true, required: true }),
-    isPrimary: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    verifiedAt: (0, import_fields10.timestamp)({ ...readOnly }),
-    canText: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
+    /** Hash of the normalised value: duplicate detection and caller lookup. Server-only (a phone number is guessable). */
+    valueHash: hiddenHash({ indexed: true, required: true }),
+    isPrimary: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    verifiedAt: (0, import_fields11.timestamp)({ ...readOnly }),
+    canText: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["active", "invalid", "ported"]),
-    consents: (0, import_fields10.relationship)({ ref: "ConsentRecord.contactPoint", many: true, ...readOnly }),
+    consents: relationship({ ref: "ConsentRecord.contactPoint", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1666,17 +1722,17 @@ var ConsentRecord = (0, import_core10.list)({
   access: immutable([...CLIENT_READ]),
   ui: { listView: { initialColumns: ["contactPoint", "purpose", "action", "method", "at"] } },
   fields: {
-    contactPoint: (0, import_fields10.relationship)({ ref: "ContactPoint.consents", ...readOnly }),
+    contactPoint: relationship({ ref: "ContactPoint.consents", ...readOnly }),
     purpose: fixedChoice(["care", "transactional", "marketing", "ai_voice", "recording"]),
     action: fixedChoice(["grant", "revoke"]),
     method: fixedChoice(["web_form", "sms_keyword", "verbal_recorded", "paper", "portal", "import", "staff_entry"]),
-    evidence: (0, import_fields10.relationship)({ ref: "Document", ...readOnly }),
-    callRecord: (0, import_fields10.relationship)({ ref: "CallRecord", ...readOnly }),
+    evidence: relationship({ ref: "Document", ...readOnly }),
+    callRecord: relationship({ ref: "CallRecord", ...readOnly }),
     keyword: systemText(),
-    capturedByUser: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
-    capturedByAgent: (0, import_fields10.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    policyVersion: (0, import_fields10.relationship)({ ref: "PolicyVersion", ...readOnly }),
-    at: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    capturedByUser: relationship({ ref: "User", ...readOnly }),
+    capturedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
+    at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var Species = (0, import_core10.list)({
@@ -1684,13 +1740,13 @@ var Species = (0, import_core10.list)({
   graphql: { plural: "SpeciesList" },
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields10.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[a-z_]{2,40}$/ } } }),
-    name: (0, import_fields10.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields11.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[a-z_]{2,40}$/ } } }),
+    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
     module: choice(["companion", "equine", "food_animal"], "companion"),
     defaultWeightUnit: choice(WEIGHT_UNITS, "kg"),
-    vitalsReference: (0, import_fields10.json)({ ui: { description: 'Reference ranges: {"hr":[60,140],"rr":[10,30],"tempC":["37.5","39.2"]}' } }),
-    breeds: (0, import_fields10.relationship)({ ref: "Breed.species", many: true }),
-    active: (0, import_fields10.checkbox)({ defaultValue: true }),
+    vitalsReference: (0, import_fields11.json)({ ui: { description: 'Reference ranges: {"hr":[60,140],"rr":[10,30],"tempC":["37.5","39.2"]}' } }),
+    breeds: relationship({ ref: "Breed.species", many: true }),
+    active: (0, import_fields11.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -1698,18 +1754,18 @@ var Breed = (0, import_core10.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "species", "sizeClass"] } },
   fields: {
-    species: (0, import_fields10.relationship)({ ref: "Species.breeds" }),
-    name: (0, import_fields10.text)({ validation: { isRequired: true } }),
-    registryCode: (0, import_fields10.text)(),
+    species: relationship({ ref: "Species.breeds" }),
+    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
+    registryCode: (0, import_fields11.text)(),
     sizeClass: choice(["toy", "small", "medium", "large", "giant"], null),
-    geneticFlags: (0, import_fields10.json)({ ui: { description: 'e.g. {"MDR1_risk": true} for herding breeds.' } }),
+    geneticFlags: (0, import_fields11.json)({ ui: { description: 'e.g. {"MDR1_risk": true} for herding breeds.' } }),
     ...trackingFields
   }
 });
 var ColourMarking = (0, import_core10.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
-  fields: { species: (0, import_fields10.relationship)({ ref: "Species" }), name: (0, import_fields10.text)({ validation: { isRequired: true } }), ...trackingFields }
+  fields: { species: relationship({ ref: "Species" }), name: (0, import_fields11.text)({ validation: { isRequired: true } }), ...trackingFields }
 });
 var Patient = (0, import_core10.list)({
   access: governed([...PATIENT_READ]),
@@ -1718,27 +1774,27 @@ var Patient = (0, import_core10.list)({
     ref: systemText({ indexed: "unique", required: true }),
     name: systemText({ required: true }),
     kind: fixedChoice(["individual", "group"]),
-    species: (0, import_fields10.relationship)({ ref: "Species", ...readOnly }),
-    breed: (0, import_fields10.relationship)({ ref: "Breed", ...readOnly }),
-    secondaryBreed: (0, import_fields10.relationship)({ ref: "Breed", ...readOnly }),
+    species: relationship({ ref: "Species", ...readOnly }),
+    breed: relationship({ ref: "Breed", ...readOnly }),
+    secondaryBreed: relationship({ ref: "Breed", ...readOnly }),
     sex: fixedChoice(["male", "female", "unknown"]),
     reproductiveStatus: fixedChoice(["intact", "neutered", "spayed", "unknown"]),
-    dateOfBirth: (0, import_fields10.calendarDay)({ ...readOnly }),
-    dobEstimated: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
+    dateOfBirth: (0, import_fields11.calendarDay)({ ...readOnly }),
+    dobEstimated: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
     colourMarkings: systemText(),
     status: lifecycle(["pending", "active", "inactive", "deceased", "merged"]),
-    deceasedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    deceasedAt: (0, import_fields11.timestamp)({ ...readOnly }),
     codeStatus: fixedChoice(["unspecified", "full", "closed_chest_only", "dnr"]),
-    preferredDvm: (0, import_fields10.relationship)({ ref: "StaffMember", ...readOnly }),
-    groupSize: (0, import_fields10.integer)({ ...readOnly }),
-    mergedInto: (0, import_fields10.relationship)({ ref: "Patient", ...readOnly }),
-    photo: (0, import_fields10.relationship)({ ref: "Document", ...readOnly }),
-    ownerships: (0, import_fields10.relationship)({ ref: "PatientOwnership.patient", many: true, ...readOnly }),
-    alerts: (0, import_fields10.relationship)({ ref: "PatientAlert.patient", many: true, ...readOnly }),
-    weights: (0, import_fields10.relationship)({ ref: "WeightMeasurement.patient", many: true, ...readOnly }),
-    microchips: (0, import_fields10.relationship)({ ref: "Microchip.patient", many: true, ...readOnly }),
-    vcprs: (0, import_fields10.relationship)({ ref: "VcprRecord.patient", many: true, ...readOnly }),
-    insurancePolicies: (0, import_fields10.relationship)({ ref: "PetInsurancePolicy.patient", many: true, ...readOnly }),
+    preferredDvm: relationship({ ref: "StaffMember", ...readOnly }),
+    groupSize: (0, import_fields11.integer)({ ...readOnly }),
+    mergedInto: relationship({ ref: "Patient", ...readOnly }),
+    photo: relationship({ ref: "Document", ...readOnly }),
+    ownerships: relationship({ ref: "PatientOwnership.patient", many: true, ...readOnly }),
+    alerts: relationship({ ref: "PatientAlert.patient", many: true, ...readOnly }),
+    weights: relationship({ ref: "WeightMeasurement.patient", many: true, ...readOnly }),
+    microchips: relationship({ ref: "Microchip.patient", many: true, ...readOnly }),
+    vcprs: relationship({ ref: "VcprRecord.patient", many: true, ...readOnly }),
+    insurancePolicies: relationship({ ref: "PetInsurancePolicy.patient", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1747,14 +1803,14 @@ var PatientOwnership = (0, import_core10.list)({
   access: governed([...PATIENT_READ]),
   ui: { listView: { initialColumns: ["patient", "client", "role", "effectiveFrom", "effectiveTo"] } },
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.ownerships", ...readOnly }),
-    client: (0, import_fields10.relationship)({ ref: "Client.ownerships", ...readOnly }),
+    patient: relationship({ ref: "Patient.ownerships", ...readOnly }),
+    client: relationship({ ref: "Client.ownerships", ...readOnly }),
     role: fixedChoice(["primary", "co_owner", "foster", "boarding_custodian"]),
-    effectiveFrom: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    effectiveTo: (0, import_fields10.timestamp)({ ...readOnly }),
+    effectiveFrom: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    effectiveTo: (0, import_fields11.timestamp)({ ...readOnly }),
     basis: fixedChoice(["registration", "transfer_signed", "adoption", "shelter_transfer", "court", "import"]),
-    evidence: (0, import_fields10.relationship)({ ref: "Document", ...readOnly }),
-    recordedBy: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
+    evidence: relationship({ ref: "Document", ...readOnly }),
+    recordedBy: relationship({ ref: "User", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1762,15 +1818,15 @@ var WeightMeasurement = (0, import_core10.list)({
   access: immutable([...PATIENT_READ]),
   ui: { listView: { initialColumns: ["patient", "value", "unit", "valueKg", "method", "measuredAt"] } },
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.weights", ...readOnly }),
+    patient: relationship({ ref: "Patient.weights", ...readOnly }),
     value: wt({ required: true }),
     unit: fixedChoice(WEIGHT_UNITS),
     valueKg: wt({ required: true }),
     method: fixedChoice(["scale", "owner_reported", "estimate", "carried_over"]),
-    bodyConditionScore: (0, import_fields10.integer)({ ...readOnly, validation: { min: 1, max: 9 } }),
-    measuredAt: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    measuredBy: (0, import_fields10.relationship)({ ref: "StaffMember", ...readOnly }),
-    appointment: (0, import_fields10.relationship)({ ref: "Appointment", ...readOnly }),
+    bodyConditionScore: (0, import_fields11.integer)({ ...readOnly, validation: { min: 1, max: 9 } }),
+    measuredAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    measuredBy: relationship({ ref: "StaffMember", ...readOnly }),
+    appointment: relationship({ ref: "Appointment", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1778,13 +1834,13 @@ var PatientAlert = (0, import_core10.list)({
   access: governed([...PATIENT_READ]),
   ui: { labelField: "text", listView: { initialColumns: ["patient", "kind", "severity", "text", "active"] } },
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.alerts", ...readOnly }),
+    patient: relationship({ ref: "Patient.alerts", ...readOnly }),
     kind: fixedChoice(["behaviour_caution", "allergy", "drug_sensitivity", "medical", "genetic", "handling", "financial", "deceased_sibling_note"]),
     severity: fixedChoice(["info", "warn", "block"]),
     text: systemText({ required: true }),
-    active: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: true }),
-    createdBy: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
-    acknowledgements: (0, import_fields10.relationship)({ ref: "AlertAcknowledgement.alert", many: true, ...readOnly }),
+    active: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: true }),
+    createdBy: relationship({ ref: "User", ...readOnly }),
+    acknowledgements: relationship({ ref: "AlertAcknowledgement.alert", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1792,23 +1848,23 @@ var PatientAlert = (0, import_core10.list)({
 var AlertAcknowledgement = (0, import_core10.list)({
   access: immutable([...PATIENT_READ]),
   fields: {
-    alert: (0, import_fields10.relationship)({ ref: "PatientAlert.acknowledgements", ...readOnly }),
-    user: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
-    appointment: (0, import_fields10.relationship)({ ref: "Appointment", ...readOnly }),
-    at: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    alert: relationship({ ref: "PatientAlert.acknowledgements", ...readOnly }),
+    user: relationship({ ref: "User", ...readOnly }),
+    appointment: relationship({ ref: "Appointment", ...readOnly }),
+    at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var Microchip = (0, import_core10.list)({
   access: governed([...PATIENT_READ]),
   ui: { labelField: "number", listView: { initialColumns: ["number", "patient", "standard", "registry", "active"] } },
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.microchips", ...readOnly }),
+    patient: relationship({ ref: "Patient.microchips", ...readOnly }),
     number: systemText({ indexed: true, required: true }),
     standard: fixedChoice(["iso_11784", "avid_9", "avid_10", "other"]),
-    implantedOn: (0, import_fields10.calendarDay)({ ...readOnly }),
+    implantedOn: (0, import_fields11.calendarDay)({ ...readOnly }),
     registry: systemText(),
-    registeredToClient: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    active: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: true }),
+    registeredToClient: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    active: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
@@ -1816,16 +1872,16 @@ var VcprRecord = (0, import_core10.list)({
   access: governed(["canReadClinical", "canBook", "canCheckIn"]),
   ui: { listView: { initialColumns: ["patient", "dvm", "scope", "status", "establishedAt", "expiresAt"] } },
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.vcprs", ...readOnly }),
+    patient: relationship({ ref: "Patient.vcprs", ...readOnly }),
     scope: fixedChoice(["dvm", "practice"]),
-    dvm: (0, import_fields10.relationship)({ ref: "StaffMember", ...readOnly }),
-    location: (0, import_fields10.relationship)({ ref: "Location", ...readOnly }),
+    dvm: relationship({ ref: "StaffMember", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     establishedByRef: systemText(),
     establishedVia: fixedChoice(["encounter", "import"]),
-    establishedAt: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    expiresAt: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    establishedAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    expiresAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["active", "expired", "terminated"]),
-    policyVersion: (0, import_fields10.relationship)({ ref: "PolicyVersion", ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
     terminatedReason: systemText(),
     version: versionField(),
     ...trackingFields
@@ -1835,30 +1891,30 @@ var ThirdPartyPayer = (0, import_core10.list)({
   access: managed("canAccessDashboard", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    name: (0, import_fields10.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    name: (0, import_fields11.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
     kind: choice(["insurer", "financing", "shelter_program", "employer"], "insurer"),
-    directPay: (0, import_fields10.checkbox)({ defaultValue: false }),
-    phone: (0, import_fields10.text)(),
-    claimsEmail: (0, import_fields10.text)(),
-    portalUrl: (0, import_fields10.text)(),
-    adapterKey: (0, import_fields10.text)({ defaultValue: "manual" }),
-    active: (0, import_fields10.checkbox)({ defaultValue: true }),
+    directPay: (0, import_fields11.checkbox)({ defaultValue: false }),
+    phone: (0, import_fields11.text)(),
+    claimsEmail: (0, import_fields11.text)(),
+    portalUrl: (0, import_fields11.text)(),
+    adapterKey: (0, import_fields11.text)({ defaultValue: "manual" }),
+    active: (0, import_fields11.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
 var PetInsurancePolicy = (0, import_core10.list)({
   access: governed([...PATIENT_READ]),
   fields: {
-    patient: (0, import_fields10.relationship)({ ref: "Patient.insurancePolicies", ...readOnly }),
-    insurer: (0, import_fields10.relationship)({ ref: "ThirdPartyPayer", ...readOnly }),
+    patient: relationship({ ref: "Patient.insurancePolicies", ...readOnly }),
+    insurer: relationship({ ref: "ThirdPartyPayer", ...readOnly }),
     policyNumber: systemText({ required: true }),
     plan: systemText(),
     deductibleMinor: minor(),
     reimbursementRate: rate(),
-    effectiveFrom: (0, import_fields10.calendarDay)({ ...readOnly }),
-    effectiveTo: (0, import_fields10.calendarDay)({ ...readOnly }),
-    directPayEligible: (0, import_fields10.checkbox)({ ...readOnly, defaultValue: false }),
-    clientAuthorisation: (0, import_fields10.relationship)({ ref: "Document", ...readOnly }),
+    effectiveFrom: (0, import_fields11.calendarDay)({ ...readOnly }),
+    effectiveTo: (0, import_fields11.calendarDay)({ ...readOnly }),
+    directPayEligible: (0, import_fields11.checkbox)({ ...readOnly, defaultValue: false }),
+    clientAuthorisation: relationship({ ref: "Document", ...readOnly }),
     ...trackingFields
   }
 });
@@ -1866,20 +1922,20 @@ var ReferralHospital = (0, import_core10.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "phone", "open24h", "active"] } },
   fields: {
-    name: (0, import_fields10.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
     kind: choice(["emergency", "specialty", "general"], "emergency"),
-    phone: (0, import_fields10.text)({ validation: { isRequired: true } }),
-    fax: (0, import_fields10.text)(),
-    email: (0, import_fields10.text)(),
-    addressLine1: (0, import_fields10.text)(),
-    city: (0, import_fields10.text)(),
-    stateCode: (0, import_fields10.text)(),
+    phone: (0, import_fields11.text)({ validation: { isRequired: true } }),
+    fax: (0, import_fields11.text)(),
+    email: (0, import_fields11.text)(),
+    addressLine1: (0, import_fields11.text)(),
+    city: (0, import_fields11.text)(),
+    stateCode: (0, import_fields11.text)(),
     lat: geo(),
     lng: geo(),
-    open24h: (0, import_fields10.checkbox)({ defaultValue: false }),
-    hours: (0, import_fields10.json)({ ui: { description: 'Per weekday open/close "HH:mm" when not 24h.' } }),
-    verifiedChannel: (0, import_fields10.checkbox)({ defaultValue: false }),
-    active: (0, import_fields10.checkbox)({ defaultValue: true }),
+    open24h: (0, import_fields11.checkbox)({ defaultValue: false }),
+    hours: (0, import_fields11.json)({ ui: { description: 'Per weekday open/close "HH:mm" when not 24h.' } }),
+    verifiedChannel: (0, import_fields11.checkbox)({ defaultValue: false }),
+    active: (0, import_fields11.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -1887,12 +1943,12 @@ var ReferringVet = (0, import_core10.list)({
   access: managed("signedIn", "canManageClients"),
   ui: { labelField: "name" },
   fields: {
-    name: (0, import_fields10.text)({ validation: { isRequired: true } }),
-    clinicName: (0, import_fields10.text)(),
-    phone: (0, import_fields10.text)(),
-    fax: (0, import_fields10.text)(),
-    email: (0, import_fields10.text)(),
-    verifiedChannel: (0, import_fields10.checkbox)({ defaultValue: false }),
+    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
+    clinicName: (0, import_fields11.text)(),
+    phone: (0, import_fields11.text)(),
+    fax: (0, import_fields11.text)(),
+    email: (0, import_fields11.text)(),
+    verifiedChannel: (0, import_fields11.checkbox)({ defaultValue: false }),
     ...trackingFields
   }
 });
@@ -1901,19 +1957,19 @@ var RefillRequest = (0, import_core10.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "productText", "channel", "status", "slaDueAt"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields10.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields10.relationship)({ ref: "Client", ...readOnly }),
-    requestedBy: (0, import_fields10.relationship)({ ref: "ClientPerson", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    requestedBy: relationship({ ref: "ClientPerson", ...readOnly }),
     channel: fixedChoice(["portal", "csr", "ai_voice", "ai_sms", "online_pharmacy", "retail_pharmacy", "email"]),
     productText: systemText({ required: true }),
     pharmacyNote: systemText(),
     status: lifecycle(["received", "in_review", "fulfilled_under_existing_rx", "approved_new_rx", "denied", "needs_exam", "merged"]),
-    slaDueAt: (0, import_fields10.timestamp)({ ...readOnly }),
-    decidedBy: (0, import_fields10.relationship)({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields10.timestamp)({ ...readOnly }),
+    slaDueAt: (0, import_fields11.timestamp)({ ...readOnly }),
+    decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    decidedAt: (0, import_fields11.timestamp)({ ...readOnly }),
     denialReason: systemText(),
-    callRecord: (0, import_fields10.relationship)({ ref: "CallRecord", ...readOnly }),
-    createdByAgent: (0, import_fields10.relationship)({ ref: "AgentIdentity", ...readOnly }),
+    callRecord: relationship({ ref: "CallRecord", ...readOnly }),
+    createdByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1923,22 +1979,22 @@ var RecordsRequest = (0, import_core10.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "requesterKind", "basis", "status", "responseDueAt"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields10.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields10.relationship)({ ref: "Client", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
     requesterKind: fixedChoice(["client_person", "clinic", "insurer", "court", "public_health", "other"]),
     requesterName: systemText({ required: true }),
     requesterContact: systemText(),
-    requestedBy: (0, import_fields10.relationship)({ ref: "ClientPerson", ...readOnly }),
+    requestedBy: relationship({ ref: "ClientPerson", ...readOnly }),
     channel: fixedChoice(["portal", "csr", "ai_voice", "email", "fax", "mail"]),
     basis: fixedChoice(["client_of_record", "authorised_person", "referral_with_authorisation", "insurer_with_authorisation", "court_order", "subpoena", "public_health"]),
     scope: systemText(),
-    authorisationDocument: (0, import_fields10.relationship)({ ref: "Document", ...readOnly }),
+    authorisationDocument: relationship({ ref: "Document", ...readOnly }),
     status: lifecycle(["received", "verifying_authority", "approved", "released", "denied", "withdrawn"]),
-    responseDueAt: (0, import_fields10.timestamp)({ ...readOnly }),
-    policyVersion: (0, import_fields10.relationship)({ ref: "PolicyVersion", ...readOnly }),
-    callRecord: (0, import_fields10.relationship)({ ref: "CallRecord", ...readOnly }),
-    createdByAgent: (0, import_fields10.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    releases: (0, import_fields10.relationship)({ ref: "RecordsRelease.request", many: true, ...readOnly }),
+    responseDueAt: (0, import_fields11.timestamp)({ ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
+    callRecord: relationship({ ref: "CallRecord", ...readOnly }),
+    createdByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    releases: relationship({ ref: "RecordsRelease.request", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -1946,13 +2002,13 @@ var RecordsRequest = (0, import_core10.list)({
 var RecordsRelease = (0, import_core10.list)({
   access: immutable(["canProcessRecordsRequests", "canReadAudit"]),
   fields: {
-    request: (0, import_fields10.relationship)({ ref: "RecordsRequest.releases", ...readOnly }),
+    request: relationship({ ref: "RecordsRequest.releases", ...readOnly }),
     recipient: systemText({ required: true }),
     channel: fixedChoice(["email", "portal", "fax", "mail", "in_person"]),
-    documents: (0, import_fields10.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{documentId, sha256, title}]" } }),
-    releasedByUser: (0, import_fields10.relationship)({ ref: "User", ...readOnly }),
-    releasedByAgent: (0, import_fields10.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    at: (0, import_fields10.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    documents: (0, import_fields11.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{documentId, sha256, title}]" } }),
+    releasedByUser: relationship({ ref: "User", ...readOnly }),
+    releasedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 
@@ -1975,22 +2031,22 @@ __export(schedule_exports, {
   WhiteboardEntry: () => WhiteboardEntry
 });
 var import_core11 = require("@keystone-6/core");
-var import_fields11 = require("@keystone-6/core/fields");
+var import_fields12 = require("@keystone-6/core/fields");
 var BOOK_READ = ["canBook", "canCheckIn", "canReadClinical", "canManageSchedules"];
 var StaffSchedule = (0, import_core11.list)({
   access: managed("canAccessDashboard", "canManageSchedules"),
   ui: { listView: { initialColumns: ["staffMember", "location", "kind", "weekday", "localDate", "startTime", "endTime"] } },
   fields: {
-    staffMember: (0, import_fields11.relationship)({ ref: "StaffMember" }),
-    location: (0, import_fields11.relationship)({ ref: "Location" }),
+    staffMember: relationship({ ref: "StaffMember" }),
+    location: relationship({ ref: "Location" }),
     kind: choice(["recurring", "one_time", "time_off"], "recurring"),
-    weekday: (0, import_fields11.integer)({ validation: { min: 0, max: 6 }, ui: { description: "0 = Sunday (recurring blocks)." } }),
-    localDate: (0, import_fields11.calendarDay)({ ui: { description: "One-time blocks and time off." } }),
-    startTime: (0, import_fields11.text)({ validation: { isRequired: true, match: { regex: /^([01]\d|2[0-3]):[0-5]\d$/ } } }),
-    endTime: (0, import_fields11.text)({ validation: { isRequired: true, match: { regex: /^([01]\d|2[0-3]):[0-5]\d$/ } } }),
-    appointmentCategories: (0, import_fields11.json)({ ui: { description: 'Allowed categories in this block, e.g. ["surgery","dental"] for the AM surgical block; empty = any.' } }),
-    effectiveFrom: (0, import_fields11.calendarDay)(),
-    effectiveTo: (0, import_fields11.calendarDay)(),
+    weekday: (0, import_fields12.integer)({ validation: { min: 0, max: 6 }, ui: { description: "0 = Sunday (recurring blocks)." } }),
+    localDate: (0, import_fields12.calendarDay)({ ui: { description: "One-time blocks and time off." } }),
+    startTime: (0, import_fields12.text)({ validation: { isRequired: true, match: { regex: /^([01]\d|2[0-3]):[0-5]\d$/ } } }),
+    endTime: (0, import_fields12.text)({ validation: { isRequired: true, match: { regex: /^([01]\d|2[0-3]):[0-5]\d$/ } } }),
+    appointmentCategories: (0, import_fields12.json)({ ui: { description: 'Allowed categories in this block, e.g. ["surgery","dental"] for the AM surgical block; empty = any.' } }),
+    effectiveFrom: (0, import_fields12.calendarDay)(),
+    effectiveTo: (0, import_fields12.calendarDay)(),
     ...trackingFields
   }
 });
@@ -1998,23 +2054,23 @@ var AppointmentType = (0, import_core11.list)({
   access: managed("signedIn", "canManageSchedules"),
   ui: { labelField: "name", listView: { initialColumns: ["code", "name", "category", "durationMinutes", "aiBookable", "requestOnly"] } },
   fields: {
-    code: (0, import_fields11.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[a-z0-9_]{2,40}$/ } } }),
-    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields12.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[a-z0-9_]{2,40}$/ } } }),
+    name: (0, import_fields12.text)({ validation: { isRequired: true } }),
     category: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "tech", "vaccine_only", "grooming", "boarding_checkin", "telehealth", "drop_off"]),
-    durationMinutes: (0, import_fields11.integer)({ validation: { isRequired: true, min: 5, max: 720 } }),
-    segments: (0, import_fields11.json)({ ui: { description: 'Segment template, e.g. [{"kind":"drop_off","offset":0,"minutes":30},{"kind":"procedure","offset":60,"minutes":120}].' } }),
-    species: (0, import_fields11.relationship)({ ref: "Species", many: true, ui: { description: "Empty = every species." } }),
-    requiredResourceKinds: (0, import_fields11.json)({ defaultValue: ["exam_room"] }),
-    providerKinds: (0, import_fields11.json)({ defaultValue: ["dvm"], ui: { description: "Staff kinds that can take it: dvm, rvt, groomer." } }),
-    aiBookable: (0, import_fields11.checkbox)({ defaultValue: false }),
-    portalBookable: (0, import_fields11.checkbox)({ defaultValue: false }),
-    requestOnly: (0, import_fields11.checkbox)({ defaultValue: false }),
-    newClientAllowed: (0, import_fields11.checkbox)({ defaultValue: true }),
+    durationMinutes: (0, import_fields12.integer)({ validation: { isRequired: true, min: 5, max: 720 } }),
+    segments: (0, import_fields12.json)({ ui: { description: 'Segment template, e.g. [{"kind":"drop_off","offset":0,"minutes":30},{"kind":"procedure","offset":60,"minutes":120}].' } }),
+    species: relationship({ ref: "Species", many: true, ui: { description: "Empty = every species." } }),
+    requiredResourceKinds: (0, import_fields12.json)({ defaultValue: ["exam_room"] }),
+    providerKinds: (0, import_fields12.json)({ defaultValue: ["dvm"], ui: { description: "Staff kinds that can take it: dvm, rvt, groomer." } }),
+    aiBookable: (0, import_fields12.checkbox)({ defaultValue: false }),
+    portalBookable: (0, import_fields12.checkbox)({ defaultValue: false }),
+    requestOnly: (0, import_fields12.checkbox)({ defaultValue: false }),
+    newClientAllowed: (0, import_fields12.checkbox)({ defaultValue: true }),
     depositRequired: choice(["none", "fixed", "estimate"], "none"),
     depositMinor: minor(),
-    vcprQualifying: (0, import_fields11.checkbox)({ defaultValue: false }),
-    colour: (0, import_fields11.text)(),
-    active: (0, import_fields11.checkbox)({ defaultValue: true }),
+    vcprQualifying: (0, import_fields12.checkbox)({ defaultValue: false }),
+    colour: (0, import_fields12.text)(),
+    active: (0, import_fields12.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2022,21 +2078,21 @@ var Resource = (0, import_core11.list)({
   access: managed("signedIn", "canManageSchedules"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "location", "active"] } },
   fields: {
-    location: (0, import_fields11.relationship)({ ref: "Location" }),
+    location: relationship({ ref: "Location" }),
     kind: choice(["exam_room", "surgery_suite", "dental_table", "anaesthesia_machine", "ultrasound", "radiography", "treatment_table", "grooming_table", "isolation"]),
-    name: (0, import_fields11.text)({ validation: { isRequired: true } }),
-    sortOrder: (0, import_fields11.integer)({ defaultValue: 0 }),
-    active: (0, import_fields11.checkbox)({ defaultValue: true }),
+    name: (0, import_fields12.text)({ validation: { isRequired: true } }),
+    sortOrder: (0, import_fields12.integer)({ defaultValue: 0 }),
+    active: (0, import_fields12.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
 var ResourceReservation = (0, import_core11.list)({
   access: governed([...BOOK_READ]),
   fields: {
-    resource: (0, import_fields11.relationship)({ ref: "Resource", ...readOnly }),
-    appointment: (0, import_fields11.relationship)({ ref: "Appointment.reservations", ...readOnly }),
-    startsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    resource: relationship({ ref: "Resource", ...readOnly }),
+    appointment: relationship({ ref: "Appointment.reservations", ...readOnly }),
+    startsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["held", "confirmed", "released"]),
     ...trackingFields
   }
@@ -2044,10 +2100,10 @@ var ResourceReservation = (0, import_core11.list)({
 var ProviderReservation = (0, import_core11.list)({
   access: governed([...BOOK_READ]),
   fields: {
-    staffMember: (0, import_fields11.relationship)({ ref: "StaffMember", ...readOnly }),
-    appointment: (0, import_fields11.relationship)({ ref: "Appointment.providerReservations", ...readOnly }),
-    startsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    staffMember: relationship({ ref: "StaffMember", ...readOnly }),
+    appointment: relationship({ ref: "Appointment.providerReservations", ...readOnly }),
+    startsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["held", "confirmed", "released"]),
     ...trackingFields
   }
@@ -2057,29 +2113,29 @@ var Appointment = (0, import_core11.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "startsAt", "client", "appointmentType", "provider", "status", "channel"], initialSort: { field: "startsAt", direction: "ASC" } } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    location: (0, import_fields11.relationship)({ ref: "Location", ...readOnly }),
-    client: (0, import_fields11.relationship)({ ref: "Client", ...readOnly }),
-    appointmentType: (0, import_fields11.relationship)({ ref: "AppointmentType", ...readOnly }),
-    provider: (0, import_fields11.relationship)({ ref: "StaffMember", ...readOnly }),
-    startsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    appointmentType: relationship({ ref: "AppointmentType", ...readOnly }),
+    provider: relationship({ ref: "StaffMember", ...readOnly }),
+    startsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["requested", "booked", "confirmed", "checked_in", "in_progress", "ready_for_checkout", "completed", "cancelled", "no_show", "declined"]),
     channel: fixedChoice(["csr", "portal", "ai_voice", "ai_sms", "walk_in", "referral", "import"]),
-    bookedByUser: (0, import_fields11.relationship)({ ref: "User", ...readOnly }),
-    bookedByAgent: (0, import_fields11.relationship)({ ref: "AgentIdentity", ...readOnly }),
+    bookedByUser: relationship({ ref: "User", ...readOnly }),
+    bookedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     slotToken: systemText(),
     reason: systemText(),
-    triage: (0, import_fields11.relationship)({ ref: "TriageAssessment", ...readOnly }),
-    callRecord: (0, import_fields11.relationship)({ ref: "CallRecord", ...readOnly }),
+    triage: relationship({ ref: "TriageAssessment", ...readOnly }),
+    callRecord: relationship({ ref: "CallRecord", ...readOnly }),
     cancelReason: systemText(),
-    cancelledAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    confirmedAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    checkedInAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    completedAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    patients: (0, import_fields11.relationship)({ ref: "AppointmentPatient.appointment", many: true, ...readOnly }),
-    segments: (0, import_fields11.relationship)({ ref: "AppointmentSegment.appointment", many: true, ...readOnly }),
-    reservations: (0, import_fields11.relationship)({ ref: "ResourceReservation.appointment", many: true, ...readOnly }),
-    providerReservations: (0, import_fields11.relationship)({ ref: "ProviderReservation.appointment", many: true, ...readOnly }),
+    cancelledAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    confirmedAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    checkedInAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    completedAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    patients: relationship({ ref: "AppointmentPatient.appointment", many: true, ...readOnly }),
+    segments: relationship({ ref: "AppointmentSegment.appointment", many: true, ...readOnly }),
+    reservations: relationship({ ref: "ResourceReservation.appointment", many: true, ...readOnly }),
+    providerReservations: relationship({ ref: "ProviderReservation.appointment", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2087,8 +2143,8 @@ var Appointment = (0, import_core11.list)({
 var AppointmentPatient = (0, import_core11.list)({
   access: governed([...BOOK_READ]),
   fields: {
-    appointment: (0, import_fields11.relationship)({ ref: "Appointment.patients", ...readOnly }),
-    patient: (0, import_fields11.relationship)({ ref: "Patient", ...readOnly }),
+    appointment: relationship({ ref: "Appointment.patients", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     reason: systemText(),
     status: lifecycle(["scheduled", "checked_in", "in_progress", "done", "cancelled", "no_show"]),
     weightSkippedReason: systemText(),
@@ -2099,14 +2155,14 @@ var AppointmentPatient = (0, import_core11.list)({
 var AppointmentSegment = (0, import_core11.list)({
   access: governed([...BOOK_READ]),
   fields: {
-    appointment: (0, import_fields11.relationship)({ ref: "Appointment.segments", ...readOnly }),
+    appointment: relationship({ ref: "Appointment.segments", ...readOnly }),
     kind: fixedChoice(["drop_off", "exam", "procedure", "anaesthesia", "recovery", "pickup", "groom", "bath"]),
-    startsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endsAt: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    resource: (0, import_fields11.relationship)({ ref: "Resource", ...readOnly }),
-    staff: (0, import_fields11.relationship)({ ref: "StaffMember", ...readOnly }),
+    startsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    resource: relationship({ ref: "Resource", ...readOnly }),
+    staff: relationship({ ref: "StaffMember", ...readOnly }),
     status: lifecycle(["planned", "active", "done", "skipped"]),
-    transitions: (0, import_fields11.relationship)({ ref: "SegmentTransition.segment", many: true, ...readOnly }),
+    transitions: relationship({ ref: "SegmentTransition.segment", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2114,27 +2170,27 @@ var AppointmentSegment = (0, import_core11.list)({
 var SegmentTransition = (0, import_core11.list)({
   access: immutable([...BOOK_READ]),
   fields: {
-    segment: (0, import_fields11.relationship)({ ref: "AppointmentSegment.transitions", ...readOnly }),
+    segment: relationship({ ref: "AppointmentSegment.transitions", ...readOnly }),
     fromStatus: systemText({ required: true }),
     toStatus: systemText({ required: true }),
-    by: (0, import_fields11.relationship)({ ref: "User", ...readOnly }),
-    at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    by: relationship({ ref: "User", ...readOnly }),
+    at: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var WaitlistEntry = (0, import_core11.list)({
   access: governed([...BOOK_READ]),
   ui: { listView: { initialColumns: ["client", "appointmentType", "urgency", "status", "createdAt"] } },
   fields: {
-    client: (0, import_fields11.relationship)({ ref: "Client", ...readOnly }),
-    patients: (0, import_fields11.relationship)({ ref: "Patient", many: true, ...readOnly }),
-    location: (0, import_fields11.relationship)({ ref: "Location", ...readOnly }),
-    appointmentType: (0, import_fields11.relationship)({ ref: "AppointmentType", ...readOnly }),
-    preferredWindows: (0, import_fields11.json)({ ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    patients: relationship({ ref: "Patient", many: true, ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    appointmentType: relationship({ ref: "AppointmentType", ...readOnly }),
+    preferredWindows: (0, import_fields12.json)({ ...readOnly }),
     urgency: fixedChoice(["routine", "soon", "urgent"]),
     status: lifecycle(["waiting", "offered", "accepted", "expired", "declined", "cancelled"]),
     offeredSlotToken: systemText(),
-    offerExpiresAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    bookedAppointment: (0, import_fields11.relationship)({ ref: "Appointment", ...readOnly }),
+    offerExpiresAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    bookedAppointment: relationship({ ref: "Appointment", ...readOnly }),
     note: systemText(),
     version: versionField(),
     ...trackingFields
@@ -2146,7 +2202,7 @@ var TriageProtocol = (0, import_core11.list)({
   fields: {
     code: systemText({ indexed: "unique", required: true }),
     name: systemText({ required: true }),
-    versions: (0, import_fields11.relationship)({ ref: "TriageProtocolVersion.protocol", many: true, ...readOnly }),
+    versions: relationship({ ref: "TriageProtocolVersion.protocol", many: true, ...readOnly }),
     ...trackingFields
   }
 });
@@ -2154,17 +2210,17 @@ var TriageProtocolVersion = (0, import_core11.list)({
   access: governed("signedIn"),
   ui: { labelField: "label", listView: { initialColumns: ["protocol", "versionNumber", "status", "publishedAt"] } },
   fields: {
-    protocol: (0, import_fields11.relationship)({ ref: "TriageProtocol.versions", ...readOnly }),
-    versionNumber: (0, import_fields11.integer)({ ...readOnly, validation: { isRequired: true } }),
+    protocol: relationship({ ref: "TriageProtocol.versions", ...readOnly }),
+    versionNumber: (0, import_fields12.integer)({ ...readOnly, validation: { isRequired: true } }),
     label: systemText(),
-    questions: (0, import_fields11.json)({ ...readOnly }),
-    redFlags: (0, import_fields11.json)({ ...readOnly }),
-    levelRules: (0, import_fields11.json)({ ...readOnly }),
-    scripts: (0, import_fields11.json)({ ...readOnly }),
+    questions: (0, import_fields12.json)({ ...readOnly }),
+    redFlags: (0, import_fields12.json)({ ...readOnly }),
+    levelRules: (0, import_fields12.json)({ ...readOnly }),
+    scripts: (0, import_fields12.json)({ ...readOnly }),
     contentHash: systemText({ required: true }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields11.timestamp)({ ...readOnly }),
-    approval: (0, import_fields11.relationship)({ ref: "ApprovalRequest", ...readOnly }),
+    publishedAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     ...trackingFields
   }
 });
@@ -2172,35 +2228,35 @@ var TriageAssessment = (0, import_core11.list)({
   access: immutable(["canReadClinical", "canBook", "canCheckIn"]),
   ui: { listView: { initialColumns: ["at", "patient", "level", "outcome", "actorKind"] } },
   fields: {
-    patient: (0, import_fields11.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields11.relationship)({ ref: "Client", ...readOnly }),
-    callRecord: (0, import_fields11.relationship)({ ref: "CallRecord", ...readOnly }),
-    protocolVersion: (0, import_fields11.relationship)({ ref: "TriageProtocolVersion", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    callRecord: relationship({ ref: "CallRecord", ...readOnly }),
+    protocolVersion: relationship({ ref: "TriageProtocolVersion", ...readOnly }),
     complaint: systemText(),
-    answers: (0, import_fields11.json)({ ...readOnly }),
-    redFlagsHit: (0, import_fields11.json)({ ...readOnly }),
+    answers: (0, import_fields12.json)({ ...readOnly }),
+    redFlagsHit: (0, import_fields12.json)({ ...readOnly }),
     level: fixedChoice(["emergency_now", "urgent_today", "soon", "routine"]),
     outcome: fixedChoice(["transferred", "er_referred", "booked", "advised_home_monitor", "callback_task"]),
-    referredTo: (0, import_fields11.relationship)({ ref: "ReferralHospital", ...readOnly }),
+    referredTo: relationship({ ref: "ReferralHospital", ...readOnly }),
     actorKind: fixedChoice(["user", "agent"]),
-    actorUser: (0, import_fields11.relationship)({ ref: "User", ...readOnly }),
-    actorAgent: (0, import_fields11.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    actorUser: relationship({ ref: "User", ...readOnly }),
+    actorAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    at: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var WhiteboardEntry = (0, import_core11.list)({
   access: governed(["canReadClinical", "canCheckIn", "canBook"]),
   ui: { listView: { initialColumns: ["location", "patient", "status", "room", "assignedDvm", "since"] } },
   fields: {
-    location: (0, import_fields11.relationship)({ ref: "Location", ...readOnly }),
-    patient: (0, import_fields11.relationship)({ ref: "Patient", ...readOnly }),
-    appointment: (0, import_fields11.relationship)({ ref: "Appointment", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    appointment: relationship({ ref: "Appointment", ...readOnly }),
     status: lifecycle(["waiting", "in_exam", "treatment", "diagnostics", "hospitalised", "surgery", "recovery", "boarding", "ready_for_discharge", "discharged"]),
-    room: (0, import_fields11.relationship)({ ref: "Resource", ...readOnly }),
-    assignedDvm: (0, import_fields11.relationship)({ ref: "StaffMember", ...readOnly }),
-    assignedTech: (0, import_fields11.relationship)({ ref: "StaffMember", ...readOnly }),
-    flags: (0, import_fields11.json)({ ...readOnly, defaultValue: [] }),
-    since: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    room: relationship({ ref: "Resource", ...readOnly }),
+    assignedDvm: relationship({ ref: "StaffMember", ...readOnly }),
+    assignedTech: relationship({ ref: "StaffMember", ...readOnly }),
+    flags: (0, import_fields12.json)({ ...readOnly, defaultValue: [] }),
+    since: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     version: versionField(),
     ...trackingFields
   }
@@ -2221,20 +2277,20 @@ __export(comms_exports, {
   Suppression: () => Suppression
 });
 var import_core12 = require("@keystone-6/core");
-var import_fields12 = require("@keystone-6/core/fields");
+var import_fields13 = require("@keystone-6/core/fields");
 var COMMS_READ = ["canMessageClients", "canManageClients", "canBook"];
 var CommsThread = (0, import_core12.list)({
   access: governed([...COMMS_READ]),
   ui: { labelField: "subject", listView: { initialColumns: ["client", "channel", "status", "lastMessageAt"] } },
   fields: {
-    client: (0, import_fields12.relationship)({ ref: "Client", ...readOnly }),
-    contactPoint: (0, import_fields12.relationship)({ ref: "ContactPoint", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    contactPoint: relationship({ ref: "ContactPoint", ...readOnly }),
     channel: fixedChoice(["sms", "email", "voice", "portal"]),
     subject: systemText(),
     status: lifecycle(["open", "waiting_client", "waiting_staff", "closed"]),
-    assignedTo: (0, import_fields12.relationship)({ ref: "StaffMember", ...readOnly }),
-    lastMessageAt: (0, import_fields12.timestamp)({ ...readOnly }),
-    messages: (0, import_fields12.relationship)({ ref: "CommsMessage.thread", many: true, ...readOnly }),
+    assignedTo: relationship({ ref: "StaffMember", ...readOnly }),
+    lastMessageAt: (0, import_fields13.timestamp)({ ...readOnly }),
+    messages: relationship({ ref: "CommsMessage.thread", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2243,19 +2299,19 @@ var CommsMessage = (0, import_core12.list)({
   access: governed([...COMMS_READ]),
   ui: { listView: { initialColumns: ["thread", "direction", "purpose", "status", "createdAt"] } },
   fields: {
-    thread: (0, import_fields12.relationship)({ ref: "CommsThread.messages", ...readOnly }),
+    thread: relationship({ ref: "CommsThread.messages", ...readOnly }),
     direction: fixedChoice(["inbound", "outbound"]),
     purpose: fixedChoice(["care", "transactional", "marketing"]),
     templateCode: systemText(),
     to: systemText(),
     from: systemText(),
-    body: (0, import_fields12.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields13.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     status: lifecycle(["queued", "sending", "sent", "delivered", "failed", "blocked", "received"]),
     blockedReason: systemText(),
     providerId: systemText({ indexed: true }),
-    patient: (0, import_fields12.relationship)({ ref: "Patient", ...readOnly }),
-    appointment: (0, import_fields12.relationship)({ ref: "Appointment", ...readOnly }),
-    sentAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    appointment: relationship({ ref: "Appointment", ...readOnly }),
+    sentAt: (0, import_fields13.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2264,13 +2320,13 @@ var MessageTemplate = (0, import_core12.list)({
   access: managed("canAccessDashboard", "canManageTemplates"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "purpose", "channel", "locale", "templateVersion"] } },
   fields: {
-    code: (0, import_fields12.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields13.text)({ validation: { isRequired: true } }),
     purpose: choice(["care", "transactional", "marketing"]),
     channel: choice(["sms", "email", "voice"]),
-    locale: (0, import_fields12.text)({ defaultValue: "en-US" }),
-    body: (0, import_fields12.text)({ validation: { isRequired: true }, ui: { displayMode: "textarea", description: "Placeholders: {{practice}}, {{pet}}, {{when}}, {{location}}, {{ref}}." } }),
-    templateVersion: (0, import_fields12.integer)({ defaultValue: 1 }),
-    active: (0, import_fields12.checkbox)({ defaultValue: true }),
+    locale: (0, import_fields13.text)({ defaultValue: "en-US" }),
+    body: (0, import_fields13.text)({ validation: { isRequired: true }, ui: { displayMode: "textarea", description: "Placeholders: {{practice}}, {{pet}}, {{when}}, {{location}}, {{ref}}." } }),
+    templateVersion: (0, import_fields13.integer)({ defaultValue: 1 }),
+    active: (0, import_fields13.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2282,25 +2338,25 @@ var CallRecord = (0, import_core12.list)({
     direction: fixedChoice(["inbound", "outbound"]),
     from: systemText({ required: true }),
     to: systemText({ required: true }),
-    location: (0, import_fields12.relationship)({ ref: "Location", ...readOnly }),
-    client: (0, import_fields12.relationship)({ ref: "Client", ...readOnly }),
-    person: (0, import_fields12.relationship)({ ref: "ClientPerson", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    person: relationship({ ref: "ClientPerson", ...readOnly }),
     answeredBy: fixedChoice(["ai", "staff", "voicemail", "missed"]),
-    agent: (0, import_fields12.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    agentRun: (0, import_fields12.relationship)({ ref: "AgentRun", ...readOnly }),
+    agent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    agentRun: relationship({ ref: "AgentRun", ...readOnly }),
     providerCallId: systemText({ indexed: true }),
     adapterKey: systemText(),
-    disclosurePlayedAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    disclosurePlayedAt: (0, import_fields13.timestamp)({ ...readOnly }),
     recordingConsent: fixedChoice(["not_asked", "accepted", "declined"]),
-    callerVerifiedAt: (0, import_fields12.timestamp)({ ...readOnly }),
+    callerVerifiedAt: (0, import_fields13.timestamp)({ ...readOnly }),
     verificationMethod: fixedChoice(["none", "pet_name_dob", "otp"]),
-    transcript: (0, import_fields12.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "[{speaker, text, at}] as received; untrusted." } }),
+    transcript: (0, import_fields13.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "[{speaker, text, at}] as received; untrusted." } }),
     summary: systemText(),
     disposition: fixedChoice(["open", "booked", "rescheduled", "cancelled", "refill_request", "records_request", "info", "transferred", "urgent_transfer", "er_referred", "voicemail", "abandoned", "callback_task"]),
     transferTo: systemText(),
-    startedAt: (0, import_fields12.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endedAt: (0, import_fields12.timestamp)({ ...readOnly }),
-    durationSeconds: (0, import_fields12.integer)({ ...readOnly }),
+    startedAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endedAt: (0, import_fields13.timestamp)({ ...readOnly }),
+    durationSeconds: (0, import_fields13.integer)({ ...readOnly }),
     recordingRef: systemText(),
     status: lifecycle(["ringing", "in_progress", "completed", "failed"]),
     version: versionField(),
@@ -2310,12 +2366,12 @@ var CallRecord = (0, import_core12.list)({
 var Suppression = (0, import_core12.list)({
   access: governed([...COMMS_READ]),
   fields: {
-    contactPoint: (0, import_fields12.relationship)({ ref: "ContactPoint", ...readOnly }),
-    patient: (0, import_fields12.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields12.relationship)({ ref: "Client", ...readOnly }),
+    contactPoint: relationship({ ref: "ContactPoint", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
     reason: fixedChoice(["stop_keyword", "deceased", "client_request", "legal", "invalid_number", "bounce"]),
-    until: (0, import_fields12.timestamp)({ ...readOnly }),
-    active: (0, import_fields12.checkbox)({ ...readOnly, defaultValue: true }),
+    until: (0, import_fields13.timestamp)({ ...readOnly }),
+    active: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2323,13 +2379,13 @@ var KnowledgeBaseEntry = (0, import_core12.list)({
   access: managed("signedIn", "canManageTemplates"),
   ui: { labelField: "topic", listView: { initialColumns: ["topic", "visibility", "entryVersion", "active"] } },
   fields: {
-    topic: (0, import_fields12.text)({ validation: { isRequired: true }, isIndexed: true }),
-    keywords: (0, import_fields12.json)({ defaultValue: [], ui: { description: "Lower-case words that match a question to this entry." } }),
-    content: (0, import_fields12.text)({ validation: { isRequired: true }, ui: { displayMode: "textarea" } }),
+    topic: (0, import_fields13.text)({ validation: { isRequired: true }, isIndexed: true }),
+    keywords: (0, import_fields13.json)({ defaultValue: [], ui: { description: "Lower-case words that match a question to this entry." } }),
+    content: (0, import_fields13.text)({ validation: { isRequired: true }, ui: { displayMode: "textarea" } }),
     visibility: choice(["public", "verified_client", "staff"], "public"),
-    location: (0, import_fields12.relationship)({ ref: "Location" }),
-    entryVersion: (0, import_fields12.integer)({ defaultValue: 1 }),
-    active: (0, import_fields12.checkbox)({ defaultValue: true }),
+    location: relationship({ ref: "Location" }),
+    entryVersion: (0, import_fields13.integer)({ defaultValue: 1 }),
+    active: (0, import_fields13.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2337,11 +2393,11 @@ var PublicSiteProfile = (0, import_core12.list)({
   access: managed("signedIn", "canManagePractice"),
   isSingleton: true,
   fields: {
-    headline: (0, import_fields12.text)({ defaultValue: "Cedar Creek Animal Hospital" }),
-    onlineBookingEnabled: (0, import_fields12.checkbox)({ defaultValue: true }),
+    headline: (0, import_fields13.text)({ defaultValue: "Cedar Creek Animal Hospital" }),
+    onlineBookingEnabled: (0, import_fields13.checkbox)({ defaultValue: true }),
     newClientBookingMode: choice(["book", "request", "off"], "request"),
-    bookingWindowDays: (0, import_fields12.integer)({ defaultValue: 60, validation: { min: 1, max: 365 } }),
-    minimumNoticeMinutes: (0, import_fields12.integer)({ defaultValue: 120 }),
+    bookingWindowDays: (0, import_fields13.integer)({ defaultValue: 60, validation: { min: 1, max: 365 } }),
+    minimumNoticeMinutes: (0, import_fields13.integer)({ defaultValue: 120 }),
     ...trackingFields
   }
 });
@@ -2349,13 +2405,13 @@ var PublicAppointmentType = (0, import_core12.list)({
   access: managed("signedIn", "canManageSchedules"),
   ui: { labelField: "publicName" },
   fields: {
-    appointmentType: (0, import_fields12.relationship)({ ref: "AppointmentType" }),
-    publicName: (0, import_fields12.text)({ validation: { isRequired: true } }),
-    description: (0, import_fields12.text)({ ui: { displayMode: "textarea" } }),
+    appointmentType: relationship({ ref: "AppointmentType" }),
+    publicName: (0, import_fields13.text)({ validation: { isRequired: true } }),
+    description: (0, import_fields13.text)({ ui: { displayMode: "textarea" } }),
     mode: choice(["book", "request"], "book"),
-    newClients: (0, import_fields12.checkbox)({ defaultValue: false }),
-    sortOrder: (0, import_fields12.integer)({ defaultValue: 0 }),
-    active: (0, import_fields12.checkbox)({ defaultValue: true }),
+    newClients: (0, import_fields13.checkbox)({ defaultValue: false }),
+    sortOrder: (0, import_fields13.integer)({ defaultValue: 0 }),
+    active: (0, import_fields13.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2363,15 +2419,15 @@ var PortalSession = (0, import_core12.list)({
   access: serverOnly,
   graphql: { omit: true },
   fields: {
-    person: (0, import_fields12.relationship)({ ref: "ClientPerson" }),
-    contactPoint: (0, import_fields12.relationship)({ ref: "ContactPoint" }),
-    tokenHash: (0, import_fields12.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    otpHash: (0, import_fields12.text)(),
-    otpAttempts: (0, import_fields12.integer)({ defaultValue: 0 }),
+    person: relationship({ ref: "ClientPerson" }),
+    contactPoint: relationship({ ref: "ContactPoint" }),
+    tokenHash: (0, import_fields13.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    otpHash: (0, import_fields13.text)(),
+    otpAttempts: (0, import_fields13.integer)({ defaultValue: 0 }),
     status: choice(["pending", "verified", "expired", "revoked"], "pending"),
-    expiresAt: (0, import_fields12.timestamp)({ validation: { isRequired: true } }),
-    verifiedAt: (0, import_fields12.timestamp)(),
-    ipHash: (0, import_fields12.text)(),
+    expiresAt: (0, import_fields13.timestamp)({ validation: { isRequired: true } }),
+    verifiedAt: (0, import_fields13.timestamp)(),
+    ipHash: (0, import_fields13.text)(),
     ...trackingFields
   }
 });
@@ -2379,15 +2435,15 @@ var RateLimitBucket = (0, import_core12.list)({
   access: serverOnly,
   graphql: { omit: true },
   fields: {
-    key: (0, import_fields12.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    windowStart: (0, import_fields12.timestamp)({ validation: { isRequired: true } }),
-    count: (0, import_fields12.integer)({ defaultValue: 0 })
+    key: (0, import_fields13.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    windowStart: (0, import_fields13.timestamp)({ validation: { isRequired: true } }),
+    count: (0, import_fields13.integer)({ defaultValue: 0 })
   }
 });
 
 // features/keystone/models/pharmacy.ts
 var import_core13 = require("@keystone-6/core");
-var import_fields13 = require("@keystone-6/core/fields");
+var import_fields14 = require("@keystone-6/core/fields");
 var CS_SCHEDULES = ["none", "CI", "CII", "CIIN", "CIII", "CIIIN", "CIV", "CV"];
 var DrugProduct = (0, import_core13.list)({
   access: governed("canAccessDashboard"),
@@ -2405,16 +2461,16 @@ var DrugProduct = (0, import_core13.list)({
     packageQty: qty(),
     packageUnit: unit(),
     csSchedule: fixedChoice(CS_SCHEDULES),
-    stateCsSchedule: (0, import_fields13.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per-state scheduling from the policy packs, e.g. {"US-CA":"CV"}.' } }),
-    isHumanLabel: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: false }),
+    stateCsSchedule: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per-state scheduling from the policy packs, e.g. {"US-CA":"CV"}.' } }),
+    isHumanLabel: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
     approvalStatus: fixedChoice(["fda_approved", "conditional", "indexed", "compounded", "human_label"]),
-    multiDoseBudDays: (0, import_fields13.integer)({ ...readOnly }),
+    multiDoseBudDays: (0, import_fields14.integer)({ ...readOnly }),
     ndc: systemText({ indexed: true }),
-    requiresWitnessOnAdminister: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: false }),
-    doseRanges: (0, import_fields13.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per species: {"canine":{"min":"0.2","max":"0.4","unit":"mg","per":"kg"}} from the practice formulary (I-O2 dose check).' } }),
-    cautionFlags: (0, import_fields13.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: 'Breed genetic flags that make this drug a caution, e.g. ["MDR1_risk"].' } }),
+    requiresWitnessOnAdminister: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
+    doseRanges: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Per species: {"canine":{"min":"0.2","max":"0.4","unit":"mg","per":"kg"}} from the practice formulary (I-O2 dose check).' } }),
+    cautionFlags: (0, import_fields14.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: 'Breed genetic flags that make this drug a caution, e.g. ["MDR1_risk"].' } }),
     measurableIncrement: qty(),
-    active: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: true }),
+    active: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2423,18 +2479,18 @@ var Prescription = (0, import_core13.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "prescriber", "status", "issuedAt"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields13.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields13.relationship)({ ref: "Client", ...readOnly }),
-    location: (0, import_fields13.relationship)({ ref: "Location", ...readOnly }),
-    prescriber: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
-    deaRegistration: (0, import_fields13.relationship)({ ref: "DeaRegistration", ...readOnly }),
-    vcpr: (0, import_fields13.relationship)({ ref: "VcprRecord", ...readOnly }),
-    issuedAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    prescriber: relationship({ ref: "StaffMember", ...readOnly }),
+    deaRegistration: relationship({ ref: "DeaRegistration", ...readOnly }),
+    vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
+    issuedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["draft", "active", "exhausted", "expired", "cancelled"]),
-    signedAt: (0, import_fields13.timestamp)({ ...readOnly }),
-    licenseEvaluation: (0, import_fields13.relationship)({ ref: "LicenseEvaluation", ...readOnly }),
-    policyVersion: (0, import_fields13.relationship)({ ref: "PolicyVersion", ...readOnly }),
-    lines: (0, import_fields13.relationship)({ ref: "PrescriptionLine.prescription", many: true, ...readOnly }),
+    signedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
+    lines: relationship({ ref: "PrescriptionLine.prescription", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2442,8 +2498,8 @@ var Prescription = (0, import_core13.list)({
 var PrescriptionLine = (0, import_core13.list)({
   access: governed(["canReadClinical", "canPrescribe", "canManageRefills"]),
   fields: {
-    prescription: (0, import_fields13.relationship)({ ref: "Prescription.lines", ...readOnly }),
-    product: (0, import_fields13.relationship)({ ref: "DrugProduct", ...readOnly }),
+    prescription: relationship({ ref: "Prescription.lines", ...readOnly }),
+    product: relationship({ ref: "DrugProduct", ...readOnly }),
     /** The product's federal schedule when the line was written (checked against the product by the DB). */
     csSchedule: fixedChoice(CS_SCHEDULES),
     directions: systemText({ required: true }),
@@ -2451,10 +2507,10 @@ var PrescriptionLine = (0, import_core13.list)({
     frequency: systemText(),
     quantity: qty({ required: true }),
     quantityUnit: unit(),
-    refillsAuthorised: (0, import_fields13.integer)({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
-    expiresAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    extralabel: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: false }),
-    substitutionAllowed: (0, import_fields13.checkbox)({ ...readOnly, defaultValue: true }),
+    refillsAuthorised: (0, import_fields14.integer)({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
+    expiresAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    extralabel: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
+    substitutionAllowed: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2463,18 +2519,18 @@ var CsContainer = (0, import_core13.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "product", "location", "status", "labelQty", "labelUnit"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    product: (0, import_fields13.relationship)({ ref: "DrugProduct", ...readOnly }),
-    location: (0, import_fields13.relationship)({ ref: "Location", ...readOnly }),
-    deaRegistration: (0, import_fields13.relationship)({ ref: "DeaRegistration", ...readOnly }),
+    product: relationship({ ref: "DrugProduct", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    deaRegistration: relationship({ ref: "DeaRegistration", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields13.calendarDay)({ ...readOnly }),
+    lotExpiresOn: (0, import_fields14.calendarDay)({ ...readOnly }),
     status: lifecycle(["sealed", "open", "emptied", "quarantined", "disposed", "retired"]),
     labelQty: qty({ required: true }),
     labelUnit: unit(),
-    openedAt: (0, import_fields13.timestamp)({ ...readOnly }),
-    openedBy: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
-    budAt: (0, import_fields13.timestamp)({ ...readOnly }),
-    entries: (0, import_fields13.relationship)({ ref: "CsLogEntry.container", many: true, ...readOnly }),
+    openedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    openedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    budAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    entries: relationship({ ref: "CsLogEntry.container", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2485,20 +2541,20 @@ var CsLogEntry = (0, import_core13.list)({
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
     ciiRef: systemText({ indexed: "unique", nullable: true }),
-    container: (0, import_fields13.relationship)({ ref: "CsContainer.entries", ...readOnly }),
-    deaRegistration: (0, import_fields13.relationship)({ ref: "DeaRegistration", ...readOnly }),
+    container: relationship({ ref: "CsContainer.entries", ...readOnly }),
+    deaRegistration: relationship({ ref: "DeaRegistration", ...readOnly }),
     schedule: fixedChoice(CS_SCHEDULES),
     type: fixedChoice(["receive", "open_transfer", "administer", "dispense", "waste", "transfer_out", "transfer_in", "return", "destroy", "adjust", "count_variance", "theft_loss"]),
     qtySigned: qty({ required: true }),
     unit: unit(),
-    occurredAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    recordedAt: (0, import_fields13.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    actor: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
-    witness: (0, import_fields13.relationship)({ ref: "StaffMember", ...readOnly }),
-    patient: (0, import_fields13.relationship)({ ref: "Patient", ...readOnly }),
-    client: (0, import_fields13.relationship)({ ref: "Client", ...readOnly }),
-    clientSnapshot: (0, import_fields13.json)({ ...readOnly }),
-    reverses: (0, import_fields13.relationship)({ ref: "CsLogEntry", ...readOnly }),
+    occurredAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    recordedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    actor: relationship({ ref: "StaffMember", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    clientSnapshot: (0, import_fields14.json)({ ...readOnly }),
+    reverses: relationship({ ref: "CsLogEntry", ...readOnly }),
     reason: systemText(),
     prevHash: systemText(),
     hash: systemText()
@@ -2507,7 +2563,7 @@ var CsLogEntry = (0, import_core13.list)({
 
 // features/keystone/models/record.ts
 var import_core14 = require("@keystone-6/core");
-var import_fields14 = require("@keystone-6/core/fields");
+var import_fields15 = require("@keystone-6/core/fields");
 var CLINICAL_READ = ["canReadClinical"];
 var ENCOUNTER_KINDS = ["outpatient", "inpatient_day", "surgery", "dental", "emergency", "telehealth", "phone_consult", "records_import", "euthanasia", "tech_visit"];
 var SECTION_KINDS = ["history", "subjective", "objective", "assessment", "plan", "discharge", "surgery_report", "dental_chart", "anaesthesia_summary", "communication"];
@@ -2517,37 +2573,37 @@ var Encounter = (0, import_core14.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "status", "attendingDvm", "startedAt"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
-    location: (0, import_fields14.relationship)({ ref: "Location", ...readOnly }),
-    appointment: (0, import_fields14.relationship)({ ref: "Appointment", ...readOnly }),
-    stay: (0, import_fields14.relationship)({ ref: "HospitalStay", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    appointment: relationship({ ref: "Appointment", ...readOnly }),
+    stay: relationship({ ref: "HospitalStay", ...readOnly }),
     kind: fixedChoice(ENCOUNTER_KINDS),
-    vcprQualifying: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
+    vcprQualifying: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["open", "in_progress", "pending_signature", "signed", "voided"]),
     reason: systemText(),
-    attendingDvm: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    participants: (0, import_fields14.relationship)({ ref: "StaffMember", many: true, ...readOnly }),
-    weightUsed: (0, import_fields14.relationship)({ ref: "WeightMeasurement", ...readOnly }),
-    startedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    submittedAt: (0, import_fields14.timestamp)({ ...readOnly }),
-    signedBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    signedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
+    participants: relationship({ ref: "StaffMember", many: true, ...readOnly }),
+    weightUsed: relationship({ ref: "WeightMeasurement", ...readOnly }),
+    startedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    submittedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    signedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    signedAt: (0, import_fields15.timestamp)({ ...readOnly }),
     contentHash: systemText(),
-    signedContent: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
-    licenseEvaluation: (0, import_fields14.relationship)({ ref: "LicenseEvaluation", ...readOnly }),
-    vcpr: (0, import_fields14.relationship)({ ref: "VcprRecord", ...readOnly }),
-    document: (0, import_fields14.relationship)({ ref: "ClinicalDocument", ...readOnly }),
-    policyVersion: (0, import_fields14.relationship)({ ref: "PolicyVersion", ...readOnly }),
-    completeness: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
+    signedContent: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
+    licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
+    vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
+    document: relationship({ ref: "ClinicalDocument", ...readOnly }),
+    policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
+    completeness: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
     voidReason: systemText(),
-    voidApproval: (0, import_fields14.relationship)({ ref: "ApprovalRequest", ...readOnly }),
+    voidApproval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     importedFrom: systemText(),
-    sections: (0, import_fields14.relationship)({ ref: "SoapSection.encounter", many: true, ...readOnly }),
-    addenda: (0, import_fields14.relationship)({ ref: "Addendum.encounter", many: true, ...readOnly }),
-    vitals: (0, import_fields14.relationship)({ ref: "VitalsObservation.encounter", many: true, ...readOnly }),
-    findings: (0, import_fields14.relationship)({ ref: "PhysicalExamFinding.encounter", many: true, ...readOnly }),
-    diagnoses: (0, import_fields14.relationship)({ ref: "Diagnosis.encounter", many: true, ...readOnly }),
-    orders: (0, import_fields14.relationship)({ ref: "ClinicalOrder.encounter", many: true, ...readOnly }),
+    sections: relationship({ ref: "SoapSection.encounter", many: true, ...readOnly }),
+    addenda: relationship({ ref: "Addendum.encounter", many: true, ...readOnly }),
+    vitals: relationship({ ref: "VitalsObservation.encounter", many: true, ...readOnly }),
+    findings: relationship({ ref: "PhysicalExamFinding.encounter", many: true, ...readOnly }),
+    diagnoses: relationship({ ref: "Diagnosis.encounter", many: true, ...readOnly }),
+    orders: relationship({ ref: "ClinicalOrder.encounter", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2556,15 +2612,15 @@ var SoapSection = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "kind", "ordinal", "version", "lockedAt"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter.sections", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.sections", ...readOnly }),
     kind: fixedChoice(SECTION_KINDS),
-    ordinal: (0, import_fields14.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
+    ordinal: (0, import_fields15.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields14.json)({ ...readOnly }),
+    structured: (0, import_fields15.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
-    lastAuthor: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    revisions: (0, import_fields14.relationship)({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
-    lockedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    lastAuthor: relationship({ ref: "StaffMember", ...readOnly }),
+    revisions: relationship({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
+    lockedAt: (0, import_fields15.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2573,16 +2629,16 @@ var SoapSectionRevision = (0, import_core14.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["section", "source", "author", "at"] } },
   fields: {
-    section: (0, import_fields14.relationship)({ ref: "SoapSection.revisions", ...readOnly }),
-    revisionNumber: (0, import_fields14.integer)({ ...readOnly, validation: { isRequired: true } }),
+    section: relationship({ ref: "SoapSection.revisions", ...readOnly }),
+    revisionNumber: (0, import_fields15.integer)({ ...readOnly, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields14.json)({ ...readOnly }),
+    structured: (0, import_fields15.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
-    template: (0, import_fields14.relationship)({ ref: "RecordTemplate", ...readOnly }),
-    scribeDraft: (0, import_fields14.relationship)({ ref: "ScribeDraft", ...readOnly }),
-    author: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    authorUser: (0, import_fields14.relationship)({ ref: "User", ...readOnly }),
-    at: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    template: relationship({ ref: "RecordTemplate", ...readOnly }),
+    scribeDraft: relationship({ ref: "ScribeDraft", ...readOnly }),
+    author: relationship({ ref: "StaffMember", ...readOnly }),
+    authorUser: relationship({ ref: "User", ...readOnly }),
+    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     contentHash: systemText({ required: true })
   }
 });
@@ -2590,13 +2646,13 @@ var Addendum = (0, import_core14.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "sectionKind", "author", "signedAt"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter.addenda", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.addenda", ...readOnly }),
     sectionKind: fixedChoice([...SECTION_KINDS, "general"]),
-    author: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    authorIsDvm: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
+    author: relationship({ ref: "StaffMember", ...readOnly }),
+    authorIsDvm: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
     reason: systemText({ required: true }),
     body: systemText({ required: true }),
-    signedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    signedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     hash: systemText({ required: true })
   }
 });
@@ -2604,20 +2660,20 @@ var VitalsObservation = (0, import_core14.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "temperature", "heartRate", "respRate", "painScore", "at"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter.vitals", ...readOnly }),
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.vitals", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     temperature: qty(),
     temperatureUnit: choice(["F", "C"], "F"),
-    heartRate: (0, import_fields14.integer)({ ...readOnly }),
-    respRate: (0, import_fields14.integer)({ ...readOnly }),
+    heartRate: (0, import_fields15.integer)({ ...readOnly }),
+    respRate: (0, import_fields15.integer)({ ...readOnly }),
     mucousMembranes: choice(["pink", "pale", "white", "cyanotic", "icteric", "injected", "brick_red", "not_assessed"], null),
     crtSeconds: qty(),
-    painScore: (0, import_fields14.integer)({ ...readOnly }),
-    bodyConditionScore: (0, import_fields14.integer)({ ...readOnly }),
+    painScore: (0, import_fields15.integer)({ ...readOnly }),
+    bodyConditionScore: (0, import_fields15.integer)({ ...readOnly }),
     mentation: choice(["bar", "qar", "dull", "obtunded", "stuporous", "comatose"], null),
     hydrationPct: qty(),
-    at: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    by: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly })
+    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var EXAM_SYSTEMS = ["general", "integument", "eyes", "ears", "oral", "cardiovascular", "respiratory", "gi", "urogenital", "musculoskeletal", "neurologic", "lymphatic"];
@@ -2625,11 +2681,11 @@ var PhysicalExamFinding = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "system", "status", "text"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter.findings", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.findings", ...readOnly }),
     system: fixedChoice(EXAM_SYSTEMS),
     status: fixedChoice(["normal", "abnormal", "not_examined"]),
     text: systemText(),
-    by: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2639,10 +2695,10 @@ var DiagnosisCode = (0, import_core14.list)({
   ui: { labelField: "term", listView: { initialColumns: ["codeSystem", "code", "term", "active"] } },
   fields: {
     codeSystem: choice(["practice", "venomcode", "snomed_vet"], "practice"),
-    code: (0, import_fields14.text)({ validation: { isRequired: true } }),
-    term: (0, import_fields14.text)({ validation: { isRequired: true } }),
-    species: (0, import_fields14.relationship)({ ref: "Species", many: true }),
-    active: (0, import_fields14.checkbox)({ defaultValue: true }),
+    code: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    species: relationship({ ref: "Species", many: true }),
+    active: (0, import_fields15.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2650,14 +2706,14 @@ var Problem = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["patient", "term", "status", "chronic", "onset"] } },
   fields: {
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter", ...readOnly }),
-    code: (0, import_fields14.relationship)({ ref: "DiagnosisCode", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     status: lifecycle(["active", "resolved", "inactive"]),
-    chronic: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
-    onset: (0, import_fields14.calendarDay)({ ...readOnly }),
-    resolvedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    chronic: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    onset: (0, import_fields15.calendarDay)({ ...readOnly }),
+    resolvedAt: (0, import_fields15.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2666,13 +2722,13 @@ var Diagnosis = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["encounter", "term", "certainty"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter.diagnoses", ...readOnly }),
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
-    code: (0, import_fields14.relationship)({ ref: "DiagnosisCode", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.diagnoses", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     certainty: fixedChoice(["presumptive", "differential", "confirmed", "ruled_out"]),
-    problem: (0, import_fields14.relationship)({ ref: "Problem", ...readOnly }),
-    by: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
+    problem: relationship({ ref: "Problem", ...readOnly }),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
@@ -2680,12 +2736,12 @@ var ClinicalAttachment = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "caption" },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter", ...readOnly }),
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     kind: fixedChoice(["photo", "radiograph", "ultrasound", "lab_pdf", "external_record", "audio", "other"]),
     caption: systemText(),
-    document: (0, import_fields14.relationship)({ ref: "Document", ...readOnly }),
-    addedBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
+    document: relationship({ ref: "Document", ...readOnly }),
+    addedBy: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
@@ -2693,21 +2749,21 @@ var ClinicalDocument = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "title", listView: { initialColumns: ["patient", "kind", "title", "status", "createdAt"] } },
   fields: {
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
     kind: fixedChoice(["encounter_record", "discharge", "rabies_certificate", "health_certificate", "estimate", "consent", "lab_report", "imaging_report", "referral_letter", "records_bundle", "cs_count", "form41_packet", "form106_packet", "claim_packet", "imported_record"]),
     title: systemText({ required: true }),
     status: lifecycle(["pending_render", "rendered", "failed"]),
     sourceType: systemText(),
     sourceId: systemText({ indexed: true }),
     sourceHash: systemText(),
-    document: (0, import_fields14.relationship)({ ref: "Document", ...readOnly }),
-    signedBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    renderedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    document: relationship({ ref: "Document", ...readOnly }),
+    signedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    renderedAt: (0, import_fields15.timestamp)({ ...readOnly }),
     // The rendered document (database store, the default; an object-store adapter keeps only the
     // key). Deterministic from the frozen source, so sha256 proves it was not altered.
     mimeType: systemText(),
-    body: (0, import_fields14.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields15.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     sha256: systemText(),
     renderError: systemText(),
     version: versionField(),
@@ -2718,13 +2774,13 @@ var RecordTemplate = (0, import_core14.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "sectionKind", "active"] } },
   fields: {
-    name: (0, import_fields14.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields15.text)({ validation: { isRequired: true } }),
     kind: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "discharge", "phone"], "wellness"),
     sectionKind: choice([...SECTION_KINDS], "objective"),
-    species: (0, import_fields14.relationship)({ ref: "Species" }),
-    body: (0, import_fields14.text)({ ui: { displayMode: "textarea" } }),
-    templateVersion: (0, import_fields14.integer)({ defaultValue: 1 }),
-    active: (0, import_fields14.checkbox)({ defaultValue: true }),
+    species: relationship({ ref: "Species" }),
+    body: (0, import_fields15.text)({ ui: { displayMode: "textarea" } }),
+    templateVersion: (0, import_fields15.integer)({ defaultValue: 1 }),
+    active: (0, import_fields15.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2732,8 +2788,8 @@ var Glossary = (0, import_core14.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term" },
   fields: {
-    term: (0, import_fields14.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
-    expansion: (0, import_fields14.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields15.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    expansion: (0, import_fields15.text)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
@@ -2741,20 +2797,20 @@ var ScribeSession = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "status", "transcriptionProvider", "modelProvider", "createdAt"] } },
   fields: {
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter", ...readOnly }),
-    startedBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    startedByAgent: (0, import_fields14.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    clientConsent: (0, import_fields14.relationship)({ ref: "ConsentRecord", ...readOnly }),
-    staffAcknowledged: (0, import_fields14.checkbox)({ ...readOnly, defaultValue: false }),
-    audioDocument: (0, import_fields14.relationship)({ ref: "Document", ...readOnly }),
-    audioDeleteAfter: (0, import_fields14.timestamp)({ ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    startedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    startedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    clientConsent: relationship({ ref: "ConsentRecord", ...readOnly }),
+    staffAcknowledged: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    audioDocument: relationship({ ref: "Document", ...readOnly }),
+    audioDeleteAfter: (0, import_fields15.timestamp)({ ...readOnly }),
     transcriptRef: systemText(),
     transcript: systemText(),
     transcriptionProvider: systemText(),
     modelProvider: systemText(),
     modelRef: systemText(),
     status: lifecycle(["recording", "transcribing", "drafted", "accepted", "discarded"]),
-    drafts: (0, import_fields14.relationship)({ ref: "ScribeDraft.session", many: true, ...readOnly }),
+    drafts: relationship({ ref: "ScribeDraft.session", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2762,15 +2818,15 @@ var ScribeSession = (0, import_core14.list)({
 var ScribeDraft = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   fields: {
-    session: (0, import_fields14.relationship)({ ref: "ScribeSession.drafts", ...readOnly }),
-    sections: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
-    suggestedCharges: (0, import_fields14.json)({ ...readOnly }),
+    session: relationship({ ref: "ScribeSession.drafts", ...readOnly }),
+    sections: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
+    suggestedCharges: (0, import_fields15.json)({ ...readOnly }),
     confidence: rate(),
     modelRef: systemText(),
-    acceptedBlocks: (0, import_fields14.json)({ ...readOnly }),
+    acceptedBlocks: (0, import_fields15.json)({ ...readOnly }),
     status: lifecycle(["proposed", "partly_accepted", "accepted", "rejected"]),
-    decidedBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    decidedAt: (0, import_fields15.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2779,16 +2835,16 @@ var Referral = (0, import_core14.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["patient", "direction", "hospital", "urgency", "status"] } },
   fields: {
-    patient: (0, import_fields14.relationship)({ ref: "Patient", ...readOnly }),
-    encounter: (0, import_fields14.relationship)({ ref: "Encounter", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
     direction: fixedChoice(["outbound", "inbound"]),
-    hospital: (0, import_fields14.relationship)({ ref: "ReferralHospital", ...readOnly }),
-    referringVet: (0, import_fields14.relationship)({ ref: "ReferringVet", ...readOnly }),
+    hospital: relationship({ ref: "ReferralHospital", ...readOnly }),
+    referringVet: relationship({ ref: "ReferringVet", ...readOnly }),
     reason: systemText({ required: true }),
     urgency: fixedChoice(["emergency", "urgent", "routine"]),
-    recordsRelease: (0, import_fields14.relationship)({ ref: "RecordsRelease", ...readOnly }),
+    recordsRelease: relationship({ ref: "RecordsRelease", ...readOnly }),
     status: lifecycle(["draft", "sent", "accepted", "seen", "report_received", "closed"]),
-    createdBy: (0, import_fields14.relationship)({ ref: "StaffMember", ...readOnly }),
+    createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2796,7 +2852,7 @@ var Referral = (0, import_core14.list)({
 
 // features/keystone/models/treatment.ts
 var import_core15 = require("@keystone-6/core");
-var import_fields15 = require("@keystone-6/core/fields");
+var import_fields16 = require("@keystone-6/core/fields");
 var CLINICAL_READ2 = ["canReadClinical"];
 var ROUTES = ["po", "iv", "im", "sc", "topical", "otic", "ophthalmic", "inhaled", "intranasal", "io", "rectal", "transdermal", "other"];
 var ClinicalOrder = (0, import_core15.list)({
@@ -2804,28 +2860,28 @@ var ClinicalOrder = (0, import_core15.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "description", "status", "orderedBy"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter.orders", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    location: (0, import_fields15.relationship)({ ref: "Location", ...readOnly }),
+    encounter: relationship({ ref: "Encounter.orders", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     kind: fixedChoice(["medication", "procedure", "treatment", "lab", "imaging", "vaccine", "fluid", "diet", "nursing", "euthanasia"]),
     description: systemText({ required: true }),
-    drug: (0, import_fields15.relationship)({ ref: "DrugProduct", ...readOnly }),
-    vaccine: (0, import_fields15.relationship)({ ref: "VaccineProduct", ...readOnly }),
+    drug: relationship({ ref: "DrugProduct", ...readOnly }),
+    vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
     status: lifecycle(["ordered", "in_progress", "completed", "cancelled", "reversed"]),
-    orderedBy: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    licenseEvaluation: (0, import_fields15.relationship)({ ref: "LicenseEvaluation", ...readOnly }),
-    dose: (0, import_fields15.relationship)({ ref: "DoseCalculation", ...readOnly }),
+    orderedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
+    dose: relationship({ ref: "DoseCalculation", ...readOnly }),
     frequency: systemText(),
-    schedule: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
+    schedule: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
     route: fixedChoice(ROUTES),
     quantity: qty(),
     quantityUnit: unit(),
-    extralabel: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
-    emergencyStabilisation: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    extralabel: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    emergencyStabilisation: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
     overrideReason: systemText(),
-    warnings: (0, import_fields15.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
+    warnings: (0, import_fields16.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
     cancelReason: systemText(),
-    administrations: (0, import_fields15.relationship)({ ref: "Administration.order", many: true, ...readOnly }),
+    administrations: relationship({ ref: "Administration.order", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2834,10 +2890,10 @@ var DoseCalculation = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["product", "weightKg", "doseAmount", "doseUnit", "totalAmount", "roundedQty", "computedUnit"] } },
   fields: {
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    weight: (0, import_fields15.relationship)({ ref: "WeightMeasurement", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    weight: relationship({ ref: "WeightMeasurement", ...readOnly }),
     weightKg: wt({ required: true }),
-    weightAgeHours: (0, import_fields15.integer)({ ...readOnly }),
+    weightAgeHours: (0, import_fields16.integer)({ ...readOnly }),
     doseAmount: qty({ required: true }),
     doseUnit: fixedChoice(["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"]),
     dosePer: fixedChoice(["kg", "m2", "animal"]),
@@ -2845,33 +2901,33 @@ var DoseCalculation = (0, import_core15.list)({
     bsaConstant: qty(),
     totalAmount: qty({ required: true }),
     totalUnit: systemText({ required: true }),
-    product: (0, import_fields15.relationship)({ ref: "DrugProduct", ...readOnly }),
+    product: relationship({ ref: "DrugProduct", ...readOnly }),
     concentration: qty(),
     concentrationUnit: systemText(),
     computedQty: qty(),
     computedUnit: systemText(),
-    roundingRule: (0, import_fields15.json)({ ...readOnly }),
+    roundingRule: (0, import_fields16.json)({ ...readOnly }),
     roundedQty: qty(),
     deliveredAmount: qty(),
-    deviationBps: (0, import_fields15.integer)({ ...readOnly }),
+    deviationBps: (0, import_fields16.integer)({ ...readOnly }),
     manualOverrideQty: qty(),
     overrideReason: systemText(),
-    warnings: (0, import_fields15.json)({ ...readOnly, defaultValue: [] }),
+    warnings: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
     calcVersion: systemText({ required: true }),
     hash: systemText({ required: true }),
-    by: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    by: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var InventoryLot = (0, import_core15.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "lotNumber", listView: { initialColumns: ["lotNumber", "drug", "vaccine", "expiresOn", "status", "location"] } },
   fields: {
-    drug: (0, import_fields15.relationship)({ ref: "DrugProduct", ...readOnly }),
-    vaccine: (0, import_fields15.relationship)({ ref: "VaccineProduct", ...readOnly }),
-    location: (0, import_fields15.relationship)({ ref: "Location", ...readOnly }),
+    drug: relationship({ ref: "DrugProduct", ...readOnly }),
+    vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    expiresOn: (0, import_fields15.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["available", "quarantined", "disposed"]),
     quarantineReason: systemText(),
     version: versionField(),
@@ -2882,27 +2938,27 @@ var Administration = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["order", "patient", "qty", "unit", "route", "givenBy", "givenAt"] } },
   fields: {
-    order: (0, import_fields15.relationship)({ ref: "ClinicalOrder.administrations", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
-    treatmentTask: (0, import_fields15.relationship)({ ref: "TreatmentTask", ...readOnly }),
-    lot: (0, import_fields15.relationship)({ ref: "InventoryLot", ...readOnly }),
+    order: relationship({ ref: "ClinicalOrder.administrations", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    treatmentTask: relationship({ ref: "TreatmentTask", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText(),
-    lotExpiresOn: (0, import_fields15.calendarDay)({ ...readOnly }),
-    csContainer: (0, import_fields15.relationship)({ ref: "CsContainer", ...readOnly }),
-    csLogEntry: (0, import_fields15.relationship)({ ref: "CsLogEntry", ...readOnly }),
+    lotExpiresOn: (0, import_fields16.calendarDay)({ ...readOnly }),
+    csContainer: relationship({ ref: "CsContainer", ...readOnly }),
+    csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
     qty: qty({ required: true }),
     unit: systemText({ required: true }),
     route: fixedChoice(ROUTES),
     site: systemText(),
-    givenBy: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    supervisingDvm: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    witness: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    licenseEvaluation: (0, import_fields15.relationship)({ ref: "LicenseEvaluation", ...readOnly }),
-    wasteLogEntry: (0, import_fields15.relationship)({ ref: "CsLogEntry", ...readOnly }),
-    givenAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    givenBy: relationship({ ref: "StaffMember", ...readOnly }),
+    supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
+    wasteLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    givenAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
-    reverses: (0, import_fields15.relationship)({ ref: "Administration", ...readOnly }),
+    reverses: relationship({ ref: "Administration", ...readOnly }),
     reason: systemText(),
     /** N1: why a veterinarian recorded an amount outside the ordered quantity (trigger Administration_qty_guard). */
     qtyOverrideReason: systemText()
@@ -2912,10 +2968,10 @@ var Ward = (0, import_core15.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    location: (0, import_fields15.relationship)({ ref: "Location" }),
+    location: relationship({ ref: "Location" }),
     name: systemText({ required: true }),
     kind: choice(["general", "icu", "isolation", "surgery_recovery", "exotics"], "general"),
-    cages: (0, import_fields15.relationship)({ ref: "Cage.ward", many: true }),
+    cages: relationship({ ref: "Cage.ward", many: true }),
     ...trackingFields
   }
 });
@@ -2923,11 +2979,11 @@ var Cage = (0, import_core15.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "ward", "size", "active"] } },
   fields: {
-    ward: (0, import_fields15.relationship)({ ref: "Ward.cages" }),
+    ward: relationship({ ref: "Ward.cages" }),
     code: systemText({ required: true, indexed: "unique" }),
     size: choice(["small", "medium", "large", "run"], "medium"),
-    features: (0, import_fields15.json)({ defaultValue: {} }),
-    active: (0, import_fields15.checkbox)({ defaultValue: true }),
+    features: (0, import_fields16.json)({ defaultValue: {} }),
+    active: (0, import_fields16.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -2936,18 +2992,18 @@ var HospitalStay = (0, import_core15.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "cage", "admittedAt", "attendingDvm"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    location: (0, import_fields15.relationship)({ ref: "Location", ...readOnly }),
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
-    cage: (0, import_fields15.relationship)({ ref: "Cage", ...readOnly }),
-    admittedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    dischargedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    cage: relationship({ ref: "Cage", ...readOnly }),
+    admittedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dischargedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     status: lifecycle(["admitted", "in_care", "ready_for_discharge", "discharged", "transferred", "deceased"]),
     codeStatus: fixedChoice(["full", "closed_chest_only", "dnr"]),
-    attendingDvm: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
+    attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
     reason: systemText(),
-    assignments: (0, import_fields15.relationship)({ ref: "CageAssignment.stay", many: true, ...readOnly }),
-    sheetOrders: (0, import_fields15.relationship)({ ref: "TreatmentSheetOrder.stay", many: true, ...readOnly }),
+    assignments: relationship({ ref: "CageAssignment.stay", many: true, ...readOnly }),
+    sheetOrders: relationship({ ref: "TreatmentSheetOrder.stay", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2955,10 +3011,10 @@ var HospitalStay = (0, import_core15.list)({
 var CageAssignment = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
-    stay: (0, import_fields15.relationship)({ ref: "HospitalStay.assignments", ...readOnly }),
-    cage: (0, import_fields15.relationship)({ ref: "Cage", ...readOnly }),
-    fromAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    toAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    stay: relationship({ ref: "HospitalStay.assignments", ...readOnly }),
+    cage: relationship({ ref: "Cage", ...readOnly }),
+    fromAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    toAt: (0, import_fields16.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
@@ -2966,17 +3022,17 @@ var TreatmentSheetOrder = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["stay", "order", "frequency", "active", "materialisedThrough"] } },
   fields: {
-    stay: (0, import_fields15.relationship)({ ref: "HospitalStay.sheetOrders", ...readOnly }),
-    order: (0, import_fields15.relationship)({ ref: "ClinicalOrder", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
+    stay: relationship({ ref: "HospitalStay.sheetOrders", ...readOnly }),
+    order: relationship({ ref: "ClinicalOrder", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     frequency: fixedChoice(["q1h", "q2h", "q4h", "q6h", "q8h", "q12h", "sid", "bid", "tid", "qid", "prn", "cri", "once"]),
-    startAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    startAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endAt: (0, import_fields16.timestamp)({ ...readOnly }),
     instructions: systemText(),
-    materialisedThrough: (0, import_fields15.timestamp)({ ...readOnly }),
-    graceMinutes: (0, import_fields15.integer)({ ...readOnly, defaultValue: 30 }),
-    active: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: true }),
-    tasks: (0, import_fields15.relationship)({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
+    materialisedThrough: (0, import_fields16.timestamp)({ ...readOnly }),
+    graceMinutes: (0, import_fields16.integer)({ ...readOnly, defaultValue: 30 }),
+    active: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: true }),
+    tasks: relationship({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -2985,17 +3041,17 @@ var TreatmentTask = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["patient", "sheetOrder", "dueAt", "status", "doneBy"] } },
   fields: {
-    sheetOrder: (0, import_fields15.relationship)({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
-    stay: (0, import_fields15.relationship)({ ref: "HospitalStay", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    dueAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    sheetOrder: relationship({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
+    stay: relationship({ ref: "HospitalStay", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    dueAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
-    doneBy: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    doneAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    doneBy: relationship({ ref: "StaffMember", ...readOnly }),
+    doneAt: (0, import_fields16.timestamp)({ ...readOnly }),
     skipReason: systemText(),
-    rescheduledTo: (0, import_fields15.relationship)({ ref: "TreatmentTask", ...readOnly }),
-    administration: (0, import_fields15.relationship)({ ref: "Administration", ...readOnly }),
-    observation: (0, import_fields15.json)({ ...readOnly }),
+    rescheduledTo: relationship({ ref: "TreatmentTask", ...readOnly }),
+    administration: relationship({ ref: "Administration", ...readOnly }),
+    observation: (0, import_fields16.json)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3005,27 +3061,27 @@ var AnaesthesiaRecord = (0, import_core15.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "asaStatus", "status", "anaesthetist", "inductionAt"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     procedure: systemText({ required: true }),
     asaStatus: fixedChoice(["I", "II", "III", "IV", "V", "IE", "IIE", "IIIE", "IVE", "VE"]),
-    fastingConfirmed: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
-    consentConfirmed: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
-    preWeight: (0, import_fields15.relationship)({ ref: "WeightMeasurement", ...readOnly }),
-    ivCatheter: (0, import_fields15.json)({ ...readOnly }),
-    protocol: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
-    checklist: (0, import_fields15.json)({ ...readOnly }),
-    inductionAt: (0, import_fields15.timestamp)({ ...readOnly }),
-    intubatedAt: (0, import_fields15.timestamp)({ ...readOnly }),
-    extubatedAt: (0, import_fields15.timestamp)({ ...readOnly }),
-    recoveryEndAt: (0, import_fields15.timestamp)({ ...readOnly }),
-    anaesthetist: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    dvm: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    licenseEvaluation: (0, import_fields15.relationship)({ ref: "LicenseEvaluation", ...readOnly }),
+    fastingConfirmed: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    consentConfirmed: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    preWeight: relationship({ ref: "WeightMeasurement", ...readOnly }),
+    ivCatheter: (0, import_fields16.json)({ ...readOnly }),
+    protocol: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
+    checklist: (0, import_fields16.json)({ ...readOnly }),
+    inductionAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    intubatedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    extubatedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    recoveryEndAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    anaesthetist: relationship({ ref: "StaffMember", ...readOnly }),
+    dvm: relationship({ ref: "StaffMember", ...readOnly }),
+    licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     status: lifecycle(["open", "monitoring", "recovery", "closed"]),
     complications: systemText(),
-    closedBy: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    readings: (0, import_fields15.relationship)({ ref: "MonitoringReading.record", many: true, ...readOnly }),
+    closedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    readings: relationship({ ref: "MonitoringReading.record", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3034,30 +3090,30 @@ var MonitoringReading = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["record", "at", "hr", "rr", "spo2", "etco2", "map", "tempC"] } },
   fields: {
-    record: (0, import_fields15.relationship)({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
-    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    hr: (0, import_fields15.integer)({ ...readOnly }),
-    rr: (0, import_fields15.integer)({ ...readOnly }),
-    spo2: (0, import_fields15.integer)({ ...readOnly }),
-    etco2: (0, import_fields15.integer)({ ...readOnly }),
-    sbp: (0, import_fields15.integer)({ ...readOnly }),
-    dbp: (0, import_fields15.integer)({ ...readOnly }),
-    map: (0, import_fields15.integer)({ ...readOnly }),
+    record: relationship({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    hr: (0, import_fields16.integer)({ ...readOnly }),
+    rr: (0, import_fields16.integer)({ ...readOnly }),
+    spo2: (0, import_fields16.integer)({ ...readOnly }),
+    etco2: (0, import_fields16.integer)({ ...readOnly }),
+    sbp: (0, import_fields16.integer)({ ...readOnly }),
+    dbp: (0, import_fields16.integer)({ ...readOnly }),
+    map: (0, import_fields16.integer)({ ...readOnly }),
     tempC: qty(),
     agentPct: qty(),
     o2FlowLpm: qty(),
     fluidsRateMlHr: qty(),
     notes: systemText(),
-    by: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly })
+    by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var SurgeryReport = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
     procedure: systemText({ required: true }),
-    surgeon: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
-    assistant: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
+    surgeon: relationship({ ref: "StaffMember", ...readOnly }),
+    assistant: relationship({ ref: "StaffMember", ...readOnly }),
     technique: systemText(),
     findings: systemText(),
     closure: systemText(),
@@ -3071,9 +3127,9 @@ var SurgeryReport = (0, import_core15.list)({
 var DentalChart = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
-    teeth: (0, import_fields15.json)({ ...readOnly, defaultValue: {} }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    teeth: (0, import_fields16.json)({ ...readOnly, defaultValue: {} }),
     version: versionField(),
     ...trackingFields
   }
@@ -3081,38 +3137,38 @@ var DentalChart = (0, import_core15.list)({
 var DischargeInstruction = (0, import_core15.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
-    encounter: (0, import_fields15.relationship)({ ref: "Encounter", ...readOnly }),
-    stay: (0, import_fields15.relationship)({ ref: "HospitalStay", ...readOnly }),
-    patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    stay: relationship({ ref: "HospitalStay", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
     body: systemText({ required: true }),
     medsSummary: systemText(),
-    recheckOn: (0, import_fields15.calendarDay)({ ...readOnly }),
-    sentAt: (0, import_fields15.timestamp)({ ...readOnly }),
-    author: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
+    recheckOn: (0, import_fields16.calendarDay)({ ...readOnly }),
+    sentAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    author: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/preventive.ts
 var import_core16 = require("@keystone-6/core");
-var import_fields16 = require("@keystone-6/core/fields");
+var import_fields17 = require("@keystone-6/core/fields");
 var CLINICAL_READ3 = ["canReadClinical"];
 var REMINDER_READ = ["canReadClinical", "canBook", "canMessageClients"];
 var VaccineProduct = (0, import_core16.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "manufacturer", "isRabies", "licensedDoiMonths", "minAgeWeeks", "active"] } },
   fields: {
-    name: (0, import_fields16.text)({ validation: { isRequired: true } }),
-    manufacturer: (0, import_fields16.text)({ validation: { isRequired: true } }),
-    antigens: (0, import_fields16.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
-    species: (0, import_fields16.relationship)({ ref: "Species", many: true }),
-    licensedDoiMonths: (0, import_fields16.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
-    minAgeWeeks: (0, import_fields16.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
-    isRabies: (0, import_fields16.checkbox)({ defaultValue: false }),
-    usdaProductCode: (0, import_fields16.text)(),
+    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    manufacturer: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    antigens: (0, import_fields17.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
+    species: relationship({ ref: "Species", many: true }),
+    licensedDoiMonths: (0, import_fields17.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
+    minAgeWeeks: (0, import_fields17.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
+    isRabies: (0, import_fields17.checkbox)({ defaultValue: false }),
+    usdaProductCode: (0, import_fields17.text)(),
     defaultRoute: choice(["sc", "im", "intranasal", "po", "transdermal"], "sc"),
-    reminderType: (0, import_fields16.relationship)({ ref: "ReminderType" }),
-    active: (0, import_fields16.checkbox)({ defaultValue: true }),
+    reminderType: relationship({ ref: "ReminderType" }),
+    active: (0, import_fields17.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -3120,27 +3176,27 @@ var VaccineAdministration = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "lotNumber", "administeredOn", "dueNextOn", "vaccinatedBy"] } },
   fields: {
-    administration: (0, import_fields16.relationship)({ ref: "Administration", ...readOnly }),
-    patient: (0, import_fields16.relationship)({ ref: "Patient", ...readOnly }),
-    encounter: (0, import_fields16.relationship)({ ref: "Encounter", ...readOnly }),
-    product: (0, import_fields16.relationship)({ ref: "VaccineProduct", ...readOnly }),
-    lot: (0, import_fields16.relationship)({ ref: "InventoryLot", ...readOnly }),
+    administration: relationship({ ref: "Administration", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    product: relationship({ ref: "VaccineProduct", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    doseSeries: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
-    isInitialSeries: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    lotExpiresOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    doseSeries: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    isInitialSeries: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     route: fixedChoice(["sc", "im", "intranasal", "po", "transdermal"]),
     site: systemText({ required: true }),
-    administeredOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
-    dueNextOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    vaccinatedBy: (0, import_fields16.relationship)({ ref: "StaffMember", ...readOnly }),
-    supervisingDvm: (0, import_fields16.relationship)({ ref: "StaffMember", ...readOnly }),
-    policyVersions: (0, import_fields16.json)({ ...readOnly }),
-    certificate: (0, import_fields16.relationship)({ ref: "RabiesCertificate", ...readOnly }),
+    administeredOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    dueNextOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    vaccinatedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
+    policyVersions: (0, import_fields17.json)({ ...readOnly }),
+    certificate: relationship({ ref: "RabiesCertificate", ...readOnly }),
     source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
     /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
-    reverses: (0, import_fields16.relationship)({ ref: "VaccineAdministration", ...readOnly }),
+    reverses: relationship({ ref: "VaccineAdministration", ...readOnly }),
     reason: systemText()
   }
 });
@@ -3149,24 +3205,24 @@ var RabiesCertificate = (0, import_core16.list)({
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "vaccinatedOn", "nextDueOn", "tagNumber"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
-    patient: (0, import_fields16.relationship)({ ref: "Patient", ...readOnly }),
-    ownerSnapshot: (0, import_fields16.json)({ ...readOnly }),
-    patientSnapshot: (0, import_fields16.json)({ ...readOnly }),
-    vaccineSnapshot: (0, import_fields16.json)({ ...readOnly }),
-    vetSnapshot: (0, import_fields16.json)({ ...readOnly }),
-    vaccinatedOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
-    nextDueOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    ownerSnapshot: (0, import_fields17.json)({ ...readOnly }),
+    patientSnapshot: (0, import_fields17.json)({ ...readOnly }),
+    vaccineSnapshot: (0, import_fields17.json)({ ...readOnly }),
+    vetSnapshot: (0, import_fields17.json)({ ...readOnly }),
+    vaccinatedOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    nextDueOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     tagNumber: systemText(),
     tagJurisdiction: systemText(),
-    fields: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
-    missingFields: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
-    document: (0, import_fields16.relationship)({ ref: "ClinicalDocument", ...readOnly }),
+    fields: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
+    missingFields: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
+    document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     reportedTo: fixedChoice(["none", "county", "city"]),
-    reportedAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    policyVersions: (0, import_fields16.json)({ ...readOnly }),
+    reportedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    policyVersions: (0, import_fields17.json)({ ...readOnly }),
     /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
-    voidedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    voidedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     voidReason: systemText(),
     ...trackingFields
   }
@@ -3175,10 +3231,10 @@ var ReminderType = (0, import_core16.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields16.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
-    name: (0, import_fields16.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields17.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
+    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
     kind: choice(["vaccine", "test", "procedure", "recheck", "preventive_med"], "vaccine"),
-    active: (0, import_fields16.checkbox)({ defaultValue: true }),
+    active: (0, import_fields17.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
@@ -3188,8 +3244,8 @@ var ReminderProtocol = (0, import_core16.list)({
   fields: {
     code: systemText({ indexed: "unique", required: true }),
     name: systemText({ required: true }),
-    species: (0, import_fields16.relationship)({ ref: "Species", ...readOnly }),
-    versions: (0, import_fields16.relationship)({ ref: "ReminderProtocolVersion.protocol", many: true, ...readOnly }),
+    species: relationship({ ref: "Species", ...readOnly }),
+    versions: relationship({ ref: "ReminderProtocolVersion.protocol", many: true, ...readOnly }),
     ...trackingFields
   }
 });
@@ -3197,15 +3253,15 @@ var ReminderProtocolVersion = (0, import_core16.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "label" },
   fields: {
-    protocol: (0, import_fields16.relationship)({ ref: "ReminderProtocol.versions", ...readOnly }),
+    protocol: relationship({ ref: "ReminderProtocol.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
-    rules: (0, import_fields16.relationship)({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
-    sourceRefs: (0, import_fields16.json)({ ...readOnly }),
-    verified: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
+    versionNumber: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rules: relationship({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
+    sourceRefs: (0, import_fields17.json)({ ...readOnly }),
+    verified: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    publishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     contentHash: systemText(),
     version: versionField(),
     ...trackingFields
@@ -3214,15 +3270,15 @@ var ReminderProtocolVersion = (0, import_core16.list)({
 var ReminderRule = (0, import_core16.list)({
   access: governed("canAccessDashboard"),
   fields: {
-    protocolVersion: (0, import_fields16.relationship)({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
+    protocolVersion: relationship({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
     code: systemText({ required: true }),
-    triggerVaccines: (0, import_fields16.relationship)({ ref: "VaccineProduct", many: true, ...readOnly }),
+    triggerVaccines: relationship({ ref: "VaccineProduct", many: true, ...readOnly }),
     triggerServiceCode: systemText(),
-    satisfies: (0, import_fields16.relationship)({ ref: "ReminderType", ...readOnly }),
-    schedule: (0, import_fields16.json)({ ...readOnly }),
-    leadDays: (0, import_fields16.integer)({ ...readOnly, defaultValue: 30 }),
-    graceDays: (0, import_fields16.integer)({ ...readOnly, defaultValue: 30 }),
-    lapseDays: (0, import_fields16.integer)({ ...readOnly, defaultValue: 180 }),
+    satisfies: relationship({ ref: "ReminderType", ...readOnly }),
+    schedule: (0, import_fields17.json)({ ...readOnly }),
+    leadDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
+    graceDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
+    lapseDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 180 }),
     ...trackingFields
   }
 });
@@ -3230,18 +3286,18 @@ var PatientReminder = (0, import_core16.list)({
   access: governed([...REMINDER_READ]),
   ui: { listView: { initialColumns: ["patient", "type", "dueOn", "status", "source"] } },
   fields: {
-    patient: (0, import_fields16.relationship)({ ref: "Patient", ...readOnly }),
-    location: (0, import_fields16.relationship)({ ref: "Location", ...readOnly }),
-    type: (0, import_fields16.relationship)({ ref: "ReminderType", ...readOnly }),
-    rule: (0, import_fields16.relationship)({ ref: "ReminderRule", ...readOnly }),
-    dueOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    type: relationship({ ref: "ReminderType", ...readOnly }),
+    rule: relationship({ ref: "ReminderRule", ...readOnly }),
+    dueOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "satisfied", "suppressed", "lapsed"]),
     suppressedReason: systemText(),
-    protocolVersion: (0, import_fields16.relationship)({ ref: "ReminderProtocolVersion", ...readOnly }),
+    protocolVersion: relationship({ ref: "ReminderProtocolVersion", ...readOnly }),
     source: fixedChoice(["protocol", "vaccine", "manual", "import"]),
     sourceKey: systemText({ required: true }),
-    lastNotifiedAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    satisfactions: (0, import_fields16.relationship)({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
+    lastNotifiedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    satisfactions: relationship({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3249,33 +3305,33 @@ var PatientReminder = (0, import_core16.list)({
 var ReminderSatisfaction = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ3]),
   fields: {
-    reminder: (0, import_fields16.relationship)({ ref: "PatientReminder.satisfactions", ...readOnly }),
+    reminder: relationship({ ref: "PatientReminder.satisfactions", ...readOnly }),
     sourceKey: systemText({ required: true }),
-    vaccineAdministration: (0, import_fields16.relationship)({ ref: "VaccineAdministration", ...readOnly }),
-    administration: (0, import_fields16.relationship)({ ref: "Administration", ...readOnly }),
-    externalEvidence: (0, import_fields16.relationship)({ ref: "Document", ...readOnly }),
+    vaccineAdministration: relationship({ ref: "VaccineAdministration", ...readOnly }),
+    administration: relationship({ ref: "Administration", ...readOnly }),
+    externalEvidence: relationship({ ref: "Document", ...readOnly }),
     note: systemText(),
-    recordedBy: (0, import_fields16.relationship)({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
 var AdverseEventReport = (0, import_core16.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "severity", "reportedTo", "status"] } },
   fields: {
-    patient: (0, import_fields16.relationship)({ ref: "Patient", ...readOnly }),
-    vaccineAdministration: (0, import_fields16.relationship)({ ref: "VaccineAdministration", ...readOnly }),
-    administration: (0, import_fields16.relationship)({ ref: "Administration", ...readOnly }),
-    product: (0, import_fields16.relationship)({ ref: "VaccineProduct", ...readOnly }),
-    drug: (0, import_fields16.relationship)({ ref: "DrugProduct", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    vaccineAdministration: relationship({ ref: "VaccineAdministration", ...readOnly }),
+    administration: relationship({ ref: "Administration", ...readOnly }),
+    product: relationship({ ref: "VaccineProduct", ...readOnly }),
+    drug: relationship({ ref: "DrugProduct", ...readOnly }),
     lotNumber: systemText(),
     description: systemText({ required: true }),
     severity: fixedChoice(["mild", "moderate", "severe", "fatal"]),
     reportedTo: fixedChoice(["manufacturer", "fda_cvm", "usda_cvb"]),
     status: lifecycle(["draft", "submitted", "acknowledged"]),
     reference: systemText(),
-    submittedAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    createdBy: (0, import_fields16.relationship)({ ref: "StaffMember", ...readOnly }),
+    submittedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3283,7 +3339,7 @@ var AdverseEventReport = (0, import_core16.list)({
 
 // features/keystone/models/imports.ts
 var import_core17 = require("@keystone-6/core");
-var import_fields17 = require("@keystone-6/core/fields");
+var import_fields18 = require("@keystone-6/core/fields");
 var ImportBatch = (0, import_core17.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "system", "entity", "status", "rowsTotal", "rowsCreated", "rowsFailed"] } },
@@ -3292,18 +3348,18 @@ var ImportBatch = (0, import_core17.list)({
     system: fixedChoice(["ezyvet", "avimark", "csv"]),
     channel: fixedChoice(["csv", "api", "dbf"]),
     entity: fixedChoice(["clients", "patients", "weights", "vaccinations", "reminders", "consults"]),
-    location: (0, import_fields17.relationship)({ ref: "Location", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
     fileName: systemText(),
-    fileHash: systemText({ indexed: true }),
+    fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(["received", "validated", "applying", "applied", "failed"]),
-    rowsTotal: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsCreated: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsSkipped: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsFailed: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
-    mapping: (0, import_fields17.json)({ ...readOnly }),
-    startedBy: (0, import_fields17.relationship)({ ref: "User", ...readOnly }),
-    finishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
-    rows: (0, import_fields17.relationship)({ ref: "ImportRow.batch", many: true, ...readOnly }),
+    rowsTotal: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsCreated: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsSkipped: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsFailed: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    mapping: (0, import_fields18.json)({ ...readOnly }),
+    startedBy: relationship({ ref: "User", ...readOnly }),
+    finishedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    rows: relationship({ ref: "ImportRow.batch", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3312,20 +3368,20 @@ var ImportRow = (0, import_core17.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { listView: { initialColumns: ["batch", "rowNumber", "externalId", "result", "recordType"] } },
   fields: {
-    batch: (0, import_fields17.relationship)({ ref: "ImportBatch.rows", ...readOnly }),
-    rowNumber: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    batch: relationship({ ref: "ImportBatch.rows", ...readOnly }),
+    rowNumber: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
     externalId: systemText({ required: true }),
     result: fixedChoice(["created", "skipped_existing", "failed"]),
     recordType: systemText(),
     recordId: systemText(),
-    errors: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
+    errors: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/agents.ts
 var import_core18 = require("@keystone-6/core");
-var import_fields18 = require("@keystone-6/core/fields");
+var import_fields19 = require("@keystone-6/core/fields");
 var AGENT_SCOPES = [
   "reception.read",
   "reception.book",
@@ -3359,29 +3415,29 @@ var AgentToolGrant = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "scope", listView: { initialColumns: ["agent", "scope", "status", "createdAt"] } },
   fields: {
-    agent: (0, import_fields18.relationship)({ ref: "AgentIdentity.grants", ...readOnly }),
+    agent: relationship({ ref: "AgentIdentity.grants", ...readOnly }),
     scope: fixedChoice(AGENT_SCOPES),
-    constraints: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
+    constraints: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
     status: lifecycle(["requested", "active", "revoked"]),
-    approval: (0, import_fields18.relationship)({ ref: "ApprovalRequest", ...readOnly }),
-    revokedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
+    revokedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
 var AgentRun = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
-  ui: { labelField: "promptHash", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
+  ui: { labelField: "callRecordId", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
   fields: {
-    agent: (0, import_fields18.relationship)({ ref: "AgentIdentity.runs", ...readOnly }),
-    startedAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    endedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    agent: relationship({ ref: "AgentIdentity.runs", ...readOnly }),
+    startedAt: (0, import_fields19.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    endedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     status: lifecycle(["started", "completed", "failed", "aborted"]),
-    promptHash: systemText(),
-    toolCalls: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
-    costMeta: (0, import_fields18.json)({ ...readOnly }),
+    promptHash: hiddenHash(),
+    toolCalls: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
+    costMeta: (0, import_fields19.json)({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
-    proposals: (0, import_fields18.relationship)({ ref: "Proposal.agentRun", many: true, ...readOnly }),
+    proposals: relationship({ ref: "Proposal.agentRun", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
@@ -3391,16 +3447,16 @@ var Proposal = (0, import_core18.list)({
   ui: { labelField: "kind", listView: { initialColumns: ["kind", "status", "proposedByAgent", "proposedByUser", "createdAt"] } },
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
-    payload: (0, import_fields18.json)({ ...readOnly }),
+    payload: (0, import_fields19.json)({ ...readOnly }),
     payloadHash: systemText({ required: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
-    agentRun: (0, import_fields18.relationship)({ ref: "AgentRun.proposals", ...readOnly }),
-    proposedByAgent: (0, import_fields18.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    proposedByUser: (0, import_fields18.relationship)({ ref: "User", ...readOnly }),
+    agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
+    proposedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    proposedByUser: relationship({ ref: "User", ...readOnly }),
     targetList: systemText(),
     targetId: systemText({ indexed: true }),
-    approval: (0, import_fields18.relationship)({ ref: "ApprovalRequest", ...readOnly }),
-    validation: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
+    approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
+    validation: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
     version: versionField(),
     ...trackingFields
   }
@@ -3409,14 +3465,14 @@ var AgentAction = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "tool", listView: { initialColumns: ["tool", "outcome", "agent", "at"] } },
   fields: {
-    agent: (0, import_fields18.relationship)({ ref: "AgentIdentity", ...readOnly }),
-    run: (0, import_fields18.relationship)({ ref: "AgentRun", ...readOnly }),
+    agent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    run: relationship({ ref: "AgentRun", ...readOnly }),
     tool: systemText({ indexed: true, required: true }),
-    argsHash: systemText(),
+    argsHash: hiddenHash(),
     outcome: fixedChoice(["ok", "scope_denied", "never_allowed", "guard_failed", "error", "killed"]),
     errorCode: systemText(),
     auditEventId: systemText(),
-    at: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields19.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 
@@ -3486,6 +3542,11 @@ var models = {
   AgentAction,
   Proposal
 };
+var API_MAX_TAKE = 500;
+for (const list18 of Object.values(models)) {
+  list18.graphql = { ...list18.graphql ?? {}, maxTake: API_MAX_TAKE };
+}
+registerListAccess(models);
 
 // features/keystone/index.ts
 var import_session2 = require("@keystone-6/core/session");
@@ -3630,6 +3691,13 @@ var canonicalJson = (value) => JSON.stringify(canonicalize(value));
 var sha256 = (text16) => (0, import_node_crypto2.createHash)("sha256").update(text16).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
+var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
+function keyedPayloadHash(value, purpose) {
+  const secret2 = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_SECRET2);
+  if (secret2.length < 16) throw new Error("SESSION_SECRET must be set to hash protected content");
+  const key2 = (0, import_node_crypto2.createHmac)("sha256", secret2).update(`vc-keyed-hash\0${purpose}`, "utf8").digest();
+  return (0, import_node_crypto2.createHmac)("sha256", key2).update(canonicalJson(value), "utf8").digest("hex");
+}
 
 // features/keystone/lib/actor.ts
 function actorFromSession(session) {
@@ -4452,7 +4520,8 @@ var ROLES = [
     permissions: [...DASH, "canManageInventory", "canReceiveStock", "canOrderStock", "canReceiveControlled", "canCountControlled", "canViewControlled"]
   },
   { id: "seed_role_bookkeeper", name: "Bookkeeper", description: "Invoices, payments, statements, exports, period close.", permissions: [...DASH, "canTakePayments", "canPostInvoices", "canViewFinance", "canManagePayments"] },
-  { id: "seed_role_agent_owner", name: "Agent Owner", description: "Owns AI agent identities and requests their grants; a second person approves.", permissions: [...DASH, "canManageAgents"] }
+  { id: "seed_role_agent_owner", name: "Agent Owner", description: "Owns AI agent identities and requests their grants; a second person approves.", permissions: [...DASH, "canManageAgents"] },
+  { id: "seed_role_ai_agent", name: "AI Agent", description: "Least privilege for AI agents. Holds no permission: an agent acts only through its tool grants and never inherits the person who connected it.", permissions: [] }
 ];
 var BOTH = ["seed_loc_main", "seed_loc_elkgrove"];
 var MAIN = ["seed_loc_main"];
@@ -5032,6 +5101,194 @@ async function loadDays(uow, actor, calendarId, days2) {
   return fresh.length;
 }
 
+// features/keystone/mcp-oauth/agentSession.ts
+var AGENT_ROLE_ID = "seed_role_ai_agent";
+var agentUserId = (agentId) => `agent_user_${agentId}`;
+
+// features/keystone/mcp-oauth/session.ts
+async function resolveMcpAccessToken(context, token, listKey = "User") {
+  try {
+    const sudo = context.sudo();
+    const record = await sudo.db.OAuthToken.findOne({ where: { token: digestToken(token) } });
+    if (!record || record.tokenType !== "access_token" || record.isRevoked !== "false" || !record.userId || !record.expiresAt || new Date(record.expiresAt).getTime() <= Date.now()) {
+      return void 0;
+    }
+    const app = await sudo.db.OAuthApp.findOne({ where: { clientId: record.clientId } });
+    if (!app || app.status !== "active") return void 0;
+    const mcp = {
+      clientId: record.clientId,
+      scopes: storedScopes(record.scopes),
+      tokenId: String(record.id)
+    };
+    const bound = await sudo.db.AgentIdentity.findMany({ where: { oauthApp: { id: { equals: app.id } } }, take: 1 });
+    const agent = bound[0];
+    const issuedTo = String(record.agentId ?? "");
+    if (issuedTo || agent) {
+      if (!agent || !issuedTo || String(agent.id) !== issuedTo) return void 0;
+      if (agent.status !== "active" || agent.killSwitch) return void 0;
+      mcp.agentId = String(agent.id);
+      return { itemId: agentUserId(String(agent.id)), listKey, mcp, agent: { id: String(agent.id) } };
+    }
+    return { itemId: String(record.userId), listKey, mcp };
+  } catch {
+    return void 0;
+  }
+}
+function withMcpBearerSessions(strategy, listKey = "User") {
+  return {
+    ...strategy,
+    async get({ context }) {
+      const token = bearerToken(context?.req?.headers?.authorization);
+      if (isMcpAccessToken(token)) return resolveMcpAccessToken(context, token, listKey);
+      return strategy.get({ context });
+    }
+  };
+}
+function mcpSessionMarker(session) {
+  const marker = session?.mcp;
+  return marker && typeof marker.clientId === "string" && Array.isArray(marker.scopes) ? marker : null;
+}
+
+// features/keystone/mutations/actorFor.ts
+async function actorFor(context) {
+  const person = actorFromSession(context.session);
+  const marker = mcpSessionMarker(context.session);
+  if (!marker) return person;
+  const agent = await context.prisma.agentIdentity.findFirst({
+    where: { ...marker.agentId ? { id: marker.agentId } : {}, oauthApp: { clientId: { equals: marker.clientId } } },
+    select: { id: true, name: true, status: true, killSwitch: true, ownerId: true, grants: { where: { status: "active" }, select: { scope: true } } }
+  });
+  if (!agent) {
+    if (marker.agentId) throw new DomainError(Codes.NOT_AUTHORIZED, "This connection is no longer linked to an agent. Reconnect the app.");
+    return person;
+  }
+  if (agent.status !== "active") throw new DomainError(Codes.NOT_AUTHORIZED, `The agent ${agent.name} is ${agent.status}.`);
+  return { kind: "agent", agentId: agent.id, ownerUserId: agent.ownerId, name: agent.name, scopes: new Set(agent.grants.map((g) => g.scope)) };
+}
+
+// features/keystone/mutations/agentGuard.ts
+var argsHash = (args) => keyedPayloadHash(args ?? {}, "agent-action-args");
+async function logAgentAction(prisma, actor, tool, args, outcome, errorCode) {
+  const agentId = actorAgentId(actor);
+  if (!agentId) return;
+  await prisma.agentAction.create({ data: { agentId, tool, argsHash: argsHash(args), outcome, errorCode: errorCode ?? "" } });
+}
+var outcomeOf = (error) => {
+  const code = isDomainError(error) ? error.code : "ERROR";
+  if (code === Codes.SCOPE_DENIED) return "scope_denied";
+  if (code === Codes.NEVER_ALLOWED_FOR_AGENTS) return "never_allowed";
+  if (code === Codes.FEATURE_DISABLED && error.details?.reason === "kill_switch") return "killed";
+  if (isDomainError(error)) return "guard_failed";
+  return "error";
+};
+async function gated(context, gate, args, run) {
+  const actor = await actorFor(context);
+  try {
+    if (actor.kind === "agent") {
+      if (gate.humanOnly) throw new DomainError(Codes.NEVER_ALLOWED_FOR_AGENTS, `${gate.tool} is a human action.`);
+      const agent = await context.prisma.agentIdentity.findUnique({ where: { id: actor.agentId }, select: { killSwitch: true, status: true, kind: true } });
+      if (!agent || agent.status !== "active") throw new DomainError(Codes.NOT_AUTHORIZED, "The agent is not active.");
+      if (agent.killSwitch) throw new DomainError(Codes.FEATURE_DISABLED, "The agent has been switched off.", { reason: "kill_switch" });
+      if (!gate.scope || !actor.scopes.has(gate.scope)) throw new DomainError(Codes.SCOPE_DENIED, `The agent has no active ${gate.scope ?? gate.tool} grant.`);
+      if (agent.kind === "voice_receptionist") {
+        const practice = await context.prisma.practiceSettings.findUnique({ where: { id: 1 }, select: { features: true } });
+        if (!practice?.features?.aiVoice) throw new DomainError(Codes.FEATURE_DISABLED, "The AI receptionist is turned off for this practice.");
+      }
+    } else {
+      if (gate.agentOnly) throw new DomainError(Codes.NOT_AUTHORIZED, `${gate.tool} is for the AI receptionist.`);
+      requirePermission(actor, ...gate.permissions);
+    }
+    const value = await run(actor);
+    await logAgentAction(context.prisma, actor, gate.tool, args, "ok", null).catch(() => void 0);
+    return value;
+  } catch (error) {
+    await logAgentAction(context.prisma, actor, gate.tool, args, outcomeOf(error), isDomainError(error) ? error.code : "ERROR").catch(() => void 0);
+    throw error;
+  }
+}
+
+// features/keystone/mutations/agents.ts
+async function setAgentKillSwitch(_root, args, context) {
+  return gated(context, { permissions: ["canManageAgents"], tool: "agent.kill_switch", humanOnly: true }, args, async (actor) => {
+    const reason = String(args.reason ?? "").trim();
+    if (!args.killSwitch && reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say why the agent can be switched back on.", { field: "reason" });
+    const result = await command(context.prisma, { name: "agent.kill_switch", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const agent = await uow.tx.agentIdentity.findUnique({ where: { id: args.agentId }, select: { id: true, killSwitch: true, version: true, name: true } });
+      if (!agent) throw new DomainError(Codes.NOT_FOUND, "Agent not found.");
+      if (agent.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.", { currentVersion: agent.version });
+      if (agent.killSwitch === args.killSwitch) return { id: agent.id, killSwitch: agent.killSwitch, status: args.killSwitch ? "killed" : "active" };
+      const updated = await uow.tx.agentIdentity.updateMany({ where: { id: agent.id, version: agent.version }, data: { killSwitch: args.killSwitch, version: { increment: 1 } } });
+      if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.");
+      uow.audit({
+        eventType: args.killSwitch ? "agent.killed" : "agent.revived",
+        entityType: "AgentIdentity",
+        entityId: agent.id,
+        actorUserId: actorUserId(actor),
+        actorAgentId: null,
+        approverId: null,
+        before: { killSwitch: agent.killSwitch },
+        after: { killSwitch: args.killSwitch },
+        reason: reason || null,
+        metadata: {}
+      });
+      return { id: agent.id, killSwitch: args.killSwitch, status: args.killSwitch ? "killed" : "active" };
+    });
+    return result.value;
+  });
+}
+var UNUSABLE_PASSWORD_HASH2 = "$2a$10$3dITCbIvf5zFA.1U8KZDhOHC3EEexi3KYy5ysZK1cRF6LHMm0H.ya";
+async function revokeAppTokens(tx, appId) {
+  const app = await tx.oAuthApp.findUnique({ where: { id: appId }, select: { clientId: true } });
+  if (!app) return 0;
+  const result = await tx.oAuthToken.updateMany({ where: { clientId: app.clientId, isRevoked: "false" }, data: { isRevoked: "true" } });
+  return result.count;
+}
+async function ensureAgentUser(tx, agent) {
+  const id2 = agentUserId(agent.id);
+  const existing = await tx.user.findUnique({ where: { id: id2 }, select: { id: true } });
+  if (existing) await tx.user.update({ where: { id: id2 }, data: { roleId: AGENT_ROLE_ID } });
+  else await tx.user.create({ data: { id: id2, name: `${agent.name} (agent)`, email: `agent-${agent.id}@agents.invalid`, password: UNUSABLE_PASSWORD_HASH2, kind: "staff", roleId: AGENT_ROLE_ID, title: "AI agent", onboardingStatus: "dismissed" } });
+  return id2;
+}
+async function bindAgentApp(_root, args, context) {
+  return gated(context, { permissions: ["canManageAgents"], tool: "agent.bind_app", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "agent.bind_app", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const { tx } = uow;
+      const agent = await tx.agentIdentity.findUnique({ where: { id: args.agentId }, select: { id: true, name: true, version: true, oauthAppId: true } });
+      if (!agent) throw new DomainError(Codes.NOT_FOUND, "Agent not found.");
+      if (agent.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.", { currentVersion: agent.version });
+      const app = await tx.oAuthApp.findUnique({ where: { id: args.oauthAppId }, select: { id: true, name: true } });
+      if (!app) throw new DomainError(Codes.NOT_FOUND, "App not found.");
+      const taken = await tx.agentIdentity.findFirst({ where: { oauthAppId: app.id, id: { not: agent.id } }, select: { name: true } });
+      if (taken) throw new DomainError(Codes.GUARD_FAILED, `${app.name} is already connected to ${taken.name}.`, { reason: "app_already_bound" });
+      await ensureAgentUser(tx, agent);
+      const updated = await tx.agentIdentity.updateMany({ where: { id: agent.id, version: agent.version }, data: { oauthAppId: app.id, version: { increment: 1 } } });
+      if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.");
+      let revoked = await revokeAppTokens(tx, app.id);
+      if (agent.oauthAppId && agent.oauthAppId !== app.id) revoked += await revokeAppTokens(tx, agent.oauthAppId);
+      auditCreate(uow, actor, "AgentIdentity", agent.id, "agent.app_bound", { revokedTokens: revoked, oauthAppId: app.id, previousAppId: agent.oauthAppId, role: AGENT_ROLE_ID, boundBy: actorUserId(actor) });
+      return { agentId: agent.id, oauthAppId: app.id, revokedTokens: revoked, version: agent.version + 1 };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function unbindAgentApp(_root, args, context) {
+  return gated(context, { permissions: ["canManageAgents"], tool: "agent.unbind_app", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "agent.unbind_app", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const { tx } = uow;
+      const agent = await tx.agentIdentity.findUnique({ where: { id: args.agentId }, select: { id: true, version: true, oauthAppId: true } });
+      if (!agent) throw new DomainError(Codes.NOT_FOUND, "Agent not found.");
+      if (agent.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.", { currentVersion: agent.version });
+      const updated = await tx.agentIdentity.updateMany({ where: { id: agent.id, version: agent.version }, data: { oauthAppId: null, version: { increment: 1 } } });
+      if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.");
+      const revoked = agent.oauthAppId ? await revokeAppTokens(tx, agent.oauthAppId) : 0;
+      auditCreate(uow, actor, "AgentIdentity", agent.id, "agent.app_unbound", { revokedTokens: revoked, previousAppId: agent.oauthAppId });
+      return { agentId: agent.id, revokedTokens: revoked, version: agent.version + 1 };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/lib/sequence.ts
 var import_node_crypto4 = require("node:crypto");
 async function nextReference(tx, prefix, now = /* @__PURE__ */ new Date(), width = 6) {
@@ -5260,11 +5517,11 @@ function buildSegments(template, start, totalMinutes) {
   return list18.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
 }
 var SLOT_TTL_MS = 5 * 6e4;
-var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
+var DEVELOPMENT_SECRET3 = "this secret should only be used in testing";
 function key() {
   const secret2 = process.env.SESSION_SECRET;
   if (!secret2 && process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET is required to sign slot offers");
-  return `slot-token:${secret2 || DEVELOPMENT_SECRET2}`;
+  return `slot-token:${secret2 || DEVELOPMENT_SECRET3}`;
 }
 function signSlot(claims, now = Date.now()) {
   const body = Buffer.from(JSON.stringify({ ...claims, exp: now + SLOT_TTL_MS })).toString("base64url");
@@ -5891,6 +6148,7 @@ async function seedClinic(uow, actor) {
   if (!await tx.agentIdentity.findUnique({ where: { id: "seed_agent_reception" }, select: { id: true } })) {
     await tx.oAuthApp.create({ data: { id: "seed_oauth_reception", name: "Cedar Creek AI receptionist (voice runtime)", clientId: "ccah-voice-receptionist", tokenEndpointAuthMethod: "none", redirectUris: ["https://voice.cedarcreekvet.com/oauth/callback"], scopes: ["mcp:read", "mcp:write"], status: "active", description: "The voice runtime signs in as this client; its token acts as the receptionist agent, never as a person." } });
     await tx.agentIdentity.create({ data: { id: "seed_agent_reception", name: "Cedar Creek AI receptionist", kind: "voice_receptionist", model: "operator-selected (OpenRouter)", provider: "openrouter", ownerId: "seed_user_park", status: "active", killSwitch: false, limits: { toolCallsPerRun: 40, maxBookingsPerCall: 3 }, oauthAppId: "seed_oauth_reception" } });
+    await ensureAgentUser(tx, { id: "seed_agent_reception", name: "Cedar Creek AI receptionist" });
     const scopes = ["reception.read", "reception.book", "reception.register", "triage.run", "pharmacy.intake", "records.request"];
     await tx.agentToolGrant.createMany({ data: scopes.map((scope) => ({ id: `seed_grant_reception_${scope.replace(".", "_")}`, agentId: "seed_agent_reception", scope, status: "active", constraints: { locations: ["seed_loc_main", "seed_loc_elkgrove"] } })) });
     auditCreate(uow, actor, "AgentIdentity", "seed_agent_reception", "agent.created", { kind: "voice_receptionist", owner: "seed_user_park", scopes, note: "aiVoice feature is off until a practice-controls change is approved" }, meta3);
@@ -6288,99 +6546,6 @@ async function policyMatrix(_root, _args, context) {
   return rows;
 }
 
-// features/keystone/mutations/agentGuard.ts
-var import_node_crypto7 = require("node:crypto");
-
-// features/keystone/mcp-oauth/session.ts
-async function resolveMcpAccessToken(context, token, listKey = "User") {
-  try {
-    const sudo = context.sudo();
-    const record = await sudo.db.OAuthToken.findOne({ where: { token: digestToken(token) } });
-    if (!record || record.tokenType !== "access_token" || record.isRevoked !== "false" || !record.userId || !record.expiresAt || new Date(record.expiresAt).getTime() <= Date.now()) {
-      return void 0;
-    }
-    const app = await sudo.db.OAuthApp.findOne({ where: { clientId: record.clientId } });
-    if (!app || app.status !== "active") return void 0;
-    const mcp = {
-      clientId: record.clientId,
-      scopes: storedScopes(record.scopes),
-      tokenId: String(record.id)
-    };
-    return { itemId: String(record.userId), listKey, mcp };
-  } catch {
-    return void 0;
-  }
-}
-function withMcpBearerSessions(strategy, listKey = "User") {
-  return {
-    ...strategy,
-    async get({ context }) {
-      const token = bearerToken(context?.req?.headers?.authorization);
-      if (isMcpAccessToken(token)) return resolveMcpAccessToken(context, token, listKey);
-      return strategy.get({ context });
-    }
-  };
-}
-function mcpSessionMarker(session) {
-  const marker = session?.mcp;
-  return marker && typeof marker.clientId === "string" && Array.isArray(marker.scopes) ? marker : null;
-}
-
-// features/keystone/mutations/actorFor.ts
-async function actorFor(context) {
-  const person = actorFromSession(context.session);
-  const marker = mcpSessionMarker(context.session);
-  if (!marker) return person;
-  const agent = await context.prisma.agentIdentity.findFirst({
-    where: { oauthApp: { clientId: { equals: marker.clientId } } },
-    select: { id: true, name: true, status: true, ownerId: true, grants: { where: { status: "active" }, select: { scope: true } } }
-  });
-  if (!agent) return person;
-  if (agent.status !== "active") throw new DomainError(Codes.NOT_AUTHORIZED, `The agent ${agent.name} is ${agent.status}.`);
-  return { kind: "agent", agentId: agent.id, ownerUserId: agent.ownerId, name: agent.name, scopes: new Set(agent.grants.map((g) => g.scope)) };
-}
-
-// features/keystone/mutations/agentGuard.ts
-var argsHash = (args) => (0, import_node_crypto7.createHash)("sha256").update(canonicalJson(args ?? {})).digest("hex");
-async function logAgentAction(prisma, actor, tool, args, outcome, errorCode) {
-  const agentId = actorAgentId(actor);
-  if (!agentId) return;
-  await prisma.agentAction.create({ data: { agentId, tool, argsHash: argsHash(args), outcome, errorCode: errorCode ?? "" } });
-}
-var outcomeOf = (error) => {
-  const code = isDomainError(error) ? error.code : "ERROR";
-  if (code === Codes.SCOPE_DENIED) return "scope_denied";
-  if (code === Codes.NEVER_ALLOWED_FOR_AGENTS) return "never_allowed";
-  if (code === Codes.FEATURE_DISABLED && error.details?.reason === "kill_switch") return "killed";
-  if (isDomainError(error)) return "guard_failed";
-  return "error";
-};
-async function gated(context, gate, args, run) {
-  const actor = await actorFor(context);
-  try {
-    if (actor.kind === "agent") {
-      if (gate.humanOnly) throw new DomainError(Codes.NEVER_ALLOWED_FOR_AGENTS, `${gate.tool} is a human action.`);
-      const agent = await context.prisma.agentIdentity.findUnique({ where: { id: actor.agentId }, select: { killSwitch: true, status: true, kind: true } });
-      if (!agent || agent.status !== "active") throw new DomainError(Codes.NOT_AUTHORIZED, "The agent is not active.");
-      if (agent.killSwitch) throw new DomainError(Codes.FEATURE_DISABLED, "The agent has been switched off.", { reason: "kill_switch" });
-      if (!gate.scope || !actor.scopes.has(gate.scope)) throw new DomainError(Codes.SCOPE_DENIED, `The agent has no active ${gate.scope ?? gate.tool} grant.`);
-      if (agent.kind === "voice_receptionist") {
-        const practice = await context.prisma.practiceSettings.findUnique({ where: { id: 1 }, select: { features: true } });
-        if (!practice?.features?.aiVoice) throw new DomainError(Codes.FEATURE_DISABLED, "The AI receptionist is turned off for this practice.");
-      }
-    } else {
-      if (gate.agentOnly) throw new DomainError(Codes.NOT_AUTHORIZED, `${gate.tool} is for the AI receptionist.`);
-      requirePermission(actor, ...gate.permissions);
-    }
-    const value = await run(actor);
-    await logAgentAction(context.prisma, actor, gate.tool, args, "ok", null).catch(() => void 0);
-    return value;
-  } catch (error) {
-    await logAgentAction(context.prisma, actor, gate.tool, args, outcomeOf(error), isDomainError(error) ? error.code : "ERROR").catch(() => void 0);
-    throw error;
-  }
-}
-
 // features/keystone/mutations/clients.ts
 var text14 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
@@ -6720,11 +6885,11 @@ async function lockSlot(uow, claims, timeZone) {
 }
 async function agentBookingChecks(uow, input, category) {
   if (!input.callRecordId) throw new DomainError(Codes.GUARD_FAILED, "An AI booking belongs to a call.", { field: "callRecordId" });
-  const call = await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { disclosurePlayedAt: true, callerVerifiedAt: true, clientId: true, status: true } });
-  if (!call || call.status !== "in_progress") throw new DomainError(Codes.GUARD_FAILED, "The call is not in progress.");
-  if (!call.disclosurePlayedAt) throw new DomainError(Codes.GUARD_FAILED, "The AI disclosure has not been played on this call.");
+  const call2 = await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { disclosurePlayedAt: true, callerVerifiedAt: true, clientId: true, status: true } });
+  if (!call2 || call2.status !== "in_progress") throw new DomainError(Codes.GUARD_FAILED, "The call is not in progress.");
+  if (!call2.disclosurePlayedAt) throw new DomainError(Codes.GUARD_FAILED, "The AI disclosure has not been played on this call.");
   const client = await uow.tx.client.findUnique({ where: { id: input.clientId }, select: { status: true } });
-  if (client?.status !== "prospect" && (!call.callerVerifiedAt || call.clientId !== input.clientId)) {
+  if (client?.status !== "prospect" && (!call2.callerVerifiedAt || call2.clientId !== input.clientId)) {
     throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before booking for an existing client.");
   }
   if (category === "sick" || category === "recheck") {
@@ -6826,8 +6991,8 @@ async function cancelAppointment(_root, args, context) {
         data: { cancelReason: args.reason.trim().slice(0, 300), cancelledAt: uow.now },
         guard: async (appt) => {
           if (actor.kind !== "agent") return;
-          const call = args.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
-          if (!call?.callerVerifiedAt || call.clientId !== appt.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before changing their appointment.");
+          const call2 = args.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
+          if (!call2?.callerVerifiedAt || call2.clientId !== appt.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before changing their appointment.");
         }
       });
       await uow.tx.appointmentPatient.updateMany({ where: { appointmentId: row.id }, data: { status: "cancelled" } });
@@ -6857,8 +7022,8 @@ async function rescheduleAppointment(_root, args, context) {
         data: { cancelReason: "rescheduled", cancelledAt: uow.now },
         guard: async () => {
           if (actor.kind !== "agent") return;
-          const call = args.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
-          if (!call?.callerVerifiedAt || call.clientId !== old.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before changing their appointment.");
+          const call2 = args.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
+          if (!call2?.callerVerifiedAt || call2.clientId !== old.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before changing their appointment.");
         }
       });
       await uow.tx.appointmentPatient.updateMany({ where: { appointmentId: old.id }, data: { status: "cancelled" } });
@@ -7055,9 +7220,9 @@ async function verifyCaller(_root, args, context) {
     if (args.method !== "pet_name_dob") throw new DomainError(Codes.INVALID_INPUT, "Unsupported verification method.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(args.petDateOfBirth)) throw new DomainError(Codes.INVALID_INPUT, "Date of birth is YYYY-MM-DD.", { field: "petDateOfBirth" });
     const result = await command(context.prisma, { name: "call.verify", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const call = await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { from: true, status: true, callerVerifiedAt: true } });
-      if (!call || call.status !== "in_progress") throw new DomainError(Codes.GUARD_FAILED, "The call is not in progress.");
-      const person = await uow.tx.clientPerson.findFirst({ where: { contactPoints: { some: { valueHash: contactHash(call.from), status: "active" } } }, select: { id: true, clientId: true, canBook: true } });
+      const call2 = await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { from: true, status: true, callerVerifiedAt: true } });
+      if (!call2 || call2.status !== "in_progress") throw new DomainError(Codes.GUARD_FAILED, "The call is not in progress.");
+      const person = await uow.tx.clientPerson.findFirst({ where: { contactPoints: { some: { valueHash: contactHash(call2.from), status: "active" } } }, select: { id: true, clientId: true, canBook: true } });
       const pet = person ? await uow.tx.patient.findFirst({
         where: { name: { equals: args.petName.trim(), mode: "insensitive" }, dateOfBirth: /* @__PURE__ */ new Date(`${args.petDateOfBirth}T00:00:00Z`), ownerships: { some: { clientId: person.clientId, effectiveTo: null } } },
         select: { id: true }
@@ -7077,10 +7242,10 @@ var MAX_TRANSCRIPT_TURNS = 400;
 async function appendCallTranscript(_root, args, context) {
   return gated(context, { permissions: ["canBook"], scope: "reception.read", tool: "call.transcript" }, args, async (actor) => {
     const result = await command(context.prisma, { name: "call.transcript", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const call = await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { transcript: true, status: true } });
-      if (!call) throw new DomainError(Codes.NOT_FOUND, "Call not found.");
-      if (call.status === "completed" || call.status === "failed") throw new DomainError(Codes.GUARD_FAILED, "The call has ended.");
-      const existing = Array.isArray(call.transcript) ? call.transcript : [];
+      const call2 = await uow.tx.callRecord.findUnique({ where: { id: args.callRecordId }, select: { transcript: true, status: true } });
+      if (!call2) throw new DomainError(Codes.NOT_FOUND, "Call not found.");
+      if (call2.status === "completed" || call2.status === "failed") throw new DomainError(Codes.GUARD_FAILED, "The call has ended.");
+      const existing = Array.isArray(call2.transcript) ? call2.transcript : [];
       const turns = args.turns.slice(0, 50).map((t) => ({ speaker: ["caller", "agent", "staff"].includes(t.speaker) ? t.speaker : "caller", text: String(t.text ?? "").slice(0, 2e3), at: t.at ?? uow.now.toISOString() }));
       const next = [...existing, ...turns].slice(-MAX_TRANSCRIPT_TURNS);
       await uow.tx.callRecord.update({ where: { id: args.callRecordId }, data: { transcript: next, version: { increment: 1 } } });
@@ -7101,7 +7266,7 @@ async function endCall(_root, args, context) {
         to: "completed",
         actor,
         eventType: "call.ended",
-        data: (call) => ({ endedAt: uow.now, durationSeconds: Math.max(0, Math.round((uow.now.getTime() - new Date(call.startedAt).getTime()) / 1e3)), disposition: args.disposition, summary: String(args.summary ?? "").slice(0, 2e3), transferTo: String(args.transferTo ?? "").slice(0, 40) })
+        data: (call2) => ({ endedAt: uow.now, durationSeconds: Math.max(0, Math.round((uow.now.getTime() - new Date(call2.startedAt).getTime()) / 1e3)), disposition: args.disposition, summary: String(args.summary ?? "").slice(0, 2e3), transferTo: String(args.transferTo ?? "").slice(0, 40) })
       });
       if (args.disposition === "callback_task" || args.disposition === "voicemail") {
         await uow.tx.task.create({ data: { kind: "call_back", title: `Call back (${row.ref})`, detail: String(args.summary ?? "").slice(0, 2e3), subjectType: "CallRecord", subjectId: row.id, locationId: row.locationId, priority: "normal", status: "open", dueAt: new Date(uow.now.getTime() + 4 * 36e5), createdByAgentId: actorAgentId(actor), createdByUserId: actorUserId(actor) } });
@@ -7209,8 +7374,8 @@ async function requestRefill(_root, args, context) {
       if (patient.status === "deceased") throw new DomainError(Codes.PATIENT_DECEASED, `${patient.name} has died.`);
       const clientId = patient.ownerships[0]?.clientId ?? null;
       if (actor.kind === "agent") {
-        const call = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
-        if (!call?.callerVerifiedAt || call.clientId !== clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before taking a refill request.");
+        const call2 = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
+        if (!call2?.callerVerifiedAt || call2.clientId !== clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before taking a refill request.");
       }
       const ref = await nextReference(uow.tx, "RFR", uow.now);
       const row = await uow.tx.refillRequest.create({
@@ -7243,8 +7408,8 @@ async function requestRecords(_root, args, context) {
       const clientId = patient.ownerships[0]?.clientId ?? null;
       if (actor.kind === "agent") {
         if (input.requesterKind !== "client_person" || input.basis !== "client_of_record") throw new DomainError(Codes.NEVER_ALLOWED_FOR_AGENTS, "The AI receptionist takes records requests from the client of record only; others go to staff.");
-        const call = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
-        if (!call?.callerVerifiedAt || call.clientId !== clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before taking a records request.");
+        const call2 = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
+        if (!call2?.callerVerifiedAt || call2.clientId !== clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before taking a records request.");
       }
       const today = await locationDay(uow, input.locationId);
       const records = await resolvePolicy(uow.tx, "medical_records", { locationId: input.locationId, on: today });
@@ -7290,9 +7455,9 @@ async function receptionContext(_root, args, context) {
   return gated(context, { permissions: ["canBook", "canReadClientPII"], scope: "reception.read", tool: "reception.context" }, args, async (actor) => {
     let clientId = args.clientId ?? null;
     if (actor.kind === "agent" || args.callRecordId) {
-      const call = args.callRecordId ? await context.prisma.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
-      if (!call?.callerVerifiedAt || !call.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller first.");
-      clientId = call.clientId;
+      const call2 = args.callRecordId ? await context.prisma.callRecord.findUnique({ where: { id: args.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
+      if (!call2?.callerVerifiedAt || !call2.clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller first.");
+      clientId = call2.clientId;
     }
     if (!clientId) throw new DomainError(Codes.INVALID_INPUT, "Name the client or the call.", { field: "clientId" });
     const client = await context.prisma.client.findUnique({
@@ -7326,36 +7491,6 @@ async function receptionContext(_root, args, context) {
       pets: pets.map((p) => ({ id: p.id, ref: p.ref, name: p.name, species: p.species?.name ?? "", status: p.status })),
       upcoming: appointments.map((a) => ({ id: a.id, ref: a.ref, startsAt: a.startsAt.toISOString(), status: a.status, version: a.version, type: a.appointmentType?.name ?? "", provider: a.provider?.displayName ?? "" }))
     };
-  });
-}
-
-// features/keystone/mutations/agents.ts
-async function setAgentKillSwitch(_root, args, context) {
-  return gated(context, { permissions: ["canManageAgents"], tool: "agent.kill_switch", humanOnly: true }, args, async (actor) => {
-    const reason = String(args.reason ?? "").trim();
-    if (!args.killSwitch && reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say why the agent can be switched back on.", { field: "reason" });
-    const result = await command(context.prisma, { name: "agent.kill_switch", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const agent = await uow.tx.agentIdentity.findUnique({ where: { id: args.agentId }, select: { id: true, killSwitch: true, version: true, name: true } });
-      if (!agent) throw new DomainError(Codes.NOT_FOUND, "Agent not found.");
-      if (agent.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.", { currentVersion: agent.version });
-      if (agent.killSwitch === args.killSwitch) return { id: agent.id, killSwitch: agent.killSwitch, status: args.killSwitch ? "killed" : "active" };
-      const updated = await uow.tx.agentIdentity.updateMany({ where: { id: agent.id, version: agent.version }, data: { killSwitch: args.killSwitch, version: { increment: 1 } } });
-      if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, "The agent changed since you loaded it. Reload and try again.");
-      uow.audit({
-        eventType: args.killSwitch ? "agent.killed" : "agent.revived",
-        entityType: "AgentIdentity",
-        entityId: agent.id,
-        actorUserId: actorUserId(actor),
-        actorAgentId: null,
-        approverId: null,
-        before: { killSwitch: agent.killSwitch },
-        after: { killSwitch: args.killSwitch },
-        reason: reason || null,
-        metadata: {}
-      });
-      return { id: agent.id, killSwitch: args.killSwitch, status: args.killSwitch ? "killed" : "active" };
-    });
-    return result.value;
   });
 }
 
@@ -8147,7 +8282,7 @@ async function rejectScribeDraft(_root, args, context) {
 
 // features/keystone/domain/dose.ts
 var DOSE_CALC_VERSION = "dose-2026.11-3";
-var HARD_BLOCKS = ["override_out_of_range", "range_unconvertible_override"];
+var HARD_BLOCKS = ["above_range", "below_range", "override_out_of_range", "range_unconvertible_override"];
 var DOSE_PERS = ["kg", "m2", "animal"];
 var DOSE_UNITS = ["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"];
 var KG_PER_LB2 = "0.45359237";
@@ -8420,7 +8555,7 @@ async function doseFor(uow, patientId, drugId, args, staff) {
   }
   const blocks = blockingWarnings(result.warnings);
   const hard = blocks.filter((b) => HARD_BLOCKS.includes(b.code));
-  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, hard.map((b) => b.message).join(" "), { reason: "dose_refused", problems: result.warnings });
+  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, `${hard.map((b) => b.message).join(" ")} Outside the formulary range a dose is not given; change the dose, or change the formulary range.`, { reason: "dose_refused", problems: result.warnings });
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
     throw new DomainError(Codes.GUARD_FAILED, `${blocks.map((b) => b.message).join(" ")} To go ahead, a veterinarian records an override reason.`, { reason: "dose_blocked", problems: result.warnings });
   }
@@ -9283,7 +9418,7 @@ async function addManualReminder(_root, args, context) {
 }
 
 // features/keystone/mutations/imports.ts
-var import_node_crypto8 = require("node:crypto");
+var import_node_crypto7 = require("node:crypto");
 
 // features/integrations/pims/index.ts
 function parseCsv(input) {
@@ -9598,7 +9733,7 @@ async function previewImport(_root, args, context) {
     if (parsed.missingRequired.length) throw new DomainError(Codes.INVALID_INPUT, `The file has no column for: ${parsed.missingRequired.join(", ")}. Map those columns and try again.`, { field: "mapping", problems: parsed.missingRequired });
     if (parsed.rows.length > MAX_ROWS) throw new DomainError(Codes.INVALID_INPUT, `Split the file: at most ${MAX_ROWS} rows per batch.`);
     const species = await speciesList(context.prisma);
-    const fileHash = (0, import_node_crypto8.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
+    const fileHash = (0, import_node_crypto7.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
     const seen = /* @__PURE__ */ new Set();
     const results = parsed.rows.map((r) => {
       const errors = validateRow(args.entity, r.values, species);
@@ -9854,6 +9989,8 @@ function extendGraphqlSchema(baseSchema) {
         requestRefill(input: JSON!, idempotencyKey: String!): JSON
         requestRecords(input: JSON!, idempotencyKey: String!): JSON
         setAgentKillSwitch(agentId: ID!, killSwitch: Boolean!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        bindAgentApp(agentId: ID!, oauthAppId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        unbindAgentApp(agentId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         openEncounter(patientId: ID!, locationId: ID!, kind: String!, appointmentId: ID, reason: String, attendingDvmId: ID, idempotencyKey: String!): JSON
         saveSoapSection(encounterId: ID!, kind: String!, ordinal: Int, body: String!, structured: JSON, templateId: ID, expectedVersion: Int, idempotencyKey: String!): JSON
         recordVitals(encounterId: ID!, temperature: String, temperatureUnit: String, heartRate: Int, respRate: Int, mucousMembranes: String, crtSeconds: String, painScore: Int, bodyConditionScore: Int, mentation: String, hydrationPct: String, idempotencyKey: String!): JSON
@@ -9941,6 +10078,8 @@ function extendGraphqlSchema(baseSchema) {
         requestRefill: op(requestRefill),
         requestRecords: op(requestRecords),
         setAgentKillSwitch: op(setAgentKillSwitch),
+        bindAgentApp: op(bindAgentApp),
+        unbindAgentApp: op(unbindAgentApp),
         openEncounter: op(openEncounter),
         saveSoapSection: op(saveSoapSection),
         recordVitals: op(recordVitals),

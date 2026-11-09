@@ -73,6 +73,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestRefill(input: JSON!, idempotencyKey: String!): JSON
         requestRecords(input: JSON!, idempotencyKey: String!): JSON
         setAgentKillSwitch(agentId: ID!, killSwitch: Boolean!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        bindAgentApp(agentId: ID!, oauthAppId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        unbindAgentApp(agentId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         openEncounter(patientId: ID!, locationId: ID!, kind: String!, appointmentId: ID, reason: String, attendingDvmId: ID, idempotencyKey: String!): JSON
         saveSoapSection(encounterId: ID!, kind: String!, ordinal: Int, body: String!, structured: JSON, templateId: ID, expectedVersion: Int, idempotencyKey: String!): JSON
         recordVitals(encounterId: ID!, temperature: String, temperatureUnit: String, heartRate: Int, respRate: Int, mucousMembranes: String, crtSeconds: String, painScore: Int, bodyConditionScore: Int, mentation: String, hydrationPct: String, idempotencyKey: String!): JSON
@@ -160,6 +162,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestRefill: op(reception.requestRefill),
         requestRecords: op(reception.requestRecords),
         setAgentKillSwitch: op(agents.setAgentKillSwitch),
+        bindAgentApp: op(agents.bindAgentApp),
+        unbindAgentApp: op(agents.unbindAgentApp),
         openEncounter: op(record.openEncounter),
         saveSoapSection: op(record.saveSoapSection),
         recordVitals: op(record.recordVitals),

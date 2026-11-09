@@ -1,6 +1,7 @@
 import { list } from '@keystone-6/core'
-import { integer, json, relationship, timestamp } from '@keystone-6/core/fields'
-import { fixedChoice, lifecycle, readOnly, systemText, versionField } from './domainFields'
+import { integer, json, timestamp } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
+import { fixedChoice, lifecycle, readOnly, systemText, versionField, hiddenHash } from './domainFields'
 import { governed } from './listAccess'
 import { trackingFields } from './trackingFields'
 
@@ -21,7 +22,7 @@ export const ImportBatch = list({
     entity: fixedChoice(['clients', 'patients', 'weights', 'vaccinations', 'reminders', 'consults']),
     location: relationship({ ref: 'Location', ...readOnly }),
     fileName: systemText(),
-    fileHash: systemText({ indexed: true }),
+    fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(['received', 'validated', 'applying', 'applied', 'failed']),
     rowsTotal: integer({ ...readOnly, defaultValue: 0 }),
     rowsCreated: integer({ ...readOnly, defaultValue: 0 }),

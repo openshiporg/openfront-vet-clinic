@@ -1,6 +1,7 @@
 import { list } from '@keystone-6/core'
 import { allOperations } from '@keystone-6/core/access'
-import { checkbox, relationship, text } from '@keystone-6/core/fields'
+import { checkbox, text } from '@keystone-6/core/fields'
+import { relationship } from './guardedRelationship'
 
 import { isSignedIn, permissions, permissionNames } from '../access'
 import { trackingFields } from './trackingFields'

@@ -82,6 +82,21 @@ export const systemText = (options: { indexed?: boolean | 'unique'; required?: b
     ui: { createView: { fieldMode: 'hidden' }, itemView: { fieldMode: 'read' } },
   })
 
+/**
+ * A server-written hash that covers something its readers cannot read, or a value small enough to guess
+ * (a phone number). Nobody reads, filters or sorts by it through the API; server code uses Prisma directly.
+ */
+export const hiddenHash = (options: { indexed?: boolean | 'unique'; required?: boolean } = {}) =>
+  text({
+    ...(options.indexed ? { isIndexed: options.indexed } : {}),
+    validation: { isRequired: options.required ?? false },
+    access: { read: () => false, create: () => false, update: () => false },
+    isFilterable: false,
+    isOrderable: false,
+    graphql: { omit: { read: true, create: true, update: true } },
+    ui: { createView: { fieldMode: 'hidden' }, itemView: { fieldMode: 'hidden' }, listView: { fieldMode: 'hidden' } },
+  })
+
 export const readOnly = { access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: 'hidden' as const }, itemView: { fieldMode: 'read' as const } } }
 
 /** A choice fixed at creation by server code (e.g. a grant scope): visible, never edited. */

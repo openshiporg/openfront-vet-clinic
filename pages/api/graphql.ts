@@ -1,6 +1,7 @@
 import { keystoneContext } from '../../features/keystone/context'
 import { useMcpScopeGuard as mcpScopeGuardPlugin } from '../../features/keystone/mcp-oauth/guard'
 import { readAuditPlugin } from '../../features/keystone/security/readAudit'
+import { depthLimitPlugin } from '../../features/keystone/security/depthLimit'
 import { createYoga } from "graphql-yoga";
 // @ts-ignore
 import processRequest from "graphql-upload/processRequest.js";
@@ -50,6 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     multipart: false,
     // MCP OAuth scopes only narrow: read-only tokens can't mutate, no token can manage credentials.
     // Every clinical or client record returned is written to ReadAudit; if that fails, nothing is returned.
-    plugins: [mcpScopeGuardPlugin(), readAuditPlugin(() => keystoneContext.prisma)],
+    // Nesting is bounded for every caller (F3); rows per list query are bounded by graphql.maxTake.
+    plugins: [depthLimitPlugin(), mcpScopeGuardPlugin(), readAuditPlugin(() => keystoneContext.prisma)],
   })(req, res);
 }

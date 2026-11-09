@@ -215,6 +215,7 @@ export async function approveAuthorization(
       token: digestToken(code),
       clientId: client.clientId,
       userId: ticket.userId,
+      agentId: await boundAgentId(context, client.id),
       scopes,
       redirectUri: ticket.redirectUri,
       resource: ticket.resource,
@@ -231,7 +232,13 @@ export function denyAuthorization(ticket: ConsentTicket, issuer: string): string
   return callback(ticket.redirectUri, { error: 'access_denied', state: ticket.state }, issuer)
 }
 
-type Grant = { clientId: string; userId: string; scopes: McpScope[]; resource: string; authorizationCode?: string }
+type Grant = { clientId: string; userId: string; agentId: string; scopes: McpScope[]; resource: string; authorizationCode?: string }
+
+/** The agent an app is bound to right now, or '' for an app that is a person's own connection. */
+async function boundAgentId(context: any, appId: string): Promise<string> {
+  const agent = await prismaOf(context).agentIdentity.findFirst({ where: { oauthAppId: appId }, select: { id: true } })
+  return agent?.id ?? ''
+}
 
 async function issueTokens(tx: any, grant: Grant) {
   const accessToken = randomToken(MCP_ACCESS_PREFIX)
@@ -240,6 +247,7 @@ async function issueTokens(tx: any, grant: Grant) {
   const shared = {
     clientId: grant.clientId,
     userId: grant.userId,
+    agentId: grant.agentId,
     scopes: grant.scopes,
     resource: grant.resource,
     isRevoked: 'false',
@@ -316,6 +324,8 @@ export async function exchangeAuthorizationCode(context: any, body: Params, issu
   }
   if (!verifyPkce(body.code_verifier, record.codeChallenge)) invalidGrant('PKCE verification failed')
   if (!record.userId) invalidGrant('The account that approved this app no longer exists')
+  // The app must still be linked to the same agent (or still be nobody's agent) as when it was approved.
+  if ((await boundAgentId(context, client.id)) !== (record.agentId ?? '')) invalidGrant('This app was connected to a different agent since it was approved; reconnect it')
 
   return prisma.$transaction(async (tx: any) => {
     const consumed = await tx.oAuthToken.updateMany({
@@ -326,6 +336,7 @@ export async function exchangeAuthorizationCode(context: any, body: Params, issu
     return issueTokens(tx, {
       clientId: client.clientId,
       userId: record.userId,
+      agentId: record.agentId ?? '',
       scopes: storedScopes(record.scopes),
       resource: record.resource || resourceFor(issuer),
       authorizationCode: digest,
@@ -349,6 +360,10 @@ export async function exchangeRefreshToken(context: any, body: Params, issuer: s
   }
   if (!record.expiresAt || new Date(record.expiresAt).getTime() <= Date.now()) invalidGrant('Refresh token expired')
   if (!record.userId) invalidGrant('The account that approved this app no longer exists')
+  if ((await boundAgentId(context, client.id)) !== (record.agentId ?? '')) {
+    await revokeGrant(context, record.userId, record.clientId)
+    invalidGrant('This app is linked to a different agent now; reconnect it')
+  }
   if (body.resource !== undefined && body.resource !== '' && body.resource !== record.resource) {
     throw new OAuthError('invalid_target', 'resource does not match the original grant')
   }
@@ -381,6 +396,7 @@ export async function exchangeRefreshToken(context: any, body: Params, issuer: s
     return issueTokens(tx, {
       clientId: record.clientId,
       userId: record.userId,
+      agentId: record.agentId ?? '',
       scopes,
       resource: record.resource || resourceFor(issuer),
       authorizationCode: record.authorizationCode || undefined,
@@ -400,6 +416,11 @@ export async function revokeToken(context: any, token: unknown): Promise<void> {
     return
   }
   await prisma.oAuthToken.updateMany({ where: { id: record.id }, data: { isRevoked: 'true' } })
+  // An access token and its refresh token are one credential: revoking one ends the other, so the
+  // refresh token cannot mint a new access token (the pair is linked both ways at issue time).
+  if (record.tokenType === 'access_token' && record.refreshToken) {
+    await prisma.oAuthToken.updateMany({ where: { token: record.refreshToken, tokenType: 'refresh_token', clientId: record.clientId }, data: { isRevoked: 'true' } })
+  }
 }
 
 export type Connection = {

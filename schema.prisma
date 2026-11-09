@@ -164,6 +164,7 @@ model OAuthToken {
   userId              String?   @map("user")
   scopes              Json?     @default("[]")
   redirectUri         String    @default("")
+  agentId             String    @default("")
   resource            String    @default("")
   expiresAt           DateTime?
   isRevoked           String?   @default("false")
