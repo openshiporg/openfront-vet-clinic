@@ -61,12 +61,15 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
   const stay = stays.find(s => s.id === sp.stay) ?? stays[0];
   const occupied = new Map(stays.map(s => [s.cage?.id, s]));
   const free = data.wards.flatMap(w => w.cages.filter(c => !occupied.has(c.id)).map(c => ({ value: c.id, label: `${c.code} · ${w.name} · ${label(c.size)}` })));
-  const tasks = stay ? (await q<{ treatmentTasks: Task[] }>(`
-      query T($stay: ID!, $from: DateTime!, $to: DateTime!) {
-        treatmentTasks(where: { stay: { id: { equals: $stay } }, dueAt: { gte: $from, lt: $to } }, orderBy: { dueAt: asc }) {
-          id dueAt status version doneAt observation skipReason doneBy { displayName }
-          sheetOrder { id frequency instructions order { id ref description drug { id csSchedule } } } }
-      }`, { stay: stay.id, from: from.toISOString(), to: to.toISOString() })).treatmentTasks : [];
+  const TASK = 'id dueAt status version doneAt observation skipReason doneBy { displayName } sheetOrder { id frequency instructions order { id ref description drug { id csSchedule } } }';
+  const sheet = stay ? await q<{ treatmentTasks: Task[]; missed: Task[] }>(`
+      query T($stay: ID!, $from: DateTime!, $to: DateTime!, $since: DateTime!) {
+        treatmentTasks(where: { stay: { id: { equals: $stay } }, dueAt: { gte: $from, lt: $to } }, orderBy: { dueAt: asc }) { ${TASK} }
+        missed: treatmentTasks(where: { stay: { id: { equals: $stay } }, status: { equals: "missed" }, dueAt: { gte: $since } }, orderBy: { dueAt: desc }) { ${TASK} }
+      }`, { stay: stay.id, from: from.toISOString(), to: to.toISOString(), since: new Date(now.getTime() - 24 * 3_600_000).toISOString() }) : null;
+  const tasks = sheet?.treatmentTasks ?? [];
+  // Missed doses fall off the left of the grid soon after; they stay listed here for a day.
+  const missed = sheet?.missed ?? [];
   const hours = Array.from({ length: 26 }, (_, i) => new Date(Math.floor(from.getTime() / 3_600_000) * 3_600_000 + i * 3_600_000));
   const rows = new Map<string, { label: string; frequency: string; tasks: Task[] }>();
   for (const t of tasks) {
@@ -141,6 +144,12 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
           ) : <Empty>No treatments scheduled for the next 24 hours. Order from the visit record with a sheet frequency.</Empty>}
           <p className="text-xs text-muted-foreground">○ due · ✓ done · ! overdue · ✕ missed · — skipped</p>
 
+          {missed.length ? (
+            <div className="space-y-1">
+              <h3 className="pt-2 text-sm font-medium text-red-700 dark:text-red-300">Missed in the last 24 hours</h3>
+              {missed.map(t => <Row key={t.id}><span className="text-sm">✕ {t.sheetOrder?.order?.description}</span><Meta>was due {when(t.dueAt, tz)} · {t.sheetOrder?.order?.ref} · not given; reschedule or record the reason in the visit record</Meta></Row>)}
+            </div>
+          ) : null}
           <h3 className="pt-2 text-sm font-medium">Due now</h3>
           {dueNow.length ? dueNow.map(t => {
             const drug = t.sheetOrder?.order?.drug;
