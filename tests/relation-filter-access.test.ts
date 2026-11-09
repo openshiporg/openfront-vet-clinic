@@ -109,3 +109,9 @@ describe('relation filters respect the target list (F1/F2)', () => {
     expect(relations.length).toBeGreaterThan(200)
   })
 })
+
+describe('approval requests are not readable by front desk (r5 #6)', () => {
+  const filter = (roleId: string) => lists.ApprovalRequest.access.filter.query({ session: sessionFor(roleId), context, listKey: 'ApprovalRequest', operation: 'query' })
+  it('front desk only sees requests they made', () => expect(filter(CSR)).toEqual({ requestedBy: { id: { equals: `test_${CSR}` } } }))
+  it('a practice manager sees all', () => expect(filter(PM)).toBe(true))
+})

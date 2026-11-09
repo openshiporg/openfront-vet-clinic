@@ -67,7 +67,10 @@ function validateRow(entity: ImportEntity, row: Row, species: SpeciesRow[]): str
   }
   if (entity === 'vaccinations') {
     need('vaccine', 'Vaccine')
-    if (!importDate(row.givenOn ?? '')) errors.push('Date given is not a date.')
+    const given = importDate(row.givenOn ?? '')
+    if (!given) errors.push('Date given is not a date.')
+    // Review r5 #3: a vaccine cannot have been given after the import day (one day of slack for time zones).
+    else if (given > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) errors.push(`Date given "${row.givenOn}" is in the future.`)
     if (row.dueOn && !importDate(row.dueOn)) errors.push('Due date is not a date.')
   }
   if (entity === 'reminders') { need('reminder', 'Reminder'); if (!importDate(row.dueOn ?? '')) errors.push('Due date is not a date.') }

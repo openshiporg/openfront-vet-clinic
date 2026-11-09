@@ -4,13 +4,13 @@ import { Page, Row, Empty, Status, Meta, Section, Tabs } from '../../components/
 import { ActionButton } from '../../components/ActionButton';
 
 type Request = {
-  id: string; action: string; summary: string; targetList: string; targetId: string; payloadHash: string; requiredPermission: string;
+  id: string; action: string; summary: string; targetList: string; targetId: string; requiredPermission: string;
   status: string; version: number; createdAt: string; expiresAt: string | null; consumedAt: string | null;
   requestedBy: { id: string; name: string } | null; requestedByAgent: { name: string } | null;
   decisions: { id: string; decision: string; reason: string; at: string; decidedBy: { name: string } | null }[];
 };
 
-const FIELDS = 'id action summary targetList targetId payloadHash requiredPermission status version createdAt expiresAt consumedAt requestedBy { id name } requestedByAgent { name } decisions { id decision reason at decidedBy { name } }';
+const FIELDS = 'id action summary targetList targetId requiredPermission status version createdAt expiresAt consumedAt requestedBy { id name } requestedByAgent { name } decisions { id decision reason at decidedBy { name } }';
 
 /**
  * Maker-checker queue. The server enforces every rule (a different person, the right permission,
@@ -52,7 +52,7 @@ export default async function ApprovalsPage({ searchParams }: { searchParams?: P
                 </Meta>
                 {r.decisions.map((d, i) => <Meta key={i}><br />{d.decision === 'approve' ? 'Approved' : 'Rejected'} by {d.decidedBy?.name ?? 'someone'} · {when(d.at, tz)}{d.reason ? ` · ${fix('ApprovalDecision', d.id, 'reason', d.reason)}` : ''}</Meta>)}
                 {r.consumedAt ? <Meta><br />Carried out {when(r.consumedAt, tz)}</Meta> : null}
-                <p className="break-all font-mono text-[11px] text-muted-foreground">{r.targetList} {r.targetId} · payload {r.payloadHash.slice(0, 12)}</p>
+                <p className="break-all font-mono text-[11px] text-muted-foreground">{r.targetList} {r.targetId}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Status value={expired ? 'expired' : r.status} />

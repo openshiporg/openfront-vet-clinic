@@ -1176,7 +1176,6 @@ type ApprovalRequest {
   targetList: String
   targetId: String
   payload: JSON
-  payloadHash: String
   requiredPermission: String
   requestedBy: User
   requestedByAgent: AgentIdentity
@@ -1242,7 +1241,6 @@ input ApprovalRequestUpdateInput {
   targetList: String
   targetId: String
   payload: JSON
-  payloadHash: String
   requiredPermission: String
   requestedBy: UserRelateToOneForUpdateInput
   requestedByAgent: AgentIdentityRelateToOneForUpdateInput
@@ -1279,7 +1277,6 @@ input ApprovalRequestCreateInput {
   targetList: String
   targetId: String
   payload: JSON
-  payloadHash: String
   requiredPermission: String
   requestedBy: UserRelateToOneForCreateInput
   requestedByAgent: AgentIdentityRelateToOneForCreateInput

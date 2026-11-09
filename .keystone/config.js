@@ -1120,8 +1120,12 @@ var ApprovalPolicy = (0, import_core7.list)({
     ...trackingFields
   }
 });
+var canDecideSomething = (session) => approvalPermissions.some((name) => hasPermission(session, name));
 var ApprovalRequest = (0, import_core7.list)({
-  access: governed("canAccessDashboard"),
+  access: {
+    ...governed("canAccessDashboard"),
+    filter: { query: ({ session }) => canDecideSomething(session) ? true : session?.itemId ? { requestedBy: { id: { equals: session.itemId } } } : false }
+  },
   ui: { labelField: "action", listView: { initialColumns: ["action", "status", "targetList", "requestedBy", "createdAt", "expiresAt"] } },
   fields: {
     action: systemText({ indexed: true, required: true }),
@@ -1129,7 +1133,7 @@ var ApprovalRequest = (0, import_core7.list)({
     targetList: systemText({ required: true }),
     targetId: systemText({ indexed: true, required: true }),
     payload: (0, import_fields8.json)({ ...readOnly }),
-    payloadHash: systemText({ required: true, secret: true }),
+    payloadHash: hiddenHash({ required: true }),
     requiredPermission: systemText({ required: true }),
     requestedBy: relationship({ ref: "User", ...readOnly }),
     requestedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
@@ -9725,7 +9729,9 @@ function validateRow(entity, row, species) {
   }
   if (entity === "vaccinations") {
     need("vaccine", "Vaccine");
-    if (!importDate(row.givenOn ?? "")) errors.push("Date given is not a date.");
+    const given = importDate(row.givenOn ?? "");
+    if (!given) errors.push("Date given is not a date.");
+    else if (given > new Date(Date.now() + 864e5).toISOString().slice(0, 10)) errors.push(`Date given "${row.givenOn}" is in the future.`);
     if (row.dueOn && !importDate(row.dueOn)) errors.push("Due date is not a date.");
   }
   if (entity === "reminders") {

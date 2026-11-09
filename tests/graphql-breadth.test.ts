@@ -5,6 +5,7 @@ import { buildSchema, parse } from 'graphql'
 import { getContext } from '@keystone-6/core/context'
 import * as PrismaModule from '@prisma/client'
 import config from '../features/keystone'
+import { ENCOUNTER_QUERY } from '../features/platform/encounters/screens/encounterQuery'
 import { API_MAX_ROOT_FIELDS, API_MAX_ROOT_ROWS, breadthLimitPlugin, measureBreadth } from '../features/keystone/security/breadthLimit'
 
 /* Review r4 F1: 40 aliases x take:500 in one document returned ~20k rows. Payload shapes live here only. */
@@ -28,6 +29,24 @@ describe('GraphQL breadth limit (r4 F1)', () => {
     expect(measureBreadth(schema, parse(aliases(10, 500)), null, null).rows).toBe(API_MAX_ROOT_ROWS)
     expect(verdict(aliases(10, 500))).toBeUndefined()
   })
+})
+
+/* Review r5 #1/#2: the cost model counts nested rows multiplicatively and the medical record page still fits. */
+describe('nested fan-out is counted (r5)', () => {
+  const nested = (roots: number, aliasesPerRoot: number) => `query { ${Array.from({ length: roots }, (_, r) => `r${r}: patients(take: 500) { ${Array.from({ length: aliasesPerRoot }, (_, i) => `w${i}: weights { id }`).join(' ')} }`).join(' ')} }`
+  it('refuses 100 aliased weights under 500 patients', () => expect(verdict(nested(1, 100))).toMatch(/rows|fields at once/))
+  it('refuses 10 roots x 20 nested aliases', () => expect(verdict(nested(10, 20))).toMatch(/rows|fields at once/))
+  it('refuses a handful of nested lists whose rows multiply', () => expect(verdict('query { patients(take: 500) { weights(take: 500) { id } } }')).toMatch(/rows/))
+  it('counts a nested list with no take as a full page', () => expect(verdict('query { patients(take: 20) { weights { id } } }')).toMatch(/rows/))
+  it('counts nested lists inside fragments', () => expect(verdict('query { patients(take: 500) { ...F } } fragment F on Patient { a: weights(take: 500) { id } }')).toMatch(/rows/))
+  it('refuses a very wide selection set', () => expect(verdict(`query { patients(take: 1) { ${Array.from({ length: 80 }, (_, i) => `a${i}: id`).join(' ')} } }`)).toMatch(/fields at once/))
+  it('the medical record page query fits the limit (any role runs this same document)', () => {
+    expect(verdict(ENCOUNTER_QUERY, { id: 'x' })).toBeUndefined()
+    const b = measureBreadth(schema, parse(ENCOUNTER_QUERY), null, { id: 'x' })
+    expect(b.rows).toBeLessThanOrEqual(API_MAX_ROOT_ROWS)
+    expect(b.rows).toBeGreaterThan(1000)
+  })
+  it('ordinary nesting stays allowed', () => expect(verdict('query { patients(take: 50) { id weights(take: 5) { id } alerts(take: 10) { id } } }')).toBeUndefined())
 })
 
 describe('every field whose read is denied is not filterable or orderable (r4 F2)', () => {

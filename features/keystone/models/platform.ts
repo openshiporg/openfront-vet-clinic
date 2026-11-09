@@ -1,8 +1,8 @@
 import { list } from '@keystone-6/core'
 import { calendarDay, checkbox, integer, json, select, text, timestamp } from '@keystone-6/core/fields'
 import { relationship } from './guardedRelationship'
-import { permissions } from '../access'
-import { choice, fixedChoice, lifecycle, minor, readOnly, systemText, versionField } from './domainFields'
+import { approvalPermissions, hasPermission, permissions } from '../access'
+import { choice, fixedChoice, hiddenHash, lifecycle, minor, readOnly, systemText, versionField } from './domainFields'
 import { governed, immutable, managed, serverOnly } from './listAccess'
 import { trackingFields } from './trackingFields'
 
@@ -195,8 +195,14 @@ export const ApprovalPolicy = list({
   },
 })
 
+/* Review r5 #6: a request's summary and payload carry the thing being approved (practice settings changes,
+   void reasons). Only people who can approve something read every request; anyone else sees their own. */
+const canDecideSomething = (session: any) => approvalPermissions.some(name => hasPermission(session, name))
 export const ApprovalRequest = list({
-  access: governed('canAccessDashboard'),
+  access: {
+    ...governed('canAccessDashboard'),
+    filter: { query: ({ session }: any) => (canDecideSomething(session) ? true : session?.itemId ? { requestedBy: { id: { equals: session.itemId } } } : false) },
+  },
   ui: { labelField: 'action', listView: { initialColumns: ['action', 'status', 'targetList', 'requestedBy', 'createdAt', 'expiresAt'] } },
   fields: {
     action: systemText({ indexed: true, required: true }),
@@ -204,7 +210,7 @@ export const ApprovalRequest = list({
     targetList: systemText({ required: true }),
     targetId: systemText({ indexed: true, required: true }),
     payload: json({ ...readOnly }),
-    payloadHash: systemText({ required: true, secret: true }),
+    payloadHash: hiddenHash({ required: true }),
     requiredPermission: systemText({ required: true }),
     requestedBy: relationship({ ref: 'User', ...readOnly }),
     requestedByAgent: relationship({ ref: 'AgentIdentity', ...readOnly }),
