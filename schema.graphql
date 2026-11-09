@@ -757,7 +757,6 @@ type OAuthToken {
 
 input OAuthTokenWhereUniqueInput {
   id: ID
-  token: String
 }
 
 input OAuthTokenWhereInput {
@@ -766,7 +765,6 @@ input OAuthTokenWhereInput {
   NOT: [OAuthTokenWhereInput!]
   id: IDFilter
   tokenType: StringFilter
-  token: StringFilter
   clientId: StringFilter
   user: UserWhereInput
   redirectUri: StringFilter
@@ -775,8 +773,6 @@ input OAuthTokenWhereInput {
   expiresAt: DateTimeNullableFilter
   isRevoked: StringNullableFilter
   authorizationCode: StringFilter
-  refreshToken: StringFilter
-  accessToken: StringFilter
   state: StringFilter
   codeChallenge: StringFilter
   codeChallengeMethod: StringNullableFilter
@@ -787,7 +783,6 @@ input OAuthTokenWhereInput {
 input OAuthTokenOrderByInput {
   id: OrderDirection
   tokenType: OrderDirection
-  token: OrderDirection
   clientId: OrderDirection
   redirectUri: OrderDirection
   agentId: OrderDirection
@@ -795,8 +790,6 @@ input OAuthTokenOrderByInput {
   expiresAt: OrderDirection
   isRevoked: OrderDirection
   authorizationCode: OrderDirection
-  refreshToken: OrderDirection
-  accessToken: OrderDirection
   state: OrderDirection
   codeChallenge: OrderDirection
   codeChallengeMethod: OrderDirection
@@ -1210,7 +1203,6 @@ input ApprovalRequestWhereInput {
   summary: StringFilter
   targetList: StringFilter
   targetId: StringFilter
-  payloadHash: StringFilter
   requiredPermission: StringFilter
   requestedBy: UserWhereInput
   requestedByAgent: AgentIdentityWhereInput
@@ -1235,7 +1227,6 @@ input ApprovalRequestOrderByInput {
   summary: OrderDirection
   targetList: OrderDirection
   targetId: OrderDirection
-  payloadHash: OrderDirection
   requiredPermission: OrderDirection
   status: OrderDirection
   expiresAt: OrderDirection
@@ -1928,7 +1919,6 @@ input IntegrationConnectionWhereInput {
   providerKey: StringFilter
   mode: StringFilter
   location: LocationWhereInput
-  secretRef: StringFilter
   status: StringFilter
   lastHealthAt: DateTimeNullableFilter
   lastError: StringFilter
@@ -1943,7 +1933,6 @@ input IntegrationConnectionOrderByInput {
   area: OrderDirection
   providerKey: OrderDirection
   mode: OrderDirection
-  secretRef: OrderDirection
   status: OrderDirection
   lastHealthAt: OrderDirection
   lastError: OrderDirection
@@ -2202,7 +2191,6 @@ input ProviderObservationWhereInput {
   source: StringFilter
   connectionId: StringFilter
   externalId: StringFilter
-  contentHash: StringFilter
   receivedAt: DateTimeNullableFilter
   processedAt: DateTimeNullableFilter
   status: StringFilter
@@ -2215,7 +2203,6 @@ input ProviderObservationOrderByInput {
   source: OrderDirection
   connectionId: OrderDirection
   externalId: OrderDirection
-  contentHash: OrderDirection
   receivedAt: OrderDirection
   processedAt: OrderDirection
   status: OrderDirection
@@ -7495,7 +7482,6 @@ input WaitlistEntryWhereInput {
   appointmentType: AppointmentTypeWhereInput
   urgency: StringFilter
   status: StringFilter
-  offeredSlotToken: StringFilter
   offerExpiresAt: DateTimeNullableFilter
   bookedAppointment: AppointmentWhereInput
   note: StringFilter
@@ -7514,7 +7500,6 @@ input WaitlistEntryOrderByInput {
   id: OrderDirection
   urgency: OrderDirection
   status: OrderDirection
-  offeredSlotToken: OrderDirection
   offerExpiresAt: OrderDirection
   note: OrderDirection
   version: OrderDirection
@@ -13972,7 +13957,6 @@ input ProposalWhereInput {
   NOT: [ProposalWhereInput!]
   id: IDFilter
   kind: StringFilter
-  payloadHash: StringFilter
   status: StringFilter
   agentRun: AgentRunWhereInput
   proposedByAgent: AgentIdentityWhereInput
@@ -13988,7 +13972,6 @@ input ProposalWhereInput {
 input ProposalOrderByInput {
   id: OrderDirection
   kind: OrderDirection
-  payloadHash: OrderDirection
   status: OrderDirection
   targetList: OrderDirection
   targetId: OrderDirection

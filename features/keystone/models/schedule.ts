@@ -179,7 +179,7 @@ export const WaitlistEntry = list({
     preferredWindows: json({ ...readOnly }),
     urgency: fixedChoice(['routine', 'soon', 'urgent']),
     status: lifecycle(['waiting', 'offered', 'accepted', 'expired', 'declined', 'cancelled']),
-    offeredSlotToken: systemText(),
+    offeredSlotToken: systemText({ secret: true }),
     offerExpiresAt: timestamp({ ...readOnly }),
     bookedAppointment: relationship({ ref: 'Appointment', ...readOnly }),
     note: systemText(),

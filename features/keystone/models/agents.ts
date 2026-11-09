@@ -59,7 +59,7 @@ export const Proposal = list({
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
     payload: json({ ...readOnly }),
-    payloadHash: systemText({ required: true }),
+    payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(['proposed', 'validated', 'approved', 'rejected', 'expired', 'applied']),
     agentRun: relationship({ ref: 'AgentRun.proposals', ...readOnly }),
     proposedByAgent: relationship({ ref: 'AgentIdentity', ...readOnly }),

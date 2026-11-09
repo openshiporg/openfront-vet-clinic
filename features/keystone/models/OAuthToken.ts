@@ -33,6 +33,8 @@ export const OAuthToken = list({
       },
     }),
     token: text({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       validation: {
         isRequired: true,
@@ -96,6 +98,8 @@ export const OAuthToken = list({
       },
     }),
     refreshToken: text({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
@@ -103,6 +107,8 @@ export const OAuthToken = list({
       },
     }),
     accessToken: text({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {

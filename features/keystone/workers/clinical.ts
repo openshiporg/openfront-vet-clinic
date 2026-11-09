@@ -61,6 +61,13 @@ export async function runClinicalJobs(db: Db, options: { now?: Date; only?: stri
     }
   }
   const interval = options.intervalSeconds ?? 300
-  for (const r of out) await recordRun(db, r.job.startsWith('reminders:') ? r.job.split(':').slice(0, 2).join(':') : r.job, interval, r, now)
+  for (const r of out) {
+    const kind = r.job.startsWith('reminders:') ? r.job.split(':').slice(0, 2).join(':') : r.job
+    await recordRun(db, kind, interval, r, now)
+    // Review r4 F3: the daily reminder lease is kept for the day after a success, so every later tick
+    // finds it held and "does not run". That is a healthy loop with nothing to do, not a stopped one:
+    // record that it checked (lastRunAt) without touching how the last real run ended.
+    if (!r.ran && r.job.startsWith('reminders:')) await db.scheduledJob.updateMany({ where: { kind }, data: { lastRunAt: now, nextRunAt: new Date(now.getTime() + interval * 1000) } }).catch(() => undefined)
+  }
   return out
 }

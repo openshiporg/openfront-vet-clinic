@@ -642,10 +642,24 @@ export async function saveSurgeryReport(_root: unknown, args: { encounterId: str
   })
 }
 
+/** Review r4 F4: a finding is a short note, not a document; the database CHECK (vc_dental_teeth_valid) uses the same limits. */
+const DENTAL_MAX_ITEMS = 50
+const DENTAL_MAX_LENGTH = 500
+
 export async function saveDentalChart(_root: unknown, args: { encounterId: string; teeth: Record<string, { findings?: string[]; procedures?: string[] }>; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canWriteRecord'], tool: 'dental.chart', humanOnly: true }, args, async actor => {
     const triadan = /^[1-8](0[1-9]|1[0-1])$/
-    for (const tooth of Object.keys(args.teeth ?? {})) if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: 'teeth' })
+    if (!args.teeth || typeof args.teeth !== 'object' || Array.isArray(args.teeth)) throw new DomainError(Codes.INVALID_INPUT, 'Teeth must be an object keyed by Triadan tooth number.', { field: 'teeth' })
+    for (const [tooth, entry] of Object.entries(args.teeth)) {
+      if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: 'teeth' })
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: 'teeth' })
+      for (const key of ['findings', 'procedures'] as const) {
+        const list = (entry as Record<string, unknown>)[key]
+        if (list === undefined) continue
+        if (!Array.isArray(list) || list.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: 'teeth' })
+        if (list.some(item => typeof item !== 'string' || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: 'teeth' })
+      }
+    }
     const result = await command(context.prisma, { name: 'dental.chart', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const enc = await chartableEncounter(uow, args.encounterId)
       const existing = await uow.tx.dentalChart.findFirst({ where: { encounterId: enc.id }, select: { id: true } })

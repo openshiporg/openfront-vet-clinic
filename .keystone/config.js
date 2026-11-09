@@ -726,6 +726,8 @@ var OAuthToken = (0, import_core5.list)({
       }
     }),
     token: (0, import_fields6.text)({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       validation: {
         isRequired: true
@@ -789,6 +791,8 @@ var OAuthToken = (0, import_core5.list)({
       }
     }),
     refreshToken: (0, import_fields6.text)({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
@@ -796,6 +800,8 @@ var OAuthToken = (0, import_core5.list)({
       }
     }),
     accessToken: (0, import_fields6.text)({
+      isFilterable: false,
+      isOrderable: false,
       access: { read: () => false },
       hooks: digestTokenInput,
       ui: {
@@ -900,6 +906,7 @@ var versionField = () => (0, import_fields7.integer)({
   ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } }
 });
 var systemText = (options = {}) => (0, import_fields7.text)({
+  ...options.secret ? { isFilterable: false, isOrderable: false } : {},
   ...options.indexed ? { isIndexed: options.indexed } : {},
   ...options.nullable ? { db: { isNullable: true } } : {},
   validation: { isRequired: options.required ?? false },
@@ -1122,7 +1129,7 @@ var ApprovalRequest = (0, import_core7.list)({
     targetList: systemText({ required: true }),
     targetId: systemText({ indexed: true, required: true }),
     payload: (0, import_fields8.json)({ ...readOnly }),
-    payloadHash: systemText({ required: true }),
+    payloadHash: systemText({ required: true, secret: true }),
     requiredPermission: systemText({ required: true }),
     requestedBy: relationship({ ref: "User", ...readOnly }),
     requestedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
@@ -1212,7 +1219,7 @@ var ProviderObservation = (0, import_core7.list)({
     source: systemText({ indexed: true, required: true }),
     connectionId: systemText(),
     externalId: systemText({ indexed: true }),
-    contentHash: systemText({ required: true }),
+    contentHash: systemText({ required: true, secret: true }),
     payload: (0, import_fields8.json)({ ...readOnly }),
     receivedAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
     processedAt: (0, import_fields8.timestamp)({ ...readOnly }),
@@ -1230,7 +1237,7 @@ var IntegrationConnection = (0, import_core7.list)({
     mode: fixedChoice(["manual", "test", "live"]),
     location: relationship({ ref: "Location", ...readOnly }),
     /** Name of the SecretBox entry holding the credential; the secret itself never leaves the server. */
-    secretRef: systemText(),
+    secretRef: systemText({ secret: true }),
     capabilityProfile: (0, import_fields8.json)({ ...readOnly }),
     status: lifecycle(["active", "paused", "error", "retired"]),
     lastHealthAt: (0, import_fields8.timestamp)({ ...readOnly }),
@@ -2188,7 +2195,7 @@ var WaitlistEntry = (0, import_core11.list)({
     preferredWindows: (0, import_fields12.json)({ ...readOnly }),
     urgency: fixedChoice(["routine", "soon", "urgent"]),
     status: lifecycle(["waiting", "offered", "accepted", "expired", "declined", "cancelled"]),
-    offeredSlotToken: systemText(),
+    offeredSlotToken: systemText({ secret: true }),
     offerExpiresAt: (0, import_fields12.timestamp)({ ...readOnly }),
     bookedAppointment: relationship({ ref: "Appointment", ...readOnly }),
     note: systemText(),
@@ -3448,7 +3455,7 @@ var Proposal = (0, import_core18.list)({
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
     payload: (0, import_fields19.json)({ ...readOnly }),
-    payloadHash: systemText({ required: true }),
+    payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
     agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
     proposedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
@@ -9148,10 +9155,22 @@ async function saveSurgeryReport(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
+var DENTAL_MAX_ITEMS = 50;
+var DENTAL_MAX_LENGTH = 500;
 async function saveDentalChart(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "dental.chart", humanOnly: true }, args, async (actor) => {
     const triadan = /^[1-8](0[1-9]|1[0-1])$/;
-    for (const tooth of Object.keys(args.teeth ?? {})) if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
+    if (!args.teeth || typeof args.teeth !== "object" || Array.isArray(args.teeth)) throw new DomainError(Codes.INVALID_INPUT, "Teeth must be an object keyed by Triadan tooth number.", { field: "teeth" });
+    for (const [tooth, entry] of Object.entries(args.teeth)) {
+      if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
+      for (const key2 of ["findings", "procedures"]) {
+        const list18 = entry[key2];
+        if (list18 === void 0) continue;
+        if (!Array.isArray(list18) || list18.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list18.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+      }
+    }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const enc = await chartableEncounter(uow, args.encounterId);
       const existing = await uow.tx.dentalChart.findFirst({ where: { encounterId: enc.id }, select: { id: true } });

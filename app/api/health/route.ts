@@ -30,7 +30,9 @@ export async function GET() {
     const loops = rows.filter(r => r.kind.startsWith(TICK_PREFIX)).map(describe)
     const jobs = rows.filter(r => !r.kind.startsWith(TICK_PREFIX)).map(describe)
     const scheduler = { enabled: schedulerEnabled(), state: !loops.length ? 'never_ran' : loops.every(l => l.state === 'running') ? 'running' : loops.some(l => l.state === 'running') ? 'degraded' : loops[0].state }
-    return Response.json({ status: 'ok', database: 'ok', scheduler, workers: loops, jobs, outbox: { pending: outboxPending, oldestPendingAt: oldest?.createdAt.toISOString() ?? null } })
+    // Overdue by more than twice its own interval (staleAfterMs) means the worker stopped: degraded, not ok.
+    const overdue = [...loops, ...jobs].filter(j => j.state === 'stale').map(j => j.kind)
+    return Response.json({ status: overdue.length ? 'degraded' : 'ok', ...(overdue.length ? { overdue } : {}), database: 'ok', scheduler, workers: loops, jobs, outbox: { pending: outboxPending, oldestPendingAt: oldest?.createdAt.toISOString() ?? null } })
   } catch {
     return Response.json({ status: 'unhealthy', reason: 'database_unavailable' }, { status: 503 })
   }

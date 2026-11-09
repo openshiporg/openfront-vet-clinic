@@ -73,8 +73,9 @@ export const versionField = () =>
   })
 
 /** Server-written text that is visible but never edited through the API. */
-export const systemText = (options: { indexed?: boolean | 'unique'; required?: boolean; nullable?: boolean } = {}) =>
+export const systemText = (options: { indexed?: boolean | 'unique'; required?: boolean; nullable?: boolean; secret?: boolean } = {}) =>
   text({
+    ...(options.secret ? { isFilterable: false, isOrderable: false } : {}),
     ...(options.indexed ? { isIndexed: options.indexed } : {}),
     ...(options.nullable ? { db: { isNullable: true } } : {}),
     validation: { isRequired: options.required ?? false },
