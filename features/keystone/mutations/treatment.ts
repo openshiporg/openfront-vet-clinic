@@ -56,7 +56,7 @@ async function doseFor(uow: UnitOfWork, patientId: string, drugId: string, args:
   try { result = calculateDose(input) } catch (error) { throw new DomainError(Codes.INVALID_INPUT, (error as Error).message, { field: 'doseAmount' }) }
   const blocks = blockingWarnings(result.warnings)
   const hard = blocks.filter(b => HARD_BLOCKS.includes(b.code))
-  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, hard.map(b => b.message).join(' '), { reason: 'dose_refused', problems: result.warnings })
+  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, `${hard.map(b => b.message).join(' ')} Outside the formulary range a dose is not given; change the dose, or change the formulary range.`, { reason: 'dose_refused', problems: result.warnings })
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
     throw new DomainError(Codes.GUARD_FAILED, `${blocks.map(b => b.message).join(' ')} To go ahead, a veterinarian records an override reason.`, { reason: 'dose_blocked', problems: result.warnings })
   }

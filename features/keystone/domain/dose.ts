@@ -14,17 +14,18 @@ import { dec, Decimal, toBpsInt, toScale, ZERO, type DecimalInput } from '../lib
  * the practice formulary range for the species, breed genetic cautions (MDR1), patient drug
  * sensitivities, weight age, and rounding deviation. A `block` needs a recorded override reason.
  *
- * Range (2026.11-3): a dose outside the formulary range is a block on either side and on every
- * basis (per kg, per lb, per m² through the body surface area of the dosing weight, per animal). A
- * manual quantity override is a measuring adjustment, never a different dose: the amount it
- * delivers is checked against the range too, and outside it the override is refused outright
- * (`override_out_of_range` cannot be overridden; order the dose rate itself instead).
+ * Range (2026.11-3): a dose outside the formulary range is refused outright, on either side and on
+ * every basis (per kg, per lb, per m² through the body surface area of the dosing weight, per
+ * animal); no override reason lets it through. A dose a species needs outside the range is a
+ * formulary change (PracticeSettings / DrugProduct.doseRanges), made and audited there. A manual
+ * quantity override is a measuring adjustment, never a different dose: the amount it delivers is
+ * checked against the range too and refused outside it.
  */
 
 export const DOSE_CALC_VERSION = 'dose-2026.11-3'
 
-/** Blocks a veterinarian can never override with a reason. */
-export const HARD_BLOCKS: readonly string[] = ['override_out_of_range', 'range_unconvertible_override']
+/** Blocks no override reason can pass: every out-of-range dose, and a manual quantity that cannot be checked. */
+export const HARD_BLOCKS: readonly string[] = ['above_range', 'below_range', 'override_out_of_range', 'range_unconvertible_override']
 
 export type DoseUnit = 'mg' | 'mcg' | 'g' | 'mL' | 'IU' | 'unit' | 'tablet' | 'capsule' | 'dose'
 export type DosePer = 'kg' | 'm2' | 'animal'
