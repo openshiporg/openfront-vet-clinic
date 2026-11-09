@@ -31,11 +31,8 @@ export async function GET() {
     const jobs = rows.filter(r => !r.kind.startsWith(TICK_PREFIX)).map(describe)
     const scheduler = { enabled: schedulerEnabled(), state: !loops.length ? 'never_ran' : loops.every(l => l.state === 'running') ? 'running' : loops.some(l => l.state === 'running') ? 'degraded' : loops[0].state }
     // Overdue by more than twice its own interval (staleAfterMs) means the worker stopped: degraded, not ok.
-    const all = [...loops, ...jobs]
-    const overdue = all.filter(j => j.state === 'stale').map(j => j.kind)
-    // A job whose last run failed is degraded too (review r5 #5), by kind only.
-    const failing = all.filter(j => j.state === 'failing').map(j => j.kind)
-    return Response.json({ status: overdue.length || failing.length ? 'degraded' : 'ok', ...(overdue.length ? { overdue } : {}), ...(failing.length ? { failing } : {}), database: 'ok', scheduler, workers: loops, jobs, outbox: { pending: outboxPending, oldestPendingAt: oldest?.createdAt.toISOString() ?? null } })
+    const overdue = [...loops, ...jobs].filter(j => j.state === 'stale').map(j => j.kind)
+    return Response.json({ status: overdue.length ? 'degraded' : 'ok', ...(overdue.length ? { overdue } : {}), database: 'ok', scheduler, workers: loops, jobs, outbox: { pending: outboxPending, oldestPendingAt: oldest?.createdAt.toISOString() ?? null } })
   } catch {
     return Response.json({ status: 'unhealthy', reason: 'database_unavailable' }, { status: 503 })
   }

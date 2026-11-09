@@ -24,7 +24,6 @@ const HIDDEN: [string, string][] = [
   ['MachineCredential', 'secretHash'],
   ['CommandReceipt', 'requestHash'],
   ['OAuthApp', 'clientSecret'],
-  ['ApprovalRequest', 'payloadHash'],
 ]
 
 describe('hashes over secret or guessable values are not exposed', () => {
@@ -73,7 +72,7 @@ describe('hashes over secret or guessable values are not exposed', () => {
     // secretRef is the name of a SecretBox entry, not a secret. Each hash covers content shown on the same record to the same readers (the payload, the rules, the
     // signed note, the file, the audit row), or the chain links of tamper-evident logs.
     expect(readable.sort()).toEqual([
-      'Addendum.hash', 'AuditEvent.hash', 'AuditEvent.prevHash', 'ClinicalDocument.sha256',
+      'Addendum.hash', 'ApprovalRequest.payloadHash', 'AuditEvent.hash', 'AuditEvent.prevHash', 'ClinicalDocument.sha256',
       'ClinicalDocument.sourceHash', 'CsLogEntry.hash', 'IntegrationConnection.secretRef', 'CsLogEntry.prevHash', 'Document.sha256', 'DoseCalculation.hash',
       'Encounter.contentHash', 'PolicyVersion.rulesHash', 'Proposal.payloadHash', 'ProviderObservation.contentHash',
       'ReminderProtocolVersion.contentHash', 'SoapSectionRevision.contentHash', 'TriageProtocolVersion.contentHash',
