@@ -32,10 +32,22 @@ export function dueTimes(input: { frequency: string; startAt: Date; endAt?: Date
   return out
 }
 
-/** Status a scheduled task should show now: due within the hour, overdue after the grace. */
-export function taskStatusAt(task: { dueAt: Date; status: string; graceMinutes: number }, now: Date): string {
+/**
+ * How long after its due time an undone task is `missed`: half the interval (the next dose is then
+ * closer than this one), at least the grace and an hour; four hours for a one-off task.
+ */
+export function missedAfterMinutes(frequency: string | null | undefined, graceMinutes: number): number {
+  const f = frequency ? sheetFrequency(frequency) : null
+  const hours = f ? FREQUENCY_HOURS[f] ?? null : null
+  const half = hours ? (hours * 60) / 2 : 240
+  return Math.max(half, graceMinutes, 60)
+}
+
+/** Status a scheduled task should show now: due within the hour, overdue after the grace, missed after missedAfterMinutes. */
+export function taskStatusAt(task: { dueAt: Date; status: string; graceMinutes: number; frequency?: string | null }, now: Date): string {
   if (!['scheduled', 'due', 'overdue'].includes(task.status)) return task.status
   const t = now.getTime()
+  if (task.frequency !== undefined && t >= task.dueAt.getTime() + missedAfterMinutes(task.frequency, task.graceMinutes) * 60_000) return 'missed'
   if (t >= task.dueAt.getTime() + task.graceMinutes * 60_000) return 'overdue'
   if (t >= task.dueAt.getTime() - HOUR) return 'due'
   return 'scheduled'

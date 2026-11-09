@@ -892,17 +892,18 @@ model MachineCredential {
 }
 
 model Note {
-  id            String         @id @default(cuid())
-  subjectType   String         @default("")
-  subjectId     String         @default("")
-  body          String         @default("")
-  visibility    String
-  author        User?          @relation("Note_author", fields: [authorId], references: [id])
-  authorId      String?        @map("author")
-  authorAgent   AgentIdentity? @relation("Note_authorAgent", fields: [authorAgentId], references: [id])
-  authorAgentId String?        @map("authorAgent")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now()) @updatedAt
+  id              String         @id @default(cuid())
+  subjectType     String         @default("")
+  subjectId       String         @default("")
+  body            String         @default("")
+  visibility      String
+  supersedesField String         @default("")
+  author          User?          @relation("Note_author", fields: [authorId], references: [id])
+  authorId        String?        @map("author")
+  authorAgent     AgentIdentity? @relation("Note_authorAgent", fields: [authorAgentId], references: [id])
+  authorAgentId   String?        @map("authorAgent")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
 
   @@index([subjectId])
   @@index([authorId])
@@ -2828,6 +2829,7 @@ model Administration {
   reverses                                  Administration?         @relation("Administration_reverses", fields: [reversesId], references: [id])
   reversesId                                String?                 @map("reverses")
   reason                                    String                  @default("")
+  qtyOverrideReason                         String                  @default("")
   from_Administration_reverses              Administration[]        @relation("Administration_reverses")
   from_TreatmentTask_administration         TreatmentTask[]         @relation("TreatmentTask_administration")
   from_VaccineAdministration_administration VaccineAdministration[] @relation("VaccineAdministration_administration")

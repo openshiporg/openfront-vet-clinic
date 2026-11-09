@@ -9,7 +9,7 @@ import { toJsonValue } from '../lib/canonical'
 import { appendCsEntry, containerBalance } from '../lib/csRegister'
 import { requireLicence } from '../domain/licensure'
 import { resolvePolicy } from '../domain/policy'
-import { blockingWarnings, calculateDose, quantityToGive, DOSE_PERS, DOSE_UNITS, type DoseInput, type DoseUnit, type DosePer } from '../domain/dose'
+import { administrationQtyProblem, blockingWarnings, calculateDose, quantityToGive, DOSE_PERS, HARD_BLOCKS, DOSE_UNITS, type DoseInput, type DoseUnit, type DosePer } from '../domain/dose'
 import { dueTimes, sheetFrequency, taskStatusAt, taskWindowProblem } from '../domain/treatment'
 import { ROUTES } from '../models/treatment'
 import type { UnitOfWork } from '../lib/unitOfWork'
@@ -55,6 +55,8 @@ async function doseFor(uow: UnitOfWork, patientId: string, drugId: string, args:
   let result
   try { result = calculateDose(input) } catch (error) { throw new DomainError(Codes.INVALID_INPUT, (error as Error).message, { field: 'doseAmount' }) }
   const blocks = blockingWarnings(result.warnings)
+  const hard = blocks.filter(b => HARD_BLOCKS.includes(b.code))
+  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, hard.map(b => b.message).join(' '), { reason: 'dose_refused', problems: result.warnings })
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
     throw new DomainError(Codes.GUARD_FAILED, `${blocks.map(b => b.message).join(' ')} To go ahead, a veterinarian records an override reason.`, { reason: 'dose_blocked', problems: result.warnings })
   }
@@ -182,7 +184,7 @@ export async function cancelOrder(_root: unknown, args: { orderId: string; expec
  * Administer (I-O1): one source order; lot (non-controlled) or CS container (controlled) with the
  * register entry in the same transaction; a witness where the product or pack requires one.
  */
-export async function recordAdministration(_root: unknown, args: { orderId: string; qty?: string | null; route?: string | null; site?: string | null; lotId?: string | null; csContainerId?: string | null; wasteQty?: string | null; witnessId?: string | null; supervisingDvmId?: string | null; treatmentTaskId?: string | null; idempotencyKey: string }, context: Ctx) {
+export async function recordAdministration(_root: unknown, args: { orderId: string; qty?: string | null; route?: string | null; site?: string | null; lotId?: string | null; csContainerId?: string | null; wasteQty?: string | null; witnessId?: string | null; supervisingDvmId?: string | null; treatmentTaskId?: string | null; qtyOverrideReason?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canAdminister'], tool: 'order.administer', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'order.administer', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const staff = await staffOf(uow, actor)
@@ -192,7 +194,7 @@ export async function recordAdministration(_root: unknown, args: { orderId: stri
   })
 }
 
-async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>[1], staff: StaffRow, args: { orderId: string; qty?: string | null; route?: string | null; site?: string | null; lotId?: string | null; csContainerId?: string | null; wasteQty?: string | null; witnessId?: string | null; supervisingDvmId?: string | null; treatmentTaskId?: string | null }) {
+async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>[1], staff: StaffRow, args: { orderId: string; qty?: string | null; route?: string | null; site?: string | null; lotId?: string | null; csContainerId?: string | null; wasteQty?: string | null; witnessId?: string | null; supervisingDvmId?: string | null; treatmentTaskId?: string | null; qtyOverrideReason?: string | null }) {
   const order = await lockRow<{ id: string; ref: string; status: string; version: number; patientId: string; encounterId: string; locationId: string; kind: string; drugId: string | null; doseId: string | null; route: string; description: string }>(uow.tx, 'ClinicalOrder', args.orderId)
   if (!['ordered', 'in_progress'].includes(order.status)) throw new DomainError(Codes.INVALID_TRANSITION, `${order.ref} is ${order.status}; nothing more can be given on it.`)
   await activePatient(uow, order.patientId)
@@ -204,6 +206,13 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
   const qty = args.qty ? decimalText(args.qty, 'qty') : planned
   if (!qty || dec(qty).lte(0)) throw new DomainError(Codes.INVALID_INPUT, 'Enter the amount given.', { field: 'qty' })
   const unit = dose?.computedUnit || 'dose'
+  // N1: the amount given matches the order within the tolerance, or a veterinarian records why not.
+  const qtyProblem = administrationQtyProblem(planned, qty, unit)
+  const qtyOverrideReason = (args.qtyOverrideReason ?? '').trim()
+  if (qtyProblem) {
+    if (staff.kind !== 'dvm') throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} Give the ordered amount, or ask a veterinarian to record it with a reason.`, { field: 'qty', reason: 'qty_outside_order' })
+    if (qtyOverrideReason.length < 8) throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} To record it anyway, give the reason (at least 8 characters).`, { field: 'qtyOverrideReason', reason: 'qty_outside_order' })
+  }
   const { on } = await locationDay(uow, order.locationId, uow.now)
   const controlled = Boolean(drug && drug.csSchedule && drug.csSchedule !== 'none')
   let licenceId: string | null = null
@@ -253,11 +262,11 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
     data: {
       orderId: order.id, patientId: order.patientId, encounterId: order.encounterId, treatmentTaskId: args.treatmentTaskId ?? null, lotId, lotNumber: lotNumber || (drug ? '' : 'n/a'), lotExpiresOn,
       csContainerId: controlled ? args.csContainerId : null, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, qty: toScale(qty, 'qty'), unit, route: args.route ?? order.route ?? 'other', site: args.site ?? '',
-      givenById: staff.id, supervisingDvmId: args.supervisingDvmId ?? null, witnessId, licenseEvaluationId: licenceId, givenAt: uow.now, wasteQty: args.wasteQty ? toScale(args.wasteQty, 'qty') : null,
+      givenById: staff.id, supervisingDvmId: args.supervisingDvmId ?? null, witnessId, licenseEvaluationId: licenceId, givenAt: uow.now, wasteQty: args.wasteQty ? toScale(args.wasteQty, 'qty') : null, qtyOverrideReason: qtyProblem ? text(qtyOverrideReason, 'qtyOverrideReason', 300) : '',
     },
   })
   if (order.status === 'ordered') await uow.tx.clinicalOrder.update({ where: { id: order.id }, data: { status: 'in_progress', version: { increment: 1 } } })
-  auditCreate(uow, actor, 'Administration', row.id, 'order.administered', { orderRef: order.ref, qty: row.qty.toString(), unit, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber })
+  auditCreate(uow, actor, 'Administration', row.id, 'order.administered', { orderRef: order.ref, qty: row.qty.toString(), planned, unit, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber, qtyOverride: Boolean(qtyProblem) }, { reason: qtyProblem ? qtyOverrideReason : null })
   return { id: row.id, qty: row.qty.toString(), unit, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId }
 }
 
@@ -437,26 +446,34 @@ export async function runTreatmentSheetJob(uow: UnitOfWork) {
   const sheets = await uow.tx.treatmentSheetOrder.findMany({ where: { active: true, OR: [{ endAt: null }, { endAt: { gt: uow.now } }] }, select: { id: true, graceMinutes: true } })
   let created = 0
   for (const s of sheets) created += await materialiseSheetOrder(uow, s.id, horizon)
-  const open = await uow.tx.treatmentTask.findMany({ where: { status: { in: ['scheduled', 'due'] }, dueAt: { lte: new Date(uow.now.getTime() + 3_600_000) } }, select: { id: true, dueAt: true, status: true, sheetOrder: { select: { graceMinutes: true } } } })
+  const open = await uow.tx.treatmentTask.findMany({ where: { status: { in: ['scheduled', 'due', 'overdue'] }, dueAt: { lte: new Date(uow.now.getTime() + 3_600_000) } }, select: { id: true, dueAt: true, status: true, patientId: true, sheetOrder: { select: { graceMinutes: true, frequency: true, order: { select: { ref: true } } } } } })
   let due = 0
   let overdue = 0
+  let missed = 0
   for (const t of open) {
-    const next = taskStatusAt({ dueAt: t.dueAt, status: t.status, graceMinutes: t.sheetOrder?.graceMinutes ?? 30 }, uow.now)
+    const next = taskStatusAt({ dueAt: t.dueAt, status: t.status, graceMinutes: t.sheetOrder?.graceMinutes ?? 30, frequency: t.sheetOrder?.frequency ?? null }, uow.now)
     if (next !== t.status) {
-      await uow.tx.treatmentTask.updateMany({ where: { id: t.id, status: t.status }, data: { status: next, version: { increment: 1 } } })
+      const moved = await uow.tx.treatmentTask.updateMany({ where: { id: t.id, status: t.status }, data: { status: next, version: { increment: 1 } } })
+      if (!moved.count) continue
       if (next === 'due') due++
       if (next === 'overdue') overdue++
+      if (next === 'missed') {
+        missed++
+        // A missed treatment is a clinical event: it stays on the sheet and in the audit trail.
+        uow.audit({ eventType: 'treatment.missed', entityType: 'TreatmentTask', entityId: t.id, before: { status: t.status }, after: { status: 'missed', dueAt: t.dueAt.toISOString(), orderRef: t.sheetOrder?.order?.ref ?? null, patientId: t.patientId }, metadata: { system: 'treatment-sheets' } })
+      }
     }
   }
-  return { sheets: sheets.length, created, due, overdue }
+  return { sheets: sheets.length, created, due, overdue, missed }
 }
 
-export async function completeTreatmentTask(_root: unknown, args: { taskId: string; expectedVersion: number; observation?: string | null; qty?: string | null; lotId?: string | null; csContainerId?: string | null; witnessId?: string | null; wasteQty?: string | null; earlyReason?: string | null; idempotencyKey: string }, context: Ctx) {
+export async function completeTreatmentTask(_root: unknown, args: { taskId: string; expectedVersion: number; observation?: string | null; qty?: string | null; qtyOverrideReason?: string | null; lotId?: string | null; csContainerId?: string | null; witnessId?: string | null; wasteQty?: string | null; earlyReason?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canAdminister'], tool: 'treatment.complete', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'treatment.complete', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const staff = await staffOf(uow, actor)
       const task = await lockRow<{ id: string; status: string; version: number; sheetOrderId: string; dueAt: Date }>(uow.tx, 'TreatmentTask', args.taskId)
       if (task.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, 'This task changed since you loaded it.', { currentVersion: task.version })
+      if (task.status === 'missed') throw new DomainError(Codes.INVALID_TRANSITION, 'This dose was missed; it is not given late. A veterinarian can reschedule it.', { reason: 'missed' })
       if (!['scheduled', 'due', 'overdue'].includes(task.status)) throw new DomainError(Codes.INVALID_TRANSITION, `This task is already ${task.status}.`)
       // Serialise every completion on the same sheet line, so two nurses can't both give the dose.
       await lockRow(uow.tx, 'TreatmentSheetOrder', task.sheetOrderId)
@@ -471,7 +488,7 @@ export async function completeTreatmentTask(_root: unknown, args: { taskId: stri
       if (problem) throw new DomainError(Codes.GUARD_FAILED, problem.message, { reason: problem.code })
       let administrationId: string | null = null
       if (sheet.order?.kind === 'medication' || sheet.order?.drugId) {
-        administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id })).id
+        administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id, qtyOverrideReason: args.qtyOverrideReason })).id
       }
       const note = args.observation ? text(args.observation, 'observation', 2000) : ''
       const observation = note || earlyReason ? ({ ...(note ? { note } : {}), ...(earlyReason ? { earlyReason, earlyBy: staff.id } : {}) } as never) : undefined
@@ -504,7 +521,7 @@ export async function rescheduleTreatmentTask(_root: unknown, args: { taskId: st
       const clash = await uow.tx.treatmentTask.findFirst({ where: { sheetOrderId: task.sheetOrderId, dueAt }, select: { id: true } })
       if (clash) throw new DomainError(Codes.GUARD_FAILED, 'There is already a task for that time on this order.')
       const next = await uow.tx.treatmentTask.create({ data: { sheetOrderId: task.sheetOrderId, stayId: task.stayId, patientId: task.patientId, dueAt, status: 'scheduled' } })
-      const row = await transition(uow, { model: 'TreatmentTask', id: task.id, from: ['scheduled', 'due', 'overdue'], to: 'rescheduled', expectedVersion: args.expectedVersion, actor, eventType: 'treatment.rescheduled', data: { rescheduledToId: next.id } })
+      const row = await transition(uow, { model: 'TreatmentTask', id: task.id, from: ['scheduled', 'due', 'overdue', 'missed'], to: 'rescheduled', expectedVersion: args.expectedVersion, actor, eventType: 'treatment.rescheduled', data: { rescheduledToId: next.id } })
       return { id: row.id, status: row.status, newTaskId: next.id }
     })
     return { replay: result.replay, ...result.value }

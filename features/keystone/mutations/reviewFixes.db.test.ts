@@ -6,7 +6,8 @@ import { containerBalance } from '../lib/csRegister'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { recordWeight } from './clients'
 import { addDiagnosis, openEncounter, recordVitals, requestVoidEncounter, saveSoapSection, signEncounter, submitEncounter } from './record'
-import { admitPatient, anaesthesiaEvent, completeTreatmentTask, moveCage, openAnaesthesia, placeOrder, recordAdministration, recordMonitoring, reverseAdministration } from './treatment'
+import { admitPatient, anaesthesiaEvent, completeTreatmentTask, moveCage, openAnaesthesia, placeOrder, recordAdministration, recordMonitoring, reverseAdministration, runTreatmentSheetJob } from './treatment'
+import { runInTransaction } from '../lib/unitOfWork'
 import { administerVaccine, recordOutsideVaccine, reverseVaccineAdministration } from './vaccines'
 import { applyImport, previewImport } from './imports'
 import { prismaToDomain } from './op'
@@ -193,4 +194,42 @@ describe.skipIf(!hasTestDatabase)('Phase 2 review fixes (database)', () => {
     expect((await run('vaccinations', 'Patient Number,Vaccine,Date Given,Due Date\nAP-5101,Rabies,2025-06-02,2026-06-02\n')).rowsCreated).toBe(1)
     expect((await run('consults', 'Medical History ID,Patient Number,Date,Vet,Notes\nMH-9001,AP-5101,2025-06-02,Dr. Alvarez,Annual exam; mild tartar.\n')).rowsCreated).toBe(1)
   }, 180_000)
+  it('N1: an amount far from the order is refused; a veterinarian may give it with a reason; the database agrees', async () => {
+    const enc = await encounter('outpatient', 'Lameness, right hind')
+    const order = await placeOrder(null, { encounterId: enc.id, kind: 'medication', drugId: 'seed_drug_meloxicam', route: 'sc', frequency: 'once', dose: { doseAmount: '0.1', doseUnit: 'mg', dosePer: 'kg' }, idempotencyKey: uniqueKey('o') }, okafor)
+    await expect(recordAdministration(null, { orderId: order.id, lotId: 'seed_lot_meloxicam_main', route: 'sc', qty: '50', idempotencyKey: uniqueKey('ad') }, lopez)).rejects.toMatchObject({ code: 'GUARD_FAILED', details: { reason: 'qty_outside_order' } })
+    await expect(recordAdministration(null, { orderId: order.id, lotId: 'seed_lot_meloxicam_main', route: 'sc', qty: '50', idempotencyKey: uniqueKey('ad') }, okafor)).rejects.toMatchObject({ code: 'GUARD_FAILED' })
+    // The database refuses it on its own, even bypassing the application.
+    await expect(prisma.administration.create({ data: { orderId: order.id, qty: '50', unit: 'mL', givenAt: new Date(), givenById: 'seed_staff_lopez', route: 'sc', lotNumber: 'X' } as never })).rejects.toSatisfy(e => /outside the ordered/.test(pg(e)))
+    const ok = await recordAdministration(null, { orderId: order.id, lotId: 'seed_lot_meloxicam_main', route: 'sc', idempotencyKey: uniqueKey('ad') }, lopez)
+    expect(ok.id).toBeTruthy()
+  }, 120_000)
+
+  it('N2: per-m² doses outside the range are refused; a manual quantity outside the range is refused whatever the reason', async () => {
+    const enc = await encounter('outpatient', 'Arthritis flare')
+    await expect(placeOrder(null, { encounterId: enc.id, kind: 'medication', drugId: 'seed_drug_meloxicam', route: 'sc', frequency: 'once', dose: { doseAmount: '2', doseUnit: 'mg', dosePer: 'm2', overrideReason: 'Clinician judgement here' }, idempotencyKey: uniqueKey('o') }, okafor)).resolves.toBeTruthy()
+    await expect(placeOrder(null, { encounterId: enc.id, kind: 'medication', drugId: 'seed_drug_meloxicam', route: 'sc', frequency: 'once', dose: { doseAmount: '2', doseUnit: 'mg', dosePer: 'm2' }, idempotencyKey: uniqueKey('o') }, okafor)).rejects.toMatchObject({ code: 'GUARD_FAILED' })
+    await expect(placeOrder(null, { encounterId: enc.id, kind: 'medication', drugId: 'seed_drug_meloxicam', route: 'sc', frequency: 'once', dose: { doseAmount: '20', doseUnit: 'mg', dosePer: 'm2' }, idempotencyKey: uniqueKey('o') }, okafor)).rejects.toMatchObject({ code: 'GUARD_FAILED' })
+    await expect(placeOrder(null, { encounterId: enc.id, kind: 'medication', drugId: 'seed_drug_meloxicam', route: 'sc', frequency: 'once', dose: { doseAmount: '0.15', doseUnit: 'mg', dosePer: 'kg', manualOverrideQty: '20', overrideReason: 'Clinician chose a larger volume' }, idempotencyKey: uniqueKey('o') }, okafor)).rejects.toMatchObject({ code: 'GUARD_FAILED', details: { reason: 'dose_refused' } })
+  }, 120_000)
+
+  it('N3: the legacy rules are validated, and a new row still cannot break them or be backdated into the legacy period', async () => {
+    const rows = await prisma.$queryRawUnsafe<{ conname: string; convalidated: boolean }[]>(`SELECT conname::text, convalidated FROM pg_constraint WHERE connamespace = current_schema()::regnamespace AND conname IN ('CsLogEntry_witness_required', 'AnaesthesiaRecord_event_order', 'MonitoringReading_temp_c') ORDER BY 1`)
+    expect(rows).toEqual([{ conname: 'AnaesthesiaRecord_event_order', convalidated: true }, { conname: 'CsLogEntry_witness_required', convalidated: true }, { conname: 'MonitoringReading_temp_c', convalidated: true }])
+    const an = await prisma.anaesthesiaRecord.findFirstOrThrow({ orderBy: { createdAt: 'desc' } })
+    await expect(prisma.monitoringReading.create({ data: { recordId: an.id, at: new Date('2026-11-01T00:00:00Z'), tempC: '60' } })).rejects.toSatisfy(e => /dated before/.test(pg(e)))
+  }, 120_000)
+
+  it('M1: the sheet job moves an undone dose to missed; a missed dose is not given late', async () => {
+    const enc = await encounter('inpatient_day', 'Hospitalised for observation', 'seed_pet_007_1')
+    const stay = await admitPatient(null, { encounterId: enc.id, cageId: 'seed_cage_mw04', codeStatus: 'full', idempotencyKey: uniqueKey('adm') }, lopez)
+    await placeOrder(null, { encounterId: enc.id, kind: 'treatment', description: 'Check incision', route: 'other', frequency: 'q6h', sheet: { stayId: stay.id, frequency: 'Q6H', durationHours: 24 }, idempotencyKey: uniqueKey('o') }, okafor)
+    const first = await prisma.treatmentTask.findFirstOrThrow({ where: { stayId: stay.id }, orderBy: { dueAt: 'asc' } })
+    const r = await runInTransaction(prisma as never, uow => runTreatmentSheetJob(uow), { now: new Date(first.dueAt.getTime() + 4 * 3_600_000) })
+    expect(r.missed).toBeGreaterThanOrEqual(1)
+    const missed = await prisma.treatmentTask.findUniqueOrThrow({ where: { id: first.id } })
+    expect(missed.status).toBe('missed')
+    await expect(completeTreatmentTask(null, { taskId: missed.id, expectedVersion: missed.version, idempotencyKey: uniqueKey('t') }, lopez)).rejects.toMatchObject({ code: 'INVALID_TRANSITION' })
+    await expect(prisma.treatmentTask.update({ where: { id: missed.id }, data: { status: 'done', doneAt: new Date(), doneById: 'seed_staff_lopez' } })).rejects.toSatisfy(e => /not given late/.test(pg(e)))
+  }, 120_000)
 })

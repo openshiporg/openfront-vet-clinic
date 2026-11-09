@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { blockingWarnings, bodySurfaceArea, calculateDose, quantityToGive, roundTo, verifyDose, type DoseInput } from './dose'
+import { administrationQtyProblem, blockingWarnings, bodySurfaceArea, calculateDose, HARD_BLOCKS, quantityToGive, roundTo, verifyDose, type DoseInput } from './dose'
 import { checkCompleteness, establishesVcpr, KNOWN_RECORD_FIELDS, revisionHash, signedContentHash, type EncounterEvidence } from './record'
-import { dueTimes, longestMonitoringGapMinutes, taskStatusAt } from './treatment'
+import { dueTimes, longestMonitoringGapMinutes, missedAfterMinutes, taskStatusAt } from './treatment'
 import { addMonths, ageInWeeks, dueDate, rabiesCertificateFields, reminderStatusOn, vaccineDuration, vaccineProblems } from './vaccines'
 import { dec } from '../lib/decimal'
 
@@ -9,6 +9,31 @@ const meloxicam = { genericName: 'Meloxicam', form: 'injectable', concentration:
 const base: DoseInput = { weightKg: '12.4', doseAmount: '0.2', doseUnit: 'mg', dosePer: 'kg', species: 'canine', product: meloxicam }
 
 describe('dose', () => {
+  it('blocks per-m² doses outside the range, using BSA from the dosing weight (N2)', () => {
+    const perM2 = { ...meloxicam, doseRanges: { canine: { min: '4', max: '6', unit: 'mg', per: 'm2' as const } } }
+    const otis = { ...base, weightKg: '22.4075', dosePer: 'm2' as const, product: perM2 }
+    expect(bodySurfaceArea('22.4075', 'canine').m2.toFixed(4)).toBe('0.8028')
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '5' }).warnings)).toEqual([])
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '20' }).warnings).map(w => w.code)).toEqual(['above_range'])
+    expect(blockingWarnings(calculateDose({ ...otis, doseAmount: '2' }).warnings).map(w => w.code)).toEqual(['below_range'])
+    // A per-kg range reached from an m² order: 2 mg/m² × 0.8028 m² / 22.4 kg = 0.07 mg/kg, below 0.1.
+    expect(blockingWarnings(calculateDose({ ...base, weightKg: '22.4075', doseAmount: '2', dosePer: 'm2' }).warnings).map(w => w.code)).toEqual(['below_range'])
+  })
+  it('refuses a manual quantity that delivers a dose outside the range, whatever the reason (N2)', () => {
+    // ORD-9: 0.15 mg/kg meloxicam for 22.4 kg is 0.67 mL; 20 mL is 100 mg, 4.46 mg/kg.
+    const r = calculateDose({ ...base, weightKg: '22.4075', doseAmount: '0.15', manualOverrideQty: '20', overrideReason: 'Clinician chose a larger volume' })
+    expect(r.warnings.map(w => w.code)).toContain('override_out_of_range')
+    expect(r.warnings.filter(w => (HARD_BLOCKS as readonly string[]).includes(w.code))).toHaveLength(1)
+    const ok = calculateDose({ ...base, weightKg: '22.4075', doseAmount: '0.15', manualOverrideQty: '0.7', overrideReason: 'Rounded to the syringe marking' })
+    expect(ok.warnings.map(w => w.code)).not.toContain('override_out_of_range')
+  })
+  it('checks the amount given against the order (N1)', () => {
+    expect(administrationQtyProblem('0.32', '0.32', 'mL')).toBeNull()
+    expect(administrationQtyProblem('0.32', '0.35', 'mL')).toBeNull()
+    expect(administrationQtyProblem('0.32', '50', 'mL')).toMatch(/0\.32/)
+    expect(administrationQtyProblem('0.32', '0.2', 'mL')).not.toBeNull()
+    expect(administrationQtyProblem('0.05', '0.06', 'mL')).toBeNull()
+  })
   it('computes total, volume and rounds to the syringe graduation exactly', () => {
     const r = calculateDose(base)
     expect(r.totalAmount).toBe('2.480000')
@@ -52,7 +77,7 @@ describe('dose', () => {
   })
   it('blocks above the formulary maximum and warns below', () => {
     expect(blockingWarnings(calculateDose({ ...base, doseAmount: '0.3' }).warnings).map(w => w.code)).toEqual(['above_range'])
-    expect(calculateDose({ ...base, doseAmount: '0.05' }).warnings.map(w => w.code)).toContain('below_range')
+    expect(blockingWarnings(calculateDose({ ...base, doseAmount: '0.05' }).warnings).map(w => w.code)).toEqual(['below_range'])
   })
   it('blocks MDR1 breeds and recorded sensitivities', () => {
     const ivermectin = { genericName: 'Ivermectin', form: 'tablet', strength: '68', strengthUnit: 'mcg', per: 'tablet', cautionFlags: ['mdr1'] }
@@ -145,6 +170,15 @@ describe('treatment sheet', () => {
     expect(taskStatusAt(t, new Date('2026-11-07T07:30:00Z'))).toBe('due')
     expect(taskStatusAt(t, new Date('2026-11-07T08:31:00Z'))).toBe('overdue')
     expect(taskStatusAt({ ...t, status: 'done' }, new Date('2026-11-07T09:00:00Z'))).toBe('done')
+  })
+  it('moves an undone task to missed after half its interval (M1)', () => {
+    expect(missedAfterMinutes('BID', 30)).toBe(360)
+    expect(missedAfterMinutes('q1h', 15)).toBe(60)
+    expect(missedAfterMinutes('once', 30)).toBe(240)
+    const t = { dueAt: start, status: 'overdue', graceMinutes: 30, frequency: 'BID' }
+    expect(taskStatusAt(t, new Date(start.getTime() + 359 * 60_000))).toBe('overdue')
+    expect(taskStatusAt(t, new Date(start.getTime() + 360 * 60_000))).toBe('missed')
+    expect(taskStatusAt({ ...t, status: 'missed' }, new Date(start.getTime() + 999 * 60_000))).toBe('missed')
   })
   it('measures the longest monitoring gap', () => {
     const r = (m: number) => new Date(start.getTime() + m * 60_000)

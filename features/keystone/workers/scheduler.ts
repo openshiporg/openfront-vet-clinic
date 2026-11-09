@@ -72,10 +72,14 @@ export function startScheduler(db: Db, log: (line: string) => void = line => con
     timers.push(setInterval(tick, ms))
   }
   ensureClinicSetup(db).then(r => log(`[scheduler] clinic setup ${r.ran ? `loaded ${JSON.stringify((r as { created?: unknown }).created)}` : 'skipped'}`)).catch(error => log(`[scheduler] clinic setup failed: ${error instanceof Error ? error.message.slice(0, 200) : 'error'}`))
-  every('clinical', minutes(process.env.VC_CLINICAL_TICK_MINUTES, 5) * 60_000, async () => {
-    const results = await runClinicalJobs(db)
+  const clinicalMinutes = minutes(process.env.VC_CLINICAL_TICK_MINUTES, 5)
+  every('clinical', clinicalMinutes * 60_000, async () => {
+    const results = await runClinicalJobs(db, { intervalSeconds: clinicalMinutes * 60 })
     const failed = results.filter(r => r.error)
     if (failed.length) log(`[scheduler] clinical: ${failed.map(f => `${f.job}: ${f.error}`).join('; ').slice(0, 400)}`)
+    // One line per tick: which jobs ran and what they changed (M1: the run is visible in the deploy log).
+    const ran = results.filter(r => r.ran && !r.error)
+    if (ran.length) log(`[scheduler] clinical ran ${ran.map(r => `${r.job}${r.result && typeof r.result === 'object' ? ` ${JSON.stringify(r.result)}` : ''}`).join('; ').slice(0, 600)}`)
     return results
   })
   every('comms', minutes(process.env.VC_COMMS_TICK_MINUTES, 1) * 60_000, async () => {

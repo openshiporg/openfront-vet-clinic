@@ -21,6 +21,12 @@ type Task = {
 /** "9a", "12p": compact hour headings for the sheet, in the practice's zone. */
 const hourLabel = (d: Date, tz: string) => new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: true }).format(d).replace(' AM', 'a').replace(' PM', 'p');
 
+/** Ward kinds in plain words; left out when the ward's name already says it ("ICU · ICU"). */
+const WARD_KIND: Record<string, string> = { general: 'General', icu: 'ICU', isolation: 'Isolation', surgery_recovery: 'Surgery recovery', exotics: 'Exotics' };
+const wardKind = (w: { name: string; kind: string }) => {
+  const k = WARD_KIND[w.kind] ?? title(w.kind);
+  return k && !w.name.toLowerCase().includes(k.toLowerCase()) ? k : '';
+};
 const CODE_TONE: Record<string, string> = { dnr: 'text-red-700 dark:text-red-300', closed_chest_only: 'text-amber-700 dark:text-amber-300', full: 'text-muted-foreground' };
 
 /**
@@ -99,8 +105,8 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
                     <p className="text-muted-foreground">{title(r.frequency)}</p>
                     <p className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
                       {inWindow.length ? inWindow.map(t => {
-                        const mark = t.status === 'done' ? '✓' : t.status === 'skipped' ? '—' : t.status === 'overdue' ? '!' : '○';
-                        const tone = t.status === 'done' ? 'text-emerald-700' : t.status === 'overdue' ? 'text-red-700' : t.status === 'skipped' ? 'text-muted-foreground' : 'text-amber-700';
+                        const mark = t.status === 'done' ? '✓' : t.status === 'skipped' ? '—' : t.status === 'missed' ? '✕' : t.status === 'overdue' ? '!' : '○';
+                        const tone = t.status === 'done' ? 'text-emerald-700' : t.status === 'overdue' || t.status === 'missed' ? 'text-red-700' : t.status === 'skipped' ? 'text-muted-foreground' : 'text-amber-700';
                         return <span key={t.id} className={tone}>{mark} {hourLabel(new Date(t.dueAt), tz)}</span>;
                       }) : <span className="font-sans text-muted-foreground">Nothing in the next 24 hours.</span>}
                     </p>
@@ -122,8 +128,8 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
                       <td className="sticky left-0 z-10 max-w-64 border-b bg-background px-2 py-1.5 align-top"><div className="break-words">{r.label}</div><div className="text-muted-foreground">{title(r.frequency)}</div></td>
                       {hours.map(h => {
                         const t = r.tasks.find(x => { const d = Date.parse(x.dueAt); return d >= h.getTime() && d < h.getTime() + 3_600_000; });
-                        const mark = !t ? '' : t.status === 'done' ? '✓' : t.status === 'skipped' ? '—' : t.status === 'overdue' ? '!' : '○';
-                        const tone = !t ? '' : t.status === 'done' ? 'text-emerald-700' : t.status === 'overdue' ? 'bg-red-50 text-red-700 dark:bg-red-950' : t.status === 'skipped' ? 'text-muted-foreground' : 'text-amber-700';
+                        const mark = !t ? '' : t.status === 'done' ? '✓' : t.status === 'skipped' ? '—' : t.status === 'missed' ? '✕' : t.status === 'overdue' ? '!' : '○';
+                        const tone = !t ? '' : t.status === 'done' ? 'text-emerald-700' : t.status === 'overdue' || t.status === 'missed' ? 'bg-red-50 text-red-700 dark:bg-red-950' : t.status === 'skipped' ? 'text-muted-foreground' : 'text-amber-700';
                         return <td key={h.toISOString()} title={t ? `${title(t.status)}${t.doneBy ? ` · ${t.doneBy.displayName}` : ''}${t.observation ? ` · ${t.observation}` : ''}` : undefined} className={`border-b border-l px-1.5 py-1.5 text-center ${tone}`}>{mark}</td>;
                       })}
                     </tr>
@@ -133,7 +139,7 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
             </div>
             </>
           ) : <Empty>No treatments scheduled for the next 24 hours. Order from the visit record with a sheet frequency.</Empty>}
-          <p className="text-xs text-muted-foreground">○ due · ✓ done · ! overdue · — skipped</p>
+          <p className="text-xs text-muted-foreground">○ due · ✓ done · ! overdue · ✕ missed · — skipped</p>
 
           <h3 className="pt-2 text-sm font-medium">Due now</h3>
           {dueNow.length ? dueNow.map(t => {
@@ -149,6 +155,10 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
                       { name: 'csContainerId', label: 'Controlled container', width: 'lg' as const, options: data.csContainers.filter(c => c.product?.id === drug!.id).map(c => ({ value: c.id, label: c.ref })) },
                       { name: 'witnessId', label: 'Witness', width: 'lg' as const, options: [{ value: '', label: 'No witness' }, ...data.witnesses.map(s => ({ value: s.id, label: s.displayName }))] },
                       { name: 'wasteQty', label: 'Wasted (mL)', width: 'sm' as const },
+                    ] : []),
+                    ...(drug ? [
+                      { name: 'qty', label: 'Amount given', width: 'md' as const, placeholder: 'as ordered' },
+                      { name: 'qtyOverrideReason', label: 'Reason if not the ordered amount (veterinarian)', width: 'lg' as const },
                     ] : []),
                     { name: 'observation', label: 'Observation', width: 'lg' as const, placeholder: 'Ate half, BAR' },
                     ...(Date.parse(t.dueAt) > now.getTime() ? [{ name: 'earlyReason', label: 'Reason if early (veterinarian)', width: 'lg' as const }] : []),
@@ -168,7 +178,7 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
       <Section title="Wards">
         {data.wards.map(w => (
           <div key={w.id} className="space-y-2 border-b pb-3 last:border-b-0">
-            <h3 className="text-sm font-medium">{w.name} <span className="font-normal text-muted-foreground">· {label(w.kind)}</span></h3>
+            <h3 className="text-sm font-medium">{w.name}{wardKind(w) ? <span className="font-normal text-muted-foreground"> · {wardKind(w)}</span> : null}</h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
               {w.cages.map(c => {
                 const s = occupied.get(c.id);

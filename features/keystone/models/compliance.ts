@@ -126,6 +126,12 @@ export const Note = list({
     subjectId: systemText({ indexed: true, required: true }),
     body: text({ ...readOnly, ui: { ...readOnly.ui, displayMode: 'textarea' } }),
     visibility: fixedChoice(['staff', 'clinical']),
+    /**
+     * When set, the body supersedes the stored text of this field on the subject (an append-only
+     * correction of wording on a row that can never change, e.g. Administration.reason). Screens
+     * show the latest superseding note in place of the field; the original stays in the row and the audit trail.
+     */
+    supersedesField: systemText(),
     author: relationship({ ref: 'User', ...readOnly }),
     authorAgent: relationship({ ref: 'AgentIdentity', ...readOnly }),
     ...trackingFields,

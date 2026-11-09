@@ -37,7 +37,17 @@ async function leased<T>(db: Db, key: string, ttlMs: number, now: Date, work: (u
   }
 }
 
-export async function runClinicalJobs(db: Db, options: { now?: Date; only?: string[] } = {}): Promise<JobResult[]> {
+/**
+ * M1: every run leaves a row (ScheduledJob, one per job kind) with when it last ran and how it ended,
+ * so "is the scheduler running?" is answered from the database, not from logs.
+ */
+async function recordRun(db: Db, kind: string, intervalSeconds: number, result: JobResult, at: Date) {
+  if (!result.ran) return
+  const data = { intervalSeconds, lastRunAt: at, nextRunAt: new Date(at.getTime() + intervalSeconds * 1000), status: result.error ? 'failed' : 'idle', leaseKey: result.job, lastError: result.error ?? '' }
+  await db.scheduledJob.upsert({ where: { kind }, create: { kind, ...data }, update: data }).catch(() => undefined)
+}
+
+export async function runClinicalJobs(db: Db, options: { now?: Date; only?: string[]; intervalSeconds?: number } = {}): Promise<JobResult[]> {
   const now = options.now ?? new Date()
   const want = (name: string) => !options.only?.length || options.only.includes(name)
   const out: JobResult[] = []
@@ -50,5 +60,7 @@ export async function runClinicalJobs(db: Db, options: { now?: Date; only?: stri
       out.push(await leased(db, `reminders:${loc.id}:${on}`, 26 * 3_600_000, now, uow => runReminderJob(uow, loc.id), { keepOnSuccess: true }))
     }
   }
+  const interval = options.intervalSeconds ?? 300
+  for (const r of out) await recordRun(db, r.job.startsWith('reminders:') ? r.job.split(':').slice(0, 2).join(':') : r.job, interval, r, now)
   return out
 }

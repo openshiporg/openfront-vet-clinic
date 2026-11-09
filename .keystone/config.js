@@ -1490,6 +1490,12 @@ var Note = (0, import_core9.list)({
     subjectId: systemText({ indexed: true, required: true }),
     body: (0, import_fields9.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     visibility: fixedChoice(["staff", "clinical"]),
+    /**
+     * When set, the body supersedes the stored text of this field on the subject (an append-only
+     * correction of wording on a row that can never change, e.g. Administration.reason). Screens
+     * show the latest superseding note in place of the field; the original stays in the row and the audit trail.
+     */
+    supersedesField: systemText(),
     author: (0, import_fields9.relationship)({ ref: "User", ...readOnly }),
     authorAgent: (0, import_fields9.relationship)({ ref: "AgentIdentity", ...readOnly }),
     ...trackingFields
@@ -2897,7 +2903,9 @@ var Administration = (0, import_core15.list)({
     givenAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
     reverses: (0, import_fields15.relationship)({ ref: "Administration", ...readOnly }),
-    reason: systemText()
+    reason: systemText(),
+    /** N1: why a veterinarian recorded an amount outside the ordered quantity (trigger Administration_qty_guard). */
+    qtyOverrideReason: systemText()
   }
 });
 var Ward = (0, import_core15.list)({
@@ -2981,7 +2989,7 @@ var TreatmentTask = (0, import_core15.list)({
     stay: (0, import_fields15.relationship)({ ref: "HospitalStay", ...readOnly }),
     patient: (0, import_fields15.relationship)({ ref: "Patient", ...readOnly }),
     dueAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    status: lifecycle(["scheduled", "due", "overdue", "done", "skipped", "rescheduled"]),
+    status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
     doneBy: (0, import_fields15.relationship)({ ref: "StaffMember", ...readOnly }),
     doneAt: (0, import_fields15.timestamp)({ ...readOnly }),
     skipReason: systemText(),
@@ -8138,7 +8146,8 @@ async function rejectScribeDraft(_root, args, context) {
 }
 
 // features/keystone/domain/dose.ts
-var DOSE_CALC_VERSION = "dose-2026.11-2";
+var DOSE_CALC_VERSION = "dose-2026.11-3";
+var HARD_BLOCKS = ["override_out_of_range", "range_unconvertible_override"];
 var DOSE_PERS = ["kg", "m2", "animal"];
 var DOSE_UNITS = ["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"];
 var KG_PER_LB2 = "0.45359237";
@@ -8240,7 +8249,19 @@ function calculateDose(input) {
         const asRange = `${toScale(rate2, 4).replace(/\.?0+$/, "")} ${range.unit}/${range.per}`;
         const same = range.unit === input.doseUnit && range.per === input.dosePer;
         if (range.max && rate2.gt(range.max)) warnings.push({ code: "above_range", severity: "block", message: `${shown}${same ? "" : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` });
-        if (range.min && rate2.lt(range.min)) warnings.push({ code: "below_range", severity: "warn", message: `${shown}${same ? "" : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` });
+        if (range.min && rate2.lt(range.min)) warnings.push({ code: "below_range", severity: "block", message: `${shown}${same ? "" : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` });
+      }
+      const manual = input.manualOverrideQty != null && input.manualOverrideQty !== "" ? dec(input.manualOverrideQty) : null;
+      if (manual && manual.gt(0)) {
+        const manualTotal = !concentration || !computedUnit || computedUnit === input.doseUnit ? { amount: manual, unit: input.doseUnit } : { amount: manual.times(concentration), unit: (product.concentration != null ? numeratorUnit(product.concentrationUnit) : product.strengthUnit) ?? input.doseUnit };
+        const manualRate = rateInRangeBasis(manualTotal.amount, manualTotal.unit, range, weightKg, input.species, null, null);
+        const qtyShown = `${manual.toString()} ${computedUnit ?? input.doseUnit}`;
+        if (!manualRate) {
+          warnings.push({ code: "range_unconvertible_override", severity: "block", message: `The manual quantity ${qtyShown} cannot be checked against the formulary range; order the dose rate instead.` });
+        } else if (range.max && manualRate.gt(range.max) || range.min && manualRate.lt(range.min)) {
+          const asRange = `${toScale(manualRate, 4).replace(/\.?0+$/, "")} ${range.unit}/${range.per}`;
+          warnings.push({ code: "override_out_of_range", severity: "block", message: `The manual quantity ${qtyShown} delivers ${asRange}, outside the formulary range for a ${input.species} (${range.min ?? "0"}\u2013${range.max ?? "\u221E"} ${range.unit}/${range.per}). A manual quantity only adjusts measuring; order the dose rate itself.` });
+        }
       }
     } else if (product.doseRanges && !range) {
       warnings.push({ code: "no_species_range", severity: "warn", message: `The formulary has no ${input.species} dose range for ${product.genericName}; check the dose against a current reference.` });
@@ -8295,6 +8316,17 @@ function rateInRangeBasis(total, unit2, range, weightKg, species, concentration,
   return null;
 }
 var quantityToGive = (dose) => dose.manualOverrideQty ?? dose.roundedQty ?? dose.computedQty ?? null;
+var ADMIN_QTY_TOLERANCE = { fraction: "0.10", floor: "0.01" };
+function administrationQtyProblem(planned, given, unit2) {
+  if (planned == null) return null;
+  const p = dec(planned);
+  const g = dec(given);
+  if (p.lte(0)) return null;
+  const tolerance = Decimal.max(p.times(ADMIN_QTY_TOLERANCE.fraction), dec(ADMIN_QTY_TOLERANCE.floor));
+  if (g.minus(p).abs().lte(tolerance)) return null;
+  const show = (d) => d.toDecimalPlaces(4).toString();
+  return `${show(g)} ${unit2} is ${g.gt(p) ? "more" : "less"} than the ordered ${show(p)} ${unit2} (allowed ${show(p.minus(tolerance).clamp(0, p))}\u2013${show(p.plus(tolerance))} ${unit2}).`;
+}
 var blockingWarnings = (warnings) => warnings.filter((w) => w.severity === "block");
 
 // features/keystone/domain/treatment.ts
@@ -8387,6 +8419,8 @@ async function doseFor(uow, patientId, drugId, args, staff) {
     throw new DomainError(Codes.INVALID_INPUT, error.message, { field: "doseAmount" });
   }
   const blocks = blockingWarnings(result.warnings);
+  const hard = blocks.filter((b) => HARD_BLOCKS.includes(b.code));
+  if (hard.length) throw new DomainError(Codes.GUARD_FAILED, hard.map((b) => b.message).join(" "), { reason: "dose_refused", problems: result.warnings });
   if (blocks.length && !(args.overrideReason && args.overrideReason.trim().length >= 8)) {
     throw new DomainError(Codes.GUARD_FAILED, `${blocks.map((b) => b.message).join(" ")} To go ahead, a veterinarian records an override reason.`, { reason: "dose_blocked", problems: result.warnings });
   }
@@ -8563,6 +8597,12 @@ async function administer(uow, actor, staff, args) {
   const qty2 = args.qty ? decimalText(args.qty, "qty") : planned;
   if (!qty2 || dec(qty2).lte(0)) throw new DomainError(Codes.INVALID_INPUT, "Enter the amount given.", { field: "qty" });
   const unit2 = dose?.computedUnit || "dose";
+  const qtyProblem = administrationQtyProblem(planned, qty2, unit2);
+  const qtyOverrideReason = (args.qtyOverrideReason ?? "").trim();
+  if (qtyProblem) {
+    if (staff.kind !== "dvm") throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} Give the ordered amount, or ask a veterinarian to record it with a reason.`, { field: "qty", reason: "qty_outside_order" });
+    if (qtyOverrideReason.length < 8) throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} To record it anyway, give the reason (at least 8 characters).`, { field: "qtyOverrideReason", reason: "qty_outside_order" });
+  }
   const { on } = await locationDay2(uow, order.locationId, uow.now);
   const controlled = Boolean(drug && drug.csSchedule && drug.csSchedule !== "none");
   let licenceId = null;
@@ -8582,13 +8622,13 @@ async function administer(uow, actor, staff, args) {
     if (container.lotExpiresOn && day2(container.lotExpiresOn) < on) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} expired on ${day2(container.lotExpiresOn)}.`);
     if (container.budAt && container.budAt < uow.now) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} is past its beyond-use date.`);
     const waste = args.wasteQty ? dec(decimalText(args.wasteQty, "wasteQty")) : dec(0);
-    const balance = await containerBalance(uow.tx, container.id);
-    if (balance.lt(dec(qty2).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`);
     const scheduleII = drug.csSchedule === "CII" || drug.csSchedule === "CIIN";
     if (args.witnessId) witnessId = (await witnessFor(uow, args.witnessId, staff.id)).id;
     if ((drug.requiresWitnessOnAdminister || scheduleII || waste.gt(0)) && !witnessId) {
       throw new DomainError(Codes.INVALID_INPUT, waste.gt(0) ? "Wasting a controlled drug needs a witness." : "A second person must witness this controlled drug.", { field: "witnessId" });
     }
+    const balance = await containerBalance(uow.tx, container.id);
+    if (balance.lt(dec(qty2).plus(waste))) throw new DomainError(Codes.GUARD_FAILED, `${container.ref} has ${balance.toString()} ${container.labelUnit} left; that is not enough.`);
     const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "administer", qtySigned: dec(qty2).neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: order.ref }, uow.now);
     csEntryId = entry.id;
     if (waste.gt(0)) wasteEntryId = (await appendCsEntry(uow.tx, { containerId: container.id, type: "waste", qtySigned: waste.neg(), unit: container.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId, patientId: order.patientId, reason: `Waste on ${order.ref}` }, uow.now)).id;
@@ -8627,11 +8667,12 @@ async function administer(uow, actor, staff, args) {
       witnessId,
       licenseEvaluationId: licenceId,
       givenAt: uow.now,
-      wasteQty: args.wasteQty ? toScale(args.wasteQty, "qty") : null
+      wasteQty: args.wasteQty ? toScale(args.wasteQty, "qty") : null,
+      qtyOverrideReason: qtyProblem ? text15(qtyOverrideReason, "qtyOverrideReason", 300) : ""
     }
   });
   if (order.status === "ordered") await uow.tx.clinicalOrder.update({ where: { id: order.id }, data: { status: "in_progress", version: { increment: 1 } } });
-  auditCreate(uow, actor, "Administration", row.id, "order.administered", { orderRef: order.ref, qty: row.qty.toString(), unit: unit2, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber });
+  auditCreate(uow, actor, "Administration", row.id, "order.administered", { orderRef: order.ref, qty: row.qty.toString(), planned, unit: unit2, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber, qtyOverride: Boolean(qtyProblem) }, { reason: qtyProblem ? qtyOverrideReason : null });
   return { id: row.id, qty: row.qty.toString(), unit: unit2, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId };
 }
 async function reverseAdministration(_root, args, context) {
@@ -8804,6 +8845,7 @@ async function completeTreatmentTask(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const task = await lockRow(uow.tx, "TreatmentTask", args.taskId);
       if (task.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "This task changed since you loaded it.", { currentVersion: task.version });
+      if (task.status === "missed") throw new DomainError(Codes.INVALID_TRANSITION, "This dose was missed; it is not given late. A veterinarian can reschedule it.", { reason: "missed" });
       if (!["scheduled", "due", "overdue"].includes(task.status)) throw new DomainError(Codes.INVALID_TRANSITION, `This task is already ${task.status}.`);
       await lockRow(uow.tx, "TreatmentSheetOrder", task.sheetOrderId);
       const sheet = await uow.tx.treatmentSheetOrder.findUniqueOrThrow({ where: { id: task.sheetOrderId }, select: { frequency: true, order: { select: { id: true, kind: true, drugId: true, locationId: true } } } });
@@ -8816,7 +8858,7 @@ async function completeTreatmentTask(_root, args, context) {
       if (problem) throw new DomainError(Codes.GUARD_FAILED, problem.message, { reason: problem.code });
       let administrationId = null;
       if (sheet.order?.kind === "medication" || sheet.order?.drugId) {
-        administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id })).id;
+        administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id, qtyOverrideReason: args.qtyOverrideReason })).id;
       }
       const note = args.observation ? text15(args.observation, "observation", 2e3) : "";
       const observation = note || earlyReason ? { ...note ? { note } : {}, ...earlyReason ? { earlyReason, earlyBy: staff.id } : {} } : void 0;
@@ -8847,7 +8889,7 @@ async function rescheduleTreatmentTask(_root, args, context) {
       const clash = await uow.tx.treatmentTask.findFirst({ where: { sheetOrderId: task.sheetOrderId, dueAt }, select: { id: true } });
       if (clash) throw new DomainError(Codes.GUARD_FAILED, "There is already a task for that time on this order.");
       const next = await uow.tx.treatmentTask.create({ data: { sheetOrderId: task.sheetOrderId, stayId: task.stayId, patientId: task.patientId, dueAt, status: "scheduled" } });
-      const row = await transition(uow, { model: "TreatmentTask", id: task.id, from: ["scheduled", "due", "overdue"], to: "rescheduled", expectedVersion: args.expectedVersion, actor, eventType: "treatment.rescheduled", data: { rescheduledToId: next.id } });
+      const row = await transition(uow, { model: "TreatmentTask", id: task.id, from: ["scheduled", "due", "overdue", "missed"], to: "rescheduled", expectedVersion: args.expectedVersion, actor, eventType: "treatment.rescheduled", data: { rescheduledToId: next.id } });
       return { id: row.id, status: row.status, newTaskId: next.id };
     });
     return { replay: result.replay, ...result.value };
@@ -9831,11 +9873,11 @@ function extendGraphqlSchema(baseSchema) {
         cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         reverseAdministration(administrationId: ID!, reason: String!, witnessId: ID, idempotencyKey: String!): JSON
         completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
-        recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
+        recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, qtyOverrideReason: String, idempotencyKey: String!): JSON
         admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
         moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
         dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
-        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, idempotencyKey: String!): JSON
+        completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, qtyOverrideReason: String, idempotencyKey: String!): JSON
         skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
         openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON

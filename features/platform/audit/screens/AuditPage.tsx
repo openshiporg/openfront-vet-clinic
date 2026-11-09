@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { q, practiceTimeZone } from '../../lib/server';
+import { q, practiceTimeZone, corrections } from '../../lib/server';
 import { when, eventText } from '../../lib/format';
 import { Page, Row, Empty, Meta, Section, Stat } from '../../components/ui';
 
@@ -22,6 +22,7 @@ export default async function AuditPage({ searchParams }: { searchParams?: Promi
     }`, { where, take: PAGE }),
     practiceTimeZone(),
   ]);
+  const fix = await corrections([{ type: 'AuditEvent', ids: data.auditEvents.filter(e => e.reason).map(e => e.id) }]);
   const v = data.verifyAuditChain;
   const last = data.auditEvents.at(-1);
   return (
@@ -40,7 +41,7 @@ export default async function AuditPage({ searchParams }: { searchParams?: Promi
               <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-mono text-xs text-muted-foreground">#{e.seq}</span><span className="font-medium">{eventText(e.eventType)}</span></div>
               <Meta>
                 <Link className="underline underline-offset-2" href={`/dashboard/platform/audit?entity=${encodeURIComponent(e.entityId)}`}>{e.entityType} <span className="font-mono">{e.entityId}</span></Link>
-                {' · '}{e.actorUser?.name ?? (e.actorAgent ? `agent ${e.actorAgent.name}` : 'system')}{e.approver ? ` · approved by ${e.approver.name}` : ''}{e.reason ? ` · ${e.reason}` : ''}
+                {' · '}{e.actorUser?.name ?? (e.actorAgent ? `agent ${e.actorAgent.name}` : 'system')}{e.approver ? ` · approved by ${e.approver.name}` : ''}{e.reason ? ` · ${fix('AuditEvent', e.id, 'reason', e.reason)}` : ''}
               </Meta>
             </div>
             <div className="text-right">

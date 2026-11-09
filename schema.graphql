@@ -3505,6 +3505,7 @@ type Note {
   subjectId: String
   body: String
   visibility: String
+  supersedesField: String
   author: User
   authorAgent: AgentIdentity
   createdAt: DateTime
@@ -3524,6 +3525,7 @@ input NoteWhereInput {
   subjectId: StringFilter
   body: StringFilter
   visibility: StringFilter
+  supersedesField: StringFilter
   author: UserWhereInput
   authorAgent: AgentIdentityWhereInput
   createdAt: DateTimeFilter
@@ -3536,6 +3538,7 @@ input NoteOrderByInput {
   subjectId: OrderDirection
   body: OrderDirection
   visibility: OrderDirection
+  supersedesField: OrderDirection
   createdAt: OrderDirection
   updatedAt: OrderDirection
 }
@@ -3545,6 +3548,7 @@ input NoteUpdateInput {
   subjectId: String
   body: String
   visibility: String
+  supersedesField: String
   author: UserRelateToOneForUpdateInput
   authorAgent: AgentIdentityRelateToOneForUpdateInput
   createdAt: DateTime
@@ -3561,6 +3565,7 @@ input NoteCreateInput {
   subjectId: String
   body: String
   visibility: String
+  supersedesField: String
   author: UserRelateToOneForCreateInput
   authorAgent: AgentIdentityRelateToOneForCreateInput
   createdAt: DateTime
@@ -11215,6 +11220,7 @@ type Administration {
   wasteQty: Decimal
   reverses: Administration
   reason: String
+  qtyOverrideReason: String
 }
 
 input AdministrationWhereUniqueInput {
@@ -11248,6 +11254,7 @@ input AdministrationWhereInput {
   wasteQty: DecimalNullableFilter
   reverses: AdministrationWhereInput
   reason: StringFilter
+  qtyOverrideReason: StringFilter
 }
 
 input AdministrationOrderByInput {
@@ -11261,6 +11268,7 @@ input AdministrationOrderByInput {
   givenAt: OrderDirection
   wasteQty: OrderDirection
   reason: OrderDirection
+  qtyOverrideReason: OrderDirection
 }
 
 input AdministrationUpdateInput {
@@ -11286,6 +11294,7 @@ input AdministrationUpdateInput {
   wasteQty: Decimal
   reverses: AdministrationRelateToOneForUpdateInput
   reason: String
+  qtyOverrideReason: String
 }
 
 input ClinicalOrderRelateToOneForUpdateInput {
@@ -11340,6 +11349,7 @@ input AdministrationCreateInput {
   wasteQty: Decimal
   reverses: AdministrationRelateToOneForCreateInput
   reason: String
+  qtyOverrideReason: String
 }
 
 input ClinicalOrderRelateToOneForCreateInput {
@@ -14899,11 +14909,11 @@ type Mutation {
   cancelOrder(orderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
   reverseAdministration(administrationId: ID!, reason: String!, witnessId: ID, idempotencyKey: String!): JSON
   completeOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
-  recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, idempotencyKey: String!): JSON
+  recordAdministration(orderId: ID!, qty: String, route: String, site: String, lotId: ID, csContainerId: ID, wasteQty: String, witnessId: ID, supervisingDvmId: ID, treatmentTaskId: ID, qtyOverrideReason: String, idempotencyKey: String!): JSON
   admitPatient(encounterId: ID!, cageId: ID!, codeStatus: String!, reason: String, idempotencyKey: String!): JSON
   moveCage(stayId: ID!, cageId: ID!, idempotencyKey: String!): JSON
   dischargePatient(stayId: ID!, expectedVersion: Int!, instructions: String!, recheckOn: String, idempotencyKey: String!): JSON
-  completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, idempotencyKey: String!): JSON
+  completeTreatmentTask(taskId: ID!, expectedVersion: Int!, observation: String, qty: String, lotId: ID, csContainerId: ID, witnessId: ID, wasteQty: String, earlyReason: String, qtyOverrideReason: String, idempotencyKey: String!): JSON
   skipTreatmentTask(taskId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
   rescheduleTreatmentTask(taskId: ID!, expectedVersion: Int!, dueAt: String!, idempotencyKey: String!): JSON
   openAnaesthesia(encounterId: ID!, procedure: String!, asaStatus: String!, fastingConfirmed: Boolean!, consentConfirmed: Boolean!, ivCatheter: JSON, protocol: JSON, anaesthetistId: ID, idempotencyKey: String!): JSON

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { q, practiceTimeZone } from '../../lib/server';
+import { q, practiceTimeZone, corrections } from '../../lib/server';
 import { when, label, title, options, weight, quantity, calendarDay } from '../../lib/format';
 import { ALERT_TONE, ageText, todayIn } from '../../lib/clinic';
 import { DOSE_WARNING, EXAM_SYSTEMS, FREQUENCIES, ORDER_KINDS, ROUTES, SECTION_KINDS, SECTION_TITLE, asaText } from '../../lib/clinical';
@@ -20,7 +20,7 @@ type Enc = {
   vitals: { id: string; at: string; temperature: string | null; temperatureUnit: string; heartRate: number | null; respRate: number | null; mucousMembranes: string; crtSeconds: string | null; painScore: number | null; by: Staff }[];
   findings: { id: string; system: string; status: string; text: string }[];
   diagnoses: { id: string; term: string; certainty: string; code: { code: string } | null }[];
-  orders: { id: string; ref: string; kind: string; description: string; status: string; route: string; frequency: string; version: number; warnings: { code: string; message?: string }[] | null; overrideReason: string; drug: { id: string; csSchedule: string } | null; orderedBy: Staff; administrations: { id: string; qty: string | null; unit: string; givenAt: string; givenBy: Staff; witness: Staff; lotNumber: string; reason: string; reverses: { id: string } | null }[] }[];
+  orders: { id: string; ref: string; kind: string; description: string; status: string; route: string; frequency: string; version: number; warnings: { code: string; message?: string }[] | null; overrideReason: string; drug: { id: string; csSchedule: string } | null; orderedBy: Staff; administrations: { id: string; qty: string | null; unit: string; givenAt: string; givenBy: Staff; witness: Staff; lotNumber: string; reason: string; qtyOverrideReason: string; reverses: { id: string } | null }[] }[];
 };
 
 /**
@@ -46,7 +46,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
           findings { id system status text }
           diagnoses { id term certainty code { code } }
           orders(orderBy: { createdAt: asc }) { id ref kind description status route frequency version warnings overrideReason drug { id csSchedule } orderedBy { id displayName }
-            administrations(orderBy: { givenAt: asc }) { id qty unit givenAt givenBy { id displayName } witness { id displayName } lotNumber reason reverses { id } } }
+            administrations(orderBy: { givenAt: asc }) { id qty unit givenAt givenBy { id displayName } witness { id displayName } lotNumber reason qtyOverrideReason reverses { id } } }
         }
         drugProducts(where: { active: { equals: true } }, orderBy: { displayName: asc }) { id displayName csSchedule }
         diagnosisCodes(where: { active: { equals: true } }, orderBy: { term: asc }) { id code term }
@@ -78,6 +78,10 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
   const bySection = new Map(e.sections.map(s => [`${s.kind}:${s.ordinal}`, s]));
   const missing = e.completeness?.missing ?? [];
   const scribeOn = data.practiceSettings?.features?.scribe === true;
+  const fix = await corrections([
+    { type: 'Administration', ids: e.orders.flatMap(o => o.administrations.filter(a => a.reverses).map(a => a.id)) },
+    { type: 'VaccineAdministration', ids: data.vaccineAdministrations.filter(v => v.reverses).map(v => v.id) },
+  ]);
   return (
     <Page title={`${p.name} · ${e.ref}`} crumbs={[{ label: 'Encounters', href: '/dashboard/platform/encounters' }, { label: p.name, href: `/dashboard/platform/patients/${p.id}` }]}>
       <header className="space-y-3">
@@ -193,7 +197,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
               const reversed = !reversal && o.administrations.some(r => r.reverses?.id === a.id);
               return (
                 <div key={a.id} className="space-y-1">
-                  <Meta>{reversal ? `Reversed ${a.qty ? `${quantity(a.qty.replace(/^-/, ''))} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'} · ${a.reason}` : `Given ${a.qty ? `${quantity(a.qty)} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'}${a.witness ? `, witnessed by ${a.witness.displayName}` : ''}${a.lotNumber ? ` · lot ${a.lotNumber}` : ''}`}{reversed ? ' · reversed' : ''} · {when(a.givenAt, tz, 'dayTime')}</Meta>
+                  <Meta>{reversal ? `Reversed ${a.qty ? `${quantity(a.qty.replace(/^-/, ''))} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'} · ${fix('Administration', a.id, 'reason', a.reason)}` : `Given ${a.qty ? `${quantity(a.qty)} ${a.unit}` : ''} by ${a.givenBy?.displayName ?? 'unknown'}${a.witness ? `, witnessed by ${a.witness.displayName}` : ''}${a.lotNumber ? ` · lot ${a.lotNumber}` : ''}${a.qtyOverrideReason ? ` · not the ordered amount: ${a.qtyOverrideReason}` : ''}`}{reversed ? ' · reversed' : ''} · {when(a.givenAt, tz, 'dayTime')}</Meta>
                   {!reversal && !reversed && e.status !== 'voided' ? (
                     <Reverse>
                       <CommandForm op="reverseAdministration" build="reverseAdministration" submit="Reverse this dose" fixed={{ administrationId: a.id }} paths={paths}
@@ -214,9 +218,11 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
                     { name: 'witnessId', label: 'Witness', options: [{ value: '', label: 'No witness' }, ...data.witnesses.map(s => ({ value: s.id, label: s.displayName }))] },
                     { name: 'wasteQty', label: 'Wasted (mL)', width: 'sm', placeholder: '0' },
                     { name: 'site', label: 'Site', placeholder: 'left cephalic' },
+                    ...GIVEN_FIELDS,
                   ] : [
                     { name: 'lotId', label: 'Lot', width: 'lg', options: data.inventoryLots.filter(l => l.drug?.id === o.drug!.id && l.location?.id === locId && l.expiresOn >= today).map(l => ({ value: l.id, label: `${l.lotNumber} · expires ${calendarDay(l.expiresOn)}` })) },
                     { name: 'site', label: 'Site', placeholder: 'right flank SC' },
+                    ...GIVEN_FIELDS,
                   ]} />
               ) : (
                 <ActionButton op="completeOrder" vars={{ orderId: o.id, expectedVersion: o.version }} paths={paths}>Mark done</ActionButton>
@@ -253,7 +259,7 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
               <Row>
                 <div className="min-w-0">
                   <p className={`text-sm ${reversal ? 'text-muted-foreground line-through' : ''}`}>{v.product?.name ?? 'Vaccine'}</p>
-                  <Meta>Dose {v.doseSeries} · lot {v.lotNumber}{v.site ? ` · ${v.site}` : ''} · {v.vaccinatedBy?.displayName ?? 'unknown'}{!reversal && v.dueNextOn ? ` · next due ${calendarDay(v.dueNextOn)}` : ''}{reversal ? ` · reversed: ${reversal.reason}` : ''}</Meta>
+                  <Meta>Dose {v.doseSeries} · lot {v.lotNumber}{v.site ? ` · ${v.site}` : ''} · {v.vaccinatedBy?.displayName ?? 'unknown'}{!reversal && v.dueNextOn ? ` · next due ${calendarDay(v.dueNextOn)}` : ''}{reversal ? ` · reversed: ${fix('VaccineAdministration', reversal.id, 'reason', reversal.reason)}` : ''}</Meta>
                 </div>
                 {v.certificate ? <Link href={`/dashboard/platform/vaccines/certificates/${v.certificate.id}`} className="inline-flex min-h-11 shrink-0 items-center text-xs underline">Certificate {v.certificate.ref}{v.certificate.tagNumber ? ` · tag ${v.certificate.tagNumber}` : ''}{v.certificate.voidedAt ? ' · void' : ''}</Link> : null}
               </Row>
@@ -368,6 +374,12 @@ export default async function EncounterPage({ params }: { params: Promise<{ id: 
     </Page>
   );
 }
+
+/** N1: blank means the ordered amount; anything outside it needs a veterinarian's reason. */
+const GIVEN_FIELDS = [
+  { name: 'qty', label: 'Amount given', width: 'md' as const, placeholder: 'as ordered' },
+  { name: 'qtyOverrideReason', label: 'Reason if not the ordered amount (veterinarian)', width: 'lg' as const },
+];
 
 /** A collapsed correction form: reversals are rare and veterinarian-only, so they stay out of the way. */
 function Reverse({ children }: { children: React.ReactNode }) {

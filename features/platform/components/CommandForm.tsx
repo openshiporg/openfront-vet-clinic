@@ -102,6 +102,13 @@ const ints = (text: string, field: string, min = 0, max = 100_000) => {
   if (!Number.isSafeInteger(n) || n < min || n > max) throw new Error(`${field} must be a whole number from ${min} to ${max}`);
   return n;
 };
+/** An amount given (blank = the ordered amount). */
+const qtyText = (text: string | undefined) => {
+  const t = text?.trim();
+  if (!t) return undefined;
+  if (!/^\d{1,6}(\.\d{1,6})?$/.test(t)) throw new Error('Amount given: a number like 0.32');
+  return t;
+};
 const required = (v: Record<string, string>, ...names: string[]) => { for (const n of names) if (!v[n]?.trim()) throw new Error(`Fill in ${n}.`); };
 
 /** Variable builders, by name (functions cannot cross the server → client boundary). */
@@ -179,7 +186,7 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
   },
   recordAdministration: (v) => {
     required(v, 'orderId');
-    return { orderId: v.orderId, route: v.route || undefined, site: v.site?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, qty: v.qty?.trim() || undefined };
+    return { orderId: v.orderId, route: v.route || undefined, site: v.site?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, qty: qtyText(v.qty), qtyOverrideReason: v.qtyOverrideReason?.trim() || undefined };
   },
   /** M5: a veterinarian reverses a dose (wrong patient, not actually given); the original stays on record. */
   reverseAdministration: (v) => {
@@ -201,7 +208,7 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
   },
   completeTreatmentTask: (v) => {
     required(v, 'taskId', 'expectedVersion');
-    return { taskId: v.taskId, expectedVersion: Number(v.expectedVersion), observation: v.observation?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, earlyReason: v.earlyReason?.trim() || undefined };
+    return { taskId: v.taskId, expectedVersion: Number(v.expectedVersion), observation: v.observation?.trim() || undefined, lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, witnessId: v.witnessId || undefined, wasteQty: v.wasteQty?.trim() || undefined, earlyReason: v.earlyReason?.trim() || undefined, qty: qtyText(v.qty), qtyOverrideReason: v.qtyOverrideReason?.trim() || undefined };
   },
   openAnaesthesia: (v) => {
     required(v, 'encounterId', 'procedure', 'asaStatus');

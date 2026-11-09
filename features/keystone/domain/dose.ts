@@ -13,9 +13,18 @@ import { dec, Decimal, toBpsInt, toScale, ZERO, type DecimalInput } from '../lib
  * Safety checks (ported from the pharmacy vertical's clinical-safety rules and made veterinary):
  * the practice formulary range for the species, breed genetic cautions (MDR1), patient drug
  * sensitivities, weight age, and rounding deviation. A `block` needs a recorded override reason.
+ *
+ * Range (2026.11-3): a dose outside the formulary range is a block on either side and on every
+ * basis (per kg, per lb, per m² through the body surface area of the dosing weight, per animal). A
+ * manual quantity override is a measuring adjustment, never a different dose: the amount it
+ * delivers is checked against the range too, and outside it the override is refused outright
+ * (`override_out_of_range` cannot be overridden; order the dose rate itself instead).
  */
 
-export const DOSE_CALC_VERSION = 'dose-2026.11-2'
+export const DOSE_CALC_VERSION = 'dose-2026.11-3'
+
+/** Blocks a veterinarian can never override with a reason. */
+export const HARD_BLOCKS: readonly string[] = ['override_out_of_range', 'range_unconvertible_override']
 
 export type DoseUnit = 'mg' | 'mcg' | 'g' | 'mL' | 'IU' | 'unit' | 'tablet' | 'capsule' | 'dose'
 export type DosePer = 'kg' | 'm2' | 'animal'
@@ -192,7 +201,22 @@ export function calculateDose(input: DoseInput): DoseResult {
         const asRange = `${toScale(rate, 4).replace(/\.?0+$/, '')} ${range.unit}/${range.per}`
         const same = range.unit === input.doseUnit && range.per === input.dosePer
         if (range.max && rate.gt(range.max)) warnings.push({ code: 'above_range', severity: 'block', message: `${shown}${same ? '' : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` })
-        if (range.min && rate.lt(range.min)) warnings.push({ code: 'below_range', severity: 'warn', message: `${shown}${same ? '' : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` })
+        if (range.min && rate.lt(range.min)) warnings.push({ code: 'below_range', severity: 'block', message: `${shown}${same ? '' : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` })
+      }
+      // A manual quantity (mL, tablets) delivers its own amount: it must sit inside the range as well.
+      const manual = input.manualOverrideQty != null && input.manualOverrideQty !== '' ? dec(input.manualOverrideQty) : null
+      if (manual && manual.gt(0)) {
+        // The quantity is in the computed unit (mL of a liquid, tablets of a solid): back to drug amount.
+        const manualTotal = !concentration || !computedUnit || computedUnit === input.doseUnit ? { amount: manual, unit: input.doseUnit }
+          : { amount: manual.times(concentration), unit: (product.concentration != null ? numeratorUnit(product.concentrationUnit) : product.strengthUnit) ?? input.doseUnit }
+        const manualRate = rateInRangeBasis(manualTotal.amount, manualTotal.unit, range, weightKg, input.species, null, null)
+        const qtyShown = `${manual.toString()} ${computedUnit ?? input.doseUnit}`
+        if (!manualRate) {
+          warnings.push({ code: 'range_unconvertible_override', severity: 'block', message: `The manual quantity ${qtyShown} cannot be checked against the formulary range; order the dose rate instead.` })
+        } else if ((range.max && manualRate.gt(range.max)) || (range.min && manualRate.lt(range.min))) {
+          const asRange = `${toScale(manualRate, 4).replace(/\.?0+$/, '')} ${range.unit}/${range.per}`
+          warnings.push({ code: 'override_out_of_range', severity: 'block', message: `The manual quantity ${qtyShown} delivers ${asRange}, outside the formulary range for a ${input.species} (${range.min ?? '0'}–${range.max ?? '∞'} ${range.unit}/${range.per}). A manual quantity only adjusts measuring; order the dose rate itself.` })
+        }
       }
     } else if (product.doseRanges && !range) {
       warnings.push({ code: 'no_species_range', severity: 'warn', message: `The formulary has no ${input.species} dose range for ${product.genericName}; check the dose against a current reference.` })
@@ -264,6 +288,24 @@ export function verifyDose(stored: Pick<DoseResult, 'totalAmount' | 'roundedQty'
 /** The quantity that is actually drawn up: an override when one was recorded, else the rounded volume. */
 export const quantityToGive = (dose: Pick<DoseResult, 'manualOverrideQty' | 'roundedQty' | 'computedQty'>) =>
   dose.manualOverrideQty ?? dose.roundedQty ?? dose.computedQty ?? null
+
+/**
+ * N1: the amount given must match the ordered quantity within a tolerance of 10% (never less than
+ * 0.01 of the unit, one syringe graduation). Outside it, only a veterinarian with a reason may record
+ * it. The database trigger Administration_qty_guard holds the same rule (vc_administration_qty_guard).
+ */
+export const ADMIN_QTY_TOLERANCE = { fraction: '0.10', floor: '0.01' } as const
+
+export function administrationQtyProblem(planned: DecimalInput | null, given: DecimalInput, unit: string): string | null {
+  if (planned == null) return null
+  const p = dec(planned)
+  const g = dec(given)
+  if (p.lte(0)) return null
+  const tolerance = Decimal.max(p.times(ADMIN_QTY_TOLERANCE.fraction), dec(ADMIN_QTY_TOLERANCE.floor))
+  if (g.minus(p).abs().lte(tolerance)) return null
+  const show = (d: Decimal) => d.toDecimalPlaces(4).toString()
+  return `${show(g)} ${unit} is ${g.gt(p) ? 'more' : 'less'} than the ordered ${show(p)} ${unit} (allowed ${show(p.minus(tolerance).clamp(0, p))}–${show(p.plus(tolerance))} ${unit}).`
+}
 
 export const blockingWarnings = (warnings: DoseWarning[]) => warnings.filter(w => w.severity === 'block')
 

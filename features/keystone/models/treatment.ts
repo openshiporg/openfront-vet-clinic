@@ -135,6 +135,8 @@ export const Administration = list({
     wasteQty: qty(),
     reverses: relationship({ ref: 'Administration', ...readOnly }),
     reason: systemText(),
+    /** N1: why a veterinarian recorded an amount outside the ordered quantity (trigger Administration_qty_guard). */
+    qtyOverrideReason: systemText(),
   },
 })
 
@@ -225,7 +227,7 @@ export const TreatmentTask = list({
     stay: relationship({ ref: 'HospitalStay', ...readOnly }),
     patient: relationship({ ref: 'Patient', ...readOnly }),
     dueAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
-    status: lifecycle(['scheduled', 'due', 'overdue', 'done', 'skipped', 'rescheduled']),
+    status: lifecycle(['scheduled', 'due', 'overdue', 'missed', 'done', 'skipped', 'rescheduled']),
     doneBy: relationship({ ref: 'StaffMember', ...readOnly }),
     doneAt: timestamp({ ...readOnly }),
     skipReason: systemText(),

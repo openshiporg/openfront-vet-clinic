@@ -18,6 +18,8 @@ const esc = (value: unknown) =>
   String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
 const words = (code: unknown) => String(code ?? '').replace(/_/g, ' ')
+/** An instant in the clinic's zone with the zone written out ("Nov 8, 2026, 2:54 PM PST"). */
+const zoned = (iso: string, timeZone: string) => new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso))
 const instant = (iso: unknown, timeZone: string) => {
   if (!iso) return ''
   const d = new Date(String(iso))
@@ -75,16 +77,21 @@ ${c.anaesthesia.length ? `<h2>Anaesthesia</h2><table>${c.anaesthesia.map(a => `<
   return page(`Medical record ${c.encounter.ref}`, body)
 }
 
-type Cert = { ref: string; vaccinatedOn: Date; nextDueOn: Date; durationMonths: number; tagNumber: string | null; fields: Record<string, unknown>; missingFields: string[] }
+type Cert = { ref: string; vaccinatedOn: Date; nextDueOn: Date; durationMonths: number; tagNumber: string | null; fields: Record<string, unknown>; missingFields: string[]; createdAt?: Date | null }
 
-export function renderRabiesCertificate(cert: Cert, practice: string) {
+/**
+ * The certificate's dates are the clinic's calendar days (the vaccine was given on that local date),
+ * and the issue time is shown in the clinic's time zone, named, so a reader in another zone cannot
+ * mistake the day.
+ */
+export function renderRabiesCertificate(cert: Cert, practice: string, timeZone = 'America/Los_Angeles') {
   const f = cert.fields ?? {}
   const label = (k: string) => words(k).replace(/^\w/, ch => ch.toUpperCase())
   const rows = Object.entries(f).map(([k, v]) => [label(k), k === 'date_given' || k === 'next_due' ? calendarDayText(String(v)) : v] as [string, unknown])
   const body = `
 <h1>Rabies vaccination certificate ${esc(cert.ref)}</h1>
 <p class="meta">${esc(practice)} · Form 51-equivalent (NASPHV) fields · ${esc(cert.durationMonths)}-month vaccination</p>
-${dl([['Vaccinated', calendarDayText(cert.vaccinatedOn.toISOString())], ['Next due', calendarDayText(cert.nextDueOn.toISOString())], ['Tag number', cert.tagNumber]])}
+${dl([['Vaccinated', `${calendarDayText(cert.vaccinatedOn.toISOString())} (clinic date, ${timeZone})`], ['Next due', calendarDayText(cert.nextDueOn.toISOString())], ['Tag number', cert.tagNumber], ['Issued', cert.createdAt ? `${zoned(cert.createdAt.toISOString(), timeZone)}` : null], ['Clinic time zone', timeZone]])}
 <h2>Certificate</h2>${dl(rows)}
 ${cert.missingFields.length ? `<h2>Incomplete</h2><p>This certificate is missing: ${esc(cert.missingFields.map(words).join(', '))}. Complete them before giving it to the owner or the licensing agency.</p>` : ''}`
   return page(`Rabies certificate ${cert.ref}`, body)
@@ -134,9 +141,10 @@ export async function renderDocument(db: Db, message: ClaimedMessage) {
     return
   }
   if (message.aggregateType === 'RabiesCertificate') {
-    const cert = await db.rabiesCertificate.findUnique({ where: { id: message.aggregateId }, select: { id: true, ref: true, patientId: true, documentId: true, vaccinatedOn: true, nextDueOn: true, durationMonths: true, tagNumber: true, fields: true, missingFields: true } })
+    const cert = await db.rabiesCertificate.findUnique({ where: { id: message.aggregateId }, select: { id: true, ref: true, patientId: true, documentId: true, vaccinatedOn: true, nextDueOn: true, durationMonths: true, tagNumber: true, fields: true, missingFields: true, createdAt: true, from_VaccineAdministration_certificate: { take: 1, select: { encounter: { select: { location: { select: { name: true, timeZone: true } } } } } } } })
     if (!cert || cert.documentId) return
-    const html = renderRabiesCertificate({ ...cert, fields: (cert.fields ?? {}) as Record<string, unknown>, missingFields: (cert.missingFields ?? []) as string[] }, practice.name)
+    const loc = cert.from_VaccineAdministration_certificate[0]?.encounter?.location
+    const html = renderRabiesCertificate({ ...cert, fields: (cert.fields ?? {}) as Record<string, unknown>, missingFields: (cert.missingFields ?? []) as string[] }, loc?.name ?? practice.name, loc?.timeZone ?? practice.timeZone)
     const doc = await db.clinicalDocument.create({ data: { patientId: cert.patientId, kind: 'rabies_certificate', title: `Rabies certificate ${cert.ref}`, status: 'pending_render', sourceType: 'RabiesCertificate', sourceId: cert.id, sourceHash: sha(JSON.stringify(cert.fields ?? {})) } })
     await store(db, doc.id, html, tx => tx.rabiesCertificate.update({ where: { id: cert.id }, data: { documentId: doc.id } }))
     return
