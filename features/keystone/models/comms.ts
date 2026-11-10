@@ -187,7 +187,8 @@ export const RateLimitBucket = list({
   graphql: { omit: true },
   fields: {
     key: text({ isIndexed: 'unique', validation: { isRequired: true } }),
-    windowStart: timestamp({ validation: { isRequired: true } }),
+    // Indexed for the sign-in limiter's sweep of expired rows (review r8 #3).
+    windowStart: timestamp({ validation: { isRequired: true }, isIndexed: true }),
     count: integer({ defaultValue: 0 }),
   },
 })

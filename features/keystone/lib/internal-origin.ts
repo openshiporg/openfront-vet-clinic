@@ -20,15 +20,33 @@ export function internalGraphqlEndpoint(port?: string): string | null {
 type HeaderReader = { get(name: string): string | null }
 
 /**
+ * One value per client: an IPv4 address as is (an IPv4-mapped IPv6 address becomes IPv4), an IPv6
+ * address cut to its /64, because one host or home line usually holds a whole /64.
+ */
+export function normalizeAddress(address: string): string {
+  let value = address.trim().toLowerCase().replace(/^\[|\](?::\d+)?$/g, '').replace(/%.*$/, '')
+  const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  if (mapped) return mapped[1]
+  if (!value.includes(':')) return value
+  const [head, tail = ''] = value.split('::')
+  const left = head ? head.split(':') : []
+  const right = value.includes('::') ? (tail ? tail.split(':') : []) : []
+  const groups = value.includes('::') ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right] : left
+  if (groups.length !== 8 || !groups.every(g => /^[0-9a-f]{1,4}$/.test(g))) return value
+  value = groups.slice(0, 4).map(g => g.replace(/^0+(?=.)/, '')).join(':')
+  return `${value}::/64`
+}
+
+/**
  * The END user's real client address from the incoming request (x-real-ip on Railway), so every
  * visitor keeps their own bucket. Never a constant shared by all visitors.
  */
 export function clientSourceFromHeaders(headers: HeaderReader | null | undefined): string | null {
   if (!headers) return null
   const realIp = (headers.get('x-real-ip') || '').split(',')[0]?.trim()
-  if (realIp) return realIp
+  if (realIp) return normalizeAddress(realIp)
   const forwarded = (headers.get('x-forwarded-for') || '').split(',')[0]?.trim()
-  return forwarded || null
+  return forwarded ? normalizeAddress(forwarded) : null
 }
 
 /** Signed identity headers, or {} (unsigned, today's behaviour) when no source/secret. Never throws. */

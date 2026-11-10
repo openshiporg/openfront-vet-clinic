@@ -5,6 +5,7 @@
  */
 import crypto from 'node:crypto'
 import { MCP_RESOURCE_PATH, OAuthError, bearerToken, issuerFromHeaders, wwwAuthenticate } from './core'
+import { clientSourceFromHeaders } from '../lib/internal-origin'
 
 export const SESSION_COOKIE = 'keystonejs-session'
 
@@ -106,13 +107,29 @@ export async function cookieContext(keystoneContext: any, request: Request) {
 const SIGN_IN_FAILED = 'Unable to sign in. Check your email and password and try again.'
 
 /**
+ * The in-process request a page's sign-in runs as: the visitor's address from Railway's x-real-ip
+ * (the same value the API and dashboard paths are limited by) and the browser's session cookie, so
+ * the sign-in limit sees the same client as every other path.
+ */
+export function signInRequestHeaders(request: Request | null | undefined): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (!request) return headers
+  const address = clientSourceFromHeaders(request.headers)
+  if (address) headers['x-real-ip'] = address
+  const cookie = request.headers.get('cookie')
+  if (cookie) headers.cookie = cookie
+  return headers
+}
+
+/**
  * Run the site's own authenticateUserWithPassword in-process and hand back the
  * Set-Cookie header Keystone's session strategy produced.
  */
 export async function signInWithPassword(
   keystoneContext: any,
   email: string,
-  password: string
+  password: string,
+  request?: Request
 ): Promise<{ setCookie: string } | { error: string }> {
   const captured: Record<string, string> = {}
   const response = {
@@ -124,7 +141,7 @@ export async function signInWithPassword(
     },
   }
   try {
-    const context = await keystoneContext.withRequest(nodeRequest({}, '/oauth/authorize'), response)
+    const context = await keystoneContext.withRequest(nodeRequest(signInRequestHeaders(request), '/oauth/authorize'), response)
     const result = await context.graphql.raw({
       query: `mutation($email: String!, $password: String!) {
         authenticate: authenticateUserWithPassword(email: $email, password: $password) {

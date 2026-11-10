@@ -40,7 +40,7 @@ npm run dev            # builds Keystone, applies migrations, starts Next.js
 - A nested list with no `take` returns at most 50 rows. A few short ones (a patient's owners, microchips, VCPRs and insurance; a client's people; a person's contact points) return at most 10. Pass `take` (up to 500) for more.
 - One request may ask for about 5,000 rows and 2,000 nested lookups in total. A request over that is refused with `QUERY_TOO_BROAD` before it runs.
 - One request may sign in only once, and may check the audit chain at most twice.
-- After 5 failed sign-ins for one email, or 20 from one address, within 15 minutes, sign-in answers "Too many sign-in attempts. Try again later." until the 15 minutes pass. A successful sign-in resets the email's count.
+- Within 15 minutes, one address gets 20 sign-in attempts in all and 5 failures per account; after that it gets "Too many sign-in attempts. Try again later." until the 15 minutes pass. Other addresses are not affected, so nobody can lock a person out from elsewhere. An account attacked from many addresses slows to one attempt per new address per 15 minutes; an address that has signed in to that account before (or redeemed a reset for it) is not slowed. A successful sign-in or a redeemed password reset resets the account's counts. The rule is in AGENTS.md.
 
 ## License
 

@@ -2083,6 +2083,8 @@ model RateLimitBucket {
   key         String   @unique @default("")
   windowStart DateTime
   count       Int?     @default(0)
+
+  @@index([windowStart])
 }
 
 model Suppression {

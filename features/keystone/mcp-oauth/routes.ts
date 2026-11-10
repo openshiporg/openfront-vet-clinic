@@ -108,7 +108,8 @@ async function accountForm(
   url: URL,
   params: Record<string, unknown>,
   name: string,
-  target: SignInContext
+  target: SignInContext,
+  request: Request
 ): Promise<Response> {
   const intent = params.intent === 'signup' ? 'signup' : 'signin'
   const email = typeof params.email === 'string' ? params.email.trim().slice(0, 320) : ''
@@ -124,7 +125,7 @@ async function accountForm(
     const created = await createAccount(keystoneContext, { name: displayName, email, password })
     if ('error' in created) return signInPage(url, name, target, 'signup', { error: created.error, email, name: displayName }, 400)
   }
-  const signedIn = await signInWithPassword(keystoneContext, email, password)
+  const signedIn = await signInWithPassword(keystoneContext, email, password, request)
   if ('error' in signedIn) return signInPage(url, name, target, intent, { error: signedIn.error, email, name: displayName }, 400)
   return redirect(withScreen(url), { 'Set-Cookie': signedIn.setCookie })
 }
@@ -204,7 +205,7 @@ export async function authorizePOST(keystoneContext: any, request: Request): Pro
     if (error instanceof OAuthError) return messagePage(name, 'This connection cannot continue', error.description)
     return messagePage(name, 'Something went wrong', 'Return to the app you were connecting and try again.', 500)
   }
-  return accountForm(keystoneContext, url, params, name, target)
+  return accountForm(keystoneContext, url, params, name, target, request)
 }
 
 export async function tokenPOST(keystoneContext: any, request: Request): Promise<Response> {
@@ -274,7 +275,7 @@ export async function connectionsPOST(keystoneContext: any, request: Request): P
     await revokeConnection(keystoneContext, String(context.session.itemId), params.client_id)
     return redirect(`${url.pathname}?disconnected=1`)
   }
-  return accountForm(keystoneContext, url, params, name, { clientName: null, callbackHost: null })
+  return accountForm(keystoneContext, url, params, name, { clientName: null, callbackHost: null }, request)
 }
 
 /** RFC 9728. The optional path suffix names the MCP endpoint the client reached. */

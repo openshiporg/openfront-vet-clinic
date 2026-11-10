@@ -2452,7 +2452,8 @@ var RateLimitBucket = (0, import_core12.list)({
   graphql: { omit: true },
   fields: {
     key: (0, import_fields13.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    windowStart: (0, import_fields13.timestamp)({ validation: { isRequired: true } }),
+    // Indexed for the sign-in limiter's sweep of expired rows (review r8 #3).
+    windowStart: (0, import_fields13.timestamp)({ validation: { isRequired: true }, isIndexed: true }),
     count: (0, import_fields13.integer)({ defaultValue: 0 })
   }
 });
@@ -10017,23 +10018,47 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
+// features/keystone/lib/internal-origin.ts
+function normalizeAddress(address) {
+  let value = address.trim().toLowerCase().replace(/^\[|\](?::\d+)?$/g, "").replace(/%.*$/, "");
+  const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return mapped[1];
+  if (!value.includes(":")) return value;
+  const [head, tail = ""] = value.split("::");
+  const left = head ? head.split(":") : [];
+  const right = value.includes("::") ? tail ? tail.split(":") : [] : [];
+  const groups = value.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return value;
+  value = groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":");
+  return `${value}::/64`;
+}
+
 // features/keystone/security/signInLimit.ts
 var SIGN_IN_WINDOW_MINUTES = 15;
-var SIGN_IN_MAX_PER_EMAIL = 5;
 var SIGN_IN_MAX_PER_ADDRESS = 20;
+var SIGN_IN_MAX_PER_EMAIL = 5;
+var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
+var SIGN_IN_KNOWN_DAYS = 90;
+var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
 var hash = (value) => (0, import_node_crypto9.createHash)("sha256").update(value).digest("hex");
-var emailBucketKey = (email) => `signin:email:${hash(email.trim().toLowerCase())}`;
+var normalEmail = (email) => email.trim().toLowerCase();
+var UNKNOWN_ADDRESS = "unknown-address";
+var where = (address) => hash(address);
 var addressBucketKey = (address) => `signin:addr:${hash(address)}`;
+var accountBucketKey = (userId) => `signin:acct:${hash(userId)}`;
+var pairBucketKey = (userId, address) => `signin:pair:${hash(userId)}:${where(address)}`;
+var knownAddressKey = (userId, address) => `signin:known:${hash(userId)}:${where(address)}`;
+var unknownEmailBucketKey = (email, address) => `signin:void:${hash(normalEmail(email))}:${where(address)}`;
 function clientAddress(req) {
   const headers = req?.headers ?? {};
   const socket = req?.socket?.remoteAddress ?? null;
   const forwarded = verifiedInternalIdentity(headers, socket, String(process.env.SESSION_SECRET || ""), Date.now());
-  if (forwarded) return forwarded;
+  if (forwarded) return forwarded.replace(/^forwarded:/, "");
   const first = (v) => String(Array.isArray(v) ? v[0] : v ?? "").split(",")[0]?.trim();
   const header = first(headers["x-real-ip"]) || first(headers["x-forwarded-for"]);
-  if (header) return header;
-  return socket && !/^(?:127\.|::1$|::ffff:127\.)/.test(socket) ? socket : null;
+  if (header) return hash(normalizeAddress(header));
+  return socket && !/^(?:127\.|::1$|::ffff:127\.)/.test(socket) ? hash(normalizeAddress(socket)) : UNKNOWN_ADDRESS;
 }
 async function countAttempt(prisma, key2) {
   const rows = await prisma.$queryRaw`
@@ -10044,28 +10069,87 @@ async function countAttempt(prisma, key2) {
     RETURNING "count"`;
   return Number(rows[0]?.count ?? 0);
 }
-async function signInLocked(prisma, email, address) {
-  const byEmail = await countAttempt(prisma, emailBucketKey(email));
-  const byAddress = address ? await countAttempt(prisma, addressBucketKey(address)) : 0;
-  return byEmail > SIGN_IN_MAX_PER_EMAIL || byAddress > SIGN_IN_MAX_PER_ADDRESS;
+async function sweepExpired(prisma, limit = SIGN_IN_SWEEP_PER_ATTEMPT) {
+  await prisma.$executeRaw`
+    DELETE FROM "RateLimitBucket" WHERE "id" IN (
+      SELECT "id" FROM "RateLimitBucket"
+      WHERE "windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) AND "key" LIKE 'signin:%'
+        AND ("key" NOT LIKE 'signin:known:%' OR "windowStart" < now() - make_interval(days => ${SIGN_IN_KNOWN_DAYS}::int))
+      LIMIT ${limit}::int FOR UPDATE SKIP LOCKED)`;
 }
-async function signInSucceeded(prisma, email, address) {
-  await prisma.$executeRaw`DELETE FROM "RateLimitBucket" WHERE "key" = ${emailBucketKey(email)}`;
-  if (address) await prisma.$executeRaw`UPDATE "RateLimitBucket" SET "count" = GREATEST(COALESCE("count", 0) - 1, 0) WHERE "key" = ${addressBucketKey(address)}`;
+async function accountId(prisma, email) {
+  const value = email.trim();
+  if (!value) return null;
+  const rows = await prisma.$queryRaw`SELECT "id" FROM "User" WHERE lower("email") = lower(${value}) ORDER BY ("email" = ${value}) DESC LIMIT 1`;
+  return rows[0]?.id ?? null;
 }
-function limitSignIn(schema, field = "authenticateUserWithPassword", identityArg = "email") {
-  const def = schema.getMutationType()?.getFields()[field];
-  if (!def?.resolve) return schema;
-  const resolve = def.resolve;
-  def.resolve = async (root, args, context, info) => {
-    const email = String(args[identityArg] ?? "");
-    const address = clientAddress(context?.req);
-    const prisma = context.sudo().prisma;
-    if (await signInLocked(prisma, email, address)) return { code: "FAILURE", message: SIGN_IN_LOCKED_MESSAGE };
-    const result = await resolve(root, args, context, info);
-    if (result && typeof result === "object" && "sessionToken" in result) await signInSucceeded(prisma, email, address);
-    return result;
-  };
+async function isKnownAddress(prisma, userId, address) {
+  if (address === UNKNOWN_ADDRESS) return false;
+  const rows = await prisma.$queryRaw`SELECT 1 AS "ok" FROM "RateLimitBucket" WHERE "key" = ${knownAddressKey(userId, address)} AND "windowStart" > now() - make_interval(days => ${SIGN_IN_KNOWN_DAYS}::int)`;
+  return rows.length > 0;
+}
+async function signInAttempt(prisma, email, address, sessionUserId = null) {
+  await sweepExpired(prisma);
+  const userId = await accountId(prisma, email);
+  if (userId && sessionUserId === userId) return { locked: false, userId };
+  const known = userId ? await isKnownAddress(prisma, userId, address) : false;
+  if (!known && await countAttempt(prisma, addressBucketKey(address)) > SIGN_IN_MAX_PER_ADDRESS) return { locked: true, userId };
+  if (!userId) return { locked: await countAttempt(prisma, unknownEmailBucketKey(email, address)) > SIGN_IN_MAX_PER_EMAIL, userId: null };
+  const pair = await countAttempt(prisma, pairBucketKey(userId, address));
+  if (pair > SIGN_IN_MAX_PER_EMAIL) return { locked: true, userId };
+  if (known) return { locked: false, userId };
+  const account = await countAttempt(prisma, accountBucketKey(userId));
+  return { locked: account > SIGN_IN_ACCOUNT_SLOW_AFTER && pair > 1, userId };
+}
+async function rememberAddress(prisma, userId, address) {
+  if (address === UNKNOWN_ADDRESS) return;
+  await prisma.$executeRaw`
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto9.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
+}
+async function signInSucceeded(prisma, userId, address) {
+  await prisma.$executeRaw`DELETE FROM "RateLimitBucket" WHERE "key" IN (${accountBucketKey(userId)}, ${pairBucketKey(userId, address)})`;
+  await rememberAddress(prisma, userId, address);
+  await prisma.$executeRaw`UPDATE "RateLimitBucket" SET "count" = GREATEST(COALESCE("count", 0) - 1, 0) WHERE "key" = ${addressBucketKey(address)}`;
+}
+async function passwordResetRedeemed(prisma, userId, address) {
+  const prefix = `signin:pair:${hash(userId)}:%`;
+  await prisma.$executeRaw`DELETE FROM "RateLimitBucket" WHERE "key" = ${accountBucketKey(userId)} OR "key" LIKE ${prefix}`;
+  await rememberAddress(prisma, userId, address);
+}
+function limitSignIn(schema, field = "authenticateUserWithPassword", identityArg = "email", resetField = "redeemUserPasswordResetToken") {
+  const fields = schema.getMutationType()?.getFields() ?? {};
+  const def = fields[field];
+  if (def?.resolve) {
+    const resolve = def.resolve;
+    def.resolve = async (root, args, context, info) => {
+      const email = String(args[identityArg] ?? "");
+      const address = clientAddress(context?.req);
+      const prisma = context.sudo().prisma;
+      const sessionUserId = typeof context?.session?.itemId === "string" ? context.session.itemId : null;
+      const attempt = await signInAttempt(prisma, email, address, sessionUserId);
+      if (attempt.locked) return { code: "FAILURE", message: SIGN_IN_LOCKED_MESSAGE };
+      const result = await resolve(root, args, context, info);
+      if (result && typeof result === "object" && "sessionToken" in result) {
+        const userId = String(result.item?.id ?? attempt.userId ?? "");
+        if (userId) await signInSucceeded(prisma, userId, address);
+      }
+      return result;
+    };
+  }
+  const reset = fields[resetField];
+  if (reset?.resolve) {
+    const resolve = reset.resolve;
+    reset.resolve = async (root, args, context, info) => {
+      const result = await resolve(root, args, context, info);
+      if (result == null) {
+        const prisma = context.sudo().prisma;
+        const userId = await accountId(prisma, String(args[identityArg] ?? ""));
+        if (userId) await passwordResetRedeemed(prisma, userId, clientAddress(context?.req));
+      }
+      return result;
+    };
+  }
   return schema;
 }
 
