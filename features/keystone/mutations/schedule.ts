@@ -185,8 +185,17 @@ async function bookInTx(uow: UnitOfWork, actor: Actor, input: BookInput, claims:
   await uow.tx.resourceReservation.create({ data: { resourceId: claims.resourceId, appointmentId: appointment.id, startsAt, endsAt, status: holdStatus } })
   await uow.tx.providerReservation.create({ data: { staffMemberId: claims.providerId, appointmentId: appointment.id, startsAt, endsAt, status: holdStatus } })
   auditCreate(uow, actor, 'Appointment', appointment.id, 'appointment.booked', { ref, status, startsAt, endsAt, typeCode: type.code, channel, patients: input.patientIds.length })
-  uow.emit({ topic: 'comms.appointment_booked', aggregateType: 'Appointment', aggregateId: appointment.id, payload: { appointmentId: appointment.id, template: status === 'requested' ? 'appointment_requested' : 'appointment_booked' }, dedupeKey: `comms.booked:${appointment.id}` })
   return { id: appointment.id, ref, status, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }
+}
+
+/** A cancellation frees a slot: matching waitlist entries become one staff task (offers are made by people or the portal API). */
+async function noteFreedSlot(uow: UnitOfWork, appointmentId: string) {
+  const appt = await uow.tx.appointment.findUnique({ where: { id: appointmentId }, select: { id: true, ref: true, startsAt: true, locationId: true, appointmentTypeId: true } })
+  if (!appt) return
+  const waiting = await uow.tx.waitlistEntry.count({ where: { status: 'waiting', locationId: appt.locationId, OR: [{ appointmentTypeId: appt.appointmentTypeId }, { appointmentTypeId: null }] } })
+  if (!waiting) return
+  const open = await uow.tx.task.findFirst({ where: { subjectType: 'Appointment', subjectId: appt.id, kind: 'follow_up' }, select: { id: true } })
+  if (!open) await uow.tx.task.create({ data: { kind: 'follow_up', priority: 'normal', status: 'open', dueAt: uow.now, subjectType: 'Appointment', subjectId: appt.id, locationId: appt.locationId, roleName: 'csr', title: `Slot freed (${appt.ref}): ${waiting} waiting`, detail: `Offer ${appt.startsAt.toISOString()} to the waitlist.` } })
 }
 
 async function releaseHolds(uow: UnitOfWork, appointmentId: string) {
@@ -209,7 +218,7 @@ export async function cancelAppointment(_root: unknown, args: { appointmentId: s
       })
       await uow.tx.appointmentPatient.updateMany({ where: { appointmentId: row.id }, data: { status: 'cancelled' } })
       await releaseHolds(uow, row.id)
-      uow.emit({ topic: 'waitlist.slot_freed', aggregateType: 'Appointment', aggregateId: row.id, payload: { appointmentId: row.id }, dedupeKey: `waitlist.freed:${row.id}` })
+      await noteFreedSlot(uow, row.id)
       return { id: row.id, status: row.status }
     })
     return { replay: result.replay, ...result.value }
@@ -260,7 +269,6 @@ export async function acceptAppointmentRequest(_root: unknown, args: { appointme
       const row = await transition<{ id: string; status: string }>(uow, { model: 'Appointment', id: args.appointmentId, from: ['requested'], to: 'booked', expectedVersion: args.expectedVersion, actor, eventType: 'appointment.accepted' })
       await uow.tx.resourceReservation.updateMany({ where: { appointmentId: row.id, status: 'held' }, data: { status: 'confirmed' } })
       await uow.tx.providerReservation.updateMany({ where: { appointmentId: row.id, status: 'held' }, data: { status: 'confirmed' } })
-      uow.emit({ topic: 'comms.appointment_booked', aggregateType: 'Appointment', aggregateId: row.id, payload: { appointmentId: row.id, template: 'appointment_booked' }, dedupeKey: `comms.accepted:${row.id}` })
       return { id: row.id, status: row.status }
     })
     return { replay: result.replay, ...result.value }

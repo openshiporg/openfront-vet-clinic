@@ -3,6 +3,7 @@ import { when, title, label } from '../../lib/format';
 import { ENCOUNTER_KINDS } from '../../lib/clinical';
 import { Page, Row, Empty, Status, Meta, Section, Tabs } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
+import { ActionButton } from '../../components/ActionButton';
 
 type E = { id: string; ref: string; kind: string; status: string; reason: string; startedAt: string; signedAt: string | null; patient: { id: string; name: string; species: { name: string } | null } | null; attendingDvm: { displayName: string } | null; location: { name: string } | null };
 
@@ -15,7 +16,7 @@ const VIEWS = {
 
 /**
  * Medical records by state (BUILD-PLAN P2). Unsigned records raise a task for the attending vet
- * after 24 hours and go to the medical director after 72 (the clinical job).
+ * after 24 hours and go to the medical director after 72, when staff press Refresh.
  */
 export default async function EncountersPage({ searchParams }: { searchParams?: Promise<{ view?: string; location?: string }> }) {
   const sp = (await searchParams) ?? {};
@@ -36,6 +37,7 @@ export default async function EncountersPage({ searchParams }: { searchParams?: 
   const items = (Object.keys(VIEWS) as (keyof typeof VIEWS)[]).map(k => ({ key: k, label: VIEWS[k].label, href: `/dashboard/platform/encounters?view=${k}`, count: k === 'open' ? data.open : k === 'unsigned' ? data.unsigned : undefined }));
   return (
     <Page title="Encounters">
+      <div><ActionButton op="refreshClinicalClocks" vars={{}} paths={['/dashboard/platform/encounters']}>Refresh due and overdue</ActionButton></div>
       <Tabs items={items} active={view} />
       <Section title={VIEWS[view].label}>
         {data.encounters.length ? data.encounters.map(e => (

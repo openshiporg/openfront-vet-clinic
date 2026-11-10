@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { TRIAGE_PROTOCOL } from '../seed/clinicData'
 import { assertNotDowngrade, outcomeAllowed, parseProtocol, protocolHash, scoreTriage } from './triage'
 import { buildSegments, findSlots, signSlot, subtract, verifySlot, workingIntervals } from './scheduling'
-import { contactHash, effectiveConsent, inQuietHours, normaliseEmail, normalisePhone, sendDecision, smsKeyword } from './contact'
-import { parseInboundSms, twilioSignature, verifyTwilioSignature } from '../../integrations/telephony'
+import { contactHash, effectiveConsent, normaliseEmail, normalisePhone } from './contact'
 import { disclosureScript, voiceAgentAdapter } from '../../integrations/voice'
 
 const protocol = parseProtocol(TRIAGE_PROTOCOL)
@@ -84,40 +83,15 @@ describe('contact rules', () => {
     expect(contactHash('+19165550142')).toMatch(/^[0-9a-f]{64}$/)
     expect(() => normalisePhone('555')).toThrow()
   })
-  it('keywords: STOP family first, C confirms', () => {
-    expect(smsKeyword(' stop ')).toBe('stop')
-    expect(smsKeyword('Unsubscribe')).toBe('stop')
-    expect(smsKeyword('c')).toBe('confirm')
-    expect(smsKeyword('Can I come at 3?')).toBeNull()
-  })
   it('consent: the latest row wins; implied purposes need no row; marketing needs express written', () => {
     const at = (m: number) => new Date(Date.UTC(2026, 0, 1, 0, m))
     expect(effectiveConsent([], 'transactional', 'implied').allowed).toBe(true)
     expect(effectiveConsent([], 'marketing', 'express_written').allowed).toBe(false)
     expect(effectiveConsent([{ purpose: 'care', action: 'grant', at: at(1) }, { purpose: 'care', action: 'revoke', at: at(2) }], 'care', 'implied').allowed).toBe(false)
   })
-  it('the send guard: deceased blocks before anything, quiet hours wrap midnight and defer', () => {
-    const base = { purpose: 'care' as const, contactStatus: 'active', consentRows: [], requirement: 'implied' as const, suppressed: false, localTime: '12:00', quietHours: { start: '21:00', end: '08:00' } }
-    expect(sendDecision({ ...base, patientStatus: 'deceased', suppressed: true })).toEqual({ action: 'block', reason: 'patient_deceased' })
-    expect(sendDecision({ ...base, suppressed: true })).toEqual({ action: 'block', reason: 'suppressed' })
-    expect(sendDecision({ ...base, localTime: '22:30' })).toEqual({ action: 'defer', reason: 'quiet_hours' })
-    expect(sendDecision({ ...base, localTime: '07:59' }).action).toBe('defer')
-    expect(sendDecision(base)).toEqual({ action: 'send' })
-    expect(inQuietHours('08:00', { start: '21:00', end: '08:00' })).toBe(false)
-  })
 })
 
-describe('telephony and voice adapters', () => {
-  it('verifies the Twilio signature (and rejects a tampered body)', () => {
-    const params = { From: '+19165550142', To: '+19165550100', Body: 'C', MessageSid: 'SM0123456789abcdef' }
-    const url = 'https://vet-clinic.openship.org/api/webhooks/sms'
-    const sig = twilioSignature('token', url, params)
-    expect(verifyTwilioSignature('token', url, params, sig)).toBe(true)
-    expect(verifyTwilioSignature('token', url, { ...params, Body: 'STOP' }, sig)).toBe(false)
-    expect(verifyTwilioSignature('token', url, params, null)).toBe(false)
-    expect(parseInboundSms(params)).toMatchObject({ from: '+19165550142', body: 'C', providerId: 'SM0123456789abcdef' })
-    expect(() => parseInboundSms({ ...params, MessageSid: '../x' })).toThrow()
-  })
+describe('voice adapters', () => {
   it('the disclosure names the AI and the recording, and asks about emergencies first', () => {
     const text = disclosureScript('Cedar Creek Animal Hospital', true)
     expect(text).toMatch(/AI|automated/i)

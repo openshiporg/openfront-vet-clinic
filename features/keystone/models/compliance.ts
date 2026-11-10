@@ -67,7 +67,7 @@ export const PolicyBinding = list({
   },
 })
 
-/** A legal or regulatory clock (D§6.3): created by the event that starts it, escalated by the scheduler. */
+/** A legal or regulatory clock (D§6.3): created by the event that starts it, escalated when staff press Refresh. */
 export const ComplianceTask = list({
   access: governed('canAccessDashboard'),
   ui: { labelField: 'title', listView: { initialColumns: ['kind', 'title', 'location', 'dueAt', 'status'], initialSort: { field: 'dueAt', direction: 'ASC' } } },

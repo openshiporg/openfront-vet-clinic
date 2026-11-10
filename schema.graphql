@@ -2058,110 +2058,6 @@ input NotificationCreateInput {
   updatedAt: DateTime
 }
 
-type OutboxEvent {
-  id: ID!
-  topic: String
-  aggregateType: String
-  aggregateId: String
-  dedupeKey: String
-  payload: JSON
-  status: String
-  attempts: Int
-  nextAttemptAt: DateTime
-  leaseOwner: String
-  leaseExpiresAt: DateTime
-  fencingToken: Int
-  lastError: String
-  deliveredAt: DateTime
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
-input OutboxEventWhereUniqueInput {
-  id: ID
-  dedupeKey: String
-}
-
-input OutboxEventWhereInput {
-  AND: [OutboxEventWhereInput!]
-  OR: [OutboxEventWhereInput!]
-  NOT: [OutboxEventWhereInput!]
-  id: IDFilter
-  topic: StringFilter
-  aggregateType: StringFilter
-  aggregateId: StringFilter
-  dedupeKey: StringFilter
-  status: StringFilter
-  attempts: IntNullableFilter
-  nextAttemptAt: DateTimeNullableFilter
-  leaseOwner: StringFilter
-  leaseExpiresAt: DateTimeNullableFilter
-  fencingToken: IntNullableFilter
-  lastError: StringFilter
-  deliveredAt: DateTimeNullableFilter
-  createdAt: DateTimeFilter
-  updatedAt: DateTimeFilter
-}
-
-input OutboxEventOrderByInput {
-  id: OrderDirection
-  topic: OrderDirection
-  aggregateType: OrderDirection
-  aggregateId: OrderDirection
-  dedupeKey: OrderDirection
-  status: OrderDirection
-  attempts: OrderDirection
-  nextAttemptAt: OrderDirection
-  leaseOwner: OrderDirection
-  leaseExpiresAt: OrderDirection
-  fencingToken: OrderDirection
-  lastError: OrderDirection
-  deliveredAt: OrderDirection
-  createdAt: OrderDirection
-  updatedAt: OrderDirection
-}
-
-input OutboxEventUpdateInput {
-  topic: String
-  aggregateType: String
-  aggregateId: String
-  dedupeKey: String
-  payload: JSON
-  status: String
-  attempts: Int
-  nextAttemptAt: DateTime
-  leaseOwner: String
-  leaseExpiresAt: DateTime
-  fencingToken: Int
-  lastError: String
-  deliveredAt: DateTime
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
-input OutboxEventUpdateArgs {
-  where: OutboxEventWhereUniqueInput!
-  data: OutboxEventUpdateInput!
-}
-
-input OutboxEventCreateInput {
-  topic: String
-  aggregateType: String
-  aggregateId: String
-  dedupeKey: String
-  payload: JSON
-  status: String
-  attempts: Int
-  nextAttemptAt: DateTime
-  leaseOwner: String
-  leaseExpiresAt: DateTime
-  fencingToken: Int
-  lastError: String
-  deliveredAt: DateTime
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
 type ProviderObservation {
   id: ID!
   source: String
@@ -2319,82 +2215,6 @@ input ReadAuditCreateInput {
   fields: JSON
   requestId: String
   at: DateTime
-}
-
-type ScheduledJob {
-  id: ID!
-  kind: String
-  intervalSeconds: Int
-  nextRunAt: DateTime
-  lastRunAt: DateTime
-  status: String
-  leaseKey: String
-  lastError: String
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
-input ScheduledJobWhereUniqueInput {
-  id: ID
-  kind: String
-}
-
-input ScheduledJobWhereInput {
-  AND: [ScheduledJobWhereInput!]
-  OR: [ScheduledJobWhereInput!]
-  NOT: [ScheduledJobWhereInput!]
-  id: IDFilter
-  kind: StringFilter
-  intervalSeconds: IntNullableFilter
-  nextRunAt: DateTimeNullableFilter
-  lastRunAt: DateTimeNullableFilter
-  status: StringFilter
-  leaseKey: StringFilter
-  lastError: StringFilter
-  createdAt: DateTimeFilter
-  updatedAt: DateTimeFilter
-}
-
-input ScheduledJobOrderByInput {
-  id: OrderDirection
-  kind: OrderDirection
-  intervalSeconds: OrderDirection
-  nextRunAt: OrderDirection
-  lastRunAt: OrderDirection
-  status: OrderDirection
-  leaseKey: OrderDirection
-  lastError: OrderDirection
-  createdAt: OrderDirection
-  updatedAt: OrderDirection
-}
-
-input ScheduledJobUpdateInput {
-  kind: String
-  intervalSeconds: Int
-  nextRunAt: DateTime
-  lastRunAt: DateTime
-  status: String
-  leaseKey: String
-  lastError: String
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
-input ScheduledJobUpdateArgs {
-  where: ScheduledJobWhereUniqueInput!
-  data: ScheduledJobUpdateInput!
-}
-
-input ScheduledJobCreateInput {
-  kind: String
-  intervalSeconds: Int
-  nextRunAt: DateTime
-  lastRunAt: DateTime
-  status: String
-  leaseKey: String
-  lastError: String
-  createdAt: DateTime
-  updatedAt: DateTime
 }
 
 type DeaPowerOfAttorney {
@@ -14118,12 +13938,6 @@ type Mutation {
   updateNotifications(data: [NotificationUpdateArgs!]!): [Notification]
   deleteNotification(where: NotificationWhereUniqueInput!): Notification
   deleteNotifications(where: [NotificationWhereUniqueInput!]!): [Notification]
-  createOutboxEvent(data: OutboxEventCreateInput!): OutboxEvent
-  createOutboxEvents(data: [OutboxEventCreateInput!]!): [OutboxEvent]
-  updateOutboxEvent(where: OutboxEventWhereUniqueInput!, data: OutboxEventUpdateInput!): OutboxEvent
-  updateOutboxEvents(data: [OutboxEventUpdateArgs!]!): [OutboxEvent]
-  deleteOutboxEvent(where: OutboxEventWhereUniqueInput!): OutboxEvent
-  deleteOutboxEvents(where: [OutboxEventWhereUniqueInput!]!): [OutboxEvent]
   createProviderObservation(data: ProviderObservationCreateInput!): ProviderObservation
   createProviderObservations(data: [ProviderObservationCreateInput!]!): [ProviderObservation]
   updateProviderObservation(where: ProviderObservationWhereUniqueInput!, data: ProviderObservationUpdateInput!): ProviderObservation
@@ -14136,12 +13950,6 @@ type Mutation {
   updateReadAudits(data: [ReadAuditUpdateArgs!]!): [ReadAudit]
   deleteReadAudit(where: ReadAuditWhereUniqueInput!): ReadAudit
   deleteReadAudits(where: [ReadAuditWhereUniqueInput!]!): [ReadAudit]
-  createScheduledJob(data: ScheduledJobCreateInput!): ScheduledJob
-  createScheduledJobs(data: [ScheduledJobCreateInput!]!): [ScheduledJob]
-  updateScheduledJob(where: ScheduledJobWhereUniqueInput!, data: ScheduledJobUpdateInput!): ScheduledJob
-  updateScheduledJobs(data: [ScheduledJobUpdateArgs!]!): [ScheduledJob]
-  deleteScheduledJob(where: ScheduledJobWhereUniqueInput!): ScheduledJob
-  deleteScheduledJobs(where: [ScheduledJobWhereUniqueInput!]!): [ScheduledJob]
   createDeaPowerOfAttorney(data: DeaPowerOfAttorneyCreateInput!): DeaPowerOfAttorney
   createDeaPowerOfAttorneys(data: [DeaPowerOfAttorneyCreateInput!]!): [DeaPowerOfAttorney]
   updateDeaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!, data: DeaPowerOfAttorneyUpdateInput!): DeaPowerOfAttorney
@@ -14889,6 +14697,7 @@ type Mutation {
   administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
   reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
   recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
+  refreshClinicalClocks(idempotencyKey: String!): JSON
   suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
   addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
   previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
@@ -14972,18 +14781,12 @@ type Query {
   notification(where: NotificationWhereUniqueInput!): Notification
   notifications(where: NotificationWhereInput! = {}, orderBy: [NotificationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: NotificationWhereUniqueInput): [Notification!]
   notificationsCount(where: NotificationWhereInput! = {}): Int
-  outboxEvent(where: OutboxEventWhereUniqueInput!): OutboxEvent
-  outboxEvents(where: OutboxEventWhereInput! = {}, orderBy: [OutboxEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: OutboxEventWhereUniqueInput): [OutboxEvent!]
-  outboxEventsCount(where: OutboxEventWhereInput! = {}): Int
   providerObservation(where: ProviderObservationWhereUniqueInput!): ProviderObservation
   providerObservations(where: ProviderObservationWhereInput! = {}, orderBy: [ProviderObservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProviderObservationWhereUniqueInput): [ProviderObservation!]
   providerObservationsCount(where: ProviderObservationWhereInput! = {}): Int
   readAudit(where: ReadAuditWhereUniqueInput!): ReadAudit
   readAudits(where: ReadAuditWhereInput! = {}, orderBy: [ReadAuditOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReadAuditWhereUniqueInput): [ReadAudit!]
   readAuditsCount(where: ReadAuditWhereInput! = {}): Int
-  scheduledJob(where: ScheduledJobWhereUniqueInput!): ScheduledJob
-  scheduledJobs(where: ScheduledJobWhereInput! = {}, orderBy: [ScheduledJobOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScheduledJobWhereUniqueInput): [ScheduledJob!]
-  scheduledJobsCount(where: ScheduledJobWhereInput! = {}): Int
   deaPowerOfAttorney(where: DeaPowerOfAttorneyWhereUniqueInput!): DeaPowerOfAttorney
   deaPowerOfAttorneys(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
   deaPowerOfAttorneysCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int

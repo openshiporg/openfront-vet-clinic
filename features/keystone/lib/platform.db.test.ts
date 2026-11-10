@@ -7,8 +7,6 @@ import { verifyAuditChain } from './audit'
 import { auditCreate, transition } from './cas'
 import { command } from './command'
 import { DomainError } from './errors'
-import { acquireLease, assertFence } from './lease'
-import { drainOutbox } from './outbox'
 import { consumeApproval, decideApproval, requestApproval } from './approval'
 import { nextReference } from './sequence'
 import { runInTransaction } from './unitOfWork'
@@ -70,18 +68,15 @@ describe.skipIf(!hasTestDatabase)('platform spine (database)', () => {
       expect((await prisma.approvalRequest.findUniqueOrThrow({ where: { id: request.id } })).status).toBe('pending')
     })
 
-    it('rolls back the state change, audit and outbox together when a later step fails', async () => {
+    it('rolls back the state change and audit together when a later step fails', async () => {
       const request = await newRequest()
       const auditBefore = await prisma.auditEvent.count()
-      const outboxBefore = await prisma.outboxEvent.count()
       await expect(runInTransaction(prisma, async uow => {
         await transition(uow, { model: 'ApprovalRequest', id: request.id, from: ['pending'], to: 'cancelled', actor: maker, eventType: 'approval.cancelled' })
-        uow.emit({ topic: 'test.never', aggregateType: 'ApprovalRequest', aggregateId: request.id, payload: {} })
         throw new Error('posting failed')
       })).rejects.toThrow('posting failed')
       expect((await prisma.approvalRequest.findUniqueOrThrow({ where: { id: request.id } })).status).toBe('pending')
       expect(await prisma.auditEvent.count()).toBe(auditBefore)
-      expect(await prisma.outboxEvent.count()).toBe(outboxBefore)
     })
   })
 
@@ -127,91 +122,6 @@ describe.skipIf(!hasTestDatabase)('platform spine (database)', () => {
       const used = await runInTransaction(prisma, uow => consumeApproval(uow, { requestId: request.id, action: 'discount.apply', targetList: 'Invoice', targetId, payload }))
       expect(used.approverId).toBe(checker.kind === 'user' ? checker.userId : null)
       await expect(runInTransaction(prisma, uow => consumeApproval(uow, { requestId: request.id, action: 'discount.apply', targetList: 'Invoice', targetId, payload }))).rejects.toMatchObject({ code: 'APPROVAL_MISMATCH' })
-    })
-  })
-
-  describe('leases and fencing', () => {
-    it('grants one holder, increments the token on take-over, and rejects the stale holder', async () => {
-      const key = uniqueKey('router')
-      const t0 = new Date('2026-11-06T15:00:00Z')
-      const a = await acquireLease(prisma, key, 'worker-a', 30_000, t0)
-      expect(a?.fencingToken).toBe(1)
-      expect(await acquireLease(prisma, key, 'worker-b', 30_000, new Date(t0.getTime() + 1_000))).toBeNull()
-      const renewed = await acquireLease(prisma, key, 'worker-a', 30_000, new Date(t0.getTime() + 2_000))
-      expect(renewed?.fencingToken).toBe(1)
-      // worker-a stalls past expiry; worker-b takes over with a higher token.
-      const later = new Date(t0.getTime() + 40_000)
-      const b = await acquireLease(prisma, key, 'worker-b', 30_000, later)
-      expect(b?.fencingToken).toBe(2)
-      await expect(prisma.$transaction(tx => assertFence(tx, renewed!, later))).rejects.toMatchObject({ code: 'STALE_FENCING_TOKEN' })
-      await expect(prisma.$transaction(tx => assertFence(tx, b!, later))).resolves.toBeUndefined()
-      await expect(prisma.$transaction(tx => assertFence(tx, b!, new Date(later.getTime() + 31_000)))).rejects.toMatchObject({ code: 'LEASE_LOST' })
-    })
-
-    it('lets exactly one of many concurrent claimants hold a free lease', async () => {
-      const key = uniqueKey('contended')
-      const now = new Date()
-      const grants = await Promise.all(Array.from({ length: 8 }, (_, i) => acquireLease(prisma, key, `w${i}`, 30_000, now)))
-      expect(grants.filter(Boolean)).toHaveLength(1)
-    })
-  })
-
-  describe('outbox delivery', () => {
-    it('delivers each message exactly once in effect, even when a worker crashes after the side effect', async () => {
-      const topic = uniqueKey('topic')
-      const ids = await runInTransaction(prisma, async uow => {
-        for (let i = 0; i < 5; i += 1) uow.emit({ topic, aggregateType: 'Test', aggregateId: `agg-${i}`, payload: { i }, dedupeKey: `${topic}:${i}` })
-        // Same dedupe key again: kept once.
-        uow.emit({ topic, aggregateType: 'Test', aggregateId: 'agg-0', payload: { i: 0 }, dedupeKey: `${topic}:0` })
-        return true
-      })
-      expect(ids).toBe(true)
-      expect(await prisma.outboxEvent.count({ where: { topic } })).toBe(5)
-
-      // The receiving side is idempotent on the dedupe key (as payment and lab partners are on their idempotency keys).
-      const effects = new Map<string, number>()
-      const receive = (dedupeKey: string) => effects.set(dedupeKey, (effects.get(dedupeKey) ?? 0) + 1)
-      const applied = new Set<string>()
-      const handler = async (message: { dedupeKey: string }) => {
-        if (!applied.has(message.dedupeKey)) { applied.add(message.dedupeKey); receive(message.dedupeKey) }
-      }
-
-      const t0 = new Date(Date.now() + 1_000)
-      // Worker A delivers message effects but "crashes" before acknowledging two of them.
-      let crashes = 0
-      const crashing = await drainOutbox(prisma, {
-        workerId: 'worker-a', topics: [topic], leaseMs: 5_000, now: () => t0,
-        handlers: { [topic]: async message => { await handler(message); if (crashes < 2) { crashes += 1; throw new Error('worker crashed after send') } } },
-      })
-      expect(crashing.claimed).toBe(5)
-      expect(crashing.failed).toBe(2)
-
-      // Worker B runs after the retry delay and redelivers only the unacknowledged ones.
-      const t1 = new Date(t0.getTime() + 10_000)
-      const second = await drainOutbox(prisma, { workerId: 'worker-b', topics: [topic], now: () => t1, handlers: { [topic]: handler } })
-      expect(second.delivered).toBe(2)
-      expect(await prisma.outboxEvent.count({ where: { topic, status: 'delivered' } })).toBe(5)
-      expect([...effects.values()].every(count => count === 1)).toBe(true)
-      expect(effects.size).toBe(5)
-    })
-
-    it('refuses the acknowledgement of a worker whose lease was taken over', async () => {
-      const topic = uniqueKey('slow')
-      await runInTransaction(prisma, async uow => uow.emit({ topic, aggregateType: 'Test', aggregateId: 'x', payload: {}, dedupeKey: `${topic}:x` }))
-      const t0 = new Date(Date.now() + 1_000)
-      let resultB: Awaited<ReturnType<typeof drainOutbox>> | null = null
-      const resultA = await drainOutbox(prisma, {
-        workerId: 'slow-a', topics: [topic], leaseMs: 1_000, now: () => t0,
-        handlers: {
-          // While A is still working, its lease expires and B claims and delivers the message.
-          [topic]: async () => { resultB = await drainOutbox(prisma, { workerId: 'fast-b', topics: [topic], now: () => new Date(t0.getTime() + 5_000), handlers: { [topic]: async () => undefined } }) },
-        },
-      })
-      expect(resultB!.delivered).toBe(1)
-      expect(resultA.staleAcks).toBe(1)
-      const row = await prisma.outboxEvent.findFirstOrThrow({ where: { topic } })
-      expect(row.status).toBe('delivered')
-      expect(row.attempts).toBe(2)
     })
   })
 

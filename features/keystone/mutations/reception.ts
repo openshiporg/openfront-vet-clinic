@@ -6,7 +6,7 @@ import { DomainError, Codes } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { resolvePolicy } from '../domain/policy'
-import { contactHash, normalisePhone, smsKeyword } from '../domain/contact'
+import { contactHash, normalisePhone } from '../domain/contact'
 import { assertNotDowngrade, outcomeAllowed, parseProtocol, scoreTriage, type TriageLevel } from '../domain/triage'
 import { gated } from './agentGuard'
 
@@ -197,7 +197,12 @@ export async function runTriage(_root: unknown, args: { input: { complaint: stri
       })
       auditCreate(uow, actor, 'TriageAssessment', row.id, 'triage.assessed', { level: scored.level, outcome, redFlags: scored.redFlagsHit, protocolVersion: version.versionNumber })
       if (scored.level === 'emergency_now' || scored.level === 'urgent_today') {
-        uow.emit({ topic: 'notify.urgent_call', aggregateType: 'TriageAssessment', aggregateId: row.id, payload: { level: scored.level, callRecordId: input.callRecordId ?? null }, dedupeKey: `notify.urgent:${row.id}` })
+        // A person calls the client back or takes the transfer: one urgent task per assessment.
+        const who = input.patientId ? (await uow.tx.patient.findUnique({ where: { id: input.patientId }, select: { name: true } }))?.name : null
+        const call = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { locationId: true } }) : null
+        const task = await uow.tx.task.create({ data: { kind: 'call_back', priority: 'urgent', status: 'open', dueAt: uow.now, subjectType: 'TriageAssessment', subjectId: row.id, locationId: call?.locationId ?? input.locationId ?? null, roleName: 'csr',
+          title: scored.level === 'emergency_now' ? `EMERGENCY call: ${who ? `${who}: ` : ''}transfer or confirm ER referral now` : `Urgent call-back today: ${who ? `${who}: ` : ''}${String(input.complaint ?? '').slice(0, 80)}`, detail: input.callRecordId ? `Call ${input.callRecordId}` : '' } })
+        uow.audit({ eventType: 'task.raised', entityType: 'Task', entityId: task.id, after: { kind: 'call_back', priority: 'urgent', level: scored.level }, metadata: { system: 'triage' } })
       }
       return { id: row.id, level: scored.level, outcome, script: scored.script, redFlags: scored.reasons, unanswered: scored.unanswered, emergencyReferral: referral }
     })
@@ -226,54 +231,6 @@ export async function referToEmergency(_root: unknown, args: { triageId: string;
     })
     return { replay: result.replay, ...result.value }
   })
-}
-
-// ── Inbound SMS (STOP first, then C to confirm) ───────────────────────────────────────────
-
-/**
- * An inbound text from the telephony adapter. Opt-out keywords are handled before anything else
- * (CTIA): a suppression and a revoke for every texting purpose, and one final confirmation. "C"
- * confirms the sender's next booked appointment. Everything else lands in the thread for staff.
- */
-export async function receiveInboundSms(db: any, input: { from: string; to: string; body: string; providerId: string }, now = new Date()) {
-  const actor = { kind: 'system', name: 'sms-inbound' } as Actor
-  const key = `sms-in:${String(input.providerId).replace(/[^A-Za-z0-9._:-]/g, '')}`.slice(0, 200)
-  const result = await command(db, { name: 'sms.inbound', actor, idempotencyKey: key, params: input, now }, async uow => {
-    const from = normalisePhone(input.from)
-    const body = String(input.body ?? '').slice(0, 1600)
-    const contact = await uow.tx.contactPoint.findFirst({ where: { valueHash: contactHash(from), status: 'active' }, select: { id: true, person: { select: { clientId: true } } } })
-    const clientId = contact?.person?.clientId ?? null
-    let thread = contact ? await uow.tx.commsThread.findFirst({ where: { contactPointId: contact.id, channel: 'sms', status: { not: 'closed' } }, orderBy: { lastMessageAt: 'desc' } }) : null
-    if (!thread) thread = await uow.tx.commsThread.create({ data: { clientId, contactPointId: contact?.id ?? null, channel: 'sms', subject: 'Text messages', status: 'waiting_staff', lastMessageAt: now } })
-    const message = await uow.tx.commsMessage.create({ data: { threadId: thread.id, direction: 'inbound', purpose: 'care', to: input.to, from, body, status: 'received', providerId: input.providerId, sentAt: now } })
-    await uow.tx.commsThread.update({ where: { id: thread.id }, data: { lastMessageAt: now, status: 'waiting_staff', version: { increment: 1 } } })
-    const keyword = smsKeyword(body)
-    let handled: string = 'thread'
-    if (keyword === 'stop' && contact) {
-      // A second STOP is the same opt-out: one active suppression per number and reason.
-      const already = await uow.tx.suppression.findFirst({ where: { contactPointId: contact.id, reason: 'stop_keyword', active: true }, select: { id: true } })
-      if (!already) await uow.tx.suppression.create({ data: { contactPointId: contact.id, clientId, reason: 'stop_keyword', active: true } })
-      await uow.tx.consentRecord.createMany({ data: ['care', 'transactional', 'marketing'].map(purpose => ({ contactPointId: contact.id, purpose, action: 'revoke', method: 'sms_keyword', keyword: body.trim().slice(0, 20), at: now })) })
-      uow.emit({ topic: 'comms.send', aggregateType: 'CommsThread', aggregateId: thread.id, payload: { kind: 'stop_confirmation', to: from, contactPointId: contact.id }, dedupeKey: `sms-stop-ack:${message.id}` })
-      handled = 'stop'
-    } else if (keyword === 'start' && contact) {
-      await uow.tx.suppression.updateMany({ where: { contactPointId: contact.id, reason: 'stop_keyword', active: true }, data: { active: false } })
-      await uow.tx.consentRecord.createMany({ data: ['care', 'transactional'].map(purpose => ({ contactPointId: contact.id, purpose, action: 'grant', method: 'sms_keyword', keyword: body.trim().slice(0, 20), at: now })) })
-      handled = 'start'
-    } else if (keyword === 'help') {
-      uow.emit({ topic: 'comms.send', aggregateType: 'CommsThread', aggregateId: thread.id, payload: { kind: 'help_reply', to: from }, dedupeKey: `sms-help:${message.id}` })
-      handled = 'help'
-    } else if (keyword === 'confirm' && clientId) {
-      const next = await uow.tx.appointment.findFirst({ where: { clientId, status: 'booked', startsAt: { gt: now } }, orderBy: { startsAt: 'asc' }, select: { id: true, version: true } })
-      if (next) {
-        await transition(uow, { model: 'Appointment', id: next.id, from: ['booked'], to: 'confirmed', expectedVersion: next.version, actor, eventType: 'appointment.confirmed', data: { confirmedAt: now }, metadata: { via: 'sms_c' } })
-        handled = 'confirmed'
-      }
-    }
-    uow.audit({ eventType: 'sms.received', entityType: 'CommsMessage', entityId: message.id, after: { threadId: thread.id, keyword: keyword ?? null, handled, knownContact: !!contact }, metadata: { system: 'sms-inbound' } })
-    return { messageId: message.id, threadId: thread.id, handled }
-  })
-  return result.value
 }
 
 // ── Refill and records requests (intake only; DVM and records staff decide) ───────────────

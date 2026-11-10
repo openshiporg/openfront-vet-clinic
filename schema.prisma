@@ -442,16 +442,6 @@ model IntegrationConnection {
   @@index([locationId])
 }
 
-model Lease {
-  id           String   @id @default(cuid())
-  key          String   @unique @default("")
-  owner        String   @default("")
-  fencingToken Int      @default(0)
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
-}
-
 model Notification {
   id          String    @id @default(cuid())
   recipient   User?     @relation("Notification_recipient", fields: [recipientId], references: [id])
@@ -466,28 +456,6 @@ model Notification {
   updatedAt   DateTime  @default(now()) @updatedAt
 
   @@index([recipientId])
-}
-
-model OutboxEvent {
-  id             String    @id @default(cuid())
-  topic          String    @default("")
-  aggregateType  String    @default("")
-  aggregateId    String    @default("")
-  dedupeKey      String    @unique @default("")
-  payload        Json?
-  status         String    @default("pending")
-  attempts       Int?      @default(0)
-  nextAttemptAt  DateTime? @default(now())
-  leaseOwner     String    @default("")
-  leaseExpiresAt DateTime?
-  fencingToken   Int?      @default(0)
-  lastError      String    @default("")
-  deliveredAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now()) @updatedAt
-
-  @@index([topic])
-  @@index([aggregateId])
 }
 
 model ProviderObservation {
@@ -528,19 +496,6 @@ model ReadAudit {
   @@index([clientId])
   @@index([resourceType])
   @@index([resourceId])
-}
-
-model ScheduledJob {
-  id              String    @id @default(cuid())
-  kind            String    @unique @default("")
-  intervalSeconds Int?
-  nextRunAt       DateTime?
-  lastRunAt       DateTime?
-  status          String    @default("idle")
-  leaseKey        String    @default("")
-  lastError       String    @default("")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
 }
 
 model SecretBox {

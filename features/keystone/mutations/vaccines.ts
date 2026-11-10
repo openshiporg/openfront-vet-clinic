@@ -11,6 +11,7 @@ import { requireLicence } from '../domain/licensure'
 import { calendarDayText, dueDate, inInitialSeries, rabiesCertificateFields, reminderStatusOn, vaccineDuration, vaccineProblems } from '../domain/vaccines'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { renderRabiesDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, locationDay, markInProgress, staffById, staffOf, text, type Ctx, type StaffRow } from './clinical'
 
 /*
@@ -156,7 +157,7 @@ async function issueRabiesCertificate(uow: UnitOfWork, input: { patientId: strin
       reportedTo: 'none', policyVersions: toJsonValue(input.pack.versions.map(v => v.id)) as never,
     },
   })
-  uow.emit({ topic: 'document.render', aggregateType: 'RabiesCertificate', aggregateId: cert.id, payload: { kind: 'rabies_certificate' }, dedupeKey: `rabies.render:${cert.id}` })
+  await renderRabiesDocument(uow, cert.id, input.locationId)
   return { id: cert.id, ref, missing }
 }
 
@@ -265,9 +266,8 @@ export async function addManualReminder(_root: unknown, args: { patientId: strin
 }
 
 /**
- * Daily reminder job for one location (lease `reminders:{location}:{date}`): moves reminders through
- * due/overdue/lapsed for the location's calendar day and queues one notify.reminder per client per
- * day (dedupe key), batching every due pet of the household into one message. Purpose `care`.
+ * Reminder refresh for one location: moves reminders through
+ * due/overdue/lapsed for the location's calendar day. Run by a staff button; nothing is sent.
  */
 export async function runReminderJob(uow: UnitOfWork, locationId: string) {
   const { on } = await locationDay(uow, locationId, uow.now)
@@ -277,7 +277,6 @@ export async function runReminderJob(uow: UnitOfWork, locationId: string) {
     take: 5000,
   })
   let changed = 0
-  const toNotify = new Map<string, { reminderIds: string[]; lines: string[] }>()
   for (const r of open) {
     if (r.patient?.status !== 'active') {
       await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: 'suppressed', suppressedReason: `Patient ${r.patient?.status ?? 'missing'}`, version: { increment: 1 } } })
@@ -290,18 +289,6 @@ export async function runReminderJob(uow: UnitOfWork, locationId: string) {
       await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: next, version: { increment: 1 } } })
       changed++
     }
-    const notifiedRecently = r.lastNotifiedAt && r.lastNotifiedAt.getTime() > uow.now.getTime() - 14 * 86_400_000
-    const clientId = r.patient?.ownerships[0]?.clientId
-    if ((next === 'due' || next === 'overdue') && !notifiedRecently && clientId) {
-      const entry = toNotify.get(clientId) ?? { reminderIds: [], lines: [] }
-      entry.reminderIds.push(r.id)
-      entry.lines.push(`${r.patient!.name}: ${r.type?.name ?? 'reminder'} ${next === 'overdue' ? 'overdue since' : 'due'} ${calendarDayText(day(r.dueOn))}`)
-      toNotify.set(clientId, entry)
-    }
   }
-  for (const [clientId, entry] of toNotify) {
-    uow.emit({ topic: 'notify.reminder', aggregateType: 'Client', aggregateId: clientId, payload: { clientId, locationId, reminderIds: entry.reminderIds, lines: entry.lines, purpose: 'care' }, dedupeKey: `notify.reminder:${clientId}:${on}` })
-    await uow.tx.patientReminder.updateMany({ where: { id: { in: entry.reminderIds } }, data: { lastNotifiedAt: uow.now } })
-  }
-  return { on, checked: open.length, changed, notified: toNotify.size }
+  return { on, checked: open.length, changed }
 }

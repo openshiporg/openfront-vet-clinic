@@ -70,54 +70,6 @@ export const CommandReceipt = list({
   },
 })
 
-export const OutboxEvent = list({
-  access: governed('canManagePractice'),
-  ui: { listView: { initialColumns: ['topic', 'status', 'attempts', 'nextAttemptAt', 'aggregateType', 'aggregateId'] } },
-  fields: {
-    topic: systemText({ indexed: true, required: true }),
-    aggregateType: systemText({ required: true }),
-    aggregateId: systemText({ indexed: true, required: true }),
-    dedupeKey: systemText({ indexed: 'unique', required: true }),
-    payload: json({ ...readOnly }),
-    status: lifecycle(['pending', 'leased', 'delivered', 'failed', 'dead']),
-    attempts: integer({ defaultValue: 0, ...readOnly }),
-    nextAttemptAt: timestamp({ defaultValue: { kind: 'now' }, ...readOnly }),
-    leaseOwner: systemText(),
-    leaseExpiresAt: timestamp({ ...readOnly }),
-    fencingToken: integer({ defaultValue: 0, ...readOnly }),
-    lastError: systemText(),
-    deliveredAt: timestamp({ ...readOnly }),
-    ...trackingFields,
-  },
-})
-
-export const Lease = list({
-  access: serverOnly,
-  graphql: { omit: true },
-  ui: { isHidden: true },
-  fields: {
-    key: text({ isIndexed: 'unique', validation: { isRequired: true } }),
-    owner: text({ validation: { isRequired: true } }),
-    fencingToken: integer({ defaultValue: 0, validation: { isRequired: true } }),
-    expiresAt: timestamp({ validation: { isRequired: true } }),
-    ...trackingFields,
-  },
-})
-
-export const ScheduledJob = list({
-  access: governed('canManagePractice'),
-  fields: {
-    kind: systemText({ indexed: 'unique', required: true }),
-    intervalSeconds: integer({ ...readOnly }),
-    nextRunAt: timestamp({ ...readOnly }),
-    lastRunAt: timestamp({ ...readOnly }),
-    status: lifecycle(['idle', 'running', 'failed', 'disabled'], 'idle'),
-    leaseKey: systemText(),
-    lastError: systemText(),
-    ...trackingFields,
-  },
-})
-
 export const Sequence = list({
   access: serverOnly,
   graphql: { omit: true },

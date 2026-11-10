@@ -43,7 +43,6 @@ export async function requestApproval(uow: UnitOfWork, actor: Actor, input: Requ
     },
   })
   uow.audit({ eventType: 'approval.requested', entityType: 'ApprovalRequest', entityId: created.id, actorUserId: actorUserId(actor), actorAgentId: actorAgentId(actor), after: { action: input.action, targetList: input.targetList, targetId: input.targetId, payloadHash: created.payloadHash, requiredPermission } })
-  uow.emit({ topic: 'notify.approval', aggregateType: 'ApprovalRequest', aggregateId: created.id, payload: { action: input.action, requiredPermission }, dedupeKey: `notify.approval:${created.id}` })
   return created
 }
 

@@ -10,7 +10,7 @@ import { gated } from './agentGuard'
 
 /**
  * Clients and patients (SCHEMA §2, STATE-MACHINES §1-§2). Every write is one idempotent command:
- * the rows, their audit events and any outbox messages commit together. Duplicate detection runs on
+ * the rows, and their audit events commit together. Duplicate detection runs on
  * contact hashes and microchip numbers before anything is created.
  */
 

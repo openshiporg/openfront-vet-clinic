@@ -12,7 +12,6 @@ import { addAddendum, addDiagnosis, openEncounter, recordVitals, requestVoidEnco
 import { admitPatient, completeTreatmentTask, placeOrder, recordAdministration } from './treatment'
 import { administerVaccine, runReminderJob } from './vaccines'
 import { applyImport, previewImport } from './imports'
-import { renderDocument } from '../workers/documents'
 
 /**
  * Phase 2 exit gate (BUILD-PLAN P2) against the scratch Postgres: a SOAP record is written, signed
@@ -108,9 +107,8 @@ describe.skipIf(!hasTestDatabase)('Phase 2 exit gate (database)', () => {
     await expect(addAddendum(null, { encounterId, sectionKind: 'assessment', reason: 'Radiographs reviewed', body: 'Radiographs confirm effusion; no osteophytes.', idempotencyKey: uniqueKey('a') }, lopez)).rejects.toMatchObject({ code: 'GUARD_FAILED' })
     await addAddendum(null, { encounterId, sectionKind: 'assessment', reason: 'Radiographs reviewed', body: 'Radiographs confirm effusion; no osteophytes.', idempotencyKey: uniqueKey('a') }, marsh)
     expect(await prisma.addendum.count({ where: { encounterId } })).toBe(1)
-    // The signed record renders to a hashed document.
+    // The signed record is rendered to a hashed document inside the signing transaction.
     const doc = await prisma.clinicalDocument.findFirstOrThrow({ where: { encounterId } })
-    await renderDocument(prisma as never, { aggregateType: 'ClinicalDocument', aggregateId: doc.id, payload: { documentId: doc.id } } as never)
     const rendered = await prisma.clinicalDocument.findUniqueOrThrow({ where: { id: doc.id } })
     expect(rendered.status).toBe('rendered')
     expect(rendered.sha256).toMatch(/^[0-9a-f]{64}$/)
@@ -144,11 +142,11 @@ describe.skipIf(!hasTestDatabase)('Phase 2 exit gate (database)', () => {
     const reminder = await prisma.patientReminder.findFirst({ where: { patientId: PATIENT, typeId: 'seed_rt_rabies', status: 'scheduled' } })
     expect(reminder?.dueOn.toISOString().slice(0, 10)).toBe(vx.dueNextOn.toISOString().slice(0, 10))
     await expect(prisma.vaccineAdministration.update({ where: { id: given.id }, data: { site: 'changed' } })).rejects.toSatisfy(e => /append-only|never/i.test(pgError(e)))
-    // The reminder job sends at most one message per household per day.
+    // The reminder refresh only moves statuses; running it twice changes nothing the second time.
     const first = await runInTransaction(prisma, uow => runReminderJob(uow, 'seed_loc_main'))
     const second = await runInTransaction(prisma, uow => runReminderJob(uow, 'seed_loc_main'))
-    expect(first.notified).toBeGreaterThanOrEqual(0)
-    expect(second.notified).toBe(0)
+    expect(first.changed).toBeGreaterThanOrEqual(0)
+    expect(second.changed).toBe(0)
   }, 120_000)
 
   it('the treatment sheet materialises tasks, and completing one records the dose', async () => {

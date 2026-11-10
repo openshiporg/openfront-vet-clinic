@@ -16,6 +16,7 @@ import * as scribe from './scribe'
 import * as treatment from './treatment'
 import * as vaccines from './vaccines'
 import * as imports from './imports'
+import * as clocks from './clocks'
 import '../lib/practiceControls'
 import { limitNestedLists } from '../security/breadthLimit'
 import { limitSignIn } from '../security/signInLimit'
@@ -23,7 +24,7 @@ import { limitSignIn } from '../security/signInLimit'
 const graphql = String.raw
 
 // Every domain resolver checks permission itself and runs as one idempotent command: the state
-// change, audit events and outbox messages commit in one transaction (features/keystone/lib).
+// change and audit events commit in one transaction (features/keystone/lib).
 export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
   return limitSignIn(limitNestedLists(mergeSchemas({
     schemas: [baseSchema],
@@ -112,6 +113,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
         reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
         recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
+        refreshClinicalClocks(idempotencyKey: String!): JSON
         suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
         previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
@@ -201,6 +203,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         administerVaccine: op(vaccines.administerVaccine),
         reverseVaccineAdministration: op(vaccines.reverseVaccineAdministration),
         recordOutsideVaccine: op(vaccines.recordOutsideVaccine),
+        refreshClinicalClocks: op(clocks.refreshClinicalClocks),
         suppressReminder: op(vaccines.suppressReminder),
         addManualReminder: op(vaccines.addManualReminder),
         previewImport: op(imports.previewImport),

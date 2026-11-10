@@ -54,7 +54,7 @@ export default async function CallsPage({ searchParams }: { searchParams?: Promi
             </div>
             <div className="flex items-center gap-3"><Status value={TRANSFERRED.includes(c.disposition) ? 'urgent' : undefined} /><span className="font-mono text-xs uppercase">{label(c.disposition)}</span></div>
           </Row>
-        )) : <Empty>No calls yet. Inbound calls appear here when the telephony adapter is connected, or when staff log them.</Empty>}
+        )) : <Empty>No calls yet. Staff log calls here.</Empty>}
       </div>
     </Page>
   );

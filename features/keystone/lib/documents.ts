@@ -1,12 +1,10 @@
 import { createHash } from 'node:crypto'
-import type { Db } from '../lib/db'
-import { TRANSACTION_OPTIONS } from '../lib/db'
-import { appendAuditEvents } from '../lib/audit'
-import type { ClaimedMessage } from '../lib/outbox'
+import type { Tx } from '../lib/db'
+import type { UnitOfWork } from '../lib/unitOfWork'
 import { calendarDayText } from '../domain/vaccines'
 
 /*
- * Clinical document rendering (INTEGRATIONS §6): `document.render` turns a frozen source (a signed
+ * Clinical document rendering (INTEGRATIONS §6): signing, discharging and issuing a certificate render, inline in the same transaction, turning a frozen source (a signed
  * encounter's signedContent, a rabies certificate, a discharge instruction) into a self-contained
  * HTML document stored on ClinicalDocument with its SHA-256. Rendering is deterministic: the same
  * source always gives the same bytes, so the hash proves the document was not altered and a
@@ -112,52 +110,54 @@ ${d.recheckOn ? `<h2>Recheck</h2><p>Please book a recheck for ${esc(calendarDayT
 
 const sha = (html: string) => createHash('sha256').update(html, 'utf8').digest('hex')
 
-async function practiceName(db: Db) {
-  const loc = await db.location.findFirst({ where: { active: true }, orderBy: { code: 'asc' }, select: { name: true, timeZone: true } })
+async function practiceName(tx: Tx) {
+  const loc = await tx.location.findFirst({ where: { active: true }, orderBy: { code: 'asc' }, select: { name: true, timeZone: true } })
   return { name: loc?.name ?? '', timeZone: loc?.timeZone ?? 'America/Los_Angeles' }
 }
 
-/** Store the rendered HTML on the ClinicalDocument and link it from the source (one transaction). */
-async function store(db: Db, docId: string, html: string, link?: (tx: Parameters<Parameters<Db['$transaction']>[0]>[0]) => Promise<unknown>) {
+/** Store the rendered HTML on the ClinicalDocument and link it from the source (same transaction). */
+async function store(uow: UnitOfWork, docId: string, html: string, link?: (tx: Tx) => Promise<unknown>) {
   const hash = sha(html)
-  await db.$transaction(async tx => {
-    const updated = await tx.clinicalDocument.updateMany({ where: { id: docId, status: { in: ['pending_render', 'failed'] } }, data: { status: 'rendered', body: html, mimeType: 'text/html', sha256: hash, renderedAt: new Date(), renderError: '', version: { increment: 1 } } })
-    if (updated.count !== 1) return
-    if (link) await link(tx)
-    await appendAuditEvents(tx, [{ eventType: 'document.rendered', entityType: 'ClinicalDocument', entityId: docId, after: { sha256: hash }, metadata: { system: 'document-worker' } }], new Date())
-  }, TRANSACTION_OPTIONS)
+  const updated = await uow.tx.clinicalDocument.updateMany({ where: { id: docId, status: { in: ['pending_render', 'failed'] } }, data: { status: 'rendered', body: html, mimeType: 'text/html', sha256: hash, renderedAt: uow.now, renderError: '', version: { increment: 1 } } })
+  if (updated.count !== 1) return hash
+  if (link) await link(uow.tx)
+  uow.audit({ eventType: 'document.rendered', entityType: 'ClinicalDocument', entityId: docId, after: { sha256: hash }, metadata: { system: 'document-render' } })
   return hash
 }
 
-export async function renderDocument(db: Db, message: ClaimedMessage) {
-  const practice = await practiceName(db)
-  if (message.aggregateType === 'ClinicalDocument') {
-    const doc = await db.clinicalDocument.findUnique({ where: { id: message.aggregateId }, select: { id: true, status: true, encounterId: true, sourceHash: true } })
-    if (!doc || doc.status === 'rendered' || !doc.encounterId) return
-    const enc = await db.encounter.findUniqueOrThrow({ where: { id: doc.encounterId }, select: { id: true, signedContent: true, contentHash: true, location: { select: { name: true, timeZone: true } } } })
-    if (!enc.signedContent || enc.contentHash !== doc.sourceHash) throw new Error(`Encounter ${enc.id} content does not match the document source hash`)
-    const html = renderEncounterRecord(enc.signedContent as unknown as Signed, enc.contentHash!, enc.location?.timeZone ?? practice.timeZone, enc.location?.name ?? practice.name)
-    await store(db, doc.id, html, tx => tx.encounter.update({ where: { id: enc.id }, data: { documentId: doc.id } }))
-    return
-  }
-  if (message.aggregateType === 'RabiesCertificate') {
-    const cert = await db.rabiesCertificate.findUnique({ where: { id: message.aggregateId }, select: { id: true, ref: true, patientId: true, documentId: true, vaccinatedOn: true, nextDueOn: true, durationMonths: true, tagNumber: true, fields: true, missingFields: true, createdAt: true, from_VaccineAdministration_certificate: { take: 1, select: { encounter: { select: { location: { select: { name: true, timeZone: true } } } } } } } })
-    if (!cert || cert.documentId) return
-    const loc = cert.from_VaccineAdministration_certificate[0]?.encounter?.location
-    const html = renderRabiesCertificate({ ...cert, fields: (cert.fields ?? {}) as Record<string, unknown>, missingFields: (cert.missingFields ?? []) as string[] }, loc?.name ?? practice.name, loc?.timeZone ?? practice.timeZone)
-    const doc = await db.clinicalDocument.create({ data: { patientId: cert.patientId, kind: 'rabies_certificate', title: `Rabies certificate ${cert.ref}`, status: 'pending_render', sourceType: 'RabiesCertificate', sourceId: cert.id, sourceHash: sha(JSON.stringify(cert.fields ?? {})) } })
-    await store(db, doc.id, html, tx => tx.rabiesCertificate.update({ where: { id: cert.id }, data: { documentId: doc.id } }))
-    return
-  }
-  if (message.aggregateType === 'DischargeInstruction') {
-    const d = await db.dischargeInstruction.findUnique({ where: { id: message.aggregateId }, select: { id: true, body: true, medsSummary: true, recheckOn: true, createdAt: true, encounterId: true, patientId: true, patient: { select: { name: true } }, author: { select: { displayName: true } } } })
-    if (!d) return
-    const exists = await db.clinicalDocument.findFirst({ where: { sourceType: 'DischargeInstruction', sourceId: d.id }, select: { id: true, status: true } })
-    if (exists?.status === 'rendered') return
-    const html = renderDischarge({ body: d.body, medsSummary: d.medsSummary || null, recheckOn: d.recheckOn, patientName: d.patient?.name ?? 'your pet', staffName: d.author?.displayName ?? null, at: d.createdAt ?? new Date() }, practice.timeZone, practice.name)
-    const doc = exists ?? (await db.clinicalDocument.create({ data: { patientId: d.patientId, encounterId: d.encounterId, kind: 'discharge', title: `Discharge instructions for ${d.patient?.name ?? 'patient'}`, status: 'pending_render', sourceType: 'DischargeInstruction', sourceId: d.id, sourceHash: sha(d.body) } }))
-    await store(db, doc.id, html)
-    return
-  }
-  throw new Error(`No renderer for ${message.aggregateType}`)
+/** Render a signed encounter's ClinicalDocument (already created, pending_render). */
+export async function renderEncounterDocument(uow: UnitOfWork, documentId: string) {
+  const tx = uow.tx
+  const practice = await practiceName(tx)
+  const doc = await tx.clinicalDocument.findUnique({ where: { id: documentId }, select: { id: true, status: true, encounterId: true, sourceHash: true } })
+  if (!doc || doc.status === 'rendered' || !doc.encounterId) return
+  const enc = await tx.encounter.findUniqueOrThrow({ where: { id: doc.encounterId }, select: { id: true, signedContent: true, contentHash: true, location: { select: { name: true, timeZone: true } } } })
+  if (!enc.signedContent || enc.contentHash !== doc.sourceHash) throw new Error(`Encounter ${enc.id} content does not match the document source hash`)
+  const html = renderEncounterRecord(enc.signedContent as unknown as Signed, enc.contentHash!, enc.location?.timeZone ?? practice.timeZone, enc.location?.name ?? practice.name)
+  await store(uow, doc.id, html, t => t.encounter.update({ where: { id: enc.id }, data: { documentId: doc.id } }))
+}
+
+/** Render a rabies certificate to a ClinicalDocument linked from the certificate. */
+export async function renderRabiesDocument(uow: UnitOfWork, certificateId: string, locationId: string) {
+  const tx = uow.tx
+  const practice = await practiceName(tx)
+  const cert = await tx.rabiesCertificate.findUnique({ where: { id: certificateId }, select: { id: true, ref: true, patientId: true, documentId: true, vaccinatedOn: true, nextDueOn: true, durationMonths: true, tagNumber: true, fields: true, missingFields: true, createdAt: true } })
+  if (!cert || cert.documentId) return
+  const loc = await tx.location.findUnique({ where: { id: locationId }, select: { name: true, timeZone: true } })
+  const html = renderRabiesCertificate({ ...cert, fields: (cert.fields ?? {}) as Record<string, unknown>, missingFields: (cert.missingFields ?? []) as string[] }, loc?.name ?? practice.name, loc?.timeZone ?? practice.timeZone)
+  const doc = await tx.clinicalDocument.create({ data: { patientId: cert.patientId, kind: 'rabies_certificate', title: `Rabies certificate ${cert.ref}`, status: 'pending_render', sourceType: 'RabiesCertificate', sourceId: cert.id, sourceHash: sha(JSON.stringify(cert.fields ?? {})) } })
+  await store(uow, doc.id, html, t => t.rabiesCertificate.update({ where: { id: cert.id }, data: { documentId: doc.id } }))
+}
+
+/** Render a discharge instruction to a ClinicalDocument. */
+export async function renderDischargeDocument(uow: UnitOfWork, instructionId: string) {
+  const tx = uow.tx
+  const practice = await practiceName(tx)
+  const d = await tx.dischargeInstruction.findUnique({ where: { id: instructionId }, select: { id: true, body: true, medsSummary: true, recheckOn: true, createdAt: true, encounterId: true, patientId: true, patient: { select: { name: true } }, author: { select: { displayName: true } } } })
+  if (!d) return
+  const exists = await tx.clinicalDocument.findFirst({ where: { sourceType: 'DischargeInstruction', sourceId: d.id }, select: { id: true, status: true } })
+  if (exists?.status === 'rendered') return
+  const html = renderDischarge({ body: d.body, medsSummary: d.medsSummary || null, recheckOn: d.recheckOn, patientName: d.patient?.name ?? 'your pet', staffName: d.author?.displayName ?? null, at: d.createdAt ?? new Date() }, practice.timeZone, practice.name)
+  const doc = exists ?? (await tx.clinicalDocument.create({ data: { patientId: d.patientId, encounterId: d.encounterId, kind: 'discharge', title: `Discharge instructions for ${d.patient?.name ?? 'patient'}`, status: 'pending_render', sourceType: 'DischargeInstruction', sourceId: d.id, sourceHash: sha(d.body) } }))
+  await store(uow, doc.id, html)
 }

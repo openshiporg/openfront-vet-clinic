@@ -31,8 +31,8 @@ const CODE_TONE: Record<string, string> = { dnr: 'text-red-700 dark:text-red-300
 
 /**
  * The hospital (BUILD-PLAN P2): wards and cages with who is in them and their resuscitation code,
- * and for one stay the treatment sheet as an hourly grid. Tasks are materialised by the clinical
- * job; a medication task records the administration (with lot or controlled container) when done.
+ * and for one stay the treatment sheet as an hourly grid. Tasks are materialised when staff press
+ * Refresh; a medication task records the administration (with lot or controlled container) when done.
  */
 export default async function HospitalPage({ searchParams }: { searchParams?: Promise<{ location?: string; stay?: string }> }) {
   const sp = (await searchParams) ?? {};
@@ -81,6 +81,7 @@ export default async function HospitalPage({ searchParams }: { searchParams?: Pr
   const dueNow = tasks.filter(t => ['scheduled', 'due', 'overdue'].includes(t.status) && Date.parse(t.dueAt) <= now.getTime() + 3_600_000);
   return (
     <Page title="Hospital">
+      <div><ActionButton op="refreshClinicalClocks" vars={{}} paths={[path]}>Refresh due and overdue</ActionButton></div>
       {base.locations.length > 1 ? <Tabs items={base.locations.map(l => ({ key: l.id, label: l.name, href: `${path}?location=${l.id}` }))} active={locId} /> : null}
       <Section title={`In hospital · ${stays.length}`}>
         {stays.length ? stays.map(s => (

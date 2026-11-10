@@ -59,6 +59,7 @@ const OPS: Record<string, Record<string, string>> = {
   administerVaccine: { encounterId: 'ID!', productId: 'ID!', lotId: 'ID!', route: 'String', site: 'String!', supervisingDvmId: 'ID', tagNumber: 'String', repeatReason: 'String' },
   reverseVaccineAdministration: { vaccineAdministrationId: 'ID!', reason: 'String!' },
   recordOutsideVaccine: { patientId: 'ID!', productId: 'ID!', administeredOn: 'String!', lotNumber: 'String', evidenceNote: 'String!' },
+  refreshClinicalClocks: {},
   suppressReminder: { reminderId: 'ID!', expectedVersion: 'Int!', reason: 'String!' },
   addManualReminder: { patientId: 'ID!', typeId: 'ID!', dueOn: 'String!' },
   previewImport: { system: 'String!', entity: 'String!', locationId: 'ID!', fileName: 'String', csv: 'String', mapping: 'JSON', source: 'String' },

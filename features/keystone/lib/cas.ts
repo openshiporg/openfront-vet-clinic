@@ -9,7 +9,7 @@ import type { UnitOfWork } from './unitOfWork'
  *   2. check the caller's expected version (STALE_STATE) and the allowed from-states (INVALID_TRANSITION);
  *   3. run the guard on the locked row;
  *   4. UPDATE … WHERE id AND version = :v AND status IN (:from), bumping version;
- *   5. queue the audit event (and any outbox messages) in the same transaction.
+ *   5. queue the audit event in the same transaction.
  */
 
 export type TransitionSpec<Row extends Record<string, unknown>> = {

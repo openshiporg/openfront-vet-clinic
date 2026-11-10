@@ -5,9 +5,9 @@ import { permissionNames } from '../access'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { openEncounter } from './record'
 import { saveDentalChart } from './treatment'
-import { runClinicalJobs } from '../workers/clinical'
+import { refreshClinicalClocks } from './clocks'
 
-/* Review r4 F3 (reminders heartbeat) and F4 (dental findings), against the scratch `vitest` schema. */
+/* Review r4 F4 (dental findings) and the staff-run clocks (no scheduler), against the scratch `vitest` schema. */
 const sessionFor = (id: string) => ({ itemId: id, data: { name: id, email: `${id}@cedarcreekvet.com`, kind: 'staff', accessExpiresAt: null, role: { id: 'r', name: 'r', ...Object.fromEntries(permissionNames.map(p => [p, p !== 'canBreakGlass'])) } } })
 const pg = (e: unknown) => String((e as Error)?.message ?? e)
 
@@ -43,15 +43,13 @@ describe.skipIf(!hasTestDatabase)('r4 fixes (database)', () => {
     await expect(prisma.dentalChart.update({ where: { id: row.id }, data: { teeth: { 204: { findings: ['ok'] } } } })).resolves.toBeTruthy()
   }, 120_000)
 
-  it('F3: a reminders loop that finds today\'s lease held still counts as having run (not stale)', async () => {
-    const first = new Date('2026-11-09T15:00:00Z')
-    await runClinicalJobs(prisma as never, { now: first, only: ['reminders'] })
-    const kinds = await prisma.scheduledJob.findMany({ where: { kind: { startsWith: 'reminders:' } } })
-    expect(kinds.length).toBeGreaterThan(0)
-    const later = new Date('2026-11-09T21:00:00Z')
-    const again = await runClinicalJobs(prisma as never, { now: later, only: ['reminders'] })
-    expect(again.every(r => !r.ran)).toBe(true)
-    const after = await prisma.scheduledJob.findMany({ where: { kind: { startsWith: 'reminders:' } } })
-    for (const row of after) expect(row.lastRunAt!.getTime()).toBe(later.getTime())
+  it('the clocks run when staff press Refresh, twice in a row is harmless, and no scheduler tables exist', async () => {
+    const first = await refreshClinicalClocks(null, { idempotencyKey: uniqueKey('clk') }, marsh)
+    expect(first.reminders.length).toBeGreaterThan(0)
+    const again = await refreshClinicalClocks(null, { idempotencyKey: uniqueKey('clk') }, marsh)
+    expect(again.records.raised).toBe(0)
+    expect(again.reminders.every(r => r.changed === 0)).toBe(true)
+    const tables = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int n FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('OutboxEvent', 'ScheduledJob', 'Lease')`
+    expect(tables[0].n).toBe(0)
   }, 120_000)
 })

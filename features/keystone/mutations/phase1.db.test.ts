@@ -8,10 +8,8 @@ import { localDate } from '../lib/calendar'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { decideApprovalRequest, requestPracticeControls } from './approvals'
 import { bookAppointment, searchAvailability } from './schedule'
-import { recordCallDisclosure, endCall, receiveInboundSms, receptionContext, runTriage, startCall, verifyCaller, requestRefill } from './reception'
+import { recordCallDisclosure, endCall, receptionContext, runTriage, startCall, verifyCaller, requestRefill } from './reception'
 import { recordWeight, registerPendingClient } from './clients'
-import { runCommsWorker, sendQueued } from '../workers/comms'
-import { recordingTelephony, manualTelephony } from '../../integrations/telephony'
 import { households, TRIAGE_PROTOCOL } from '../seed/clinicData'
 
 /**
@@ -108,21 +106,8 @@ describe.skipIf(!hasTestDatabase)('Phase 1 exit gate (database)', () => {
     expect(appt).toMatchObject({ channel: 'ai_voice', bookedByAgentId: 'seed_agent_reception', callRecordId: call.id })
     await endCall(null, { callRecordId: call.id, disposition: 'booked', summary: 'Booked annual vaccines', idempotencyKey: uniqueKey('end') }, agent)
 
-    const phone = recordingTelephony()
-    // Run the worker at 10:00 Sacramento time so quiet hours don't defer the text.
-    const tenAm = new Date(`${from}T18:00:00Z`)
-    await runCommsWorker(prisma as never, { adapter: phone.adapter, now: () => tenAm })
-    const text = phone.sent.find(s => s.to === home.people[0].phone)
-    expect(text?.body).toContain(pet.name)
-    expect(text?.body).toMatch(/Reply C to confirm/)
-    expect(await prisma.commsMessage.count({ where: { appointmentId: booked.id, status: 'sent' } })).toBe(1)
-
-    // The client texts C: the appointment is confirmed (and a provider retry is the same message).
-    const sms = { from: home.people[0].phone!, to: '+19165550100', body: 'C', providerId: 'SMconfirm0000000001' }
-    expect((await receiveInboundSms(prisma, sms)).handled).toBe('confirmed')
-    await receiveInboundSms(prisma, sms)
-    expect((await prisma.appointment.findUniqueOrThrow({ where: { id: booked.id } })).status).toBe('confirmed')
-    expect(await prisma.commsMessage.count({ where: { providerId: sms.providerId } })).toBe(1)
+    // The booking sends nothing: there is no texting machinery.
+    expect(await prisma.commsMessage.count({ where: { appointmentId: booked.id } })).toBe(0)
   }, 60_000)
 
   it('"my dog ate rat poison" → ER instruction and urgent transfer, never a booking', async () => {
@@ -145,8 +130,7 @@ describe.skipIf(!hasTestDatabase)('Phase 1 exit gate (database)', () => {
     const allNo = Object.fromEntries(TRIAGE_PROTOCOL.questions.map(q => [q.id, false]))
     await expect(runTriage(null, { input: { complaint: 'actually he seems fine', answers: allNo, callRecordId: call.id, locationId: 'seed_loc_main' }, idempotencyKey: uniqueKey('t') }, agent)).rejects.toMatchObject({ code: 'GUARD_FAILED' })
     await endCall(null, { callRecordId: call.id, disposition: 'urgent_transfer', transferTo: '+19165550100', idempotencyKey: uniqueKey('end') }, agent)
-    // The worker raises one urgent task for a person.
-    await runCommsWorker(prisma as never, { adapter: manualTelephony })
+    // The triage itself raises one urgent task for a person.
     const tasks = await prisma.task.findMany({ where: { subjectType: 'TriageAssessment', subjectId: triage.id } })
     expect(tasks).toHaveLength(1)
     expect(tasks[0]).toMatchObject({ priority: 'urgent', kind: 'call_back' })
@@ -194,40 +178,6 @@ describe.skipIf(!hasTestDatabase)('Phase 1 exit gate (database)', () => {
     const claim = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString())
     await expect(prisma.providerReservation.create({ data: { staffMemberId: claim.providerId, startsAt: new Date(claim.start), endsAt: new Date(claim.end), status: 'confirmed' } })).rejects.toThrow(/no_overlap/)
   }, 120_000)
-
-  it('a text about a deceased patient is blocked; STOP suppresses once and still gets its confirmation', async () => {
-    const deceasedHome = HOMES[15]
-    const dead = deceasedHome.pets[0]
-    expect(dead.status).toBe('deceased')
-    const contact = await prisma.contactPoint.findFirstOrThrow({ where: { personId: deceasedHome.people[0].id, kind: 'mobile' } })
-    const thread = await prisma.commsThread.create({ data: { clientId: deceasedHome.id, contactPointId: contact.id, channel: 'sms', subject: 'Reminders', status: 'open' } })
-    const msg = await prisma.commsMessage.create({ data: { threadId: thread.id, direction: 'outbound', purpose: 'care', templateCode: 'appointment_reminder', to: contact.value, body: `${dead.name} is due for vaccines`, status: 'queued', patientId: dead.id } })
-    const phone = recordingTelephony()
-    const noon = new Date('2026-11-12T20:00:00Z')
-    const out = await sendQueued(prisma as never, { adapter: phone.adapter, now: noon })
-    expect(out.find(o => o.id === msg.id)).toMatchObject({ result: 'blocked', reason: 'patient_deceased' })
-    expect(phone.sent.some(s => s.to === contact.value)).toBe(false)
-    expect((await prisma.commsMessage.findUniqueOrThrow({ where: { id: msg.id } })).blockedReason).toBe('patient_deceased')
-
-    // Quiet hours (22:30 local) defer instead of blocking.
-    const other = HOMES[5]
-    const oc = await prisma.contactPoint.findFirstOrThrow({ where: { personId: other.people[0].id, kind: 'mobile' } })
-    const t2 = await prisma.commsThread.create({ data: { clientId: other.id, contactPointId: oc.id, channel: 'sms', subject: 'x', status: 'open' } })
-    const late = await prisma.commsMessage.create({ data: { threadId: t2.id, direction: 'outbound', purpose: 'transactional', to: oc.value, body: 'Your appointment is tomorrow', status: 'queued' } })
-    expect((await sendQueued(prisma as never, { adapter: phone.adapter, now: new Date('2026-11-13T06:30:00Z') })).find(o => o.id === late.id)).toMatchObject({ result: 'deferred', reason: 'quiet_hours' })
-    // The manual adapter hands the text to a person.
-    expect((await sendQueued(prisma as never, { adapter: manualTelephony, now: noon })).find(o => o.id === late.id)).toMatchObject({ result: 'handed_off' })
-    expect(await prisma.task.count({ where: { subjectType: 'CommsMessage', subjectId: late.id } })).toBe(1)
-
-    // STOP twice: one suppression; the confirmation still goes; later texts are blocked.
-    await receiveInboundSms(prisma, { from: oc.value, to: '+19165550100', body: 'STOP', providerId: 'SMstop00000000000001' })
-    await receiveInboundSms(prisma, { from: oc.value, to: '+19165550100', body: 'stop', providerId: 'SMstop00000000000002' })
-    expect(await prisma.suppression.count({ where: { contactPointId: oc.id, active: true } })).toBe(1)
-    await runCommsWorker(prisma as never, { adapter: phone.adapter, now: () => noon })
-    expect(phone.sent.filter(s => s.to === oc.value && /no longer receive/.test(s.body)).length).toBeGreaterThanOrEqual(1)
-    const after = await prisma.commsMessage.create({ data: { threadId: t2.id, direction: 'outbound', purpose: 'transactional', to: oc.value, body: 'See you soon', status: 'queued' } })
-    expect((await sendQueued(prisma as never, { adapter: phone.adapter, now: noon })).find(o => o.id === after.id)).toMatchObject({ result: 'blocked' })
-  }, 60_000)
 
   it('a lapsed VCPR is visible on the patient header data', async () => {
     const lapsed = await prisma.vcprRecord.findFirst({ where: { status: 'expired' }, select: { patientId: true, expiresAt: true } })

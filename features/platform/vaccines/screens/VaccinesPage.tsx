@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { q, practiceTimeZone } from '../../lib/server';
-import { calendarDay, when, label } from '../../lib/format';
+import { calendarDay, label } from '../../lib/format';
 import { ALERT_TONE, todayIn, addDaysTo } from '../../lib/clinic';
 import { Page, Row, Empty, Status, Meta, Section, Tabs } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
@@ -16,8 +16,8 @@ const VIEWS = {
 } as const;
 
 /**
- * Vaccines and reminders (BUILD-PLAN P2). The reminder job moves reminders from scheduled to due to
- * overdue and sends them through the client's chosen channel within quiet hours; a vaccine given
+ * Vaccines and reminders (BUILD-PLAN P2). Staff press Refresh to move reminders from scheduled to due to
+ * overdue (nothing is sent); a vaccine given
  * satisfies the matching reminder and opens the next one from the protocol.
  */
 export default async function VaccinesPage({ searchParams }: { searchParams?: Promise<{ view?: string; patient?: string }> }) {
@@ -46,12 +46,13 @@ export default async function VaccinesPage({ searchParams }: { searchParams?: Pr
   return (
     <Page title={data.patient ? `Vaccines · ${data.patient.name}` : 'Vaccines and reminders'} crumbs={data.patient ? [{ label: 'Vaccines', href: path }] : []}>
       <Tabs items={(Object.keys(VIEWS) as (keyof typeof VIEWS)[]).map(k => ({ key: k, label: VIEWS[k].label, href: `${path}?view=${k}${qs}`, count: k === 'overdue' ? data.overdue : undefined }))} active={view} />
+      <div><ActionButton op="refreshClinicalClocks" vars={{}} paths={[path]}>Refresh due and overdue</ActionButton></div>
       <Section title={VIEWS[view].label}>
         {data.patientReminders.length ? data.patientReminders.map(r => (
           <Row key={r.id}>
             <div className="min-w-0 flex-1">
               <Link href={`${path}?patient=${r.patient?.id}`} className="font-medium hover:underline">{r.patient?.name}</Link> <span className="text-muted-foreground">{r.patient?.species?.name}</span> · {r.type?.name}
-              <Meta>due {calendarDay(r.dueOn)}{r.lastNotifiedAt ? ` · reminded ${when(r.lastNotifiedAt, tz, 'day')}` : ' · not reminded yet'}{r.source !== 'protocol' ? ` · ${label(r.source)}` : ''}{r.suppressedReason ? ` · ${r.suppressedReason}` : ''}</Meta>
+              <Meta>due {calendarDay(r.dueOn)}{r.source !== 'protocol' ? ` · ${label(r.source)}` : ''}{r.suppressedReason ? ` · ${r.suppressedReason}` : ''}</Meta>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Status value={r.status} />

@@ -14,6 +14,7 @@ import { dueTimes, sheetFrequency, taskStatusAt, taskWindowProblem } from '../do
 import { ROUTES } from '../models/treatment'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { renderDischargeDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, decimalText, latestWeight, locationDay, markInProgress, practiceSettings, staffById, staffOf, text, witnessFor, type Ctx, type StaffRow } from './clinical'
 
 /*
@@ -404,7 +405,7 @@ export async function dischargePatient(_root: unknown, args: { stayId: string; e
       }
       const instr = await uow.tx.dischargeInstruction.create({ data: { encounterId: row.encounterId, stayId: row.id, patientId: row.patientId, body, recheckOn: args.recheckOn ? new Date(`${args.recheckOn}T00:00:00Z`) : null, authorId: staff.id } })
       await uow.tx.whiteboardEntry.updateMany({ where: { patientId: row.patientId, status: 'hospitalised' }, data: { status: 'ready_for_discharge', since: uow.now, version: { increment: 1 } } })
-      uow.emit({ topic: 'document.render', aggregateType: 'DischargeInstruction', aggregateId: instr.id, payload: { stayId: row.id }, dedupeKey: `discharge.render:${instr.id}` })
+      await renderDischargeDocument(uow, instr.id)
       return { id: row.id, status: 'discharged', instructionId: instr.id }
     })
     return { replay: result.replay, ...result.value }

@@ -9,8 +9,10 @@ Built on Next.js and KeystoneJS 6 with PostgreSQL.
 ## What works today
 
 - **Practice set-up (Phase 0):** locations, staff with licences and DEA registrations, roles, maker-checker approvals, a hash-chained audit log, a read audit on every client and clinical record, and federal and California policy packs that fail closed when a rule is missing.
-- **Front desk (Phase 1):** clients (households), patients with alerts, weights, microchips and VCPR status, a day sheet with booking, a patient-flow whiteboard, a waitlist, client messages with quiet hours and STOP handling, and the controlled-substance register foundation (the database refuses a negative balance and Schedule II refills).
+- **Front desk (Phase 1):** clients (households), patients with alerts, weights, microchips and VCPR status, a day sheet with booking, a patient-flow whiteboard, a waitlist, a log of client messages staff write by hand, and the controlled-substance register foundation (the database refuses a negative balance and Schedule II refills).
 - **AI receptionist (inbound calls only):** it plays an AI and recording disclosure, screens for emergencies (an emergency is transferred, never booked), verifies the caller before sharing anything, books routine visits and takes refill and records requests for staff. It works only through scoped MCP tools, can be switched off instantly, and is switched on only by a second approver. It never prescribes, never touches controlled substances and never makes outbound calls.
+
+Time-based states (treatment tasks due or overdue, unsigned-record tasks, vaccine reminder status) are refreshed when staff press **Refresh due and overdue**; there is no scheduler, cron or worker, and the app sends no texts or emails. External events go only through Openfront Commerce webhooks (`features/webhooks` in the openfront repo).
 
 Coming next: the medical record, orders, vaccines and reminders, inventory, invoicing, payments and wellness plans (see the build plan).
 

@@ -14,6 +14,7 @@ import { addMonths } from '../domain/vaccines'
 import { ENCOUNTER_KINDS, REPEATABLE_SECTIONS, SECTION_KINDS, EXAM_SYSTEMS } from '../models/record'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { renderEncounterDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, latestWeight, locationDay, markInProgress, staffById, staffOf, text, type Ctx, type StaffRow } from './clinical'
 
 /*
@@ -307,7 +308,7 @@ export async function returnEncounter(_root: unknown, args: { encounterId: strin
 /**
  * Sign [L] (SM§5): a veterinarian on the encounter (or the medical director) with an active licence
  * for the location's state. The canonical content is hashed and frozen; the sections lock; a
- * qualifying visit establishes or renews the VCPR; the signed record is rendered via the outbox.
+ * qualifying visit establishes or renews the VCPR; the signed record is rendered in the same transaction.
  */
 export async function signEncounter(_root: unknown, args: { encounterId: string; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canSignRecord'], tool: 'encounter.sign', humanOnly: true }, args, async actor => {
@@ -356,7 +357,7 @@ export async function signEncounter(_root: unknown, args: { encounterId: string;
       })
       if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, `${current.ref} changed while signing.`)
       await uow.tx.task.updateMany({ where: { subjectType: 'Encounter', subjectId: current.id, kind: 'record_unsigned', status: { in: ['open', 'in_progress'] } }, data: { status: 'done', completedAt: uow.now, version: { increment: 1 } } })
-      uow.emit({ topic: 'document.render', aggregateType: 'ClinicalDocument', aggregateId: doc.id, payload: { encounterId: current.id, contentHash }, dedupeKey: `document.render:${doc.id}` })
+      await renderEncounterDocument(uow, doc.id)
       uow.audit({ eventType: 'encounter.signed', entityType: 'Encounter', entityId: current.id, actorUserId: actorUserId(actor), before: { status: current.status, version: current.version }, after: { status: 'signed', version: current.version + 1, contentHash, signedById: staff.id, licenseEvaluationId: licence.evaluationId, vcprId, documentId: doc.id } })
       return { id: current.id, ref: current.ref, status: 'signed', contentHash, vcprId, documentId: doc.id, verified: policy.verified }
     })
