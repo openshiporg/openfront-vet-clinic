@@ -17,13 +17,15 @@ import * as treatment from './treatment'
 import * as vaccines from './vaccines'
 import * as imports from './imports'
 import '../lib/practiceControls'
+import { limitNestedLists } from '../security/breadthLimit'
+import { limitSignIn } from '../security/signInLimit'
 
 const graphql = String.raw
 
 // Every domain resolver checks permission itself and runs as one idempotent command: the state
 // change, audit events and outbox messages commit in one transaction (features/keystone/lib).
 export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
-  return mergeSchemas({
+  return limitSignIn(limitNestedLists(mergeSchemas({
     schemas: [baseSchema],
     typeDefs: graphql`
       scalar JSON
@@ -205,5 +207,5 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         applyImport: op(imports.applyImport),
       },
     },
-  })
+  })))
 }

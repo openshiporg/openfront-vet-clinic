@@ -3833,7 +3833,7 @@ async function appendAuditEvents(tx, events, now = /* @__PURE__ */ new Date()) {
       prevHash,
       at: now
     };
-    const hash = auditHash(prevHash, row);
+    const hash2 = auditHash(prevHash, row);
     rows.push({
       seq: row.seq,
       eventKey: row.eventKey,
@@ -3850,11 +3850,11 @@ async function appendAuditEvents(tx, events, now = /* @__PURE__ */ new Date()) {
       ...row.metadata === null ? {} : { metadata: row.metadata },
       requestId: row.requestId ?? "",
       prevHash,
-      hash,
+      hash: hash2,
       at: row.at
     });
-    written.push({ seq, hash });
-    prevHash = hash;
+    written.push({ seq, hash: hash2 });
+    prevHash = hash2;
   }
   await tx.auditEvent.createMany({ data: rows });
   return written;
@@ -3869,7 +3869,7 @@ async function verifyAuditChain(db, batchSize = 1e3) {
     for (const row of rows) {
       if (row.seq !== expectedSeq) return { ok: false, count, lastSeq: expectedSeq - 1, lastHash: prevHash, brokenAtSeq: expectedSeq, problem: "missing event" };
       if (row.prevHash !== prevHash) return { ok: false, count, lastSeq: row.seq - 1, lastHash: prevHash, brokenAtSeq: row.seq, problem: "previous hash does not match" };
-      const hash = auditHash(prevHash, {
+      const hash2 = auditHash(prevHash, {
         ...row,
         reason: row.reason || null,
         requestId: row.requestId || null,
@@ -3877,7 +3877,7 @@ async function verifyAuditChain(db, batchSize = 1e3) {
         actorAgentId: row.actorAgentId ?? null,
         approverId: row.approverId ?? null
       });
-      if (hash !== row.hash) return { ok: false, count, lastSeq: row.seq - 1, lastHash: prevHash, brokenAtSeq: row.seq, problem: "content does not match its hash" };
+      if (hash2 !== row.hash) return { ok: false, count, lastSeq: row.seq - 1, lastHash: prevHash, brokenAtSeq: row.seq, problem: "content does not match its hash" };
       prevHash = row.hash;
       expectedSeq += 1;
       count += 1;
@@ -5363,7 +5363,7 @@ async function appendCsEntry(tx, input, now) {
   if ((input.type === "waste" || input.type === "administer" && ciiRef) && !witnessId) throw new Error(`A ${input.type === "waste" ? "waste" : "Schedule II"} register entry needs a witness`);
   if (witnessId && witnessId === input.actorId) throw new Error("The witness must be someone other than the person recording the entry");
   const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty2, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null, ...witnessId ? { witnessId } : {}, ...input.reversesId ? { reversesId: input.reversesId } : {} };
-  const hash = sha256(`${prevHash}
+  const hash2 = sha256(`${prevHash}
 ${canonicalJson(body)}`);
   return tx.csLogEntry.create({
     data: {
@@ -5385,7 +5385,7 @@ ${canonicalJson(body)}`);
       clientId: input.clientId ?? null,
       reason: input.reason ?? "",
       prevHash,
-      hash
+      hash: hash2
     }
   });
 }
@@ -7821,13 +7821,13 @@ async function writeSection(uow, actor, staff, encounterId, input) {
     version = row.version + 1;
   }
   const revisionNumber = await uow.tx.soapSectionRevision.count({ where: { sectionId } }) + 1;
-  const hash = revisionHash({ kind: input.kind, ordinal, body, structured: input.structured ?? null, source: input.source, author: staff.id });
+  const hash2 = revisionHash({ kind: input.kind, ordinal, body, structured: input.structured ?? null, source: input.source, author: staff.id });
   await uow.tx.soapSectionRevision.create({
-    data: { sectionId, revisionNumber, body, structured: input.structured ?? null, source: input.source, templateId: input.templateId ?? null, scribeDraftId: input.scribeDraftId ?? null, authorId: staff.id, authorUserId: actorUserId(actor), at: uow.now, contentHash: hash }
+    data: { sectionId, revisionNumber, body, structured: input.structured ?? null, source: input.source, templateId: input.templateId ?? null, scribeDraftId: input.scribeDraftId ?? null, authorId: staff.id, authorUserId: actorUserId(actor), at: uow.now, contentHash: hash2 }
   });
   await markInProgress(uow, enc);
   await uow.tx.encounter.update({ where: { id: encounterId }, data: { participants: { connect: [{ id: staff.id }] } } });
-  uow.audit({ eventType: "record.section_saved", entityType: "SoapSection", entityId: sectionId, actorUserId: actorUserId(actor), after: { encounterId, kind: input.kind, ordinal, version, revisionNumber, source: input.source, contentHash: hash } });
+  uow.audit({ eventType: "record.section_saved", entityType: "SoapSection", entityId: sectionId, actorUserId: actorUserId(actor), after: { encounterId, kind: input.kind, ordinal, version, revisionNumber, source: input.source, contentHash: hash2 } });
   return { id: sectionId, kind: input.kind, ordinal, version, revisionNumber };
 }
 async function saveSoapSection(_root, args, context) {
@@ -8108,10 +8108,10 @@ async function addAddendum(_root, args, context) {
       if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
       if (enc.status !== "signed") throw new DomainError(Codes.GUARD_FAILED, `${enc.ref} is not signed yet; edit the section instead.`);
       if (["assessment", "plan"].includes(args.sectionKind) && staff.kind !== "dvm") throw new DomainError(Codes.GUARD_FAILED, "A change to the assessment or plan is a veterinarian's addendum.");
-      const hash = addendumHash({ encounterId: enc.id, contentHash: enc.contentHash, sectionKind: args.sectionKind, reason, body, author: staff.id, signedAt: uow.now });
-      const row = await uow.tx.addendum.create({ data: { encounterId: enc.id, sectionKind: args.sectionKind, authorId: staff.id, authorIsDvm: staff.kind === "dvm", reason, body, signedAt: uow.now, hash } });
-      auditCreate(uow, actor, "Addendum", row.id, "record.addendum_added", { encounterId: enc.id, ref: enc.ref, sectionKind: args.sectionKind, hash }, { reason });
-      return { id: row.id, hash };
+      const hash2 = addendumHash({ encounterId: enc.id, contentHash: enc.contentHash, sectionKind: args.sectionKind, reason, body, author: staff.id, signedAt: uow.now });
+      const row = await uow.tx.addendum.create({ data: { encounterId: enc.id, sectionKind: args.sectionKind, authorId: staff.id, authorIsDvm: staff.kind === "dvm", reason, body, signedAt: uow.now, hash: hash2 } });
+      auditCreate(uow, actor, "Addendum", row.id, "record.addendum_added", { encounterId: enc.id, ref: enc.ref, sectionKind: args.sectionKind, hash: hash2 }, { reason });
+      return { id: row.id, hash: hash2 };
     });
     return { replay: result.replay, ...result.value };
   });
@@ -9904,14 +9904,14 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const startedAt = /* @__PURE__ */ new Date(`${on}T12:00:00Z`);
       const body = row.notes.trim();
       const content = { importedFrom: batch.system, externalId: key2, date: on, vet: row.vet ?? "", reason: row.reason ?? "", notes: body, batch: batch.ref };
-      const hash = signedContentHash(toJsonValue(content));
+      const hash2 = signedContentHash(toJsonValue(content));
       const enc = await uow.tx.encounter.create({ data: { ref, patientId, locationId: batch.locationId, kind: "records_import", vcprQualifying: false, status: "open", reason: (row.reason ?? "").slice(0, 300), startedAt, importedFrom: `${batch.system}:${key2}` } });
       const section = await uow.tx.soapSection.create({ data: { encounterId: enc.id, kind: "history", ordinal: 1, body, source: "import" } });
       await uow.tx.soapSectionRevision.create({ data: { sectionId: section.id, revisionNumber: 1, body, source: "import", authorUserId: actorUserId(actor), at: uow.now, contentHash: revisionHash({ kind: "history", ordinal: 1, body, structured: null, source: "import", author: `import:${batch.system}` }) } });
       await uow.tx.soapSection.update({ where: { id: section.id }, data: { lockedAt: uow.now } });
-      await uow.tx.$executeRawUnsafe(`UPDATE "Encounter" SET status = 'signed', "signedAt" = $2, "contentHash" = $3, "signedContent" = $4::jsonb, "submittedAt" = $2, version = version + 1 WHERE id = $1`, enc.id, uow.now, hash, JSON.stringify({ ...content, signer: { source: batch.system, name: row.vet ?? "" } }));
+      await uow.tx.$executeRawUnsafe(`UPDATE "Encounter" SET status = 'signed', "signedAt" = $2, "contentHash" = $3, "signedContent" = $4::jsonb, "submittedAt" = $2, version = version + 1 WHERE id = $1`, enc.id, uow.now, hash2, JSON.stringify({ ...content, signer: { source: batch.system, name: row.vet ?? "" } }));
       await mapExternal(uow, sys2, "Encounter", enc.id, key2);
-      auditCreate(uow, actor, "Encounter", enc.id, "encounter.imported", { ref, batch: batch.ref, rowNumber, contentHash: hash });
+      auditCreate(uow, actor, "Encounter", enc.id, "encounter.imported", { ref, batch: batch.ref, rowNumber, contentHash: hash2 });
       return { ...base, result: "created", recordType: "Encounter", recordId: enc.id };
     }
   }
@@ -9966,10 +9966,113 @@ async function applyImport(_root, args, context) {
   });
 }
 
+// features/keystone/security/breadthLimit.ts
+var import_graphql3 = require("graphql");
+var API_NESTED_DEFAULT = 50;
+var NESTED_LIST_BOUNDS = {
+  "Patient.ownerships": 10,
+  "Patient.microchips": 10,
+  "Patient.vcprs": 10,
+  "Patient.insurancePolicies": 10,
+  "Client.people": 10,
+  "ClientPerson.contactPoints": 10,
+  // Holidays and closures accumulate every year (33 live after two years); keep the whole list.
+  "BusinessCalendar.exceptions": 500
+};
+function limitNestedLists(schema) {
+  const roots = /* @__PURE__ */ new Set([schema.getQueryType()?.name, schema.getMutationType()?.name, schema.getSubscriptionType()?.name]);
+  for (const type of Object.values(schema.getTypeMap())) {
+    if (type.name.startsWith("__") || roots.has(type.name) || !("getFields" in type && "getInterfaces" in type)) continue;
+    for (const field of Object.values(type.getFields())) {
+      if (!/^\[/.test(String(field.type))) continue;
+      const take = field.args.find((a) => a.name === "take");
+      if (!take || typeof take.defaultValue !== "number") continue;
+      take.defaultValue = Math.min(take.defaultValue, NESTED_LIST_BOUNDS[`${type.name}.${field.name}`] ?? API_NESTED_DEFAULT);
+    }
+  }
+  return schema;
+}
+
+// features/keystone/security/signInLimit.ts
+var import_node_crypto9 = require("node:crypto");
+
+// features/keystone/security/internalIdentity.ts
+var import_node_crypto8 = require("node:crypto");
+var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto8.timingSafeEqual)(leftBuffer, rightBuffer);
+}
+function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
+  const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
+  if (!loopback || secret2.length < 32) return null;
+  const identity = String(headers["x-openfront-client-identity"] || "");
+  const timestamp16 = String(headers["x-openfront-client-timestamp"] || "");
+  const signature = String(headers["x-openfront-client-signature"] || "");
+  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp16) || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const age = Math.abs(now - Number(timestamp16) * 1e3);
+  if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
+  const expected = (0, import_node_crypto8.createHmac)("sha256", secret2).update(`${timestamp16}:${identity}`).digest("hex");
+  return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
+}
+
+// features/keystone/security/signInLimit.ts
+var SIGN_IN_WINDOW_MINUTES = 15;
+var SIGN_IN_MAX_PER_EMAIL = 5;
+var SIGN_IN_MAX_PER_ADDRESS = 20;
+var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
+var hash = (value) => (0, import_node_crypto9.createHash)("sha256").update(value).digest("hex");
+var emailBucketKey = (email) => `signin:email:${hash(email.trim().toLowerCase())}`;
+var addressBucketKey = (address) => `signin:addr:${hash(address)}`;
+function clientAddress(req) {
+  const headers = req?.headers ?? {};
+  const socket = req?.socket?.remoteAddress ?? null;
+  const forwarded = verifiedInternalIdentity(headers, socket, String(process.env.SESSION_SECRET || ""), Date.now());
+  if (forwarded) return forwarded;
+  const first = (v) => String(Array.isArray(v) ? v[0] : v ?? "").split(",")[0]?.trim();
+  const header = first(headers["x-real-ip"]) || first(headers["x-forwarded-for"]);
+  if (header) return header;
+  return socket && !/^(?:127\.|::1$|::ffff:127\.)/.test(socket) ? socket : null;
+}
+async function countAttempt(prisma, key2) {
+  const rows = await prisma.$queryRaw`
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto9.randomUUID)()}, ${key2}, now(), 1)
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
+      "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
+    RETURNING "count"`;
+  return Number(rows[0]?.count ?? 0);
+}
+async function signInLocked(prisma, email, address) {
+  const byEmail = await countAttempt(prisma, emailBucketKey(email));
+  const byAddress = address ? await countAttempt(prisma, addressBucketKey(address)) : 0;
+  return byEmail > SIGN_IN_MAX_PER_EMAIL || byAddress > SIGN_IN_MAX_PER_ADDRESS;
+}
+async function signInSucceeded(prisma, email, address) {
+  await prisma.$executeRaw`DELETE FROM "RateLimitBucket" WHERE "key" = ${emailBucketKey(email)}`;
+  if (address) await prisma.$executeRaw`UPDATE "RateLimitBucket" SET "count" = GREATEST(COALESCE("count", 0) - 1, 0) WHERE "key" = ${addressBucketKey(address)}`;
+}
+function limitSignIn(schema, field = "authenticateUserWithPassword", identityArg = "email") {
+  const def = schema.getMutationType()?.getFields()[field];
+  if (!def?.resolve) return schema;
+  const resolve = def.resolve;
+  def.resolve = async (root, args, context, info) => {
+    const email = String(args[identityArg] ?? "");
+    const address = clientAddress(context?.req);
+    const prisma = context.sudo().prisma;
+    if (await signInLocked(prisma, email, address)) return { code: "FAILURE", message: SIGN_IN_LOCKED_MESSAGE };
+    const result = await resolve(root, args, context, info);
+    if (result && typeof result === "object" && "sessionToken" in result) await signInSucceeded(prisma, email, address);
+    return result;
+  };
+  return schema;
+}
+
 // features/keystone/mutations/index.ts
 var graphql = String.raw;
 function extendGraphqlSchema(baseSchema) {
-  return (0, import_schema.mergeSchemas)({
+  return limitSignIn(limitNestedLists((0, import_schema.mergeSchemas)({
     schemas: [baseSchema],
     typeDefs: graphql`
       scalar JSON
@@ -10151,7 +10254,7 @@ function extendGraphqlSchema(baseSchema) {
         applyImport: op(applyImport)
       }
     }
-  });
+  })));
 }
 
 // features/keystone/lib/mail.ts

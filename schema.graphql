@@ -306,7 +306,7 @@ type Role {
   canBreakGlass: Boolean
   createdAt: DateTime
   updatedAt: DateTime
-  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
+  assignedTo(where: UserWhereInput! = {}, orderBy: [UserOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: UserWhereUniqueInput): [User!]
   assignedToCount(where: UserWhereInput! = {}): Int
 }
 
@@ -866,9 +866,9 @@ type AgentIdentity {
   killSwitch: Boolean
   limits: JSON
   oauthApp: OAuthApp
-  grants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
+  grants(where: AgentToolGrantWhereInput! = {}, orderBy: [AgentToolGrantOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AgentToolGrantWhereUniqueInput): [AgentToolGrant!]
   grantsCount(where: AgentToolGrantWhereInput! = {}): Int
-  runs(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
+  runs(where: AgentRunWhereInput! = {}, orderBy: [AgentRunOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AgentRunWhereUniqueInput): [AgentRun!]
   runsCount(where: AgentRunWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -1182,7 +1182,7 @@ type ApprovalRequest {
   status: String
   expiresAt: DateTime
   consumedAt: DateTime
-  decisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
+  decisions(where: ApprovalDecisionWhereInput! = {}, orderBy: [ApprovalDecisionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ApprovalDecisionWhereUniqueInput): [ApprovalDecision!]
   decisionsCount(where: ApprovalDecisionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -1490,7 +1490,7 @@ type BusinessCalendar {
   weekendDays: JSON
   regularOpen: String
   regularClose: String
-  composedOf(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
+  composedOf(where: BusinessCalendarWhereInput! = {}, orderBy: [BusinessCalendarOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: BusinessCalendarWhereUniqueInput): [BusinessCalendar!]
   composedOfCount(where: BusinessCalendarWhereInput! = {}): Int
   exceptions(where: CalendarExceptionWhereInput! = {}, orderBy: [CalendarExceptionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CalendarExceptionWhereUniqueInput): [CalendarException!]
   exceptionsCount(where: CalendarExceptionWhereInput! = {}): Int
@@ -2482,7 +2482,7 @@ type DeaRegistration {
   expiresOn: CalendarDay
   stateCsRegistration: String
   csosCertificateRef: String
-  powersOfAttorney(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
+  powersOfAttorney(where: DeaPowerOfAttorneyWhereInput! = {}, orderBy: [DeaPowerOfAttorneyOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: DeaPowerOfAttorneyWhereUniqueInput): [DeaPowerOfAttorney!]
   powersOfAttorneyCount(where: DeaPowerOfAttorneyWhereInput! = {}): Int
   status: String
   version: Int
@@ -2691,7 +2691,7 @@ type Location {
   calendar: BusinessCalendar
   openHours: JSON
   emergencyCoverage: String
-  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
+  deaRegistrations(where: DeaRegistrationWhereInput! = {}, orderBy: [DeaRegistrationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: DeaRegistrationWhereUniqueInput): [DeaRegistration!]
   deaRegistrationsCount(where: DeaRegistrationWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -3079,10 +3079,10 @@ type StaffMember {
   credentials: String
   employment: String
   homeLocation: Location
-  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
+  locations(where: LocationWhereInput! = {}, orderBy: [LocationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LocationWhereUniqueInput): [Location!]
   locationsCount(where: LocationWhereInput! = {}): Int
   colour: String
-  licenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
+  licenses(where: ProfessionalLicenseWhereInput! = {}, orderBy: [ProfessionalLicenseOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ProfessionalLicenseWhereUniqueInput): [ProfessionalLicense!]
   licensesCount(where: ProfessionalLicenseWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -3633,7 +3633,7 @@ type PolicyPack {
   name: String
   kind: String
   jurisdiction: String
-  versions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
+  versions(where: PolicyVersionWhereInput! = {}, orderBy: [PolicyVersionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PolicyVersionWhereUniqueInput): [PolicyVersion!]
   versionsCount(where: PolicyVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -4214,9 +4214,9 @@ type Client {
   accountFlags: JSON
   taxExempt: Boolean
   mergedInto: Client
-  people(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
+  people(where: ClientPersonWhereInput! = {}, orderBy: [ClientPersonOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: ClientPersonWhereUniqueInput): [ClientPerson!]
   peopleCount(where: ClientPersonWhereInput! = {}): Int
-  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
+  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
   ownershipsCount(where: PatientOwnershipWhereInput! = {}): Int
   source: String
   version: Int
@@ -4393,7 +4393,7 @@ type ClientPerson {
   preferredLanguage: String
   user: User
   identityVerifiedAt: DateTime
-  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
+  contactPoints(where: ContactPointWhereInput! = {}, orderBy: [ContactPointOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: ContactPointWhereUniqueInput): [ContactPoint!]
   contactPointsCount(where: ContactPointWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -4672,7 +4672,7 @@ type ContactPoint {
   verifiedAt: DateTime
   canText: Boolean
   status: String
-  consents(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
+  consents(where: ConsentRecordWhereInput! = {}, orderBy: [ConsentRecordOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ConsentRecordWhereUniqueInput): [ConsentRecord!]
   consentsCount(where: ConsentRecordWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -4881,17 +4881,17 @@ type Patient {
   groupSize: Int
   mergedInto: Patient
   photo: Document
-  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
+  ownerships(where: PatientOwnershipWhereInput! = {}, orderBy: [PatientOwnershipOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: PatientOwnershipWhereUniqueInput): [PatientOwnership!]
   ownershipsCount(where: PatientOwnershipWhereInput! = {}): Int
-  alerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
+  alerts(where: PatientAlertWhereInput! = {}, orderBy: [PatientAlertOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PatientAlertWhereUniqueInput): [PatientAlert!]
   alertsCount(where: PatientAlertWhereInput! = {}): Int
-  weights(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
+  weights(where: WeightMeasurementWhereInput! = {}, orderBy: [WeightMeasurementOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: WeightMeasurementWhereUniqueInput): [WeightMeasurement!]
   weightsCount(where: WeightMeasurementWhereInput! = {}): Int
-  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
+  microchips(where: MicrochipWhereInput! = {}, orderBy: [MicrochipOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: MicrochipWhereUniqueInput): [Microchip!]
   microchipsCount(where: MicrochipWhereInput! = {}): Int
-  vcprs(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
+  vcprs(where: VcprRecordWhereInput! = {}, orderBy: [VcprRecordOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: VcprRecordWhereUniqueInput): [VcprRecord!]
   vcprsCount(where: VcprRecordWhereInput! = {}): Int
-  insurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
+  insurancePolicies(where: PetInsurancePolicyWhereInput! = {}, orderBy: [PetInsurancePolicyOrderByInput!]! = [], take: Int! = 10, skip: Int! = 0, cursor: PetInsurancePolicyWhereUniqueInput): [PetInsurancePolicy!]
   insurancePoliciesCount(where: PetInsurancePolicyWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5130,7 +5130,7 @@ type PatientAlert {
   text: String
   active: Boolean
   createdBy: User
-  acknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
+  acknowledgements(where: AlertAcknowledgementWhereInput! = {}, orderBy: [AlertAcknowledgementOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AlertAcknowledgementWhereUniqueInput): [AlertAcknowledgement!]
   acknowledgementsCount(where: AlertAcknowledgementWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5481,7 +5481,7 @@ type RecordsRequest {
   policyVersion: PolicyVersion
   callRecord: CallRecord
   createdByAgent: AgentIdentity
-  releases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
+  releases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
   releasesCount(where: RecordsReleaseWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -5900,7 +5900,7 @@ type Species {
   module: String
   defaultWeightUnit: String
   vitalsReference: JSON
-  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
+  breeds(where: BreedWhereInput! = {}, orderBy: [BreedOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: BreedWhereUniqueInput): [Breed!]
   breedsCount(where: BreedWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -6277,13 +6277,13 @@ type Appointment {
   confirmedAt: DateTime
   checkedInAt: DateTime
   completedAt: DateTime
-  patients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
+  patients(where: AppointmentPatientWhereInput! = {}, orderBy: [AppointmentPatientOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AppointmentPatientWhereUniqueInput): [AppointmentPatient!]
   patientsCount(where: AppointmentPatientWhereInput! = {}): Int
-  segments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
+  segments(where: AppointmentSegmentWhereInput! = {}, orderBy: [AppointmentSegmentOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AppointmentSegmentWhereUniqueInput): [AppointmentSegment!]
   segmentsCount(where: AppointmentSegmentWhereInput! = {}): Int
-  reservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
+  reservations(where: ResourceReservationWhereInput! = {}, orderBy: [ResourceReservationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ResourceReservationWhereUniqueInput): [ResourceReservation!]
   reservationsCount(where: ResourceReservationWhereInput! = {}): Int
-  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
+  providerReservations(where: ProviderReservationWhereInput! = {}, orderBy: [ProviderReservationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ProviderReservationWhereUniqueInput): [ProviderReservation!]
   providerReservationsCount(where: ProviderReservationWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -6584,7 +6584,7 @@ type AppointmentSegment {
   resource: Resource
   staff: StaffMember
   status: String
-  transitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
+  transitions(where: SegmentTransitionWhereInput! = {}, orderBy: [SegmentTransitionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SegmentTransitionWhereUniqueInput): [SegmentTransition!]
   transitionsCount(where: SegmentTransitionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -6693,7 +6693,7 @@ type AppointmentType {
   category: String
   durationMinutes: Int
   segments: JSON
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   requiredResourceKinds: JSON
   providerKinds: JSON
@@ -7279,7 +7279,7 @@ type TriageProtocol {
   id: ID!
   code: String
   name: String
-  versions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
+  versions(where: TriageProtocolVersionWhereInput! = {}, orderBy: [TriageProtocolVersionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: TriageProtocolVersionWhereUniqueInput): [TriageProtocolVersion!]
   versionsCount(where: TriageProtocolVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -7448,7 +7448,7 @@ input TriageProtocolRelateToOneForCreateInput {
 type WaitlistEntry {
   id: ID!
   client: Client
-  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
+  patients(where: PatientWhereInput! = {}, orderBy: [PatientOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PatientWhereUniqueInput): [Patient!]
   patientsCount(where: PatientWhereInput! = {}): Int
   location: Location
   appointmentType: AppointmentType
@@ -7939,7 +7939,7 @@ type CommsThread {
   status: String
   assignedTo: StaffMember
   lastMessageAt: DateTime
-  messages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
+  messages(where: CommsMessageWhereInput! = {}, orderBy: [CommsMessageOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CommsMessageWhereUniqueInput): [CommsMessage!]
   messagesCount(where: CommsMessageWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -8541,7 +8541,7 @@ type Prescription {
   signedAt: DateTime
   licenseEvaluation: LicenseEvaluation
   policyVersion: PolicyVersion
-  lines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
+  lines(where: PrescriptionLineWhereInput! = {}, orderBy: [PrescriptionLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PrescriptionLineWhereUniqueInput): [PrescriptionLine!]
   linesCount(where: PrescriptionLineWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -8804,7 +8804,7 @@ type CsContainer {
   openedAt: DateTime
   openedBy: StaffMember
   budAt: DateTime
-  entries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
+  entries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
   entriesCount(where: CsLogEntryWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -9067,7 +9067,7 @@ type Encounter {
   status: String
   reason: String
   attendingDvm: StaffMember
-  participants(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
+  participants(where: StaffMemberWhereInput! = {}, orderBy: [StaffMemberOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: StaffMemberWhereUniqueInput): [StaffMember!]
   participantsCount(where: StaffMemberWhereInput! = {}): Int
   weightUsed: WeightMeasurement
   startedAt: DateTime
@@ -9084,17 +9084,17 @@ type Encounter {
   voidReason: String
   voidApproval: ApprovalRequest
   importedFrom: String
-  sections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
+  sections(where: SoapSectionWhereInput! = {}, orderBy: [SoapSectionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SoapSectionWhereUniqueInput): [SoapSection!]
   sectionsCount(where: SoapSectionWhereInput! = {}): Int
-  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
+  addenda(where: AddendumWhereInput! = {}, orderBy: [AddendumOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AddendumWhereUniqueInput): [Addendum!]
   addendaCount(where: AddendumWhereInput! = {}): Int
-  vitals(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
+  vitals(where: VitalsObservationWhereInput! = {}, orderBy: [VitalsObservationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: VitalsObservationWhereUniqueInput): [VitalsObservation!]
   vitalsCount(where: VitalsObservationWhereInput! = {}): Int
-  findings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
+  findings(where: PhysicalExamFindingWhereInput! = {}, orderBy: [PhysicalExamFindingOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PhysicalExamFindingWhereUniqueInput): [PhysicalExamFinding!]
   findingsCount(where: PhysicalExamFindingWhereInput! = {}): Int
-  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
+  diagnoses(where: DiagnosisWhereInput! = {}, orderBy: [DiagnosisOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: DiagnosisWhereUniqueInput): [Diagnosis!]
   diagnosesCount(where: DiagnosisWhereInput! = {}): Int
-  orders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
+  orders(where: ClinicalOrderWhereInput! = {}, orderBy: [ClinicalOrderOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ClinicalOrderWhereUniqueInput): [ClinicalOrder!]
   ordersCount(where: ClinicalOrderWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -9413,7 +9413,7 @@ type SoapSection {
   structured: JSON
   source: String
   lastAuthor: StaffMember
-  revisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
+  revisions(where: SoapSectionRevisionWhereInput! = {}, orderBy: [SoapSectionRevisionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SoapSectionRevisionWhereUniqueInput): [SoapSectionRevision!]
   revisionsCount(where: SoapSectionRevisionWhereInput! = {}): Int
   lockedAt: DateTime
   version: Int
@@ -9868,7 +9868,7 @@ type DiagnosisCode {
   codeSystem: String
   code: String
   term: String
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   active: Boolean
   createdAt: DateTime
@@ -10424,7 +10424,7 @@ type ScribeSession {
   modelProvider: String
   modelRef: String
   status: String
-  drafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
+  drafts(where: ScribeDraftWhereInput! = {}, orderBy: [ScribeDraftOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ScribeDraftWhereUniqueInput): [ScribeDraft!]
   draftsCount(where: ScribeDraftWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -10776,7 +10776,7 @@ type ClinicalOrder {
   overrideReason: String
   warnings: JSON
   cancelReason: String
-  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
+  administrations(where: AdministrationWhereInput! = {}, orderBy: [AdministrationOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: AdministrationWhereUniqueInput): [Administration!]
   administrationsCount(where: AdministrationWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11356,7 +11356,7 @@ type Ward {
   location: Location
   name: String
   kind: String
-  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
+  cages(where: CageWhereInput! = {}, orderBy: [CageOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CageWhereUniqueInput): [Cage!]
   cagesCount(where: CageWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -11515,9 +11515,9 @@ type HospitalStay {
   codeStatus: String
   attendingDvm: StaffMember
   reason: String
-  assignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
+  assignments(where: CageAssignmentWhereInput! = {}, orderBy: [CageAssignmentOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CageAssignmentWhereUniqueInput): [CageAssignment!]
   assignmentsCount(where: CageAssignmentWhereInput! = {}): Int
-  sheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
+  sheetOrders(where: TreatmentSheetOrderWhereInput! = {}, orderBy: [TreatmentSheetOrderOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: TreatmentSheetOrderWhereUniqueInput): [TreatmentSheetOrder!]
   sheetOrdersCount(where: TreatmentSheetOrderWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11725,7 +11725,7 @@ type TreatmentSheetOrder {
   materialisedThrough: DateTime
   graceMinutes: Int
   active: Boolean
-  tasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
+  tasks(where: TreatmentTaskWhereInput! = {}, orderBy: [TreatmentTaskOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: TreatmentTaskWhereUniqueInput): [TreatmentTask!]
   tasksCount(where: TreatmentTaskWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -11954,7 +11954,7 @@ type AnaesthesiaRecord {
   status: String
   complications: String
   closedBy: StaffMember
-  readings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
+  readings(where: MonitoringReadingWhereInput! = {}, orderBy: [MonitoringReadingOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: MonitoringReadingWhereUniqueInput): [MonitoringReading!]
   readingsCount(where: MonitoringReadingWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -12435,7 +12435,7 @@ type VaccineProduct {
   name: String
   manufacturer: String
   antigens: JSON
-  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
   speciesCount(where: SpeciesWhereInput! = {}): Int
   licensedDoiMonths: Int
   minAgeWeeks: Int
@@ -12865,7 +12865,7 @@ type ReminderProtocol {
   code: String
   name: String
   species: Species
-  versions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
+  versions(where: ReminderProtocolVersionWhereInput! = {}, orderBy: [ReminderProtocolVersionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ReminderProtocolVersionWhereUniqueInput): [ReminderProtocolVersion!]
   versionsCount(where: ReminderProtocolVersionWhereInput! = {}): Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -12943,7 +12943,7 @@ type ReminderProtocolVersion {
   protocol: ReminderProtocol
   label: String
   versionNumber: Int
-  rules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
+  rules(where: ReminderRuleWhereInput! = {}, orderBy: [ReminderRuleOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ReminderRuleWhereUniqueInput): [ReminderRule!]
   rulesCount(where: ReminderRuleWhereInput! = {}): Int
   sourceRefs: JSON
   verified: Boolean
@@ -13061,7 +13061,7 @@ type ReminderRule {
   id: ID!
   protocolVersion: ReminderProtocolVersion
   code: String
-  triggerVaccines(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
+  triggerVaccines(where: VaccineProductWhereInput! = {}, orderBy: [VaccineProductOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: VaccineProductWhereUniqueInput): [VaccineProduct!]
   triggerVaccinesCount(where: VaccineProductWhereInput! = {}): Int
   triggerServiceCode: String
   satisfies: ReminderType
@@ -13180,7 +13180,7 @@ type PatientReminder {
   source: String
   sourceKey: String
   lastNotifiedAt: DateTime
-  satisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
+  satisfactions(where: ReminderSatisfactionWhereInput! = {}, orderBy: [ReminderSatisfactionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ReminderSatisfactionWhereUniqueInput): [ReminderSatisfaction!]
   satisfactionsCount(where: ReminderSatisfactionWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -13492,7 +13492,7 @@ type ImportBatch {
   mapping: JSON
   startedBy: User
   finishedAt: DateTime
-  rows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
+  rows(where: ImportRowWhereInput! = {}, orderBy: [ImportRowOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ImportRowWhereUniqueInput): [ImportRow!]
   rowsCount(where: ImportRowWhereInput! = {}): Int
   version: Int
   createdAt: DateTime
@@ -13774,7 +13774,7 @@ type AgentRun {
   toolCalls: JSON
   costMeta: JSON
   callRecordId: String
-  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
+  proposals(where: ProposalWhereInput! = {}, orderBy: [ProposalOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ProposalWhereUniqueInput): [Proposal!]
   proposalsCount(where: ProposalWhereInput! = {}): Int
   version: Int
   createdAt: DateTime

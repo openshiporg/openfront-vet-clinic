@@ -17,6 +17,52 @@ export const API_DEFAULT_PAGE = 500
  * which does not depend on this estimate.
  */
 export const API_NESTED_DEFAULT = 50
+/**
+ * Review r7 #1/#3: a nested list asked for with no `take` returns at most its schema default (limitNestedLists sets it;
+ * Keystone's own default was the 500 maxTake, ten times the estimate). Child lists that are small for a real practice
+ * default lower still, so an ordinary single-record read that follows them (patient -> ownerships -> client -> people
+ * -> contactPoints) fits the row cap. The estimate below reads the same default from the schema, so it is exact.
+ * An explicit `take` (up to 500) is still allowed and charged at its value.
+ */
+export const NESTED_LIST_BOUNDS: Record<string, number> = {
+  'Patient.ownerships': 10,
+  'Patient.microchips': 10,
+  'Patient.vcprs': 10,
+  'Patient.insurancePolicies': 10,
+  'Client.people': 10,
+  'ClientPerson.contactPoints': 10,
+  // Holidays and closures accumulate every year (33 live after two years); keep the whole list.
+  'BusinessCalendar.exceptions': 500,
+}
+/**
+ * Review r7 #1/#3: lower the `take` default of every nested list (a list field with a `take` argument on any type but
+ * Query and Mutation) from Keystone's 500 to API_NESTED_DEFAULT, or to its NESTED_LIST_BOUNDS entry. Keystone's nested
+ * resolver passes the args straight to findMany, so this default is the real number of rows returned when no `take`
+ * is given, and measureBreadth reads the same default. Called from extendGraphqlSchema; mutates and returns the schema.
+ */
+export function limitNestedLists<S extends GraphQLSchema>(schema: S): S {
+  const roots = new Set([schema.getQueryType()?.name, schema.getMutationType()?.name, schema.getSubscriptionType()?.name])
+  for (const type of Object.values(schema.getTypeMap())) {
+    // Duck-typed: Keystone and the test runner may load graphql twice, and instanceof checks fail across copies.
+    if (type.name.startsWith('__') || roots.has(type.name) || !('getFields' in type && 'getInterfaces' in type)) continue
+    for (const field of Object.values((type as GraphQLObjectType).getFields()) as GraphQLField<unknown, unknown>[]) {
+      if (!/^\[/.test(String(field.type))) continue
+      const take = field.args.find(a => a.name === 'take')
+      if (!take || typeof take.defaultValue !== 'number') continue
+      ;(take as { defaultValue: unknown }).defaultValue = Math.min(take.defaultValue, NESTED_LIST_BOUNDS[`${type.name}.${field.name}`] ?? API_NESTED_DEFAULT)
+      // Keystone's maxTake check reads the list's root findMany default, never this nested one, so an explicit take up to 500 still works.
+    }
+  }
+  return schema
+}
+/**
+ * Review r7 #2/#4: root fields that may appear only so many times in one operation (aliases and fragments included).
+ * One sign-in per request (20 aliased guesses ran in one request); the audit chain check is one heavy scan.
+ */
+export const API_ROOT_FIELD_CAPS: Record<string, number> = {
+  authenticateUserWithPassword: 1,
+  verifyAuditChain: 2,
+}
 export const API_MAX_SELECTION_FIELDS = 60
 /**
  * Review r6 #2: Keystone runs one query per parent row for every nested list and every `<rel>Count`
@@ -101,7 +147,13 @@ function fieldDef(schema: GraphQLSchema, parent: Composite, on: string | null, n
   return undefined
 }
 
-export type Breadth = { fields: number; rows: number; widest: number; calls: number; introspection: number; aliases: number }
+export type Breadth = { fields: number; rows: number; widest: number; calls: number; introspection: number; aliases: number; capped?: { field: string; count: number; cap: number } | null }
+
+/** The schema default of a list field's `take` argument: what Keystone returns when no `take` is given. */
+function schemaTakeDefault(def: GraphQLField<unknown, unknown>, fallback: number): number {
+  const v = def.args.find(a => a.name === 'take')?.defaultValue
+  return typeof v === 'number' && Number.isFinite(v) ? Math.abs(Math.trunc(v)) : fallback
+}
 
 /**
  * The cost of a document (reviews r5 and r6):
@@ -112,7 +164,7 @@ export type Breadth = { fields: number; rows: number; widest: number; calls: num
  * Fragments, inline fragments and union members (`authenticatedItem { ... on User { … } }`) are all walked.
  */
 export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, operationName: string | null | undefined, variables: Vars): Breadth {
-  const empty = { fields: 0, rows: 0, widest: 0, calls: 0, introspection: 0, aliases: 0 }
+  const empty = { fields: 0, rows: 0, widest: 0, calls: 0, introspection: 0, aliases: 0, capped: null }
   const fragments = new Map(document.definitions.filter((d): d is FragmentDefinitionNode => d.kind === Kind.FRAGMENT_DEFINITION).map(d => [d.name.value, d]))
   const operations = document.definitions.filter((d): d is OperationDefinitionNode => d.kind === Kind.OPERATION_DEFINITION)
   const operation = operationName ? operations.find(o => o.name?.value === operationName) : operations[0]
@@ -126,6 +178,7 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
   let visited = 0
   let introspection = 0
   let aliases = 0
+  let capped: Breadth['capped'] = null
   const walk = (set: SelectionSetNode, parent: Composite, multiplier: number, root: boolean): number => {
     const all: { field: FieldNode; on: string | null }[] = []
     collect(set, fragments, new Set(), null, all)
@@ -133,6 +186,14 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
     if (root) introspection += all.filter(f => f.field.name.value === '__schema' || f.field.name.value === '__type').length
     widest = Math.max(widest, fields.length)
     const repeats = new Map<string, number>()
+    if (root) {
+      const roots = new Map<string, number>()
+      for (const { field: f } of fields) roots.set(f.name.value, (roots.get(f.name.value) ?? 0) + 1)
+      for (const [name, count] of roots) {
+        const cap = API_ROOT_FIELD_CAPS[name]
+        if (cap !== undefined && count > cap && !capped) capped = { field: name, count, cap }
+      }
+    }
     for (const { field: f, on } of fields) {
       if (++visited > API_MAX_VISITED) { rows = Infinity; return fields.length }
       const def = fieldDef(schema, parent, on, f.name.value)
@@ -141,7 +202,7 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
       const list = isListType(getNullableType(def.type))
       const counter = !list && !root && /Count$/.test(f.name.value) && def.type.toString().startsWith('Int')
       const custom = root && isQuery && isScalarType(named) && named.name === 'JSON'
-      let own = list ? takeOf(f.arguments?.find(a => a.name.value === 'take')?.value, variables, root ? API_DEFAULT_PAGE : API_NESTED_DEFAULT) : 1
+      let own = list ? takeOf(f.arguments?.find(a => a.name.value === 'take')?.value, variables, schemaTakeDefault(def, root ? API_DEFAULT_PAGE : API_NESTED_DEFAULT)) : 1
       if (list) {
         const bound = uniqueBound(schema, named, f.arguments?.find(a => a.name.value === 'where')?.value, variables)
         if (bound !== null) own = Math.min(own, bound)
@@ -163,11 +224,12 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
     return fields.length
   }
   const fields = walk(operation.selectionSet, rootType, 1, true)
-  return { fields, rows, widest, calls, introspection, aliases }
+  return { fields, rows, widest, calls, introspection, aliases, capped }
 }
 
 /** The reason a measured document is refused, or null when it is within every limit. */
 export function breadthRefusal(b: Breadth, limits = { fields: API_MAX_ROOT_FIELDS, rows: API_MAX_ROOT_ROWS }): string | null {
+  if (b.capped) return `The request runs ${b.capped.field} ${b.capped.count} times; at most ${b.capped.cap} ${b.capped.cap === 1 ? 'is' : 'are'} allowed in one request.`
   if (b.introspection > API_MAX_INTROSPECTION_FIELDS) return `The query asks for ${b.introspection} introspection fields; at most ${API_MAX_INTROSPECTION_FIELDS} are allowed.`
   if (b.widest > API_MAX_SELECTION_FIELDS && b.fields <= limits.fields) return `A selection asks for ${b.widest} fields at once; at most ${API_MAX_SELECTION_FIELDS} are allowed.`
   if (b.fields > limits.fields) return `The query runs ${b.fields} top-level fields; at most ${limits.fields} are allowed in one request.`

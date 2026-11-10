@@ -34,6 +34,14 @@ npm run dev            # builds Keystone, applies migrations, starts Next.js
 
 `npm run verify` runs type checks, lint, unit and database tests (database tests need `VC_TEST_DATABASE_URL`).
 
+## Using the GraphQL API
+
+- A top-level list returns at most 500 rows; page through it with `take` and `skip`.
+- A nested list with no `take` returns at most 50 rows. A few short ones (a patient's owners, microchips, VCPRs and insurance; a client's people; a person's contact points) return at most 10. Pass `take` (up to 500) for more.
+- One request may ask for about 5,000 rows and 2,000 nested lookups in total. A request over that is refused with `QUERY_TOO_BROAD` before it runs.
+- One request may sign in only once, and may check the audit chain at most twice.
+- After 5 failed sign-ins for one email, or 20 from one address, within 15 minutes, sign-in answers "Too many sign-in attempts. Try again later." until the 15 minutes pass. A successful sign-in resets the email's count.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

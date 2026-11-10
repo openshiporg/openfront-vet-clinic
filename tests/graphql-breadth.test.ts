@@ -6,7 +6,7 @@ import { getContext } from '@keystone-6/core/context'
 import * as PrismaModule from '@prisma/client'
 import config from '../features/keystone'
 import { ENCOUNTER_QUERY } from '../features/platform/encounters/screens/encounterQuery'
-import { API_MAX_ALIASES_PER_FIELD, API_MAX_RESOLVER_CALLS, API_MAX_ROOT_FIELDS, API_MAX_ROOT_ROWS, API_NESTED_DEFAULT, breadthLimitPlugin, breadthRefusal, measureBreadth } from '../features/keystone/security/breadthLimit'
+import { API_MAX_ALIASES_PER_FIELD, API_MAX_RESOLVER_CALLS, API_MAX_ROOT_FIELDS, API_MAX_ROOT_ROWS, API_NESTED_DEFAULT, NESTED_LIST_BOUNDS, breadthLimitPlugin, breadthRefusal, measureBreadth } from '../features/keystone/security/breadthLimit'
 import { screenDocuments } from './helpers/screenDocuments'
 
 /* Review r4 F1: 40 aliases x take:500 in one document returned ~20k rows. Payload shapes live here only. */
@@ -125,4 +125,46 @@ describe('every field whose read is denied is not filterable or orderable (r4 F2
       expect(field.graphql.isEnabled.orderBy).toBe(false)
     })
   }
+})
+
+/* Review r7 #1/#3: an ordinary nested read with no takes works, and the estimate is the real nested default. */
+describe('nested reads with no take (r7)', () => {
+  const PATIENT_WITH_CONTACTS = 'query($i: ID!) { patient(where: { id: $i }) { id weights { id } alerts { id } ownerships { client { id people { id contactPoints { id } } } } } }'
+  it('one patient with weights, alerts, owners, their people and contact points (no takes) is allowed', () => expect(verdict(PATIENT_WITH_CONTACTS, { i: 'x' })).toBeUndefined())
+  it('one client with people, contact points and pets (no takes) is allowed', () => expect(verdict('query($i: ID!) { client(where: { id: $i }) { id people { id contactPoints { id } } ownerships { patient { id weights { id } } } } }', { i: 'x' })).toBeUndefined())
+  it('the estimate is the schema default Keystone really returns, never less', () => {
+    const fields = (schema.getType('Patient') as any).getFields()
+    const takeDefault = (f: any) => f.args.find((a: any) => a.name === 'take').defaultValue
+    expect(takeDefault(fields.weights)).toBe(API_NESTED_DEFAULT)
+    expect(takeDefault(fields.ownerships)).toBe(NESTED_LIST_BOUNDS['Patient.ownerships'])
+    expect(measureBreadth(schema, parse('query { patients(take: 20) { ownerships { id } } }'), null, null).rows).toBe(20 + 20 * NESTED_LIST_BOUNDS['Patient.ownerships'])
+    // Root lists keep the full page: their default is the maxTake.
+    expect((schema.getQueryType() as any).getFields().patients.args.find((a: any) => a.name === 'take').defaultValue).toBe(500)
+    // No nested list in the schema defaults above the nested estimate unless it is listed with its own bound.
+    for (const type of Object.values(schema.getTypeMap()) as any[]) {
+      if (!type.getFields || type.name.startsWith('__') || type.name === 'Query' || type.name === 'Mutation') continue
+      for (const f of Object.values(type.getFields()) as any[]) {
+        const take = f.args?.find((a: any) => a.name === 'take')
+        if (take) expect(take.defaultValue, `${type.name}.${f.name}`).toBe(NESTED_LIST_BOUNDS[`${type.name}.${f.name}`] ?? API_NESTED_DEFAULT)
+      }
+    }
+  })
+  it('an explicit nested take is still charged at its value', () => expect(verdict('query { patients(take: 500) { weights(take: 500) { id } } }')).toMatch(/rows/))
+  it('the r6 fan-outs stay refused: 500 patients x their owners chain', () => expect(verdict('{ patients(take: 500) { ownerships { client { people { contactPoints { id } } } } } }')).toMatch(/rows|lookups/))
+})
+
+/* Review r7 #2/#4: one sign-in per request; the audit chain check at most twice. */
+describe('root fields capped per request (r7)', () => {
+  const al = (n: number, f: (i: number) => string) => Array.from({ length: n }, (_, i) => f(i)).join(' ')
+  const signIn = (i: number) => `a${i}: authenticateUserWithPassword(email: "n${i}@example.com", password: "p${i}") { __typename }`
+  it('one sign-in is allowed', () => expect(verdict(`mutation { ${signIn(0)} }`)).toBeUndefined())
+  it('two aliased sign-ins are refused', () => expect(verdict(`mutation { ${al(2, signIn)} }`)).toMatch(/authenticateUserWithPassword 2 times; at most 1/))
+  it('20 aliased sign-ins (the r7 attack) are refused', () => expect(verdict(`mutation { ${al(20, signIn)} }`)).toMatch(/authenticateUserWithPassword 20 times/))
+  it('sign-ins hidden in fragments are counted', () => expect(verdict(`mutation { ...A ...B } fragment A on Mutation { ${signIn(0)} } fragment B on Mutation { ${signIn(1)} }`)).toMatch(/authenticateUserWithPassword 2 times/))
+  it('verifyAuditChain twice is allowed, three times refused', () => {
+    expect(verdict(`{ ${al(2, i => `v${i}: verifyAuditChain`)} }`)).toBeUndefined()
+    expect(verdict(`{ ${al(3, i => `v${i}: verifyAuditChain`)} }`)).toMatch(/verifyAuditChain 3 times; at most 2/)
+    expect(verdict(`{ ${al(8, i => `v${i}: verifyAuditChain`)} }`)).toMatch(/verifyAuditChain 8 times/)
+  })
+  it('the audit page (one chain check) is allowed', () => expect(verdict('query { auditEventsCount verifyAuditChain }')).toBeUndefined())
 })
