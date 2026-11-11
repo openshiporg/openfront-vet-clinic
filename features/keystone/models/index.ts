@@ -32,6 +32,12 @@ export const models = {
   PrescriptionLine: pharmacy.PrescriptionLine,
   CsContainer: pharmacy.CsContainer,
   CsLogEntry: pharmacy.CsLogEntry,
+  Dispense: pharmacy.Dispense,
+  CsCount: pharmacy.CsCount,
+  CsCountLine: pharmacy.CsCountLine,
+  CsDiscrepancyCase: pharmacy.CsDiscrepancyCase,
+  CsDestructionRecord: pharmacy.CsDestructionRecord,
+  PdmpReport: pharmacy.PdmpReport,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter: record.Encounter,
   SoapSection: record.SoapSection,

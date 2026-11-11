@@ -8624,6 +8624,7 @@ type CsContainer {
   openedAt: DateTime
   openedBy: StaffMember
   budAt: DateTime
+  balance: String
   entries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
   entriesCount(where: CsLogEntryWhereInput! = {}): Int
   version: Int
@@ -8873,6 +8874,664 @@ input CsContainerRelateToOneForCreateInput {
 input CsLogEntryRelateToOneForCreateInput {
   create: CsLogEntryCreateInput
   connect: CsLogEntryWhereUniqueInput
+}
+
+type Dispense {
+  id: ID!
+  ref: String
+  prescription: Prescription
+  line: PrescriptionLine
+  patient: Patient
+  client: Client
+  location: Location
+  product: DrugProduct
+  lot: InventoryLot
+  container: CsContainer
+  csLogEntry: CsLogEntry
+  refillRequest: RefillRequest
+  quantity: Decimal
+  quantityUnit: String
+  refillNumber: Int
+  dispensedBy: StaffMember
+  dispensedAt: DateTime
+  label: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DispenseWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input DispenseWhereInput {
+  AND: [DispenseWhereInput!]
+  OR: [DispenseWhereInput!]
+  NOT: [DispenseWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  prescription: PrescriptionWhereInput
+  line: PrescriptionLineWhereInput
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  product: DrugProductWhereInput
+  lot: InventoryLotWhereInput
+  container: CsContainerWhereInput
+  csLogEntry: CsLogEntryWhereInput
+  refillRequest: RefillRequestWhereInput
+  quantity: DecimalFilter
+  quantityUnit: StringNullableFilter
+  refillNumber: IntFilter
+  dispensedBy: StaffMemberWhereInput
+  dispensedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DispenseOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  quantity: OrderDirection
+  quantityUnit: OrderDirection
+  refillNumber: OrderDirection
+  dispensedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DispenseUpdateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForUpdateInput
+  line: PrescriptionLineRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  product: DrugProductRelateToOneForUpdateInput
+  lot: InventoryLotRelateToOneForUpdateInput
+  container: CsContainerRelateToOneForUpdateInput
+  csLogEntry: CsLogEntryRelateToOneForUpdateInput
+  refillRequest: RefillRequestRelateToOneForUpdateInput
+  quantity: Decimal
+  quantityUnit: String
+  refillNumber: Int
+  dispensedBy: StaffMemberRelateToOneForUpdateInput
+  dispensedAt: DateTime
+  label: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PrescriptionLineRelateToOneForUpdateInput {
+  create: PrescriptionLineCreateInput
+  connect: PrescriptionLineWhereUniqueInput
+  disconnect: Boolean
+}
+
+input InventoryLotRelateToOneForUpdateInput {
+  create: InventoryLotCreateInput
+  connect: InventoryLotWhereUniqueInput
+  disconnect: Boolean
+}
+
+input RefillRequestRelateToOneForUpdateInput {
+  create: RefillRequestCreateInput
+  connect: RefillRequestWhereUniqueInput
+  disconnect: Boolean
+}
+
+input DispenseUpdateArgs {
+  where: DispenseWhereUniqueInput!
+  data: DispenseUpdateInput!
+}
+
+input DispenseCreateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForCreateInput
+  line: PrescriptionLineRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  product: DrugProductRelateToOneForCreateInput
+  lot: InventoryLotRelateToOneForCreateInput
+  container: CsContainerRelateToOneForCreateInput
+  csLogEntry: CsLogEntryRelateToOneForCreateInput
+  refillRequest: RefillRequestRelateToOneForCreateInput
+  quantity: Decimal
+  quantityUnit: String
+  refillNumber: Int
+  dispensedBy: StaffMemberRelateToOneForCreateInput
+  dispensedAt: DateTime
+  label: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PrescriptionLineRelateToOneForCreateInput {
+  create: PrescriptionLineCreateInput
+  connect: PrescriptionLineWhereUniqueInput
+}
+
+input InventoryLotRelateToOneForCreateInput {
+  create: InventoryLotCreateInput
+  connect: InventoryLotWhereUniqueInput
+}
+
+input RefillRequestRelateToOneForCreateInput {
+  create: RefillRequestCreateInput
+  connect: RefillRequestWhereUniqueInput
+}
+
+type CsCount {
+  id: ID!
+  ref: String
+  location: Location
+  kind: String
+  countedBy: StaffMember
+  witness: StaffMember
+  countedAt: DateTime
+  status: String
+  lines(where: CsCountLineWhereInput! = {}, orderBy: [CsCountLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CsCountLineWhereUniqueInput): [CsCountLine!]
+  linesCount(where: CsCountLineWhereInput! = {}): Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsCountWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input CsCountWhereInput {
+  AND: [CsCountWhereInput!]
+  OR: [CsCountWhereInput!]
+  NOT: [CsCountWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  location: LocationWhereInput
+  kind: StringFilter
+  countedBy: StaffMemberWhereInput
+  witness: StaffMemberWhereInput
+  countedAt: DateTimeFilter
+  status: StringFilter
+  lines: CsCountLineManyRelationFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsCountLineManyRelationFilter {
+  every: CsCountLineWhereInput
+  some: CsCountLineWhereInput
+  none: CsCountLineWhereInput
+}
+
+input CsCountOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  kind: OrderDirection
+  countedAt: OrderDirection
+  status: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsCountUpdateInput {
+  ref: String
+  location: LocationRelateToOneForUpdateInput
+  kind: String
+  countedBy: StaffMemberRelateToOneForUpdateInput
+  witness: StaffMemberRelateToOneForUpdateInput
+  countedAt: DateTime
+  status: String
+  lines: CsCountLineRelateToManyForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsCountLineRelateToManyForUpdateInput {
+  disconnect: [CsCountLineWhereUniqueInput!]
+  set: [CsCountLineWhereUniqueInput!]
+  create: [CsCountLineCreateInput!]
+  connect: [CsCountLineWhereUniqueInput!]
+}
+
+input CsCountUpdateArgs {
+  where: CsCountWhereUniqueInput!
+  data: CsCountUpdateInput!
+}
+
+input CsCountCreateInput {
+  ref: String
+  location: LocationRelateToOneForCreateInput
+  kind: String
+  countedBy: StaffMemberRelateToOneForCreateInput
+  witness: StaffMemberRelateToOneForCreateInput
+  countedAt: DateTime
+  status: String
+  lines: CsCountLineRelateToManyForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsCountLineRelateToManyForCreateInput {
+  create: [CsCountLineCreateInput!]
+  connect: [CsCountLineWhereUniqueInput!]
+}
+
+type CsCountLine {
+  id: ID!
+  count: CsCount
+  container: CsContainer
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  unit: String
+  discrepancyCase: CsDiscrepancyCase
+}
+
+input CsCountLineWhereUniqueInput {
+  id: ID
+}
+
+input CsCountLineWhereInput {
+  AND: [CsCountLineWhereInput!]
+  OR: [CsCountLineWhereInput!]
+  NOT: [CsCountLineWhereInput!]
+  id: IDFilter
+  count: CsCountWhereInput
+  container: CsContainerWhereInput
+  expectedQty: DecimalFilter
+  countedQty: DecimalFilter
+  variance: DecimalFilter
+  unit: StringNullableFilter
+  discrepancyCase: CsDiscrepancyCaseWhereInput
+}
+
+input CsCountLineOrderByInput {
+  id: OrderDirection
+  expectedQty: OrderDirection
+  countedQty: OrderDirection
+  variance: OrderDirection
+  unit: OrderDirection
+}
+
+input CsCountLineUpdateInput {
+  count: CsCountRelateToOneForUpdateInput
+  container: CsContainerRelateToOneForUpdateInput
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  unit: String
+  discrepancyCase: CsDiscrepancyCaseRelateToOneForUpdateInput
+}
+
+input CsCountRelateToOneForUpdateInput {
+  create: CsCountCreateInput
+  connect: CsCountWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CsDiscrepancyCaseRelateToOneForUpdateInput {
+  create: CsDiscrepancyCaseCreateInput
+  connect: CsDiscrepancyCaseWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CsCountLineUpdateArgs {
+  where: CsCountLineWhereUniqueInput!
+  data: CsCountLineUpdateInput!
+}
+
+input CsCountLineCreateInput {
+  count: CsCountRelateToOneForCreateInput
+  container: CsContainerRelateToOneForCreateInput
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  unit: String
+  discrepancyCase: CsDiscrepancyCaseRelateToOneForCreateInput
+}
+
+input CsCountRelateToOneForCreateInput {
+  create: CsCountCreateInput
+  connect: CsCountWhereUniqueInput
+}
+
+input CsDiscrepancyCaseRelateToOneForCreateInput {
+  create: CsDiscrepancyCaseCreateInput
+  connect: CsDiscrepancyCaseWhereUniqueInput
+}
+
+type CsDiscrepancyCase {
+  id: ID!
+  ref: String
+  location: Location
+  container: CsContainer
+  kind: String
+  qty: Decimal
+  unit: String
+  discoveredAt: DateTime
+  discoveredBy: StaffMember
+  description: String
+  status: String
+  noticeDueOn: CalendarDay
+  noticeGivenAt: DateTime
+  noticeReference: String
+  form106DueOn: CalendarDay
+  form106FiledAt: DateTime
+  form106Reference: String
+  resolution: String
+  closedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsDiscrepancyCaseWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input CsDiscrepancyCaseWhereInput {
+  AND: [CsDiscrepancyCaseWhereInput!]
+  OR: [CsDiscrepancyCaseWhereInput!]
+  NOT: [CsDiscrepancyCaseWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  location: LocationWhereInput
+  container: CsContainerWhereInput
+  kind: StringFilter
+  qty: DecimalFilter
+  unit: StringNullableFilter
+  discoveredAt: DateTimeFilter
+  discoveredBy: StaffMemberWhereInput
+  description: StringFilter
+  status: StringFilter
+  noticeDueOn: CalendarDayNullableFilter
+  noticeGivenAt: DateTimeNullableFilter
+  noticeReference: StringFilter
+  form106DueOn: CalendarDayNullableFilter
+  form106FiledAt: DateTimeNullableFilter
+  form106Reference: StringFilter
+  resolution: StringFilter
+  closedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsDiscrepancyCaseOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  kind: OrderDirection
+  qty: OrderDirection
+  unit: OrderDirection
+  discoveredAt: OrderDirection
+  description: OrderDirection
+  status: OrderDirection
+  noticeDueOn: OrderDirection
+  noticeGivenAt: OrderDirection
+  noticeReference: OrderDirection
+  form106DueOn: OrderDirection
+  form106FiledAt: OrderDirection
+  form106Reference: OrderDirection
+  resolution: OrderDirection
+  closedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsDiscrepancyCaseUpdateInput {
+  ref: String
+  location: LocationRelateToOneForUpdateInput
+  container: CsContainerRelateToOneForUpdateInput
+  kind: String
+  qty: Decimal
+  unit: String
+  discoveredAt: DateTime
+  discoveredBy: StaffMemberRelateToOneForUpdateInput
+  description: String
+  status: String
+  noticeDueOn: CalendarDay
+  noticeGivenAt: DateTime
+  noticeReference: String
+  form106DueOn: CalendarDay
+  form106FiledAt: DateTime
+  form106Reference: String
+  resolution: String
+  closedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsDiscrepancyCaseUpdateArgs {
+  where: CsDiscrepancyCaseWhereUniqueInput!
+  data: CsDiscrepancyCaseUpdateInput!
+}
+
+input CsDiscrepancyCaseCreateInput {
+  ref: String
+  location: LocationRelateToOneForCreateInput
+  container: CsContainerRelateToOneForCreateInput
+  kind: String
+  qty: Decimal
+  unit: String
+  discoveredAt: DateTime
+  discoveredBy: StaffMemberRelateToOneForCreateInput
+  description: String
+  status: String
+  noticeDueOn: CalendarDay
+  noticeGivenAt: DateTime
+  noticeReference: String
+  form106DueOn: CalendarDay
+  form106FiledAt: DateTime
+  form106Reference: String
+  resolution: String
+  closedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type CsDestructionRecord {
+  id: ID!
+  ref: String
+  container: CsContainer
+  location: Location
+  csLogEntry: CsLogEntry
+  qty: Decimal
+  unit: String
+  method: String
+  form41Reference: String
+  recordedBy: StaffMember
+  witnessA: StaffMember
+  witnessB: StaffMember
+  destroyedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsDestructionRecordWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input CsDestructionRecordWhereInput {
+  AND: [CsDestructionRecordWhereInput!]
+  OR: [CsDestructionRecordWhereInput!]
+  NOT: [CsDestructionRecordWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  container: CsContainerWhereInput
+  location: LocationWhereInput
+  csLogEntry: CsLogEntryWhereInput
+  qty: DecimalFilter
+  unit: StringNullableFilter
+  method: StringFilter
+  form41Reference: StringFilter
+  recordedBy: StaffMemberWhereInput
+  witnessA: StaffMemberWhereInput
+  witnessB: StaffMemberWhereInput
+  destroyedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsDestructionRecordOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  qty: OrderDirection
+  unit: OrderDirection
+  method: OrderDirection
+  form41Reference: OrderDirection
+  destroyedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsDestructionRecordUpdateInput {
+  ref: String
+  container: CsContainerRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  csLogEntry: CsLogEntryRelateToOneForUpdateInput
+  qty: Decimal
+  unit: String
+  method: String
+  form41Reference: String
+  recordedBy: StaffMemberRelateToOneForUpdateInput
+  witnessA: StaffMemberRelateToOneForUpdateInput
+  witnessB: StaffMemberRelateToOneForUpdateInput
+  destroyedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsDestructionRecordUpdateArgs {
+  where: CsDestructionRecordWhereUniqueInput!
+  data: CsDestructionRecordUpdateInput!
+}
+
+input CsDestructionRecordCreateInput {
+  ref: String
+  container: CsContainerRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  csLogEntry: CsLogEntryRelateToOneForCreateInput
+  qty: Decimal
+  unit: String
+  method: String
+  form41Reference: String
+  recordedBy: StaffMemberRelateToOneForCreateInput
+  witnessA: StaffMemberRelateToOneForCreateInput
+  witnessB: StaffMemberRelateToOneForCreateInput
+  destroyedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type PdmpReport {
+  id: ID!
+  ref: String
+  location: Location
+  dispense: Dispense
+  program: String
+  format: String
+  dueOn: CalendarDay
+  status: String
+  submittedAt: DateTime
+  submittedBy: StaffMember
+  confirmation: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PdmpReportWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input PdmpReportWhereInput {
+  AND: [PdmpReportWhereInput!]
+  OR: [PdmpReportWhereInput!]
+  NOT: [PdmpReportWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  location: LocationWhereInput
+  dispense: DispenseWhereInput
+  program: StringFilter
+  format: StringFilter
+  dueOn: CalendarDayNullableFilter
+  status: StringFilter
+  submittedAt: DateTimeNullableFilter
+  submittedBy: StaffMemberWhereInput
+  confirmation: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PdmpReportOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  program: OrderDirection
+  format: OrderDirection
+  dueOn: OrderDirection
+  status: OrderDirection
+  submittedAt: OrderDirection
+  confirmation: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PdmpReportUpdateInput {
+  ref: String
+  location: LocationRelateToOneForUpdateInput
+  dispense: DispenseRelateToOneForUpdateInput
+  program: String
+  format: String
+  dueOn: CalendarDay
+  status: String
+  submittedAt: DateTime
+  submittedBy: StaffMemberRelateToOneForUpdateInput
+  confirmation: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DispenseRelateToOneForUpdateInput {
+  create: DispenseCreateInput
+  connect: DispenseWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PdmpReportUpdateArgs {
+  where: PdmpReportWhereUniqueInput!
+  data: PdmpReportUpdateInput!
+}
+
+input PdmpReportCreateInput {
+  ref: String
+  location: LocationRelateToOneForCreateInput
+  dispense: DispenseRelateToOneForCreateInput
+  program: String
+  format: String
+  dueOn: CalendarDay
+  status: String
+  submittedAt: DateTime
+  submittedBy: StaffMemberRelateToOneForCreateInput
+  confirmation: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DispenseRelateToOneForCreateInput {
+  create: DispenseCreateInput
+  connect: DispenseWhereUniqueInput
 }
 
 type Encounter {
@@ -11108,12 +11767,6 @@ input TreatmentTaskRelateToOneForUpdateInput {
   disconnect: Boolean
 }
 
-input InventoryLotRelateToOneForUpdateInput {
-  create: InventoryLotCreateInput
-  connect: InventoryLotWhereUniqueInput
-  disconnect: Boolean
-}
-
 input AdministrationRelateToOneForUpdateInput {
   create: AdministrationCreateInput
   connect: AdministrationWhereUniqueInput
@@ -11159,11 +11812,6 @@ input ClinicalOrderRelateToOneForCreateInput {
 input TreatmentTaskRelateToOneForCreateInput {
   create: TreatmentTaskCreateInput
   connect: TreatmentTaskWhereUniqueInput
-}
-
-input InventoryLotRelateToOneForCreateInput {
-  create: InventoryLotCreateInput
-  connect: InventoryLotWhereUniqueInput
 }
 
 input AdministrationRelateToOneForCreateInput {
@@ -14340,6 +14988,42 @@ type Mutation {
   updateCsLogEntries(data: [CsLogEntryUpdateArgs!]!): [CsLogEntry]
   deleteCsLogEntry(where: CsLogEntryWhereUniqueInput!): CsLogEntry
   deleteCsLogEntries(where: [CsLogEntryWhereUniqueInput!]!): [CsLogEntry]
+  createDispense(data: DispenseCreateInput!): Dispense
+  createDispenses(data: [DispenseCreateInput!]!): [Dispense]
+  updateDispense(where: DispenseWhereUniqueInput!, data: DispenseUpdateInput!): Dispense
+  updateDispenses(data: [DispenseUpdateArgs!]!): [Dispense]
+  deleteDispense(where: DispenseWhereUniqueInput!): Dispense
+  deleteDispenses(where: [DispenseWhereUniqueInput!]!): [Dispense]
+  createCsCount(data: CsCountCreateInput!): CsCount
+  createCsCounts(data: [CsCountCreateInput!]!): [CsCount]
+  updateCsCount(where: CsCountWhereUniqueInput!, data: CsCountUpdateInput!): CsCount
+  updateCsCounts(data: [CsCountUpdateArgs!]!): [CsCount]
+  deleteCsCount(where: CsCountWhereUniqueInput!): CsCount
+  deleteCsCounts(where: [CsCountWhereUniqueInput!]!): [CsCount]
+  createCsCountLine(data: CsCountLineCreateInput!): CsCountLine
+  createCsCountLines(data: [CsCountLineCreateInput!]!): [CsCountLine]
+  updateCsCountLine(where: CsCountLineWhereUniqueInput!, data: CsCountLineUpdateInput!): CsCountLine
+  updateCsCountLines(data: [CsCountLineUpdateArgs!]!): [CsCountLine]
+  deleteCsCountLine(where: CsCountLineWhereUniqueInput!): CsCountLine
+  deleteCsCountLines(where: [CsCountLineWhereUniqueInput!]!): [CsCountLine]
+  createCsDiscrepancyCase(data: CsDiscrepancyCaseCreateInput!): CsDiscrepancyCase
+  createCsDiscrepancyCases(data: [CsDiscrepancyCaseCreateInput!]!): [CsDiscrepancyCase]
+  updateCsDiscrepancyCase(where: CsDiscrepancyCaseWhereUniqueInput!, data: CsDiscrepancyCaseUpdateInput!): CsDiscrepancyCase
+  updateCsDiscrepancyCases(data: [CsDiscrepancyCaseUpdateArgs!]!): [CsDiscrepancyCase]
+  deleteCsDiscrepancyCase(where: CsDiscrepancyCaseWhereUniqueInput!): CsDiscrepancyCase
+  deleteCsDiscrepancyCases(where: [CsDiscrepancyCaseWhereUniqueInput!]!): [CsDiscrepancyCase]
+  createCsDestructionRecord(data: CsDestructionRecordCreateInput!): CsDestructionRecord
+  createCsDestructionRecords(data: [CsDestructionRecordCreateInput!]!): [CsDestructionRecord]
+  updateCsDestructionRecord(where: CsDestructionRecordWhereUniqueInput!, data: CsDestructionRecordUpdateInput!): CsDestructionRecord
+  updateCsDestructionRecords(data: [CsDestructionRecordUpdateArgs!]!): [CsDestructionRecord]
+  deleteCsDestructionRecord(where: CsDestructionRecordWhereUniqueInput!): CsDestructionRecord
+  deleteCsDestructionRecords(where: [CsDestructionRecordWhereUniqueInput!]!): [CsDestructionRecord]
+  createPdmpReport(data: PdmpReportCreateInput!): PdmpReport
+  createPdmpReports(data: [PdmpReportCreateInput!]!): [PdmpReport]
+  updatePdmpReport(where: PdmpReportWhereUniqueInput!, data: PdmpReportUpdateInput!): PdmpReport
+  updatePdmpReports(data: [PdmpReportUpdateArgs!]!): [PdmpReport]
+  deletePdmpReport(where: PdmpReportWhereUniqueInput!): PdmpReport
+  deletePdmpReports(where: [PdmpReportWhereUniqueInput!]!): [PdmpReport]
   createEncounter(data: EncounterCreateInput!): Encounter
   createEncounters(data: [EncounterCreateInput!]!): [Encounter]
   updateEncounter(where: EncounterWhereUniqueInput!, data: EncounterUpdateInput!): Encounter
@@ -14982,6 +15666,24 @@ type Query {
   csLogEntry(where: CsLogEntryWhereUniqueInput!): CsLogEntry
   csLogEntries(where: CsLogEntryWhereInput! = {}, orderBy: [CsLogEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsLogEntryWhereUniqueInput): [CsLogEntry!]
   csLogEntriesCount(where: CsLogEntryWhereInput! = {}): Int
+  dispense(where: DispenseWhereUniqueInput!): Dispense
+  dispenses(where: DispenseWhereInput! = {}, orderBy: [DispenseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DispenseWhereUniqueInput): [Dispense!]
+  dispensesCount(where: DispenseWhereInput! = {}): Int
+  csCount(where: CsCountWhereUniqueInput!): CsCount
+  csCounts(where: CsCountWhereInput! = {}, orderBy: [CsCountOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsCountWhereUniqueInput): [CsCount!]
+  csCountsCount(where: CsCountWhereInput! = {}): Int
+  csCountLine(where: CsCountLineWhereUniqueInput!): CsCountLine
+  csCountLines(where: CsCountLineWhereInput! = {}, orderBy: [CsCountLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsCountLineWhereUniqueInput): [CsCountLine!]
+  csCountLinesCount(where: CsCountLineWhereInput! = {}): Int
+  csDiscrepancyCase(where: CsDiscrepancyCaseWhereUniqueInput!): CsDiscrepancyCase
+  csDiscrepancyCases(where: CsDiscrepancyCaseWhereInput! = {}, orderBy: [CsDiscrepancyCaseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsDiscrepancyCaseWhereUniqueInput): [CsDiscrepancyCase!]
+  csDiscrepancyCasesCount(where: CsDiscrepancyCaseWhereInput! = {}): Int
+  csDestructionRecord(where: CsDestructionRecordWhereUniqueInput!): CsDestructionRecord
+  csDestructionRecords(where: CsDestructionRecordWhereInput! = {}, orderBy: [CsDestructionRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsDestructionRecordWhereUniqueInput): [CsDestructionRecord!]
+  csDestructionRecordsCount(where: CsDestructionRecordWhereInput! = {}): Int
+  pdmpReport(where: PdmpReportWhereUniqueInput!): PdmpReport
+  pdmpReports(where: PdmpReportWhereInput! = {}, orderBy: [PdmpReportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PdmpReportWhereUniqueInput): [PdmpReport!]
+  pdmpReportsCount(where: PdmpReportWhereInput! = {}): Int
   encounter(where: EncounterWhereUniqueInput!): Encounter
   encounters(where: EncounterWhereInput! = {}, orderBy: [EncounterOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EncounterWhereUniqueInput): [Encounter!]
   encountersCount(where: EncounterWhereInput! = {}): Int

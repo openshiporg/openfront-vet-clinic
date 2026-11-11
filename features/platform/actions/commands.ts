@@ -64,6 +64,20 @@ const OPS: Record<string, Record<string, string>> = {
   addManualReminder: { patientId: 'ID!', typeId: 'ID!', dueOn: 'String!' },
   previewImport: { system: 'String!', entity: 'String!', locationId: 'ID!', fileName: 'String', csv: 'String', mapping: 'JSON', source: 'String' },
   applyImport: { batchId: 'ID!' },
+  // Phase 3: prescriptions, dispensing, stock and the controlled-substance register.
+  writePrescription: { patientId: 'ID!', locationId: 'ID!', lines: 'JSON!' },
+  decideRefill: { requestId: 'ID!', decision: 'String!', reason: 'String', expectedVersion: 'Int!' },
+  dispenseFill: { lineId: 'ID!', quantity: 'String!', lotId: 'ID', csContainerId: 'ID', refillRequestId: 'ID' },
+  receiveStockLot: { drugId: 'ID', vaccineId: 'ID', locationId: 'ID!', lotNumber: 'String!', expiresOn: 'String!' },
+  setLotQuarantine: { lotId: 'ID!', quarantine: 'Boolean!', reason: 'String!', expectedVersion: 'Int!' },
+  receiveControlled: { productId: 'ID!', locationId: 'ID!', lotNumber: 'String!', lotExpiresOn: 'String!', labelQty: 'String!', labelUnit: 'String!', orderFormReference: 'String' },
+  openControlled: { containerId: 'ID!', expectedVersion: 'Int!' },
+  wasteControlled: { containerId: 'ID!', qty: 'String!', reason: 'String!', witnessId: 'ID!' },
+  countControlled: { locationId: 'ID!', kind: 'String!', witnessId: 'ID!', counts: 'JSON!' },
+  reportCsLoss: { containerId: 'ID!', kind: 'String!', qty: 'String!', description: 'String!', witnessId: 'ID!' },
+  advanceDiscrepancy: { caseId: 'ID!', step: 'String!', reference: 'String', resolution: 'String', expectedVersion: 'Int!' },
+  destroyControlled: { containerId: 'ID!', qty: 'String', method: 'String!', form41Reference: 'String', witnessAId: 'ID!', witnessBId: 'ID!' },
+  submitPdmp: { reportId: 'ID!', confirmation: 'String!', expectedVersion: 'Int!' },
 };
 
 const KEY = /^[A-Za-z0-9._:-]{8,200}$/;

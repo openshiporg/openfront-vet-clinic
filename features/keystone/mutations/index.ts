@@ -17,6 +17,7 @@ import * as treatment from './treatment'
 import * as vaccines from './vaccines'
 import * as imports from './imports'
 import * as clocks from './clocks'
+import * as pharmacy from './pharmacy'
 import '../lib/practiceControls'
 import { limitNestedLists } from '../security/breadthLimit'
 import { limitSignIn } from '../security/signInLimit'
@@ -118,6 +119,19 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
         previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
         applyImport(batchId: ID!, idempotencyKey: String!): JSON
+        writePrescription(patientId: ID!, locationId: ID!, lines: JSON!, idempotencyKey: String!): JSON
+        decideRefill(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        dispenseFill(lineId: ID!, quantity: String!, lotId: ID, csContainerId: ID, refillRequestId: ID, idempotencyKey: String!): JSON
+        receiveStockLot(drugId: ID, vaccineId: ID, locationId: ID!, lotNumber: String!, expiresOn: String!, idempotencyKey: String!): JSON
+        setLotQuarantine(lotId: ID!, quarantine: Boolean!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        receiveControlled(productId: ID!, locationId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, orderFormReference: String, idempotencyKey: String!): JSON
+        openControlled(containerId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        wasteControlled(containerId: ID!, qty: String!, reason: String!, witnessId: ID!, idempotencyKey: String!): JSON
+        countControlled(locationId: ID!, kind: String!, witnessId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+        reportCsLoss(containerId: ID!, kind: String!, qty: String!, description: String!, witnessId: ID!, idempotencyKey: String!): JSON
+        advanceDiscrepancy(caseId: ID!, step: String!, reference: String, resolution: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
+        submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
       }
     `,
     resolvers: {
@@ -208,6 +222,19 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         addManualReminder: op(vaccines.addManualReminder),
         previewImport: op(imports.previewImport),
         applyImport: op(imports.applyImport),
+        writePrescription: op(pharmacy.writePrescription),
+        decideRefill: op(pharmacy.decideRefill),
+        dispenseFill: op(pharmacy.dispenseFill),
+        receiveStockLot: op(pharmacy.receiveStockLot),
+        setLotQuarantine: op(pharmacy.setLotQuarantine),
+        receiveControlled: op(pharmacy.receiveControlled),
+        openControlled: op(pharmacy.openControlled),
+        wasteControlled: op(pharmacy.wasteControlled),
+        countControlled: op(pharmacy.countControlled),
+        reportCsLoss: op(pharmacy.reportCsLoss),
+        advanceDiscrepancy: op(pharmacy.advanceDiscrepancy),
+        destroyControlled: op(pharmacy.destroyControlled),
+        submitPdmp: op(pharmacy.submitPdmp),
       },
     },
   })))

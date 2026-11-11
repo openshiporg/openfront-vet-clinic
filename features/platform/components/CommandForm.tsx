@@ -249,5 +249,61 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     if (v.csv.length > 5_000_000) throw new Error('The file is over 5 MB; split it or use the ezyVet API source.');
     return { system: v.system, entity: v.entity, locationId: v.locationId, fileName: v.fileName?.trim() || undefined, csv: v.csv, source: 'manual-csv' };
   },
+  // ── Phase 3: pharmacy, stock and the controlled-substance register ──
+  writePrescription: (v) => {
+    required(v, 'patientId', 'locationId', 'productId', 'directions', 'quantity');
+    if (!/^\d{1,6}(\.\d{1,6})?$/.test(v.quantity.trim())) throw new Error('Quantity: a number like 30');
+    const refills = v.refills?.trim() ? ints(v.refills, 'Refills', 0, 5) : 0;
+    return { patientId: v.patientId, locationId: v.locationId, lines: [{ productId: v.productId, directions: v.directions.trim(), route: v.route?.trim() || undefined, frequency: v.frequency?.trim() || undefined, quantity: v.quantity.trim(), quantityUnit: v.quantityUnit || undefined, refillsAuthorised: refills }] };
+  },
+  dispenseFill: (v) => {
+    required(v, 'lineId', 'quantity');
+    if (!/^\d{1,6}(\.\d{1,6})?$/.test(v.quantity.trim())) throw new Error('Quantity: a number like 30');
+    return { lineId: v.lineId, quantity: v.quantity.trim(), lotId: v.lotId || undefined, csContainerId: v.csContainerId || undefined, refillRequestId: v.refillRequestId || undefined };
+  },
+  receiveStockLot: (v) => {
+    required(v, 'locationId', 'lotNumber', 'expiresOn');
+    if (!v.drugId && !v.vaccineId) throw new Error('Choose a drug or a vaccine.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.expiresOn.trim())) throw new Error('Expires: use YYYY-MM-DD.');
+    return { drugId: v.drugId || undefined, vaccineId: v.drugId ? undefined : v.vaccineId || undefined, locationId: v.locationId, lotNumber: v.lotNumber.trim(), expiresOn: v.expiresOn.trim() };
+  },
+  receiveControlled: (v) => {
+    required(v, 'productId', 'locationId', 'lotNumber', 'lotExpiresOn', 'labelQty', 'labelUnit');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.lotExpiresOn.trim())) throw new Error('Expires: use YYYY-MM-DD.');
+    if (!/^\d{1,6}(\.\d{1,6})?$/.test(v.labelQty.trim())) throw new Error('Amount on the label: a number like 10');
+    return { productId: v.productId, locationId: v.locationId, lotNumber: v.lotNumber.trim(), lotExpiresOn: v.lotExpiresOn.trim(), labelQty: v.labelQty.trim(), labelUnit: v.labelUnit, orderFormReference: v.orderFormReference?.trim() || undefined };
+  },
+  wasteControlled: (v) => {
+    required(v, 'containerId', 'qty', 'reason', 'witnessId');
+    if (!/^\d{1,6}(\.\d{1,6})?$/.test(v.qty.trim())) throw new Error('Amount: a number like 0.2');
+    return { containerId: v.containerId, qty: v.qty.trim(), reason: v.reason.trim(), witnessId: v.witnessId };
+  },
+  /** One count per open container: fields named count_<containerId>. */
+  countControlled: (v) => {
+    required(v, 'locationId', 'kind', 'witnessId');
+    const counts = Object.entries(v).filter(([k]) => k.startsWith('count_')).map(([k, value]) => {
+      if (!/^\d{1,6}(\.\d{1,6})?$/.test((value ?? '').trim())) throw new Error('Enter every counted amount as a number like 7.5 (zero if empty).');
+      return { containerId: k.slice(6), countedQty: value.trim() };
+    });
+    if (!counts.length) throw new Error('There are no open containers to count.');
+    return { locationId: v.locationId, kind: v.kind, witnessId: v.witnessId, counts };
+  },
+  reportCsLoss: (v) => {
+    required(v, 'containerId', 'kind', 'qty', 'description', 'witnessId');
+    if (!/^\d{1,6}(\.\d{1,6})?$/.test(v.qty.trim())) throw new Error('Amount: a number like 0.2');
+    return { containerId: v.containerId, kind: v.kind, qty: v.qty.trim(), description: v.description.trim(), witnessId: v.witnessId };
+  },
+  destroyControlled: (v) => {
+    required(v, 'containerId', 'method', 'witnessAId', 'witnessBId');
+    if (v.qty?.trim() && !/^\d{1,6}(\.\d{1,6})?$/.test(v.qty.trim())) throw new Error('Amount: a number like 2.5, or leave blank for everything left.');
+    return { containerId: v.containerId, qty: v.qty?.trim() || undefined, method: v.method.trim(), form41Reference: v.form41Reference?.trim() || undefined, witnessAId: v.witnessAId, witnessBId: v.witnessBId };
+  },
+  quarantine: (v) => { required(v, 'lotId', 'reason', 'expectedVersion'); return { lotId: v.lotId, quarantine: v.quarantine === 'yes', reason: v.reason.trim(), expectedVersion: Number(v.expectedVersion) }; },
+  submitPdmp: (v) => { required(v, 'reportId', 'confirmation', 'expectedVersion'); return { reportId: v.reportId, confirmation: v.confirmation.trim(), expectedVersion: Number(v.expectedVersion) }; },
+  decideRefill: (v) => { required(v, 'requestId', 'decision', 'expectedVersion'); return { requestId: v.requestId, decision: v.decision, reason: v.reason?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }; },
+  advanceDiscrepancyStep: (v) => {
+    required(v, 'caseId', 'step', 'expectedVersion');
+    return { caseId: v.caseId, step: v.step, reference: v.reference?.trim() || undefined, resolution: v.resolution?.trim() || undefined, expectedVersion: Number(v.expectedVersion) };
+  },
   killSwitch: (v) => ({ agentId: v.agentId, killSwitch: v.killSwitch === 'on', reason: v.reason?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }),
 };

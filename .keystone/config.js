@@ -210,6 +210,11 @@ var init_readAudit = __esm({
       "Suppression",
       "CsContainer",
       "CsLogEntry",
+      "CsCount",
+      "CsCountLine",
+      "CsDiscrepancyCase",
+      "CsDestructionRecord",
+      "PdmpReport",
       // Phase 2: the medical record, orders and treatment, preventive care
       "SoapSection",
       "SoapSectionRevision",
@@ -852,12 +857,9 @@ __export(platform_exports, {
   Document: () => Document,
   ExternalId: () => ExternalId,
   IntegrationConnection: () => IntegrationConnection,
-  Lease: () => Lease,
   Notification: () => Notification,
-  OutboxEvent: () => OutboxEvent,
   ProviderObservation: () => ProviderObservation,
   ReadAudit: () => ReadAudit,
-  ScheduledJob: () => ScheduledJob,
   SecretBox: () => SecretBox,
   Sequence: () => Sequence
 });
@@ -1000,51 +1002,6 @@ var CommandReceipt = (0, import_core7.list)({
     responseBody: (0, import_fields8.json)(),
     recoveryPoint: (0, import_fields8.text)({ defaultValue: "completed" }),
     completedAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" } }),
-    ...trackingFields
-  }
-});
-var OutboxEvent = (0, import_core7.list)({
-  access: governed("canManagePractice"),
-  ui: { listView: { initialColumns: ["topic", "status", "attempts", "nextAttemptAt", "aggregateType", "aggregateId"] } },
-  fields: {
-    topic: systemText({ indexed: true, required: true }),
-    aggregateType: systemText({ required: true }),
-    aggregateId: systemText({ indexed: true, required: true }),
-    dedupeKey: systemText({ indexed: "unique", required: true }),
-    payload: (0, import_fields8.json)({ ...readOnly }),
-    status: lifecycle(["pending", "leased", "delivered", "failed", "dead"]),
-    attempts: (0, import_fields8.integer)({ defaultValue: 0, ...readOnly }),
-    nextAttemptAt: (0, import_fields8.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    leaseOwner: systemText(),
-    leaseExpiresAt: (0, import_fields8.timestamp)({ ...readOnly }),
-    fencingToken: (0, import_fields8.integer)({ defaultValue: 0, ...readOnly }),
-    lastError: systemText(),
-    deliveredAt: (0, import_fields8.timestamp)({ ...readOnly }),
-    ...trackingFields
-  }
-});
-var Lease = (0, import_core7.list)({
-  access: serverOnly,
-  graphql: { omit: true },
-  ui: { isHidden: true },
-  fields: {
-    key: (0, import_fields8.text)({ isIndexed: "unique", validation: { isRequired: true } }),
-    owner: (0, import_fields8.text)({ validation: { isRequired: true } }),
-    fencingToken: (0, import_fields8.integer)({ defaultValue: 0, validation: { isRequired: true } }),
-    expiresAt: (0, import_fields8.timestamp)({ validation: { isRequired: true } }),
-    ...trackingFields
-  }
-});
-var ScheduledJob = (0, import_core7.list)({
-  access: governed("canManagePractice"),
-  fields: {
-    kind: systemText({ indexed: "unique", required: true }),
-    intervalSeconds: (0, import_fields8.integer)({ ...readOnly }),
-    nextRunAt: (0, import_fields8.timestamp)({ ...readOnly }),
-    lastRunAt: (0, import_fields8.timestamp)({ ...readOnly }),
-    status: lifecycle(["idle", "running", "failed", "disabled"], "idle"),
-    leaseKey: systemText(),
-    lastError: systemText(),
     ...trackingFields
   }
 });
@@ -2461,6 +2418,192 @@ var RateLimitBucket = (0, import_core12.list)({
 // features/keystone/models/pharmacy.ts
 var import_core13 = require("@keystone-6/core");
 var import_fields14 = require("@keystone-6/core/fields");
+
+// features/keystone/lib/canonical.ts
+var import_node_crypto2 = require("node:crypto");
+
+// features/keystone/lib/decimal.ts
+var import_decimal = __toESM(require("decimal.js"));
+var Decimal = import_decimal.default.clone({
+  precision: 60,
+  rounding: import_decimal.default.ROUND_HALF_EVEN,
+  toExpNeg: -40,
+  toExpPos: 60
+});
+var Scale = { qty: 6, rate: 6, wt: 4, geo: 6 };
+var DECIMAL_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+function dec(value) {
+  if (value instanceof Decimal) return value;
+  if (typeof value === "bigint") return new Decimal(value.toString());
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
+    return new Decimal(value);
+  }
+  const text16 = String(value).trim();
+  if (!DECIMAL_TEXT.test(text16)) throw new Error(`Not a decimal number: ${JSON.stringify(text16).slice(0, 40)}`);
+  return new Decimal(text16);
+}
+function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
+  const places = typeof scale === "number" ? scale : Scale[scale];
+  return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
+}
+var plain = (value) => dec(value).toFixed();
+var ZERO = new Decimal(0);
+var ONE = new Decimal(1);
+var BPS = new Decimal(1e4);
+function toBpsInt(fraction) {
+  const text16 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
+  const n = Number.parseInt(text16, 10);
+  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text16}`);
+  return n;
+}
+var KG_PER_LB = new Decimal("0.45359237");
+function toKg(value, unit2) {
+  const v = dec(value);
+  if (v.isNegative()) throw new RangeError("A weight cannot be negative");
+  const kg = unit2 === "kg" ? v : unit2 === "lb" ? v.times(KG_PER_LB) : v.div(1e3);
+  return kg.toDecimalPlaces(Scale.wt, Decimal.ROUND_HALF_EVEN);
+}
+
+// features/keystone/lib/canonical.ts
+function canonicalize(value) {
+  if (value === null || value === void 0) return null;
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Canonical JSON cannot hold a non-finite number");
+    return value;
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (typeof value === "object") {
+    const decimalLike = value;
+    if (typeof decimalLike.isFinite === "function" && typeof decimalLike.isNaN === "function") return plain(decimalLike.toString());
+    return Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key2, entry]) => [key2, canonicalize(entry)])
+    );
+  }
+  throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
+}
+var canonicalJson = (value) => JSON.stringify(canonicalize(value));
+var sha256 = (text16) => (0, import_node_crypto2.createHash)("sha256").update(text16).digest("hex");
+var payloadHash = (value) => sha256(canonicalJson(value));
+var toJsonValue = (value) => canonicalize(value);
+var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
+function keyedPayloadHash(value, purpose) {
+  const secret2 = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_SECRET2);
+  if (secret2.length < 16) throw new Error("SESSION_SECRET must be set to hash protected content");
+  const key2 = (0, import_node_crypto2.createHmac)("sha256", secret2).update(`vc-keyed-hash\0${purpose}`, "utf8").digest();
+  return (0, import_node_crypto2.createHmac)("sha256", key2).update(canonicalJson(value), "utf8").digest("hex");
+}
+
+// features/keystone/lib/db.ts
+async function advisoryLock(tx, key2) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key2}, 0))`;
+}
+var MODEL_NAME = /^[A-Z][A-Za-z0-9]*$/;
+function tableName(model) {
+  if (!MODEL_NAME.test(model)) throw new Error(`Invalid model name: ${model.slice(0, 40)}`);
+  return `"${model}"`;
+}
+function delegateOf(tx, model) {
+  tableName(model);
+  const delegate = tx[model[0].toLowerCase() + model.slice(1)];
+  if (!delegate) throw new Error(`Unknown model: ${model}`);
+  return delegate;
+}
+var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: 6e4 };
+
+// features/keystone/lib/sequence.ts
+var import_node_crypto3 = require("node:crypto");
+async function nextReference(tx, prefix, now = /* @__PURE__ */ new Date(), width = 6) {
+  if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
+  const key2 = `${prefix}-${now.getUTCFullYear()}`;
+  await advisoryLock(tx, `sequence:${key2}`);
+  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
+  const value = row.nextValue - 1;
+  return `${key2}-${String(value).padStart(width, "0")}`;
+}
+var CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+function publicCode(prefix, groups = 2) {
+  const bytes = (0, import_node_crypto3.randomBytes)(groups * 4);
+  const chars = Array.from(bytes, (byte) => CROCKFORD[byte % 32]);
+  const parts = Array.from({ length: groups }, (_, i) => chars.slice(i * 4, i * 4 + 4).join(""));
+  return `${prefix}-${parts.join("-")}`;
+}
+async function nextSerial(tx, prefix, width = 6) {
+  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
+  const key2 = `${prefix}-serial`;
+  await advisoryLock(tx, `sequence:${key2}`);
+  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
+  return `${prefix}-${String(row.nextValue - 1).padStart(width, "0")}`;
+}
+async function reserveReferences(tx, prefix, n, now = /* @__PURE__ */ new Date(), width = 6) {
+  if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
+  if (n <= 0) return [];
+  const key2 = `${prefix}-${now.getUTCFullYear()}`;
+  await advisoryLock(tx, `sequence:${key2}`);
+  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
+  const first = row.nextValue - n;
+  return Array.from({ length: n }, (_, i) => `${key2}-${String(first + i).padStart(width, "0")}`);
+}
+async function reserveSerials(tx, prefix, n, width = 6) {
+  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
+  if (n <= 0) return [];
+  const key2 = `${prefix}-serial`;
+  await advisoryLock(tx, `sequence:${key2}`);
+  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
+  const first = row.nextValue - n;
+  return Array.from({ length: n }, (_, i) => `${prefix}-${String(first + i).padStart(width, "0")}`);
+}
+
+// features/keystone/lib/csRegister.ts
+async function appendCsEntry(tx, input, now) {
+  const container = await tx.csContainer.findUnique({ where: { id: input.containerId }, select: { id: true, deaRegistrationId: true, product: { select: { csSchedule: true } } } });
+  if (!container?.product) throw new Error("Unknown controlled-substance container");
+  const schedule = container.product.csSchedule;
+  await advisoryLock(tx, `cs-chain:${container.id}`);
+  const last = await tx.csLogEntry.findFirst({ where: { containerId: container.id }, orderBy: { recordedAt: "desc" }, select: { hash: true } });
+  const prevHash = last?.hash || "0".repeat(64);
+  const ref = await nextReference(tx, "CS", now);
+  const ciiRef = schedule === "CII" || schedule === "CIIN" ? await nextReference(tx, "CII", now) : null;
+  const qty2 = toScale(dec(input.qtySigned), "qty");
+  const witnessId = input.witnessId ?? null;
+  if ((input.type === "waste" || input.type === "administer" && ciiRef) && !witnessId) throw new Error(`A ${input.type === "waste" ? "waste" : "Schedule II"} register entry needs a witness`);
+  if (witnessId && witnessId === input.actorId) throw new Error("The witness must be someone other than the person recording the entry");
+  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty2, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null, ...witnessId ? { witnessId } : {}, ...input.reversesId ? { reversesId: input.reversesId } : {} };
+  const hash2 = sha256(`${prevHash}
+${canonicalJson(body)}`);
+  return tx.csLogEntry.create({
+    data: {
+      ...input.id ? { id: input.id } : {},
+      ref,
+      ciiRef,
+      containerId: container.id,
+      deaRegistrationId: container.deaRegistrationId,
+      schedule,
+      type: input.type,
+      qtySigned: qty2,
+      unit: input.unit,
+      occurredAt: input.occurredAt,
+      recordedAt: now,
+      actorId: input.actorId,
+      witnessId,
+      reversesId: input.reversesId ?? null,
+      patientId: input.patientId ?? null,
+      clientId: input.clientId ?? null,
+      reason: input.reason ?? "",
+      prevHash,
+      hash: hash2
+    }
+  });
+}
+async function containerBalance(tx, containerId) {
+  const sum = await tx.csLogEntry.aggregate({ where: { containerId }, _sum: { qtySigned: true } });
+  return dec(sum._sum.qtySigned ?? 0);
+}
+
+// features/keystone/models/pharmacy.ts
 var CS_SCHEDULES = ["none", "CI", "CII", "CIIN", "CIII", "CIIIN", "CIV", "CV"];
 var DrugProduct = (0, import_core13.list)({
   access: governed("canAccessDashboard"),
@@ -2547,6 +2690,10 @@ var CsContainer = (0, import_core13.list)({
     openedAt: (0, import_fields14.timestamp)({ ...readOnly }),
     openedBy: relationship({ ref: "StaffMember", ...readOnly }),
     budAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    /** Derived on read: Σ register entries (never stored, so it cannot drift). */
+    balance: (0, import_fields14.virtual)({ field: import_core13.graphql.field({ type: import_core13.graphql.String, async resolve(item, _args, context) {
+      return (await containerBalance(context.prisma, item.id)).toFixed();
+    } }) }),
     entries: relationship({ ref: "CsLogEntry.container", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -2575,6 +2722,121 @@ var CsLogEntry = (0, import_core13.list)({
     reason: systemText(),
     prevHash: systemText(),
     hash: systemText()
+  }
+});
+var Dispense = (0, import_core13.list)({
+  access: governed(["canReadClinical", "canDispense", "canFulfilRefill"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "product", "quantity", "quantityUnit", "refillNumber", "dispensedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    prescription: relationship({ ref: "Prescription", ...readOnly }),
+    line: relationship({ ref: "PrescriptionLine", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    product: relationship({ ref: "DrugProduct", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
+    container: relationship({ ref: "CsContainer", ...readOnly }),
+    csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    refillRequest: relationship({ ref: "RefillRequest", ...readOnly }),
+    quantity: qty({ required: true }),
+    quantityUnit: unit(),
+    /** 0 for the original fill, then 1, 2, … for each refill. */
+    refillNumber: (0, import_fields14.integer)({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
+    dispensedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    dispensedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    label: (0, import_fields14.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The label as printed: every field the practice must show (policy pack)." } }),
+    ...trackingFields
+  }
+});
+var CsCount = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "location", "kind", "countedBy", "countedAt", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    kind: fixedChoice(["initial", "biennial", "periodic", "spot"]),
+    countedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    countedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["closed"]),
+    lines: relationship({ ref: "CsCountLine.count", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var CsCountLine = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  fields: {
+    count: relationship({ ref: "CsCount.lines", ...readOnly }),
+    container: relationship({ ref: "CsContainer", ...readOnly }),
+    expectedQty: qty({ required: true }),
+    countedQty: qty({ required: true }),
+    variance: qty({ required: true }),
+    unit: unit(),
+    discrepancyCase: relationship({ ref: "CsDiscrepancyCase", ...readOnly })
+  }
+});
+var CsDiscrepancyCase = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "location", "kind", "status", "noticeDueOn", "form106DueOn"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    container: relationship({ ref: "CsContainer", ...readOnly }),
+    kind: fixedChoice(["count_variance", "theft", "loss"]),
+    qty: qty({ required: true }),
+    unit: unit(),
+    discoveredAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    discoveredBy: relationship({ ref: "StaffMember", ...readOnly }),
+    description: systemText(),
+    status: lifecycle(["open", "notified", "form_filed", "closed"]),
+    noticeDueOn: (0, import_fields14.calendarDay)({ ...readOnly }),
+    noticeGivenAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    noticeReference: systemText(),
+    form106DueOn: (0, import_fields14.calendarDay)({ ...readOnly }),
+    form106FiledAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    form106Reference: systemText(),
+    resolution: systemText(),
+    closedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var CsDestructionRecord = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "container", "qty", "unit", "destroyedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    container: relationship({ ref: "CsContainer", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    qty: qty({ required: true }),
+    unit: unit(),
+    method: systemText({ required: true }),
+    form41Reference: systemText(),
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    witnessA: relationship({ ref: "StaffMember", ...readOnly }),
+    witnessB: relationship({ ref: "StaffMember", ...readOnly }),
+    destroyedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var PdmpReport = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "location", "program", "status", "dueOn", "submittedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    dispense: relationship({ ref: "Dispense", ...readOnly }),
+    program: systemText({ required: true }),
+    format: systemText(),
+    dueOn: (0, import_fields14.calendarDay)({ ...readOnly }),
+    status: lifecycle(["pending", "submitted"]),
+    submittedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    submittedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    confirmation: systemText(),
+    version: versionField(),
+    ...trackingFields
   }
 });
 
@@ -3510,6 +3772,12 @@ var models = {
   PrescriptionLine,
   CsContainer,
   CsLogEntry,
+  Dispense,
+  CsCount,
+  CsCountLine,
+  CsDiscrepancyCase,
+  CsDestructionRecord,
+  PdmpReport,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter,
   SoapSection,
@@ -3638,84 +3906,6 @@ var Codes = {
   DUPLICATE_SUSPECTED: "DUPLICATE_SUSPECTED"
 };
 
-// features/keystone/lib/canonical.ts
-var import_node_crypto2 = require("node:crypto");
-
-// features/keystone/lib/decimal.ts
-var import_decimal = __toESM(require("decimal.js"));
-var Decimal = import_decimal.default.clone({
-  precision: 60,
-  rounding: import_decimal.default.ROUND_HALF_EVEN,
-  toExpNeg: -40,
-  toExpPos: 60
-});
-var Scale = { qty: 6, rate: 6, wt: 4, geo: 6 };
-var DECIMAL_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
-function dec(value) {
-  if (value instanceof Decimal) return value;
-  if (typeof value === "bigint") return new Decimal(value.toString());
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
-    return new Decimal(value);
-  }
-  const text16 = String(value).trim();
-  if (!DECIMAL_TEXT.test(text16)) throw new Error(`Not a decimal number: ${JSON.stringify(text16).slice(0, 40)}`);
-  return new Decimal(text16);
-}
-function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
-  const places = typeof scale === "number" ? scale : Scale[scale];
-  return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
-}
-var plain = (value) => dec(value).toFixed();
-var ZERO = new Decimal(0);
-var ONE = new Decimal(1);
-var BPS = new Decimal(1e4);
-function toBpsInt(fraction) {
-  const text16 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
-  const n = Number.parseInt(text16, 10);
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text16}`);
-  return n;
-}
-var KG_PER_LB = new Decimal("0.45359237");
-function toKg(value, unit2) {
-  const v = dec(value);
-  if (v.isNegative()) throw new RangeError("A weight cannot be negative");
-  const kg = unit2 === "kg" ? v : unit2 === "lb" ? v.times(KG_PER_LB) : v.div(1e3);
-  return kg.toDecimalPlaces(Scale.wt, Decimal.ROUND_HALF_EVEN);
-}
-
-// features/keystone/lib/canonical.ts
-function canonicalize(value) {
-  if (value === null || value === void 0) return null;
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "string" || typeof value === "boolean") return value;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("Canonical JSON cannot hold a non-finite number");
-    return value;
-  }
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (typeof value === "object") {
-    const decimalLike = value;
-    if (typeof decimalLike.isFinite === "function" && typeof decimalLike.isNaN === "function") return plain(decimalLike.toString());
-    return Object.fromEntries(
-      Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key2, entry]) => [key2, canonicalize(entry)])
-    );
-  }
-  throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
-}
-var canonicalJson = (value) => JSON.stringify(canonicalize(value));
-var sha256 = (text16) => (0, import_node_crypto2.createHash)("sha256").update(text16).digest("hex");
-var payloadHash = (value) => sha256(canonicalJson(value));
-var toJsonValue = (value) => canonicalize(value);
-var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
-function keyedPayloadHash(value, purpose) {
-  const secret2 = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_SECRET2);
-  if (secret2.length < 16) throw new Error("SESSION_SECRET must be set to hash protected content");
-  const key2 = (0, import_node_crypto2.createHmac)("sha256", secret2).update(`vc-keyed-hash\0${purpose}`, "utf8").digest();
-  return (0, import_node_crypto2.createHmac)("sha256", key2).update(canonicalJson(value), "utf8").digest("hex");
-}
-
 // features/keystone/lib/actor.ts
 function actorFromSession(session) {
   if (!session || !isSignedIn({ session })) throw new DomainError(Codes.NOT_AUTHORIZED, "Sign in to continue.");
@@ -3733,23 +3923,6 @@ function requirePermission(actor, ...anyOf2) {
 var principalKey = (actor) => actor.kind === "user" ? `user:${actor.userId}` : actor.kind === "agent" ? `agent:${actor.agentId}` : `system:${actor.name}`;
 var actorUserId = (actor) => actor.kind === "user" ? actor.userId : null;
 var actorAgentId = (actor) => actor.kind === "agent" ? actor.agentId : null;
-
-// features/keystone/lib/db.ts
-async function advisoryLock(tx, key2) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key2}, 0))`;
-}
-var MODEL_NAME = /^[A-Z][A-Za-z0-9]*$/;
-function tableName(model) {
-  if (!MODEL_NAME.test(model)) throw new Error(`Invalid model name: ${model.slice(0, 40)}`);
-  return `"${model}"`;
-}
-function delegateOf(tx, model) {
-  tableName(model);
-  const delegate = tx[model[0].toLowerCase() + model.slice(1)];
-  if (!delegate) throw new Error(`Unknown model: ${model}`);
-  return delegate;
-}
-var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: 6e4 };
 
 // features/keystone/lib/idempotency.ts
 var IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/;
@@ -3785,7 +3958,7 @@ async function writeReceipt(tx, input) {
 }
 
 // features/keystone/lib/audit.ts
-var import_node_crypto3 = require("node:crypto");
+var import_node_crypto4 = require("node:crypto");
 var GENESIS_HASH = "0".repeat(64);
 function auditHashBody(row) {
   return {
@@ -3819,7 +3992,7 @@ async function appendAuditEvents(tx, events, now = /* @__PURE__ */ new Date()) {
     seq += 1;
     const row = {
       seq,
-      eventKey: event.eventKey ?? (0, import_node_crypto3.randomUUID)(),
+      eventKey: event.eventKey ?? (0, import_node_crypto4.randomUUID)(),
       eventType: event.eventType,
       entityType: event.entityType,
       entityId: event.entityId,
@@ -3894,39 +4067,15 @@ var UnitOfWork = class {
     this.now = now;
     this.requestId = requestId;
     this.audits = [];
-    this.outbox = [];
   }
   audit(event) {
     this.audits.push({ requestId: this.requestId, ...event });
   }
-  emit(message) {
-    this.outbox.push(message);
-  }
 };
-async function flushOutbox(tx, messages, now) {
-  for (const message of messages) {
-    const payload = toJsonValue(message.payload);
-    const dedupeKey = message.dedupeKey ?? `${message.topic}:${message.aggregateType}:${message.aggregateId}:${sha256(canonicalJson(payload))}`;
-    await tx.outboxEvent.upsert({
-      where: { dedupeKey },
-      create: {
-        topic: message.topic,
-        aggregateType: message.aggregateType,
-        aggregateId: message.aggregateId,
-        dedupeKey,
-        payload,
-        status: "pending",
-        nextAttemptAt: message.availableAt ?? now
-      },
-      update: {}
-    });
-  }
-}
 async function runInTransaction(db, work, options = {}) {
   return db.$transaction(async (tx) => {
     const uow = new UnitOfWork(tx, options.now ?? /* @__PURE__ */ new Date(), options.requestId ?? null);
     const result = await work(uow);
-    await flushOutbox(tx, uow.outbox, uow.now);
     await appendAuditEvents(tx, uow.audits, uow.now);
     return result;
   }, TRANSACTION_OPTIONS);
@@ -5306,95 +5455,6 @@ async function unbindAgentApp(_root, args, context) {
   });
 }
 
-// features/keystone/lib/sequence.ts
-var import_node_crypto4 = require("node:crypto");
-async function nextReference(tx, prefix, now = /* @__PURE__ */ new Date(), width = 6) {
-  if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
-  const key2 = `${prefix}-${now.getUTCFullYear()}`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
-  const value = row.nextValue - 1;
-  return `${key2}-${String(value).padStart(width, "0")}`;
-}
-var CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-function publicCode(prefix, groups = 2) {
-  const bytes = (0, import_node_crypto4.randomBytes)(groups * 4);
-  const chars = Array.from(bytes, (byte) => CROCKFORD[byte % 32]);
-  const parts = Array.from({ length: groups }, (_, i) => chars.slice(i * 4, i * 4 + 4).join(""));
-  return `${prefix}-${parts.join("-")}`;
-}
-async function nextSerial(tx, prefix, width = 6) {
-  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
-  const key2 = `${prefix}-serial`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
-  return `${prefix}-${String(row.nextValue - 1).padStart(width, "0")}`;
-}
-async function reserveReferences(tx, prefix, n, now = /* @__PURE__ */ new Date(), width = 6) {
-  if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
-  if (n <= 0) return [];
-  const key2 = `${prefix}-${now.getUTCFullYear()}`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
-  const first = row.nextValue - n;
-  return Array.from({ length: n }, (_, i) => `${key2}-${String(first + i).padStart(width, "0")}`);
-}
-async function reserveSerials(tx, prefix, n, width = 6) {
-  if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
-  if (n <= 0) return [];
-  const key2 = `${prefix}-serial`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
-  const first = row.nextValue - n;
-  return Array.from({ length: n }, (_, i) => `${prefix}-${String(first + i).padStart(width, "0")}`);
-}
-
-// features/keystone/lib/csRegister.ts
-async function appendCsEntry(tx, input, now) {
-  const container = await tx.csContainer.findUnique({ where: { id: input.containerId }, select: { id: true, deaRegistrationId: true, product: { select: { csSchedule: true } } } });
-  if (!container?.product) throw new Error("Unknown controlled-substance container");
-  const schedule = container.product.csSchedule;
-  await advisoryLock(tx, `cs-chain:${container.id}`);
-  const last = await tx.csLogEntry.findFirst({ where: { containerId: container.id }, orderBy: { recordedAt: "desc" }, select: { hash: true } });
-  const prevHash = last?.hash || "0".repeat(64);
-  const ref = await nextReference(tx, "CS", now);
-  const ciiRef = schedule === "CII" || schedule === "CIIN" ? await nextReference(tx, "CII", now) : null;
-  const qty2 = toScale(dec(input.qtySigned), "qty");
-  const witnessId = input.witnessId ?? null;
-  if ((input.type === "waste" || input.type === "administer" && ciiRef) && !witnessId) throw new Error(`A ${input.type === "waste" ? "waste" : "Schedule II"} register entry needs a witness`);
-  if (witnessId && witnessId === input.actorId) throw new Error("The witness must be someone other than the person recording the entry");
-  const body = { ref, ciiRef, containerId: container.id, schedule, type: input.type, qtySigned: qty2, unit: input.unit, occurredAt: input.occurredAt.toISOString(), actorId: input.actorId, patientId: input.patientId ?? null, ...witnessId ? { witnessId } : {}, ...input.reversesId ? { reversesId: input.reversesId } : {} };
-  const hash2 = sha256(`${prevHash}
-${canonicalJson(body)}`);
-  return tx.csLogEntry.create({
-    data: {
-      ...input.id ? { id: input.id } : {},
-      ref,
-      ciiRef,
-      containerId: container.id,
-      deaRegistrationId: container.deaRegistrationId,
-      schedule,
-      type: input.type,
-      qtySigned: qty2,
-      unit: input.unit,
-      occurredAt: input.occurredAt,
-      recordedAt: now,
-      actorId: input.actorId,
-      witnessId,
-      reversesId: input.reversesId ?? null,
-      patientId: input.patientId ?? null,
-      clientId: input.clientId ?? null,
-      reason: input.reason ?? "",
-      prevHash,
-      hash: hash2
-    }
-  });
-}
-async function containerBalance(tx, containerId) {
-  const sum = await tx.csLogEntry.aggregate({ where: { containerId }, _sum: { qtySigned: true } });
-  return dec(sum._sum.qtySigned ?? 0);
-}
-
 // features/keystone/domain/contact.ts
 var import_node_crypto5 = require("node:crypto");
 function normalisePhone(raw) {
@@ -6338,7 +6398,6 @@ async function requestApproval(uow, actor, input) {
     }
   });
   uow.audit({ eventType: "approval.requested", entityType: "ApprovalRequest", entityId: created.id, actorUserId: actorUserId(actor), actorAgentId: actorAgentId(actor), after: { action: input.action, targetList: input.targetList, targetId: input.targetId, payloadHash: created.payloadHash, requiredPermission } });
-  uow.emit({ topic: "notify.approval", aggregateType: "ApprovalRequest", aggregateId: created.id, payload: { action: input.action, requiredPermission }, dedupeKey: `notify.approval:${created.id}` });
   return created;
 }
 async function decideApproval(uow, actor, input) {
@@ -6985,8 +7044,15 @@ async function bookInTx(uow, actor, input, claims) {
   await uow.tx.resourceReservation.create({ data: { resourceId: claims.resourceId, appointmentId: appointment.id, startsAt, endsAt, status: holdStatus } });
   await uow.tx.providerReservation.create({ data: { staffMemberId: claims.providerId, appointmentId: appointment.id, startsAt, endsAt, status: holdStatus } });
   auditCreate(uow, actor, "Appointment", appointment.id, "appointment.booked", { ref, status, startsAt, endsAt, typeCode: type.code, channel, patients: input.patientIds.length });
-  uow.emit({ topic: "comms.appointment_booked", aggregateType: "Appointment", aggregateId: appointment.id, payload: { appointmentId: appointment.id, template: status === "requested" ? "appointment_requested" : "appointment_booked" }, dedupeKey: `comms.booked:${appointment.id}` });
   return { id: appointment.id, ref, status, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+}
+async function noteFreedSlot(uow, appointmentId) {
+  const appt = await uow.tx.appointment.findUnique({ where: { id: appointmentId }, select: { id: true, ref: true, startsAt: true, locationId: true, appointmentTypeId: true } });
+  if (!appt) return;
+  const waiting = await uow.tx.waitlistEntry.count({ where: { status: "waiting", locationId: appt.locationId, OR: [{ appointmentTypeId: appt.appointmentTypeId }, { appointmentTypeId: null }] } });
+  if (!waiting) return;
+  const open = await uow.tx.task.findFirst({ where: { subjectType: "Appointment", subjectId: appt.id, kind: "follow_up" }, select: { id: true } });
+  if (!open) await uow.tx.task.create({ data: { kind: "follow_up", priority: "normal", status: "open", dueAt: uow.now, subjectType: "Appointment", subjectId: appt.id, locationId: appt.locationId, roleName: "csr", title: `Slot freed (${appt.ref}): ${waiting} waiting`, detail: `Offer ${appt.startsAt.toISOString()} to the waitlist.` } });
 }
 async function releaseHolds(uow, appointmentId) {
   await uow.tx.resourceReservation.updateMany({ where: { appointmentId, status: { not: "released" } }, data: { status: "released" } });
@@ -7014,7 +7080,7 @@ async function cancelAppointment(_root, args, context) {
       });
       await uow.tx.appointmentPatient.updateMany({ where: { appointmentId: row.id }, data: { status: "cancelled" } });
       await releaseHolds(uow, row.id);
-      uow.emit({ topic: "waitlist.slot_freed", aggregateType: "Appointment", aggregateId: row.id, payload: { appointmentId: row.id }, dedupeKey: `waitlist.freed:${row.id}` });
+      await noteFreedSlot(uow, row.id);
       return { id: row.id, status: row.status };
     });
     return { replay: result.replay, ...result.value };
@@ -7066,7 +7132,6 @@ async function acceptAppointmentRequest(_root, args, context) {
       const row = await transition(uow, { model: "Appointment", id: args.appointmentId, from: ["requested"], to: "booked", expectedVersion: args.expectedVersion, actor, eventType: "appointment.accepted" });
       await uow.tx.resourceReservation.updateMany({ where: { appointmentId: row.id, status: "held" }, data: { status: "confirmed" } });
       await uow.tx.providerReservation.updateMany({ where: { appointmentId: row.id, status: "held" }, data: { status: "confirmed" } });
-      uow.emit({ topic: "comms.appointment_booked", aggregateType: "Appointment", aggregateId: row.id, payload: { appointmentId: row.id, template: "appointment_booked" }, dedupeKey: `comms.accepted:${row.id}` });
       return { id: row.id, status: row.status };
     });
     return { replay: result.replay, ...result.value };
@@ -7345,7 +7410,21 @@ async function runTriage(_root, args, context) {
       });
       auditCreate(uow, actor, "TriageAssessment", row.id, "triage.assessed", { level: scored.level, outcome, redFlags: scored.redFlagsHit, protocolVersion: version.versionNumber });
       if (scored.level === "emergency_now" || scored.level === "urgent_today") {
-        uow.emit({ topic: "notify.urgent_call", aggregateType: "TriageAssessment", aggregateId: row.id, payload: { level: scored.level, callRecordId: input.callRecordId ?? null }, dedupeKey: `notify.urgent:${row.id}` });
+        const who = input.patientId ? (await uow.tx.patient.findUnique({ where: { id: input.patientId }, select: { name: true } }))?.name : null;
+        const call2 = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { locationId: true } }) : null;
+        const task = await uow.tx.task.create({ data: {
+          kind: "call_back",
+          priority: "urgent",
+          status: "open",
+          dueAt: uow.now,
+          subjectType: "TriageAssessment",
+          subjectId: row.id,
+          locationId: call2?.locationId ?? input.locationId ?? null,
+          roleName: "csr",
+          title: scored.level === "emergency_now" ? `EMERGENCY call: ${who ? `${who}: ` : ""}transfer or confirm ER referral now` : `Urgent call-back today: ${who ? `${who}: ` : ""}${String(input.complaint ?? "").slice(0, 80)}`,
+          detail: input.callRecordId ? `Call ${input.callRecordId}` : ""
+        } });
+        uow.audit({ eventType: "task.raised", entityType: "Task", entityId: task.id, after: { kind: "call_back", priority: "urgent", level: scored.level }, metadata: { system: "triage" } });
       }
       return { id: row.id, level: scored.level, outcome, script: scored.script, redFlags: scored.reasons, unanswered: scored.unanswered, emergencyReferral: referral };
     });
@@ -7459,11 +7538,11 @@ async function requestRecords(_root, args, context) {
 }
 async function lookupKnowledge(_root, args, context) {
   return gated(context, { permissions: ["canAccessDashboard"], scope: "reception.read", tool: "knowledge.lookup" }, args, async (actor) => {
-    const words = String(args.question ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    const words2 = String(args.question ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
     const entries = await context.prisma.knowledgeBaseEntry.findMany({ where: { active: true, ...actor.kind === "agent" ? { visibility: "public" } : {}, OR: [{ locationId: null }, { locationId: args.locationId ?? void 0 }] }, select: { id: true, topic: true, keywords: true, content: true } });
     const scored = entries.map((e) => {
       const keys = (Array.isArray(e.keywords) ? e.keywords : []).map((k) => k.toLowerCase());
-      return { e, score: words.filter((w) => keys.includes(w) || e.topic.toLowerCase().includes(w)).length };
+      return { e, score: words2.filter((w) => keys.includes(w) || e.topic.toLowerCase().includes(w)).length };
     }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
     return { answers: scored.map((x) => ({ topic: x.e.topic, content: x.e.content })) };
   });
@@ -7666,6 +7745,114 @@ function calendarDayText(isoDay3) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDay3 ?? "");
   if (!m) return isoDay3 ?? "";
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])));
+}
+
+// features/keystone/lib/documents.ts
+var import_node_crypto7 = require("node:crypto");
+var esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+var words = (code) => String(code ?? "").replace(/_/g, " ");
+var zoned = (iso, timeZone) => new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(iso));
+var instant = (iso, timeZone) => {
+  if (!iso) return "";
+  const d = new Date(String(iso));
+  return Number.isNaN(d.getTime()) ? esc(iso) : new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" }).format(d);
+};
+function page(title, body) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+body{font:14px/1.5 system-ui,sans-serif;color:#111;max-width:760px;margin:24px auto;padding:0 16px}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 6px;border-bottom:1px solid #ddd}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px;margin:0}dt{color:#555}dd{margin:0}
+pre{white-space:pre-wrap;font:inherit;margin:0}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:2px 6px;border-bottom:1px solid #eee;vertical-align:top}
+.meta{color:#555;font-size:12px}@media print{body{margin:0}}
+</style></head><body>${body}</body></html>`;
+}
+var dl = (rows) => `<dl>${rows.filter(([, v]) => v !== null && v !== void 0 && v !== "").map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+var SECTION_ORDER = ["history", "subjective", "objective", "assessment", "plan", "surgery_report", "discharge", "communication"];
+function renderEncounterRecord(c, hash2, timeZone, practice) {
+  const sections = [...c.sections].sort((a, b) => SECTION_ORDER.indexOf(a.kind) - SECTION_ORDER.indexOf(b.kind) || a.ordinal - b.ordinal).filter((s) => s.body.trim());
+  const signer = c.signer?.source ? `${c.signer.name || "Unnamed clinician"} (imported from ${c.signer.source})` : c.signer?.name;
+  const body = `
+<h1>Medical record ${esc(c.encounter.ref)}</h1>
+<p class="meta">${esc(practice)} \xB7 ${esc(words(c.encounter.kind))} \xB7 ${instant(c.encounter.startedAt, timeZone)}</p>
+<h2>Patient</h2>${dl([["Name", c.patient.name], ["Patient no.", c.patient.ref], ["Species", c.patient.species], ["Breed", c.patient.breed], ["Sex", [c.patient.sex, c.patient.reproductiveStatus].filter(Boolean).map(words).join(", ")], ["Born", calendarDayText(c.patient.dateOfBirth)]])}
+${c.client ? `<h2>Client</h2>${dl([["Name", c.client.name], ["Client no.", c.client.ref], ["Address", c.client.address], ["Phone", c.client.phone]])}` : ""}
+${c.encounter.reason ? `<h2>Reason for visit</h2><pre>${esc(c.encounter.reason)}</pre>` : ""}
+${sections.map((s) => `<h2>${esc(words(s.kind).replace(/^\w/, (ch) => ch.toUpperCase()))}</h2><pre>${esc(s.body)}</pre>`).join("")}
+${c.vitals.length ? `<h2>Vitals</h2><table>${c.vitals.map((v) => `<tr><td>${instant(v.at, timeZone)}</td><td>${esc(Object.entries(v).filter(([k, x]) => k !== "at" && x !== null && x !== "").map(([k, x]) => `${words(k)} ${x}`).join(" \xB7 "))}</td></tr>`).join("")}</table>` : ""}
+${c.findings.length ? `<h2>Physical exam</h2><table>${c.findings.map((f) => `<tr><td>${esc(words(f.system))}</td><td>${esc(words(f.status))}</td><td>${esc(f.text)}</td></tr>`).join("")}</table>` : ""}
+${c.diagnoses.length ? `<h2>Diagnoses</h2><table>${c.diagnoses.map((d) => `<tr><td>${esc(d.term)}</td><td>${esc(words(d.certainty))}</td></tr>`).join("")}</table>` : ""}
+${c.orders.length ? `<h2>Orders and treatments</h2><table>${c.orders.map((o) => `<tr><td>${esc(o.ref)}</td><td>${esc(o.description)}${o.route ? ` \xB7 ${esc(o.route)}` : ""}${o.frequency ? ` \xB7 ${esc(o.frequency)}` : ""}</td><td>${esc(words(o.status))}</td></tr>${(o.administrations ?? []).map((a) => `<tr><td></td><td class="meta">Given ${esc(a.qty)} ${esc(a.unit)} ${esc(a.route)} ${a.lotNumber ? `lot ${esc(a.lotNumber)}` : ""}</td><td class="meta">${instant(a.givenAt, timeZone)}</td></tr>`).join("")}`).join("")}</table>` : ""}
+${c.vaccines.length ? `<h2>Vaccines</h2><table>${c.vaccines.map((v) => `<tr><td>${esc(v.product?.name)}</td><td>lot ${esc(v.lotNumber)}</td><td>${esc(calendarDayText(v.administeredOn))}</td><td>${v.dueNextOn ? `next due ${esc(calendarDayText(v.dueNextOn))}` : ""}</td></tr>`).join("")}</table>` : ""}
+${c.anaesthesia.length ? `<h2>Anaesthesia</h2><table>${c.anaesthesia.map((a) => `<tr><td>${esc(a.ref)}</td><td>ASA ${esc(a.asaStatus)}</td><td>${esc(words(a.status))}</td></tr>`).join("")}</table>` : ""}
+<h2>Signature</h2>${dl([["Signed by", signer], ["Signed at", instant(c.signedAt, timeZone)], ["Content hash (SHA-256)", hash2]])}
+<p class="meta">This record is frozen at signing. Corrections appear as dated addenda and never change the text above.</p>`;
+  return page(`Medical record ${c.encounter.ref}`, body);
+}
+function renderRabiesCertificate(cert, practice, timeZone = "America/Los_Angeles") {
+  const f = cert.fields ?? {};
+  const label = (k) => words(k).replace(/^\w/, (ch) => ch.toUpperCase());
+  const rows = Object.entries(f).map(([k, v]) => [label(k), k === "date_given" || k === "next_due" ? calendarDayText(String(v)) : v]);
+  const body = `
+<h1>Rabies vaccination certificate ${esc(cert.ref)}</h1>
+<p class="meta">${esc(practice)} \xB7 Form 51-equivalent (NASPHV) fields \xB7 ${esc(cert.durationMonths)}-month vaccination</p>
+${dl([["Vaccinated", `${calendarDayText(cert.vaccinatedOn.toISOString())} (clinic date, ${timeZone})`], ["Next due", calendarDayText(cert.nextDueOn.toISOString())], ["Tag number", cert.tagNumber], ["Issued", cert.createdAt ? `${zoned(cert.createdAt.toISOString(), timeZone)}` : null], ["Clinic time zone", timeZone]])}
+<h2>Certificate</h2>${dl(rows)}
+${cert.missingFields.length ? `<h2>Incomplete</h2><p>This certificate is missing: ${esc(cert.missingFields.map(words).join(", "))}. Complete them before giving it to the owner or the licensing agency.</p>` : ""}`;
+  return page(`Rabies certificate ${cert.ref}`, body);
+}
+function renderDischarge(d, timeZone, practice) {
+  const body = `
+<h1>Discharge instructions for ${esc(d.patientName)}</h1>
+<p class="meta">${esc(practice)} \xB7 ${instant(d.at.toISOString(), timeZone)}${d.staffName ? ` \xB7 ${esc(d.staffName)}` : ""}</p>
+<h2>Home care</h2><pre>${esc(d.body)}</pre>
+${d.medsSummary ? `<h2>Medications</h2><pre>${esc(d.medsSummary)}</pre>` : ""}
+${d.recheckOn ? `<h2>Recheck</h2><p>Please book a recheck for ${esc(calendarDayText(d.recheckOn.toISOString()))}.</p>` : ""}
+<p class="meta">If your pet's breathing changes, it collapses, bleeds, or cannot keep water down, call us or the nearest emergency hospital now.</p>`;
+  return page(`Discharge instructions for ${d.patientName}`, body);
+}
+var sha = (html) => (0, import_node_crypto7.createHash)("sha256").update(html, "utf8").digest("hex");
+async function practiceName(tx) {
+  const loc = await tx.location.findFirst({ where: { active: true }, orderBy: { code: "asc" }, select: { name: true, timeZone: true } });
+  return { name: loc?.name ?? "", timeZone: loc?.timeZone ?? "America/Los_Angeles" };
+}
+async function store(uow, docId, html, link) {
+  const hash2 = sha(html);
+  const updated = await uow.tx.clinicalDocument.updateMany({ where: { id: docId, status: { in: ["pending_render", "failed"] } }, data: { status: "rendered", body: html, mimeType: "text/html", sha256: hash2, renderedAt: uow.now, renderError: "", version: { increment: 1 } } });
+  if (updated.count !== 1) return hash2;
+  if (link) await link(uow.tx);
+  uow.audit({ eventType: "document.rendered", entityType: "ClinicalDocument", entityId: docId, after: { sha256: hash2 }, metadata: { system: "document-render" } });
+  return hash2;
+}
+async function renderEncounterDocument(uow, documentId) {
+  const tx = uow.tx;
+  const practice = await practiceName(tx);
+  const doc = await tx.clinicalDocument.findUnique({ where: { id: documentId }, select: { id: true, status: true, encounterId: true, sourceHash: true } });
+  if (!doc || doc.status === "rendered" || !doc.encounterId) return;
+  const enc = await tx.encounter.findUniqueOrThrow({ where: { id: doc.encounterId }, select: { id: true, signedContent: true, contentHash: true, location: { select: { name: true, timeZone: true } } } });
+  if (!enc.signedContent || enc.contentHash !== doc.sourceHash) throw new Error(`Encounter ${enc.id} content does not match the document source hash`);
+  const html = renderEncounterRecord(enc.signedContent, enc.contentHash, enc.location?.timeZone ?? practice.timeZone, enc.location?.name ?? practice.name);
+  await store(uow, doc.id, html, (t) => t.encounter.update({ where: { id: enc.id }, data: { documentId: doc.id } }));
+}
+async function renderRabiesDocument(uow, certificateId, locationId) {
+  const tx = uow.tx;
+  const practice = await practiceName(tx);
+  const cert = await tx.rabiesCertificate.findUnique({ where: { id: certificateId }, select: { id: true, ref: true, patientId: true, documentId: true, vaccinatedOn: true, nextDueOn: true, durationMonths: true, tagNumber: true, fields: true, missingFields: true, createdAt: true } });
+  if (!cert || cert.documentId) return;
+  const loc = await tx.location.findUnique({ where: { id: locationId }, select: { name: true, timeZone: true } });
+  const html = renderRabiesCertificate({ ...cert, fields: cert.fields ?? {}, missingFields: cert.missingFields ?? [] }, loc?.name ?? practice.name, loc?.timeZone ?? practice.timeZone);
+  const doc = await tx.clinicalDocument.create({ data: { patientId: cert.patientId, kind: "rabies_certificate", title: `Rabies certificate ${cert.ref}`, status: "pending_render", sourceType: "RabiesCertificate", sourceId: cert.id, sourceHash: sha(JSON.stringify(cert.fields ?? {})) } });
+  await store(uow, doc.id, html, (t) => t.rabiesCertificate.update({ where: { id: cert.id }, data: { documentId: doc.id } }));
+}
+async function renderDischargeDocument(uow, instructionId) {
+  const tx = uow.tx;
+  const practice = await practiceName(tx);
+  const d = await tx.dischargeInstruction.findUnique({ where: { id: instructionId }, select: { id: true, body: true, medsSummary: true, recheckOn: true, createdAt: true, encounterId: true, patientId: true, patient: { select: { name: true } }, author: { select: { displayName: true } } } });
+  if (!d) return;
+  const exists = await tx.clinicalDocument.findFirst({ where: { sourceType: "DischargeInstruction", sourceId: d.id }, select: { id: true, status: true } });
+  if (exists?.status === "rendered") return;
+  const html = renderDischarge({ body: d.body, medsSummary: d.medsSummary || null, recheckOn: d.recheckOn, patientName: d.patient?.name ?? "your pet", staffName: d.author?.displayName ?? null, at: d.createdAt ?? /* @__PURE__ */ new Date() }, practice.timeZone, practice.name);
+  const doc = exists ?? await tx.clinicalDocument.create({ data: { patientId: d.patientId, encounterId: d.encounterId, kind: "discharge", title: `Discharge instructions for ${d.patient?.name ?? "patient"}`, status: "pending_render", sourceType: "DischargeInstruction", sourceId: d.id, sourceHash: sha(d.body) } });
+  await store(uow, doc.id, html);
 }
 
 // features/keystone/mutations/clinical.ts
@@ -8091,7 +8278,7 @@ async function signEncounter(_root, args, context) {
       });
       if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, `${current.ref} changed while signing.`);
       await uow.tx.task.updateMany({ where: { subjectType: "Encounter", subjectId: current.id, kind: "record_unsigned", status: { in: ["open", "in_progress"] } }, data: { status: "done", completedAt: uow.now, version: { increment: 1 } } });
-      uow.emit({ topic: "document.render", aggregateType: "ClinicalDocument", aggregateId: doc.id, payload: { encounterId: current.id, contentHash }, dedupeKey: `document.render:${doc.id}` });
+      await renderEncounterDocument(uow, doc.id);
       uow.audit({ eventType: "encounter.signed", entityType: "Encounter", entityId: current.id, actorUserId: actorUserId(actor), before: { status: current.status, version: current.version }, after: { status: "signed", version: current.version + 1, contentHash, signedById: staff.id, licenseEvaluationId: licence.evaluationId, vcprId, documentId: doc.id } });
       return { id: current.id, ref: current.ref, status: "signed", contentHash, vcprId, documentId: doc.id, verified: policy.verified };
     });
@@ -8153,6 +8340,32 @@ registerApplier("encounter.void", async (uow, actor, request) => {
   await uow.tx.task.updateMany({ where: { subjectType: "Encounter", subjectId: encounterId, kind: "record_unsigned", status: { in: ["open", "in_progress"] } }, data: { status: "cancelled", completedAt: uow.now, version: { increment: 1 } } });
   return { id: row.id, status: row.status };
 });
+async function runUnsignedRecordClock(uow) {
+  const settings = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { unsignedRecordTaskHours: true, unsignedRecordEscalateHours: true, medicalDirectorId: true } });
+  const taskHours = settings?.unsignedRecordTaskHours ?? 24;
+  const escalateHours = settings?.unsignedRecordEscalateHours ?? 72;
+  const due = await uow.tx.encounter.findMany({
+    where: { status: { in: ["open", "in_progress", "pending_signature"] }, startedAt: { lte: new Date(uow.now.getTime() - taskHours * 36e5) } },
+    select: { id: true, ref: true, startedAt: true, locationId: true, attendingDvmId: true, patient: { select: { name: true } } },
+    take: 500
+  });
+  let raised = 0;
+  let escalated = 0;
+  for (const enc of due) {
+    const ageHours = Math.floor((uow.now.getTime() - enc.startedAt.getTime()) / 36e5);
+    const task = await uow.tx.task.findFirst({ where: { subjectType: "Encounter", subjectId: enc.id, kind: "record_unsigned" }, select: { id: true, status: true, priority: true } });
+    if (!task) {
+      const row = await uow.tx.task.create({ data: { kind: "record_unsigned", title: `Sign ${enc.ref} (${enc.patient?.name ?? "patient"})`, detail: `Unsigned for ${ageHours} hours.`, subjectType: "Encounter", subjectId: enc.id, locationId: enc.locationId, assigneeId: enc.attendingDvmId, roleName: "dvm", priority: ageHours >= escalateHours ? "urgent" : "high", status: "open", dueAt: uow.now } });
+      uow.audit({ eventType: "task.raised", entityType: "Task", entityId: row.id, after: { kind: "record_unsigned", encounterId: enc.id, ageHours }, metadata: { system: "record-clock" } });
+      raised++;
+    } else if (ageHours >= escalateHours && task.priority !== "urgent" && ["open", "in_progress"].includes(task.status)) {
+      await uow.tx.task.update({ where: { id: task.id }, data: { priority: "urgent", assigneeId: settings?.medicalDirectorId ?? enc.attendingDvmId, detail: `Unsigned for ${ageHours} hours; escalated to the medical director.`, version: { increment: 1 } } });
+      uow.audit({ eventType: "task.escalated", entityType: "Task", entityId: task.id, after: { encounterId: enc.id, ageHours, to: settings?.medicalDirectorId ?? null }, metadata: { system: "record-clock" } });
+      escalated++;
+    }
+  }
+  return { checked: due.length, raised, escalated, through: addDays(uow.now.toISOString().slice(0, 10), 0) };
+}
 
 // features/integrations/scribe/index.ts
 var import_zod3 = require("zod");
@@ -8513,6 +8726,20 @@ function dueTimes(input, from, to) {
   const first = input.startAt.getTime() >= from.getTime() ? input.startAt.getTime() : input.startAt.getTime() + Math.ceil((from.getTime() - input.startAt.getTime()) / step) * step;
   for (let t = first; t < end.getTime(); t += step) out.push(new Date(t));
   return out;
+}
+function missedAfterMinutes(frequency, graceMinutes) {
+  const f = frequency ? sheetFrequency(frequency) : null;
+  const hours = f ? FREQUENCY_HOURS[f] ?? null : null;
+  const half = hours ? hours * 60 / 2 : 240;
+  return Math.max(half, graceMinutes, 60);
+}
+function taskStatusAt(task, now) {
+  if (!["scheduled", "due", "overdue"].includes(task.status)) return task.status;
+  const t = now.getTime();
+  if (task.frequency !== void 0 && t >= task.dueAt.getTime() + missedAfterMinutes(task.frequency, task.graceMinutes) * 6e4) return "missed";
+  if (t >= task.dueAt.getTime() + task.graceMinutes * 6e4) return "overdue";
+  if (t >= task.dueAt.getTime() - HOUR) return "due";
+  return "scheduled";
 }
 var TASK_EARLY_MINUTES = 60;
 function taskWindowProblem(input) {
@@ -8960,7 +9187,7 @@ async function dischargePatient(_root, args, context) {
       }
       const instr = await uow.tx.dischargeInstruction.create({ data: { encounterId: row.encounterId, stayId: row.id, patientId: row.patientId, body, recheckOn: args.recheckOn ? /* @__PURE__ */ new Date(`${args.recheckOn}T00:00:00Z`) : null, authorId: staff.id } });
       await uow.tx.whiteboardEntry.updateMany({ where: { patientId: row.patientId, status: "hospitalised" }, data: { status: "ready_for_discharge", since: uow.now, version: { increment: 1 } } });
-      uow.emit({ topic: "document.render", aggregateType: "DischargeInstruction", aggregateId: instr.id, payload: { stayId: row.id }, dedupeKey: `discharge.render:${instr.id}` });
+      await renderDischargeDocument(uow, instr.id);
       return { id: row.id, status: "discharged", instructionId: instr.id };
     });
     return { replay: result.replay, ...result.value };
@@ -8990,6 +9217,30 @@ async function materialiseSheetOrder(uow, sheetOrderId, horizon) {
   }
   if (!sheet.materialisedThrough || horizon > sheet.materialisedThrough) await uow.tx.treatmentSheetOrder.update({ where: { id: sheet.id }, data: { materialisedThrough: horizon } });
   return created;
+}
+async function runTreatmentSheetJob(uow) {
+  const horizon = new Date(uow.now.getTime() + 24 * 36e5);
+  const sheets = await uow.tx.treatmentSheetOrder.findMany({ where: { active: true, OR: [{ endAt: null }, { endAt: { gt: uow.now } }] }, select: { id: true, graceMinutes: true } });
+  let created = 0;
+  for (const s of sheets) created += await materialiseSheetOrder(uow, s.id, horizon);
+  const open = await uow.tx.treatmentTask.findMany({ where: { status: { in: ["scheduled", "due", "overdue"] }, dueAt: { lte: new Date(uow.now.getTime() + 36e5) } }, select: { id: true, dueAt: true, status: true, patientId: true, sheetOrder: { select: { graceMinutes: true, frequency: true, order: { select: { ref: true } } } } } });
+  let due = 0;
+  let overdue = 0;
+  let missed = 0;
+  for (const t of open) {
+    const next = taskStatusAt({ dueAt: t.dueAt, status: t.status, graceMinutes: t.sheetOrder?.graceMinutes ?? 30, frequency: t.sheetOrder?.frequency ?? null }, uow.now);
+    if (next !== t.status) {
+      const moved = await uow.tx.treatmentTask.updateMany({ where: { id: t.id, status: t.status }, data: { status: next, version: { increment: 1 } } });
+      if (!moved.count) continue;
+      if (next === "due") due++;
+      if (next === "overdue") overdue++;
+      if (next === "missed") {
+        missed++;
+        uow.audit({ eventType: "treatment.missed", entityType: "TreatmentTask", entityId: t.id, before: { status: t.status }, after: { status: "missed", dueAt: t.dueAt.toISOString(), orderRef: t.sheetOrder?.order?.ref ?? null, patientId: t.patientId }, metadata: { system: "treatment-sheets" } });
+      }
+    }
+  }
+  return { sheets: sheets.length, created, due, overdue, missed };
 }
 async function completeTreatmentTask(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "treatment.complete", humanOnly: true }, args, async (actor) => {
@@ -9353,7 +9604,7 @@ async function issueRabiesCertificate(uow, input) {
       policyVersions: toJsonValue(input.pack.versions.map((v) => v.id))
     }
   });
-  uow.emit({ topic: "document.render", aggregateType: "RabiesCertificate", aggregateId: cert.id, payload: { kind: "rabies_certificate" }, dedupeKey: `rabies.render:${cert.id}` });
+  await renderRabiesDocument(uow, cert.id, input.locationId);
   return { id: cert.id, ref, missing };
 }
 async function recordOutsideVaccine(_root, args, context) {
@@ -9445,9 +9696,32 @@ async function addManualReminder(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
+async function runReminderJob(uow, locationId) {
+  const { on } = await locationDay2(uow, locationId, uow.now);
+  const open = await uow.tx.patientReminder.findMany({
+    where: { locationId, status: { in: ["scheduled", "due", "overdue"] }, dueOn: { lte: /* @__PURE__ */ new Date(`${addDays(on, 60)}T00:00:00Z`) } },
+    select: { id: true, dueOn: true, status: true, lastNotifiedAt: true, patientId: true, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } }, type: { select: { name: true } }, patient: { select: { name: true, status: true, ownerships: { where: { role: "primary", effectiveTo: null }, select: { clientId: true }, take: 1 } } } },
+    take: 5e3
+  });
+  let changed = 0;
+  for (const r of open) {
+    if (r.patient?.status !== "active") {
+      await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: "suppressed", suppressedReason: `Patient ${r.patient?.status ?? "missing"}`, version: { increment: 1 } } });
+      changed++;
+      continue;
+    }
+    const rule2 = { leadDays: r.rule?.leadDays ?? 30, graceDays: r.rule?.graceDays ?? 30, lapseDays: r.rule?.lapseDays ?? 180 };
+    const next = reminderStatusOn({ dueOn: day2(r.dueOn), status: r.status }, rule2, on);
+    if (next !== r.status) {
+      await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status: next, version: { increment: 1 } } });
+      changed++;
+    }
+  }
+  return { on, checked: open.length, changed };
+}
 
 // features/keystone/mutations/imports.ts
-var import_node_crypto7 = require("node:crypto");
+var import_node_crypto8 = require("node:crypto");
 
 // features/integrations/pims/index.ts
 function parseCsv(input) {
@@ -9663,16 +9937,16 @@ function ezyvetApiSource(config2) {
       const spec = resource[entity];
       const bearer = await token();
       const rows = [];
-      for (let page = 1; page <= 500; page++) {
+      for (let page2 = 1; page2 <= 500; page2++) {
         const url = new URL(`${config2.baseUrl}/v1/${spec.path}`);
         url.searchParams.set("limit", "200");
-        url.searchParams.set("page", String(page));
+        url.searchParams.set("page", String(page2));
         if (since) url.searchParams.set("modified_at", JSON.stringify({ ">": Math.floor(Date.parse(since) / 1e3) }));
         const res = await f(url, { headers: { authorization: `Bearer ${bearer}` } });
-        if (!res.ok) throw new Error(`ezyVet ${spec.path} page ${page} failed (${res.status}).`);
+        if (!res.ok) throw new Error(`ezyVet ${spec.path} page ${page2} failed (${res.status}).`);
         const body = await res.json();
         for (const item of body.items ?? []) rows.push({ rowNumber: rows.length + 1, values: spec.map(Object.values(item)[0] ?? {}) });
-        if (!body.items?.length || page >= (body.meta?.items_page_total ?? page)) break;
+        if (!body.items?.length || page2 >= (body.meta?.items_page_total ?? page2)) break;
       }
       return { headers: [], mapping: {}, rows, missingRequired: [] };
     }
@@ -9764,7 +10038,7 @@ async function previewImport(_root, args, context) {
     if (parsed.missingRequired.length) throw new DomainError(Codes.INVALID_INPUT, `The file has no column for: ${parsed.missingRequired.join(", ")}. Map those columns and try again.`, { field: "mapping", problems: parsed.missingRequired });
     if (parsed.rows.length > MAX_ROWS) throw new DomainError(Codes.INVALID_INPUT, `Split the file: at most ${MAX_ROWS} rows per batch.`);
     const species = await speciesList(context.prisma);
-    const fileHash = (0, import_node_crypto7.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
+    const fileHash = (0, import_node_crypto8.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
     const seen = /* @__PURE__ */ new Set();
     const results = parsed.rows.map((r) => {
       const errors = validateRow(args.entity, r.values, species);
@@ -9967,6 +10241,21 @@ async function applyImport(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/clocks.ts
+async function refreshClinicalClocks(_root, args, context) {
+  const actor = actorFromSession(context.session);
+  requirePermission(actor, "canAdminister", "canSignRecord", "canBook", "canManagePractice");
+  const result = await command(context.prisma, { name: "clocks.refresh", actor, idempotencyKey: args.idempotencyKey, params: {} }, async (uow) => {
+    const treatment = await runTreatmentSheetJob(uow);
+    const records = await runUnsignedRecordClock(uow);
+    const locations = await uow.tx.location.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { id: true } });
+    const reminders = [];
+    for (const loc of locations) reminders.push(await runReminderJob(uow, loc.id));
+    return { treatment, records, reminders };
+  });
+  return { replay: result.replay, ...result.value };
+}
+
 // features/keystone/security/breadthLimit.ts
 var import_graphql3 = require("graphql");
 var API_NESTED_DEFAULT = 50;
@@ -9995,15 +10284,15 @@ function limitNestedLists(schema) {
 }
 
 // features/keystone/security/signInLimit.ts
-var import_node_crypto9 = require("node:crypto");
+var import_node_crypto10 = require("node:crypto");
 
 // features/keystone/security/internalIdentity.ts
-var import_node_crypto8 = require("node:crypto");
+var import_node_crypto9 = require("node:crypto");
 var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto8.timingSafeEqual)(leftBuffer, rightBuffer);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto9.timingSafeEqual)(leftBuffer, rightBuffer);
 }
 function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
@@ -10014,7 +10303,7 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp16) || !/^[a-f0-9]{64}$/.test(signature)) return null;
   const age = Math.abs(now - Number(timestamp16) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto8.createHmac)("sha256", secret2).update(`${timestamp16}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${timestamp16}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -10041,7 +10330,7 @@ var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
 var SIGN_IN_KNOWN_DAYS = 90;
 var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
-var hash = (value) => (0, import_node_crypto9.createHash)("sha256").update(value).digest("hex");
+var hash = (value) => (0, import_node_crypto10.createHash)("sha256").update(value).digest("hex");
 var normalEmail = (email) => email.trim().toLowerCase();
 var UNKNOWN_ADDRESS = "unknown-address";
 var where = (address) => hash(address);
@@ -10062,7 +10351,7 @@ function clientAddress(req) {
 }
 async function countAttempt(prisma, key2) {
   const rows = await prisma.$queryRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto9.randomUUID)()}, ${key2}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto10.randomUUID)()}, ${key2}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
       "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
@@ -10104,7 +10393,7 @@ async function signInAttempt(prisma, email, address, sessionUserId = null) {
 async function rememberAddress(prisma, userId, address) {
   if (address === UNKNOWN_ADDRESS) return;
   await prisma.$executeRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto9.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto10.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
 }
 async function signInSucceeded(prisma, userId, address) {
@@ -10154,11 +10443,11 @@ function limitSignIn(schema, field = "authenticateUserWithPassword", identityArg
 }
 
 // features/keystone/mutations/index.ts
-var graphql = String.raw;
+var graphql2 = String.raw;
 function extendGraphqlSchema(baseSchema) {
   return limitSignIn(limitNestedLists((0, import_schema.mergeSchemas)({
     schemas: [baseSchema],
-    typeDefs: graphql`
+    typeDefs: graphql2`
       scalar JSON
       type Query {
         redirectToInit: Boolean
@@ -10243,6 +10532,7 @@ function extendGraphqlSchema(baseSchema) {
         administerVaccine(encounterId: ID!, productId: ID!, lotId: ID!, route: String, site: String!, supervisingDvmId: ID, tagNumber: String, repeatReason: String, idempotencyKey: String!): JSON
         reverseVaccineAdministration(vaccineAdministrationId: ID!, reason: String!, idempotencyKey: String!): JSON
         recordOutsideVaccine(patientId: ID!, productId: ID!, administeredOn: String!, lotNumber: String, evidenceNote: String!, idempotencyKey: String!): JSON
+        refreshClinicalClocks(idempotencyKey: String!): JSON
         suppressReminder(reminderId: ID!, expectedVersion: Int!, reason: String!, idempotencyKey: String!): JSON
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
         previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
@@ -10332,6 +10622,7 @@ function extendGraphqlSchema(baseSchema) {
         administerVaccine: op(administerVaccine),
         reverseVaccineAdministration: op(reverseVaccineAdministration),
         recordOutsideVaccine: op(recordOutsideVaccine),
+        refreshClinicalClocks: op(refreshClinicalClocks),
         suppressReminder: op(suppressReminder),
         addManualReminder: op(addManualReminder),
         previewImport: op(previewImport),

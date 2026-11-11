@@ -1,10 +1,11 @@
-import { list } from '@keystone-6/core'
-import { calendarDay, checkbox, integer, json, timestamp } from '@keystone-6/core/fields'
+import { graphql, list } from '@keystone-6/core'
+import { calendarDay, checkbox, integer, json, timestamp, virtual } from '@keystone-6/core/fields'
 import { relationship } from './guardedRelationship'
 import { permissions } from '../access'
 import { choice, fixedChoice, lifecycle, qty, readOnly, systemText, unit, versionField } from './domainFields'
 import { governed } from './listAccess'
 import { trackingFields } from './trackingFields'
+import { containerBalance } from '../lib/csRegister'
 
 /*
  * Drug catalogue, prescriptions and the controlled-substance register: the database layer
@@ -110,6 +111,8 @@ export const CsContainer = list({
     openedAt: timestamp({ ...readOnly }),
     openedBy: relationship({ ref: 'StaffMember', ...readOnly }),
     budAt: timestamp({ ...readOnly }),
+    /** Derived on read: Σ register entries (never stored, so it cannot drift). */
+    balance: virtual({ field: graphql.field({ type: graphql.String, async resolve(item, _args, context) { return (await containerBalance(context.prisma as never, (item as { id: string }).id)).toFixed() } }) }),
     entries: relationship({ ref: 'CsLogEntry.container', many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields,
@@ -143,4 +146,134 @@ export const CsLogEntry = list({
   },
 })
 
-export const CS_REGISTER_LISTS = ['CsContainer', 'CsLogEntry'] as const
+export const CS_REGISTER_LISTS = ['CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport'] as const
+
+/** What was handed to a client (or used for an in-house sale) against a prescription line. Immutable. */
+export const Dispense = list({
+  access: governed(['canReadClinical', 'canDispense', 'canFulfilRefill']),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'patient', 'product', 'quantity', 'quantityUnit', 'refillNumber', 'dispensedAt'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    prescription: relationship({ ref: 'Prescription', ...readOnly }),
+    line: relationship({ ref: 'PrescriptionLine', ...readOnly }),
+    patient: relationship({ ref: 'Patient', ...readOnly }),
+    client: relationship({ ref: 'Client', ...readOnly }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    product: relationship({ ref: 'DrugProduct', ...readOnly }),
+    lot: relationship({ ref: 'InventoryLot', ...readOnly }),
+    container: relationship({ ref: 'CsContainer', ...readOnly }),
+    csLogEntry: relationship({ ref: 'CsLogEntry', ...readOnly }),
+    refillRequest: relationship({ ref: 'RefillRequest', ...readOnly }),
+    quantity: qty({ required: true }),
+    quantityUnit: unit(),
+    /** 0 for the original fill, then 1, 2, … for each refill. */
+    refillNumber: integer({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
+    dispensedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    dispensedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    label: json({ ...readOnly, ui: { ...readOnly.ui, description: 'The label as printed: every field the practice must show (policy pack).' } }),
+    ...trackingFields,
+  },
+})
+
+/** A physical count of every open container at a location (initial, biennial, periodic or spot). */
+export const CsCount = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'location', 'kind', 'countedBy', 'countedAt', 'status'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    kind: fixedChoice(['initial', 'biennial', 'periodic', 'spot']),
+    countedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    witness: relationship({ ref: 'StaffMember', ...readOnly }),
+    countedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(['closed']),
+    lines: relationship({ ref: 'CsCountLine.count', many: true, ...readOnly }),
+    ...trackingFields,
+  },
+})
+
+export const CsCountLine = list({
+  access: governed('canViewControlled'),
+  fields: {
+    count: relationship({ ref: 'CsCount.lines', ...readOnly }),
+    container: relationship({ ref: 'CsContainer', ...readOnly }),
+    expectedQty: qty({ required: true }),
+    countedQty: qty({ required: true }),
+    variance: qty({ required: true }),
+    unit: unit(),
+    discrepancyCase: relationship({ ref: 'CsDiscrepancyCase', ...readOnly }),
+  },
+})
+
+/**
+ * A count variance, a theft or a loss. The two federal clocks are stored as dates and judged on read
+ * against the location's business calendar: DEA notice by the next business day (21 CFR 1301.76(b)),
+ * then Form 106 within 45 days (21 CFR 1301.76(b)).
+ */
+export const CsDiscrepancyCase = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'location', 'kind', 'status', 'noticeDueOn', 'form106DueOn'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    container: relationship({ ref: 'CsContainer', ...readOnly }),
+    kind: fixedChoice(['count_variance', 'theft', 'loss']),
+    qty: qty({ required: true }),
+    unit: unit(),
+    discoveredAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    discoveredBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    description: systemText(),
+    status: lifecycle(['open', 'notified', 'form_filed', 'closed']),
+    noticeDueOn: calendarDay({ ...readOnly }),
+    noticeGivenAt: timestamp({ ...readOnly }),
+    noticeReference: systemText(),
+    form106DueOn: calendarDay({ ...readOnly }),
+    form106FiledAt: timestamp({ ...readOnly }),
+    form106Reference: systemText(),
+    resolution: systemText(),
+    closedAt: timestamp({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields,
+  },
+})
+
+/** Destruction of expired or unwanted stock (Form 41). Two witnesses, both other than the person recording. Immutable. */
+export const CsDestructionRecord = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'container', 'qty', 'unit', 'destroyedAt'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    container: relationship({ ref: 'CsContainer', ...readOnly }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    csLogEntry: relationship({ ref: 'CsLogEntry', ...readOnly }),
+    qty: qty({ required: true }),
+    unit: unit(),
+    method: systemText({ required: true }),
+    form41Reference: systemText(),
+    recordedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    witnessA: relationship({ ref: 'StaffMember', ...readOnly }),
+    witnessB: relationship({ ref: 'StaffMember', ...readOnly }),
+    destroyedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields,
+  },
+})
+
+/** A controlled dispense to report to the state programme (CURES in California: within 7 days). Pending until staff record the upload. */
+export const PdmpReport = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'location', 'program', 'status', 'dueOn', 'submittedAt'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    dispense: relationship({ ref: 'Dispense', ...readOnly }),
+    program: systemText({ required: true }),
+    format: systemText(),
+    dueOn: calendarDay({ ...readOnly }),
+    status: lifecycle(['pending', 'submitted']),
+    submittedAt: timestamp({ ...readOnly }),
+    submittedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    confirmation: systemText(),
+    version: versionField(),
+    ...trackingFields,
+  },
+})

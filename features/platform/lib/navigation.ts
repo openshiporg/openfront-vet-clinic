@@ -60,6 +60,7 @@ export const SHIPPED_ROUTES = new Set<string>([
   '/platform/today', '/platform/approvals', '/platform/schedule', '/platform/whiteboard', '/platform/waitlist', '/platform/clients',
   '/platform/patients', '/platform/calls', '/platform/messages', '/platform/records-requests', '/platform/agents', '/platform/team', '/platform/policies', '/platform/compliance', '/platform/read-audit', '/platform/audit', '/platform/settings',
   '/platform/encounters', '/platform/hospital', '/platform/vaccines', '/platform/imports',
+  '/platform/prescriptions', '/platform/controlled', '/platform/inventory',
 ])
 
 const shipped = platformNavItems.filter(item => SHIPPED_ROUTES.has(item.href))
