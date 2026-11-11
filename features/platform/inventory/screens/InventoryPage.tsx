@@ -163,7 +163,7 @@ async function Orders({ path, placeOptions, itemOptions, locations }: { path: st
             {o.lines.map(l => (
               <Row key={l.id}>
                 <div className="min-w-0 flex-1 pl-3 text-sm">{l.item?.name}<Meta>{Number(l.qtyReceived)} of {Number(l.qtyOrdered)} received · {money(l.unitCostMinor)} each</Meta></div>
-                {o.status === 'submitted' || o.status === 'partially_received' ? (
+                {(o.status === 'submitted' || o.status === 'partially_received') && Number(l.qtyReceived) < Number(l.qtyOrdered) ? (
                   <CommandForm op="receivePurchaseOrder" build="receivePurchaseOrder" submit="Receive" fixed={{ orderId: o.id, lineId: l.id }} paths={[path]}
                     fields={[{ name: 'stockLocationId', label: 'Store in', width: 'lg', options: placeOptions }, { name: 'lotNumber', label: 'Lot number', width: 'md' }, { name: 'expiresOn', label: 'Expires (YYYY-MM-DD)', width: 'md' }, { name: 'quantity', label: 'Arrived', width: 'sm' }, { name: 'packingSlip', label: 'Packing slip', width: 'md' }]} />
                 ) : null}

@@ -20,7 +20,7 @@ export default async function PrescriptionsPage({ searchParams }: { searchParams
   const sp = (await searchParams) ?? {};
   const view = sp.view === 'refills' ? 'refills' : sp.view === 'outside' ? 'outside' : sp.view === 'dispensed' ? 'dispensed' : 'active';
   const tz = await practiceTimeZone();
-  const data = await q<{ dispenses: { id: string; ref: string; quantity: string; quantityUnit: string | null; dispensedAt: string; patient: { name: string } | null; product: { displayName: string } | null; dispensedBy: { displayName: string } | null; line: { id: string } | null }[]; dispenseLabels: { id: string; dispense: { id: string } | null }[]; externalDispenses: { id: string; ref: string; status: string; version: number; pharmacyName: string; orderReference: string; note: string; prescription: { ref: string } | null }[]; prescriptions: Rx[]; refillRequests: Refill[]; pending: number; drugProducts: { id: string; displayName: string }[]; patients: { id: string; name: string }[]; locations: { id: string; name: string }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { displayName: string } | null }[] }>(`{
+  const data = await q<{ dispenses: { id: string; ref: string; quantity: string; quantityUnit: string | null; dispensedAt: string; patient: { name: string } | null; product: { displayName: string } | null; dispensedBy: { displayName: string } | null; line: { id: string } | null }[]; dispenseLabels: { id: string; dispense: { id: string } | null }[]; externalDispenses: { id: string; ref: string; status: string; version: number; pharmacyName: string; orderReference: string; note: string; prescription: { ref: string } | null }[]; prescriptions: Rx[]; refillRequests: Refill[]; pending: number; drugProducts: { id: string; displayName: string }[]; patients: { id: string; name: string; ref: string; species: { name: string } | null }[]; locations: { id: string; name: string }[]; inventoryLots: { id: string; lotNumber: string; expiresOn: string; drug: { displayName: string } | null }[] }>(`{
     dispenses(orderBy: { dispensedAt: desc }, take: 500) { id ref quantity quantityUnit dispensedAt patient { name } product { displayName } dispensedBy { displayName } line { id } }
     dispenseLabels(orderBy: { printedAt: desc }, take: 300) { id dispense { id } }
     externalDispenses(orderBy: { createdAt: desc }, take: 50) { id ref status version pharmacyName orderReference note prescription { ref } }
@@ -28,7 +28,7 @@ export default async function PrescriptionsPage({ searchParams }: { searchParams
     refillRequests(where: { status: { in: ["received", "in_review"] } }, orderBy: { slaDueAt: asc }, take: 100) { id ref status version productText channel slaDueAt patient { name } client { displayName } }
     pending: refillRequestsCount(where: { status: { in: ["received", "in_review"] } })
     drugProducts(where: { active: { equals: true }, csSchedule: { equals: "none" } }, orderBy: { displayName: asc }, take: 200) { id displayName }
-    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
+    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ref species { name } }
     locations(orderBy: { name: asc }, take: 10) { id name }
     inventoryLots(where: { status: { equals: "available" } }, take: 200) { id lotNumber expiresOn drug { displayName } }
   }`);
@@ -111,7 +111,7 @@ export default async function PrescriptionsPage({ searchParams }: { searchParams
             <p className="text-xs text-muted-foreground">Needs a veterinarian with a current licence and a current veterinarian-client-patient relationship. Controlled drugs need your DEA registration and follow the refill limits.</p>
             <CommandForm op="writePrescription" build="writePrescription" submit="Sign prescription" paths={[path]}
               fields={[
-                { name: 'patientId', label: 'Patient', width: 'lg', options: [{ value: '', label: 'Choose a patient' }, ...data.patients.map(p => ({ value: p.id, label: p.name }))] },
+                { name: 'patientId', label: 'Patient', width: 'lg', options: [{ value: '', label: 'Choose a patient' }, ...data.patients.map(p => ({ value: p.id, label: `${p.name} · ${p.species?.name ?? 'Patient'} · ${p.ref}` }))] },
                 { name: 'locationId', label: 'Location', width: 'lg', options: data.locations.map(l => ({ value: l.id, label: l.name })) },
                 { name: 'productId', label: 'Drug', width: 'lg', options: [{ value: '', label: 'Choose a drug' }, ...data.drugProducts.map(p => ({ value: p.id, label: p.displayName }))] },
                 { name: 'directions', label: 'Directions', width: 'full', placeholder: 'Give 1 tablet by mouth every 12 hours with food' },
