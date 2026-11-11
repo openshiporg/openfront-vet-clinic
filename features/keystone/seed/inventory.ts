@@ -16,7 +16,7 @@ const PLACES = [
 ] as const
 const OPENING: Record<string, number> = {
   seed_lot_carprofen_main: 240, seed_lot_gabapentin_main: 180, seed_lot_meloxicam_main: 120, seed_lot_cefovecin_main: 24, seed_lot_maropitant_main: 40, seed_lot_lrs_main: 12,
-  seed_lot_dapp_main: 60, seed_lot_dapp_old: 8, seed_lot_lepto_main: 40, seed_lot_bord_main: 30, seed_lot_civ_main: 20, seed_lot_fvrcp_main: 36, seed_lot_felv_main: 18,
+  seed_lot_dapp_main: 60, seed_lot_dapp_old: 8, seed_lot_lepto_main: 40, seed_lot_bord_main: 30, seed_lot_civ_main: 20, seed_lot_fvrcp_main: 36, seed_lot_felv_main: 18, seed_lot_rab_main: 25, seed_lot_rabf_main: 15,
 }
 const SUPPLIERS = [
   { id: 'seed_sup_covetrus', name: 'Covetrus', accountNumber: 'CC-204118', phone: '800-555-0143', email: 'orders@covetrus.example.com' },

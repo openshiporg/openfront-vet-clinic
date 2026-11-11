@@ -10,6 +10,7 @@ import { requireDeaRegistration, requireLicence, type CsSchedule } from '../doma
 import { resolvePolicy } from '../domain/policy'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { lotToDraw, takeFromLot } from './inventory'
 import { activePatient, day, decimalText, locationDay, staffOf, text, witnessFor, type Ctx } from './clinical'
 
 /*
@@ -187,6 +188,7 @@ export async function dispenseFill(_root: unknown, args: { lineId: string; quant
       let expiryOn: Date | null = null
       let containerId: string | null = null
       let csEntryId: string | null = null
+      let draw: Awaited<ReturnType<typeof lotToDraw>> | null = null
       if (controlled) {
         if (!can(actor, 'canAdministerControlled')) throw new DomainError(Codes.NOT_AUTHORIZED, 'Dispensing a controlled drug needs the controlled-substance permission.')
         await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rx.location.id, action: 'administer_controlled', at: uow.now })
@@ -203,10 +205,10 @@ export async function dispenseFill(_root: unknown, args: { lineId: string; quant
         const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: 'dispense', qtySigned: dec(qty).neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: rx.patient.id, clientId: rx.client?.id ?? null, reason: rx.ref }, uow.now)
         containerId = c.id; csEntryId = entry.id; lotNumber = c.lotNumber; expiryOn = c.lotExpiresOn
       } else {
-        const lots = await uow.tx.inventoryLot.findMany({ where: { drugId: line.productId, locationId: rx.location.id, status: 'available', expiresOn: { gte: new Date(`${on}T00:00:00Z`) } }, orderBy: { expiresOn: 'asc' }, select: { id: true, lotNumber: true, expiresOn: true } })
-        const pick = args.lotId ? lots.find(l => l.id === args.lotId) : lots[0]
-        if (args.lotId && !pick) throw new DomainError(Codes.GUARD_FAILED, 'That lot is not available here (expired, quarantined or another drug).')
-        if (pick) { lotId = pick.id; lotNumber = pick.lotNumber; expiryOn = pick.expiresOn }
+        // A fill always comes out of one lot in stock here (I-O1): no lot, or not enough in it, is refused.
+        if (!line.productId) throw new DomainError(Codes.GUARD_FAILED, 'The prescription line has no drug.')
+        draw = await lotToDraw(uow, { product: { drugId: line.productId }, productName: line.product?.displayName ?? 'this drug', lotId: args.lotId, locationId: rx.location.id, on, qty })
+        lotId = draw.lotId; lotNumber = draw.lotNumber; expiryOn = draw.expiresOn
       }
       const ref = await nextReference(uow.tx, 'DSP', uow.now)
       const policy = await resolvePolicy(uow.tx, 'prescription', { locationId: rx.location.id, on })
@@ -223,7 +225,8 @@ export async function dispenseFill(_root: unknown, args: { lineId: string; quant
       const row = await uow.tx.dispense.create({
         data: { ref, prescriptionId: rx.id, lineId: line.id, patientId: rx.patient.id, clientId: rx.client?.id ?? null, locationId: rx.location.id, productId: line.productId, lotId, containerId, csLogEntryId: csEntryId, refillRequestId: args.refillRequestId ?? null, quantity: toScale(dec(qty), 'qty'), quantityUnit: line.quantityUnit, refillNumber: fills, dispensedById: staff.id, dispensedAt: uow.now, label: labelJson },
       })
-      auditCreate(uow, actor, 'Dispense', row.id, 'dispense.filled', { ref, rx: rx.ref, lineId: line.id, refillNumber: fills, quantity: qty, containerId, lotId })
+      const movementId = draw ? (await takeFromLot(uow, draw, { kind: 'dispense', sourceType: 'dispense', sourceId: row.id, actorId: staff.id })).id : null
+      auditCreate(uow, actor, 'Dispense', row.id, 'dispense.filled', { ref, rx: rx.ref, lineId: line.id, refillNumber: fills, quantity: qty, containerId, lotId, movementId })
       if (controlled) {
         const cs = await resolvePolicy(uow.tx, 'controlled_substances', { locationId: rx.location.id, on })
         if (cs.rules.pdmp.required && cs.rules.pdmp.schedules.includes(line.csSchedule as CsSchedule)) {

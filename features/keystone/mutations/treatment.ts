@@ -14,6 +14,7 @@ import { dueTimes, sheetFrequency, taskStatusAt, taskWindowProblem } from '../do
 import { ROUTES } from '../models/treatment'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { lotToDraw, returnToLot, takeFromLot } from './inventory'
 import { renderDischargeDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, decimalText, latestWeight, locationDay, markInProgress, practiceSettings, staffById, staffOf, text, witnessFor, type Ctx, type StaffRow } from './clinical'
 
@@ -223,6 +224,7 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
   let csEntryId: string | null = null
   let wasteEntryId: string | null = null
   let witnessId: string | null = null
+  let draw: Awaited<ReturnType<typeof lotToDraw>> | null = null
   if (controlled) {
     if (!args.csContainerId) throw new DomainError(Codes.INVALID_INPUT, 'Choose the controlled-substance container the dose was drawn from.', { field: 'csContainerId' })
     licenceId = (await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: order.locationId, action: 'administer_controlled', at: uow.now })).evaluationId
@@ -253,6 +255,8 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
     if (drug && lot.drugId !== drug.id) throw new DomainError(Codes.GUARD_FAILED, 'That lot is a different product.')
     if (lot.status !== 'available') throw new DomainError(Codes.GUARD_FAILED, `Lot ${lot.lotNumber} is ${lot.status}.`)
     if (day(lot.expiresOn)! < on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lot.lotNumber} expired on ${day(lot.expiresOn)}.`)
+    // The dose comes out of this lot's stock here (I-O1); the database refuses taking more than it holds.
+    if (lot.drugId) draw = await lotToDraw(uow, { product: { drugId: lot.drugId }, productName: drug?.displayName ?? 'this drug', lotId: lot.id, locationId: order.locationId, on, qty })
     lotId = lot.id
     lotNumber = lot.lotNumber
     lotExpiresOn = lot.expiresOn
@@ -266,6 +270,7 @@ async function administer(uow: UnitOfWork, actor: Parameters<typeof auditCreate>
       givenById: staff.id, supervisingDvmId: args.supervisingDvmId ?? null, witnessId, licenseEvaluationId: licenceId, givenAt: uow.now, wasteQty: args.wasteQty ? toScale(args.wasteQty, 'qty') : null, qtyOverrideReason: qtyProblem ? text(qtyOverrideReason, 'qtyOverrideReason', 300) : '',
     },
   })
+  if (draw) await takeFromLot(uow, draw, { kind: 'use', sourceType: 'administration', sourceId: row.id, actorId: staff.id })
   if (order.status === 'ordered') await uow.tx.clinicalOrder.update({ where: { id: order.id }, data: { status: 'in_progress', version: { increment: 1 } } })
   auditCreate(uow, actor, 'Administration', row.id, 'order.administered', { orderRef: order.ref, qty: row.qty.toString(), planned, unit, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber, qtyOverride: Boolean(qtyProblem) }, { reason: qtyProblem ? qtyOverrideReason : null })
   return { id: row.id, qty: row.qty.toString(), unit, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId }
@@ -304,6 +309,7 @@ export async function reverseAdministration(_root: unknown, args: { administrati
           givenById: staff.id, witnessId, givenAt: uow.now, reversesId: original.id, reason,
         },
       })
+      await returnToLot(uow, { sourceType: 'administration', sourceId: original.id, reversalId: row.id, actorId: staff.id, reason })
       const live = await uow.tx.administration.count({ where: { orderId: order.id, reversesId: null, from_Administration_reverses: { none: {} } } })
       let orderStatus = order.status
       if (!live && ['ordered', 'in_progress'].includes(order.status)) {

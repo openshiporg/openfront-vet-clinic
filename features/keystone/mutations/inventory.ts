@@ -35,6 +35,41 @@ export async function moveStock(uow: UnitOfWork, m: Movement) {
   })
 }
 
+/**
+ * Choose the lot a dispense or a dose comes from (DOMAIN I-O1): this product's, at this location, available
+ * (not quarantined or recalled), in date and holding at least the quantity. With no lot chosen, the
+ * soonest-expiring lot that holds enough. Refuses when there is none; `takeFromLot` then writes the movement.
+ */
+export async function lotToDraw(uow: UnitOfWork, d: { product: { drugId: string } | { vaccineId: string }; productName: string; lotId?: string | null; locationId: string; on: string; qty: string }) {
+  const levels = await uow.tx.stockLevel.findMany({
+    where: { onHand: { gt: 0 }, stockLocation: { locationId: d.locationId }, lot: { ...d.product, ...(d.lotId ? { id: d.lotId } : {}), locationId: d.locationId, status: 'available', expiresOn: { gte: new Date(`${d.on}T00:00:00Z`) } } },
+    select: { itemId: true, stockLocationId: true, onHand: true, unit: true, lot: { select: { id: true, lotNumber: true, expiresOn: true } } },
+  })
+  if (!levels.length) {
+    throw new DomainError(Codes.GUARD_FAILED, d.lotId ? 'That lot has no stock here, or it is expired, quarantined or another product.' : `No lot of ${d.productName} is in stock here (in date and not quarantined). Receive stock first.`, { field: 'lotId', reason: 'no_stock' })
+  }
+  const need = dec(d.qty)
+  const sorted = levels.filter(l => l.lot && l.itemId && l.stockLocationId).sort((a, b) => a.lot!.expiresOn.getTime() - b.lot!.expiresOn.getTime())
+  const pick = sorted.find(l => dec(l.onHand.toString()).gte(need))
+  if (!pick) {
+    const best = sorted.reduce((m, l) => (dec(l.onHand.toString()).gt(dec(m.onHand.toString())) ? l : m))
+    throw new DomainError(Codes.GUARD_FAILED, `Lot ${best.lot!.lotNumber} has ${plain(dec(best.onHand.toString()))} on hand; ${plain(need)} is more than that.`, { field: 'quantity', reason: 'not_enough_stock' })
+  }
+  return { lotId: pick.lot!.id, lotNumber: pick.lot!.lotNumber, expiresOn: pick.lot!.expiresOn, itemId: pick.itemId!, stockLocationId: pick.stockLocationId!, unit: pick.unit, qty: plain(need) }
+}
+
+/** Write the dispense or use movement for a lot chosen by `lotToDraw`; the database refuses an overdraw (a parallel draw). */
+export async function takeFromLot(uow: UnitOfWork, lot: Awaited<ReturnType<typeof lotToDraw>>, m: { kind: 'dispense' | 'use'; sourceType: string; sourceId: string; actorId: string }) {
+  return moveStock(uow, { itemId: lot.itemId, lotId: lot.lotId, stockLocationId: lot.stockLocationId, kind: m.kind, qtySigned: `-${lot.qty}`, unit: lot.unit, sourceType: m.sourceType, sourceId: m.sourceId, actorId: m.actorId })
+}
+
+/** A reversed dose was not given: the stock it took (if any) goes back to its lot as a return movement. */
+export async function returnToLot(uow: UnitOfWork, r: { sourceType: string; sourceId: string; reversalId: string; actorId: string; reason: string }) {
+  const taken = await uow.tx.stockMovement.findFirst({ where: { sourceType: r.sourceType, sourceId: r.sourceId, kind: 'use' }, select: { itemId: true, lotId: true, stockLocationId: true, qtySigned: true, unit: true } })
+  if (!taken) return null
+  return moveStock(uow, { itemId: taken.itemId!, lotId: taken.lotId, stockLocationId: taken.stockLocationId!, kind: 'return', qtySigned: plain(dec(taken.qtySigned.toString()).neg()), unit: taken.unit, sourceType: `${r.sourceType}_reversal`, sourceId: r.reversalId, reason: r.reason.slice(0, 200), actorId: r.actorId })
+}
+
 /** Lots with stock for an item at a place, soonest expiry first (FEFO), skipping quarantined and expired lots. */
 export async function fefoLots(tx: UnitOfWork['tx'], itemId: string, stockLocationId: string, on: string) {
   const levels = await tx.stockLevel.findMany({ where: { itemId, stockLocationId, onHand: { gt: 0 }, lot: { status: 'available', expiresOn: { gte: new Date(`${on}T00:00:00Z`) } } }, select: { onHand: true, lot: { select: { id: true, lotNumber: true, expiresOn: true } } } })

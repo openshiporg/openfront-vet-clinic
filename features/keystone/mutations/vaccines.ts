@@ -11,6 +11,7 @@ import { requireLicence } from '../domain/licensure'
 import { calendarDayText, dueDate, inInitialSeries, rabiesCertificateFields, reminderStatusOn, vaccineDuration, vaccineProblems } from '../domain/vaccines'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { lotToDraw, returnToLot, takeFromLot } from './inventory'
 import { renderRabiesDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, locationDay, markInProgress, staffById, staffOf, text, type Ctx, type StaffRow } from './clinical'
 
@@ -86,6 +87,8 @@ export async function administerVaccine(_root: unknown, args: { encounterId: str
         rabiesPolicy: rabiesPack ? { firstDoseMinAgeWeeks: rabiesPack.rules.firstDoseMinAgeWeeks } : null, giverKind: staff.kind, supervisingDvmPresent: Boolean(supervising),
       })
       if (problems.length) throw new DomainError(Codes.GUARD_FAILED, problems.join(' '), { problems })
+      // One dose comes out of this lot's stock here (I-O1); no stock, or a quarantined lot, is refused.
+      const draw = await lotToDraw(uow, { product: { vaccineId: product.id }, productName: product.name, lotId: lot!.id, locationId: enc.locationId!, on, qty: '1' })
       const licence = product.isRabies ? await requireLicence(uow.tx, { staffMemberId: (staff.kind === 'dvm' ? staff : supervising!).id, locationId: enc.locationId!, action: 'examine', at: uow.now }) : null
 
       // M3: a repeat of the same product the same day is refused; within VACCINE_REPEAT_MIN_DAYS it needs a vet's reason.
@@ -115,6 +118,7 @@ export async function administerVaccine(_root: unknown, args: { encounterId: str
           vaccinatedById: staff.id, supervisingDvmId: supervising?.id ?? null, certificateId: certificate?.id ?? null, policyVersions: toJsonValue(rabiesPack?.versions.map(v => v.id) ?? []) as never, source: 'administered',
         },
       })
+      await takeFromLot(uow, draw, { kind: 'use', sourceType: 'vaccine_administration', sourceId: va.id, actorId: staff.id })
       let reminder = null
       const typeId = rule?.satisfiesId ?? product.reminderTypeId
       if (typeId) reminder = await satisfyAndSchedule(uow, { patientId: patient.id, locationId: enc.locationId!, typeId, sourceKey: `VA:${va.id}`, nextDueOn: dueNextOn, rule, vaccineAdministrationId: va.id, staffId: staff.id, on })
@@ -214,6 +218,7 @@ export async function reverseVaccineAdministration(_root: unknown, args: { vacci
       if (await uow.tx.vaccineAdministration.count({ where: { reversesId: va.id } })) throw new DomainError(Codes.GUARD_FAILED, `This ${va.product?.name ?? 'vaccine'} dose was already reversed.`, { reason: 'already_reversed' })
       const { id: _id, createdAt: _c, product: _p, certificate: _cert, certificateId: _ci, administrationId: _a, reason: _r, reversesId: _rv, ...copy } = va as typeof va & { createdAt?: Date }
       const row = await uow.tx.vaccineAdministration.create({ data: { ...copy, policyVersions: (va.policyVersions ?? []) as never, source: 'reversal', reversesId: va.id, reason, vaccinatedById: staff.id } })
+      await returnToLot(uow, { sourceType: 'vaccine_administration', sourceId: va.id, reversalId: row.id, actorId: staff.id, reason })
       if (va.certificate) await uow.tx.rabiesCertificate.update({ where: { id: va.certificate.id }, data: { voidedAt: uow.now, voidReason: reason } })
       const scheduled = await uow.tx.patientReminder.updateMany({ where: { sourceKey: `VA:${va.id}`, status: { not: 'suppressed' } }, data: { status: 'suppressed', suppressedReason: `Vaccine reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } })
       const satisfied = await uow.tx.reminderSatisfaction.findMany({ where: { OR: [{ vaccineAdministrationId: va.id }, { sourceKey: `VA:${va.id}` }] }, select: { reminderId: true } })

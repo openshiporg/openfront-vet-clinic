@@ -2522,7 +2522,7 @@ function delegateOf(tx, model) {
   if (!delegate) throw new Error(`Unknown model: ${model}`);
   return delegate;
 }
-var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: 18e5 };
+var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: 6e4 };
 
 // features/keystone/lib/sequence.ts
 var import_node_crypto3 = require("node:crypto");
@@ -6341,7 +6341,9 @@ var OPENING = {
   seed_lot_bord_main: 30,
   seed_lot_civ_main: 20,
   seed_lot_fvrcp_main: 36,
-  seed_lot_felv_main: 18
+  seed_lot_felv_main: 18,
+  seed_lot_rab_main: 25,
+  seed_lot_rabf_main: 15
 };
 var SUPPLIERS = [
   { id: "seed_sup_covetrus", name: "Covetrus", accountNumber: "CC-204118", phone: "800-555-0143", email: "orders@covetrus.example.com" },
@@ -9323,6 +9325,348 @@ function taskWindowProblem(input) {
   return null;
 }
 
+// features/keystone/mutations/inventory.ts
+var dateOnly = (value, field) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
+};
+var positive = (value, field) => {
+  const t = decimalText(value, field);
+  if (!dec(t).gt(0)) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
+  return t;
+};
+async function moveStock(uow, m) {
+  return uow.tx.stockMovement.create({
+    data: { itemId: m.itemId, lotId: m.lotId ?? null, stockLocationId: m.stockLocationId, kind: m.kind, qtySigned: toScale(dec(m.qtySigned), "qty"), unit: m.unit ?? null, sourceType: m.sourceType, sourceId: m.sourceId, reason: m.reason ?? "", actorId: m.actorId, occurredAt: uow.now }
+  });
+}
+async function lotToDraw(uow, d) {
+  const levels = await uow.tx.stockLevel.findMany({
+    where: { onHand: { gt: 0 }, stockLocation: { locationId: d.locationId }, lot: { ...d.product, ...d.lotId ? { id: d.lotId } : {}, locationId: d.locationId, status: "available", expiresOn: { gte: /* @__PURE__ */ new Date(`${d.on}T00:00:00Z`) } } },
+    select: { itemId: true, stockLocationId: true, onHand: true, unit: true, lot: { select: { id: true, lotNumber: true, expiresOn: true } } }
+  });
+  if (!levels.length) {
+    throw new DomainError(Codes.GUARD_FAILED, d.lotId ? "That lot has no stock here, or it is expired, quarantined or another product." : `No lot of ${d.productName} is in stock here (in date and not quarantined). Receive stock first.`, { field: "lotId", reason: "no_stock" });
+  }
+  const need = dec(d.qty);
+  const sorted = levels.filter((l) => l.lot && l.itemId && l.stockLocationId).sort((a, b) => a.lot.expiresOn.getTime() - b.lot.expiresOn.getTime());
+  const pick = sorted.find((l) => dec(l.onHand.toString()).gte(need));
+  if (!pick) {
+    const best = sorted.reduce((m, l) => dec(l.onHand.toString()).gt(dec(m.onHand.toString())) ? l : m);
+    throw new DomainError(Codes.GUARD_FAILED, `Lot ${best.lot.lotNumber} has ${plain(dec(best.onHand.toString()))} on hand; ${plain(need)} is more than that.`, { field: "quantity", reason: "not_enough_stock" });
+  }
+  return { lotId: pick.lot.id, lotNumber: pick.lot.lotNumber, expiresOn: pick.lot.expiresOn, itemId: pick.itemId, stockLocationId: pick.stockLocationId, unit: pick.unit, qty: plain(need) };
+}
+async function takeFromLot(uow, lot, m) {
+  return moveStock(uow, { itemId: lot.itemId, lotId: lot.lotId, stockLocationId: lot.stockLocationId, kind: m.kind, qtySigned: `-${lot.qty}`, unit: lot.unit, sourceType: m.sourceType, sourceId: m.sourceId, actorId: m.actorId });
+}
+async function returnToLot(uow, r) {
+  const taken = await uow.tx.stockMovement.findFirst({ where: { sourceType: r.sourceType, sourceId: r.sourceId, kind: "use" }, select: { itemId: true, lotId: true, stockLocationId: true, qtySigned: true, unit: true } });
+  if (!taken) return null;
+  return moveStock(uow, { itemId: taken.itemId, lotId: taken.lotId, stockLocationId: taken.stockLocationId, kind: "return", qtySigned: plain(dec(taken.qtySigned.toString()).neg()), unit: taken.unit, sourceType: `${r.sourceType}_reversal`, sourceId: r.reversalId, reason: r.reason.slice(0, 200), actorId: r.actorId });
+}
+async function ensureItem(uow, input) {
+  const found = await uow.tx.item.findFirst({ where: input.drugId ? { drugId: input.drugId } : { vaccineId: input.vaccineId }, select: { id: true } });
+  if (found) return found.id;
+  if (input.drugId) {
+    const d = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: input.drugId }, select: { displayName: true, csSchedule: true, form: true } });
+    if (d.csSchedule !== "none") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are stocked through the controlled-substance register.");
+    return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: d.displayName, kind: "drug", drugId: input.drugId, baseUnit: "unit" } })).id;
+  }
+  const v = await uow.tx.vaccineProduct.findUniqueOrThrow({ where: { id: input.vaccineId }, select: { name: true } });
+  return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: v.name, kind: "vaccine", vaccineId: input.vaccineId, baseUnit: "dose", coldChain: true } })).id;
+}
+async function addStockLocation(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "stock.add_place", humanOnly: true }, args, async (actor) => {
+    const name = text16(args.name, "name", 80);
+    if (!["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of place.", { field: "kind" });
+    const cold = args.kind === "fridge" || args.kind === "freezer";
+    if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
+    if (cold && !dec(args.minTempC).lt(dec(args.maxTempC))) throw new DomainError(Codes.INVALID_INPUT, "The lowest allowed temperature must be below the highest.", { field: "minTempC" });
+    const result = await command(context.prisma, { name: "stock.add_place", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await locationDay2(uow, args.locationId, uow.now);
+      const row = await uow.tx.stockLocation.create({ data: { name, locationId: args.locationId, kind: args.kind, minTempC: cold ? toScale(dec(args.minTempC), "qty") : null, maxTempC: cold ? toScale(dec(args.maxTempC), "qty") : null } });
+      auditCreate(uow, actor, "StockLocation", row.id, "stock.place_added", { name, kind: args.kind });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receiveStock(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive_lot", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const expiresOn = dateOnly(args.expiresOn, "Expires");
+    const quantity = positive(args.quantity, "quantity");
+    if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
+    const result = await command(context.prisma, { name: "stock.receive_lot", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
+      if (!place?.active || !place.locationId) throw new DomainError(Codes.NOT_FOUND, "That storage place is not available.");
+      if (place.kind === "controlled_cabinet") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are received through the controlled-substance register.");
+      const { on } = await locationDay2(uow, place.locationId, uow.now);
+      if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
+      const itemId = await ensureItem(uow, args);
+      let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: place.locationId, lotNumber, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null }, select: { id: true, expiresOn: true, status: true } });
+      if (lot && lot.status !== "available") throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is ${lot.status} and cannot take more stock.`);
+      if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+      lot ??= await uow.tx.inventoryLot.create({ data: { drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, locationId: place.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true, status: true } });
+      const mv = await moveStock(uow, { itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: quantity, unit: args.unit, sourceType: "receive", sourceId: lot.id, actorId: staff.id });
+      auditCreate(uow, actor, "InventoryLot", lot.id, "stock.received", { lotNumber, quantity, stockLocationId: place.id, movementId: mv.id });
+      return { id: lot.id, movementId: mv.id, status: "available" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var day3 = (d) => d.toISOString().slice(0, 10);
+async function adjustStock(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
+    const quantity = positive(args.quantity, "quantity");
+    const reason = text16(args.reason, "reason", 200);
+    if (reason.length < 4) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 4 characters).", { field: "reason" });
+    if (args.kind !== "dispose" && args.kind !== "use") throw new DomainError(Codes.INVALID_INPUT, "Choose dispose or use.", { field: "kind" });
+    const result = await command(context.prisma, { name: "stock.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const mv = await moveStock(uow, { itemId: args.itemId, lotId: args.lotId, stockLocationId: args.stockLocationId, kind: args.kind, qtySigned: `-${quantity}`, sourceType: "adjustment", sourceId: args.lotId ?? args.itemId, reason, actorId: staff.id });
+      auditCreate(uow, actor, "StockMovement", mv.id, "stock.adjusted", { kind: args.kind, quantity, reason }, { reason });
+      return { id: mv.id, status: "recorded" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addSupplier(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canManageInventory"], tool: "supplier.create", humanOnly: true }, args, async (actor) => {
+    const name = text16(args.name, "name", 100);
+    const result = await command(context.prisma, { name: "supplier.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (await uow.tx.supplier.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `${name} is already a supplier.`);
+      const row = await uow.tx.supplier.create({ data: { name, accountNumber: String(args.accountNumber ?? "").trim().slice(0, 60), phone: String(args.phone ?? "").trim().slice(0, 40), email: String(args.email ?? "").trim().slice(0, 120), deaNumber: String(args.deaNumber ?? "").trim().slice(0, 20) } });
+      auditCreate(uow, actor, "Supplier", row.id, "supplier.created", { name });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function draftPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock"], tool: "po.draft", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 60) throw new DomainError(Codes.INVALID_INPUT, "An order needs between one and sixty lines.", { field: "lines" });
+    const result = await command(context.prisma, { name: "po.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      await locationDay2(uow, args.locationId, uow.now);
+      if (!await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
+      for (const l of args.lines) {
+        positive(l.quantity, "quantity");
+        if (!/^\d{1,9}$/.test(String(l.unitCostMinor))) throw new DomainError(Codes.INVALID_INPUT, "Cost is in whole cents.", { field: "unitCostMinor" });
+        if (!await uow.tx.item.findFirst({ where: { id: l.itemId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "An item on the order is not in the catalogue.");
+      }
+      const ref = await nextReference(uow.tx, "PO", uow.now);
+      const row = await uow.tx.purchaseOrder.create({
+        data: { ref, supplierId: args.supplierId, locationId: args.locationId, status: "draft", orderedById: staff.id, note: String(args.note ?? "").slice(0, 300), lines: { create: args.lines.map((l) => ({ itemId: l.itemId, qtyOrdered: toScale(dec(l.quantity), "qty"), qtyReceived: "0", unit: l.unit ?? null, unitCostMinor: BigInt(l.unitCostMinor) })) } }
+      });
+      auditCreate(uow, actor, "PurchaseOrder", row.id, "po.drafted", { ref, lines: args.lines.length });
+      return { id: row.id, ref, status: "draft", version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function submitPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.submit", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "po.submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const lines = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: args.orderId }, select: { qtyOrdered: true, unitCostMinor: true } });
+      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "The order has no lines.");
+      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "po.submitted", data: { orderedAt: uow.now, approvedById: staff.id } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function cancelPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.cancel", humanOnly: true }, args, async (actor) => {
+    const reason = text16(args.reason, "reason", 200);
+    const result = await command(context.prisma, { name: "po.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft", "submitted"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "po.cancelled", reason });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receivePurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock"], tool: "po.receive", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.lines) || !args.lines.length) throw new DomainError(Codes.INVALID_INPUT, "Enter what arrived.", { field: "lines" });
+    const result = await command(context.prisma, { name: "po.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const po = await lockRow(uow.tx, "PurchaseOrder", args.orderId);
+      if (!["submitted", "partially_received"].includes(po.status)) throw new DomainError(Codes.INVALID_TRANSITION, `${po.ref} is ${po.status.replaceAll("_", " ")}; it cannot be received.`);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
+      if (!place?.active || place.locationId !== po.locationId) throw new DomainError(Codes.GUARD_FAILED, "Choose a storage place at the ordering location.");
+      const { on } = await locationDay2(uow, po.locationId, uow.now);
+      const receiptRef = await nextReference(uow.tx, "GRN", uow.now);
+      const receipt = await uow.tx.goodsReceipt.create({ data: { ref: receiptRef, purchaseOrderId: po.id, locationId: po.locationId, receivedById: staff.id, receivedAt: uow.now, packingSlip: String(args.packingSlip ?? "").trim().slice(0, 60) } });
+      for (const l of args.lines) {
+        const qty2 = positive(l.quantity, "quantity");
+        const line = await lockRow(uow.tx, "PurchaseOrderLine", l.lineId);
+        if (line.purchaseOrderId !== po.id) throw new DomainError(Codes.GUARD_FAILED, "A line does not belong to this order.");
+        const remaining = dec(String(line.qtyOrdered)).minus(dec(String(line.qtyReceived)));
+        if (dec(qty2).gt(remaining)) throw new DomainError(Codes.GUARD_FAILED, `Only ${plain(remaining)} more of that line is expected.`);
+        const expiresOn = dateOnly(l.expiresOn, "Expires");
+        if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
+        const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
+        const lotNumber = text16(l.lotNumber, "lotNumber", 60);
+        let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
+        if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+        lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
+        await moveStock(uow, { itemId: line.itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: qty2, unit: line.unit, sourceType: "goods_receipt", sourceId: receipt.id, actorId: staff.id });
+        await uow.tx.goodsReceiptLine.create({ data: { receiptId: receipt.id, purchaseOrderLineId: line.id, itemId: line.itemId, lotId: lot.id, qty: toScale(dec(qty2), "qty"), unit: line.unit ?? null } });
+        await uow.tx.purchaseOrderLine.update({ where: { id: line.id }, data: { qtyReceived: toScale(dec(String(line.qtyReceived)).plus(dec(qty2)), "qty") } });
+      }
+      const all = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: po.id }, select: { qtyOrdered: true, qtyReceived: true } });
+      const done = all.every((l) => dec(l.qtyReceived.toString()).gte(dec(l.qtyOrdered.toString())));
+      await transition(uow, { model: "PurchaseOrder", id: po.id, from: ["submitted", "partially_received"], to: done ? "received" : "partially_received", actor, eventType: "po.received" });
+      auditCreate(uow, actor, "GoodsReceipt", receipt.id, "po.goods_received", { ref: receiptRef, order: po.ref, lines: args.lines.length });
+      return { id: receipt.id, ref: receiptRef, status: done ? "received" : "partially_received" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function setReorderRule(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "stock.reorder_rule", humanOnly: true }, args, async (actor) => {
+    const minQty = decimalText(args.minQty, "minQty");
+    const targetQty = positive(args.targetQty, "targetQty");
+    if (!dec(targetQty).gt(dec(minQty))) throw new DomainError(Codes.INVALID_INPUT, "The target must be above the re-order point.", { field: "targetQty" });
+    const result = await command(context.prisma, { name: "stock.reorder_rule", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await locationDay2(uow, args.locationId, uow.now);
+      const existing = await uow.tx.reorderRule.findFirst({ where: { itemId: args.itemId, locationId: args.locationId }, select: { id: true } });
+      const data = { minQty: toScale(dec(minQty), "qty"), targetQty: toScale(dec(targetQty), "qty") };
+      const row = existing ? await uow.tx.reorderRule.update({ where: { id: existing.id }, data }) : await uow.tx.reorderRule.create({ data: { itemId: args.itemId, locationId: args.locationId, ...data } });
+      auditCreate(uow, actor, "ReorderRule", row.id, "stock.reorder_rule_set", { minQty, targetQty });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function countStock(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.count", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.counts) || !args.counts.length || args.counts.length > 300) throw new DomainError(Codes.INVALID_INPUT, "Enter at least one counted amount.", { field: "counts" });
+    const result = await command(context.prisma, { name: "stock.count", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true } });
+      if (!place) throw new DomainError(Codes.NOT_FOUND, "Storage place not found.");
+      const ref = await nextReference(uow.tx, "SCN", uow.now);
+      const count = await uow.tx.stockCount.create({ data: { ref, locationId: place.locationId, stockLocationId: place.id, status: "closed", countedById: staff.id, countedAt: uow.now } });
+      let variances = 0;
+      for (const c of args.counts) {
+        const counted = dec(decimalText(c.countedQty, "countedQty"));
+        const level = await uow.tx.stockLevel.findFirst({ where: { itemId: c.itemId, lotId: c.lotId ?? null, stockLocationId: place.id }, select: { onHand: true } });
+        const expected = dec(level?.onHand?.toString() ?? "0");
+        const variance = counted.minus(expected);
+        await uow.tx.stockCountLine.create({ data: { countId: count.id, itemId: c.itemId, lotId: c.lotId ?? null, expectedQty: toScale(expected, "qty"), countedQty: toScale(counted, "qty"), variance: toScale(variance, "qty") } });
+        if (!variance.isZero()) {
+          variances += 1;
+          await moveStock(uow, { itemId: c.itemId, lotId: c.lotId, stockLocationId: place.id, kind: "count", qtySigned: plain(variance), sourceType: "stock_count", sourceId: count.id, reason: `Count ${ref}`, actorId: staff.id });
+        }
+      }
+      auditCreate(uow, actor, "StockCount", count.id, "stock.counted", { ref, lines: args.counts.length, variances });
+      return { id: count.id, ref, status: "closed", variances };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function openRecall(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.open", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const title = text16(args.title, "title", 160);
+    const result = await command(context.prisma, { name: "recall.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const item = await uow.tx.item.findUnique({ where: { id: args.itemId }, select: { id: true, drugId: true, vaccineId: true } });
+      if (!item) throw new DomainError(Codes.NOT_FOUND, "Item not found.");
+      if (await uow.tx.recallCase.findFirst({ where: { itemId: item.id, lotNumber, status: "open" }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "A recall for that lot is already open.");
+      const ref = await nextReference(uow.tx, "RCL", uow.now);
+      const recall = await uow.tx.recallCase.create({ data: { ref, title, source: String(args.source ?? "").slice(0, 120), itemId: item.id, lotNumber, status: "open", openedAt: uow.now } });
+      const lots = await uow.tx.inventoryLot.findMany({ where: { lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, status: true } });
+      const lotIds = lots.map((l) => l.id);
+      let quarantined = 0;
+      for (const l of lots.filter((x) => x.status === "available")) {
+        await transition(uow, { model: "InventoryLot", id: l.id, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Recall ${ref}`, data: { quarantineReason: `Recall ${ref}: ${title}` } });
+        quarantined += 1;
+      }
+      const exposures = [];
+      for (const d of await uow.tx.dispense.findMany({ where: { lotId: { in: lotIds } }, select: { id: true, patientId: true, clientId: true, dispensedAt: true } })) exposures.push({ patientId: d.patientId, clientId: d.clientId, sourceType: "dispense", sourceId: d.id, givenOn: d.dispensedAt });
+      for (const a of await uow.tx.administration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, givenAt: true } })) exposures.push({ patientId: a.patientId, clientId: null, sourceType: "administration", sourceId: a.id, givenOn: a.givenAt });
+      for (const v of await uow.tx.vaccineAdministration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, administeredOn: true } })) exposures.push({ patientId: v.patientId, clientId: null, sourceType: "vaccine", sourceId: v.id, givenOn: v.administeredOn });
+      for (const e of exposures) {
+        const clientId = e.clientId ?? (e.patientId ? (await uow.tx.patientOwnership.findFirst({ where: { patientId: e.patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } }))?.clientId ?? null : null);
+        await uow.tx.recallExposure.create({ data: { recallId: recall.id, patientId: e.patientId, clientId, sourceType: e.sourceType, sourceId: e.sourceId, givenOn: e.givenOn, status: "to_contact" } });
+      }
+      auditCreate(uow, actor, "RecallCase", recall.id, "recall.opened", { ref, lotNumber, quarantined, exposures: exposures.length });
+      return { id: recall.id, ref, status: "open", quarantinedLots: quarantined, exposures: exposures.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function markRecallExposure(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.exposure", humanOnly: true }, args, async (actor) => {
+    if (args.status !== "contacted" && args.status !== "resolved") throw new DomainError(Codes.INVALID_INPUT, "Choose contacted or resolved.", { field: "status" });
+    const result = await command(context.prisma, { name: "recall.exposure", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "RecallExposure", id: args.exposureId, from: args.status === "contacted" ? ["to_contact"] : ["to_contact", "contacted"], to: args.status, expectedVersion: args.expectedVersion, actor, eventType: "recall.exposure_updated", data: { note: String(args.note ?? "").slice(0, 300) } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function closeRecall(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.close", humanOnly: true }, args, async (actor) => {
+    const resolution = text16(args.resolution, "resolution", 300);
+    const result = await command(context.prisma, { name: "recall.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const open = await uow.tx.recallExposure.count({ where: { recallId: args.recallId, status: { not: "resolved" } } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, `${open} ${open === 1 ? "patient has" : "patients have"} not been marked resolved.`);
+      const row = await transition(uow, { model: "RecallCase", id: args.recallId, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "recall.closed", reason: resolution, data: { closedAt: uow.now, resolution } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function logTemperature(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock", "canManageInventory", "canAdminister"], tool: "temperature.log", humanOnly: true }, args, async (actor) => {
+    if (!/^-?\d{1,3}(\.\d{1,2})?$/.test(String(args.readingC ?? "").trim())) throw new DomainError(Codes.INVALID_INPUT, "Temperature: a number like 4.2", { field: "readingC" });
+    const result = await command(context.prisma, { name: "temperature.log", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await lockRow(uow.tx, "StockLocation", args.stockLocationId);
+      if (!["fridge", "freezer"].includes(place.kind) || place.minTempC === null || place.maxTempC === null) throw new DomainError(Codes.GUARD_FAILED, `${place.name} is not a fridge or freezer.`);
+      const reading = dec(args.readingC.trim());
+      const inRange = reading.gte(dec(String(place.minTempC))) && reading.lte(dec(String(place.maxTempC)));
+      const log = await uow.tx.temperatureLog.create({ data: { stockLocationId: place.id, readingC: toScale(reading, "qty"), inRange, recordedById: staff.id, recordedAt: uow.now } });
+      let excursionId = null;
+      let quarantined = 0;
+      if (!inRange) {
+        const openOne = await uow.tx.temperatureExcursion.findFirst({ where: { stockLocationId: place.id, status: "open" }, select: { id: true } });
+        if (openOne) excursionId = openOne.id;
+        else {
+          const ref = await nextReference(uow.tx, "TEX", uow.now);
+          const ex = await uow.tx.temperatureExcursion.create({ data: { ref, stockLocationId: place.id, logId: log.id, status: "open", openedAt: uow.now } });
+          excursionId = ex.id;
+        }
+        const levels = await uow.tx.stockLevel.findMany({ where: { stockLocationId: place.id, onHand: { gt: 0 }, lotId: { not: null }, lot: { status: "available" }, item: { coldChain: true } }, select: { lotId: true } });
+        for (const lotId of [...new Set(levels.map((l) => l.lotId))]) {
+          await transition(uow, { model: "InventoryLot", id: lotId, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Fridge out of range (${plain(reading)} \xB0C)`, data: { quarantineReason: `${place.name} read ${plain(reading)} \xB0C, outside ${plain(dec(String(place.minTempC)))} to ${plain(dec(String(place.maxTempC)))} \xB0C` } });
+          quarantined += 1;
+        }
+        await uow.tx.temperatureExcursion.update({ where: { id: excursionId }, data: { quarantinedLots: { increment: quarantined } } });
+        auditCreate(uow, actor, "TemperatureExcursion", excursionId, "temperature.excursion", { place: place.name, readingC: plain(reading), quarantined });
+      }
+      return { id: log.id, status: inRange ? "in_range" : "excursion", excursionId, quarantinedLots: quarantined };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function resolveExcursion(_root, args, context) {
+  return gated(context, { permissions: ["canReleaseQuarantine", "canManageInventory"], tool: "temperature.resolve", humanOnly: true }, args, async (actor) => {
+    const resolution = text16(args.resolution, "resolution", 300);
+    const result = await command(context.prisma, { name: "temperature.resolve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "TemperatureExcursion", id: args.excursionId, from: ["open"], to: "resolved", expectedVersion: args.expectedVersion, actor, eventType: "temperature.resolved", reason: resolution, data: { resolvedAt: uow.now, resolution } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/mutations/treatment.ts
 var ORDER_KINDS = ["medication", "procedure", "treatment", "lab", "imaging", "vaccine", "fluid", "diet", "nursing"];
 var LICENSED_ORDER = { medication: "prescribe", procedure: "diagnose", euthanasia: "authorise_euthanasia" };
@@ -9554,6 +9898,7 @@ async function administer(uow, actor, staff, args) {
   let csEntryId = null;
   let wasteEntryId = null;
   let witnessId = null;
+  let draw = null;
   if (controlled) {
     if (!args.csContainerId) throw new DomainError(Codes.INVALID_INPUT, "Choose the controlled-substance container the dose was drawn from.", { field: "csContainerId" });
     licenceId = (await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: order.locationId, action: "administer_controlled", at: uow.now })).evaluationId;
@@ -9582,6 +9927,7 @@ async function administer(uow, actor, staff, args) {
     if (drug && lot.drugId !== drug.id) throw new DomainError(Codes.GUARD_FAILED, "That lot is a different product.");
     if (lot.status !== "available") throw new DomainError(Codes.GUARD_FAILED, `Lot ${lot.lotNumber} is ${lot.status}.`);
     if (day2(lot.expiresOn) < on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lot.lotNumber} expired on ${day2(lot.expiresOn)}.`);
+    if (lot.drugId) draw = await lotToDraw(uow, { product: { drugId: lot.drugId }, productName: drug?.displayName ?? "this drug", lotId: lot.id, locationId: order.locationId, on, qty: qty2 });
     lotId = lot.id;
     lotNumber = lot.lotNumber;
     lotExpiresOn = lot.expiresOn;
@@ -9613,6 +9959,7 @@ async function administer(uow, actor, staff, args) {
       qtyOverrideReason: qtyProblem ? text16(qtyOverrideReason, "qtyOverrideReason", 300) : ""
     }
   });
+  if (draw) await takeFromLot(uow, draw, { kind: "use", sourceType: "administration", sourceId: row.id, actorId: staff.id });
   if (order.status === "ordered") await uow.tx.clinicalOrder.update({ where: { id: order.id }, data: { status: "in_progress", version: { increment: 1 } } });
   auditCreate(uow, actor, "Administration", row.id, "order.administered", { orderRef: order.ref, qty: row.qty.toString(), planned, unit: unit2, controlled, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId, lotNumber, qtyOverride: Boolean(qtyProblem) }, { reason: qtyProblem ? qtyOverrideReason : null });
   return { id: row.id, qty: row.qty.toString(), unit: unit2, csLogEntryId: csEntryId, wasteLogEntryId: wasteEntryId };
@@ -9657,6 +10004,7 @@ async function reverseAdministration(_root, args, context) {
           reason
         }
       });
+      await returnToLot(uow, { sourceType: "administration", sourceId: original.id, reversalId: row.id, actorId: staff.id, reason });
       const live = await uow.tx.administration.count({ where: { orderId: order.id, reversesId: null, from_Administration_reverses: { none: {} } } });
       let orderStatus = order.status;
       if (!live && ["ordered", "in_progress"].includes(order.status)) {
@@ -10068,6 +10416,7 @@ async function administerVaccine(_root, args, context) {
         supervisingDvmPresent: Boolean(supervising)
       });
       if (problems.length) throw new DomainError(Codes.GUARD_FAILED, problems.join(" "), { problems });
+      const draw = await lotToDraw(uow, { product: { vaccineId: product.id }, productName: product.name, lotId: lot.id, locationId: enc.locationId, on, qty: "1" });
       const licence = product.isRabies ? await requireLicence(uow.tx, { staffMemberId: (staff.kind === "dvm" ? staff : supervising).id, locationId: enc.locationId, action: "examine", at: uow.now }) : null;
       const recent = await uow.tx.vaccineAdministration.findFirst({ where: { patientId: patient.id, productId: product.id, ...liveDose, administeredOn: { gt: /* @__PURE__ */ new Date(`${addDays(on, -VACCINE_REPEAT_MIN_DAYS)}T00:00:00Z`) } }, orderBy: { administeredOn: "desc" }, select: { administeredOn: true } });
       if (recent && day2(recent.administeredOn) === on) throw new DomainError(Codes.GUARD_FAILED, `${patient.name ?? "This patient"} already had ${product.name} today. Reverse that dose first if it was recorded by mistake.`, { reason: "repeat_same_day" });
@@ -10108,6 +10457,7 @@ async function administerVaccine(_root, args, context) {
           source: "administered"
         }
       });
+      await takeFromLot(uow, draw, { kind: "use", sourceType: "vaccine_administration", sourceId: va.id, actorId: staff.id });
       let reminder = null;
       const typeId = rule2?.satisfiesId ?? product.reminderTypeId;
       if (typeId) reminder = await satisfyAndSchedule(uow, { patientId: patient.id, locationId: enc.locationId, typeId, sourceKey: `VA:${va.id}`, nextDueOn: dueNextOn, rule: rule2, vaccineAdministrationId: va.id, staffId: staff.id, on });
@@ -10211,6 +10561,7 @@ async function reverseVaccineAdministration(_root, args, context) {
       if (await uow.tx.vaccineAdministration.count({ where: { reversesId: va.id } })) throw new DomainError(Codes.GUARD_FAILED, `This ${va.product?.name ?? "vaccine"} dose was already reversed.`, { reason: "already_reversed" });
       const { id: _id, createdAt: _c, product: _p, certificate: _cert, certificateId: _ci, administrationId: _a, reason: _r, reversesId: _rv, ...copy } = va;
       const row = await uow.tx.vaccineAdministration.create({ data: { ...copy, policyVersions: va.policyVersions ?? [], source: "reversal", reversesId: va.id, reason, vaccinatedById: staff.id } });
+      await returnToLot(uow, { sourceType: "vaccine_administration", sourceId: va.id, reversalId: row.id, actorId: staff.id, reason });
       if (va.certificate) await uow.tx.rabiesCertificate.update({ where: { id: va.certificate.id }, data: { voidedAt: uow.now, voidReason: reason } });
       const scheduled = await uow.tx.patientReminder.updateMany({ where: { sourceKey: `VA:${va.id}`, status: { not: "suppressed" } }, data: { status: "suppressed", suppressedReason: `Vaccine reversed: ${reason}`.slice(0, 300), version: { increment: 1 } } });
       const satisfied = await uow.tx.reminderSatisfaction.findMany({ where: { OR: [{ vaccineAdministrationId: va.id }, { sourceKey: `VA:${va.id}` }] }, select: { reminderId: true } });
@@ -10827,7 +11178,7 @@ var addMonthsTo = (d, months) => {
   out.setUTCMonth(out.getUTCMonth() + months);
   return out;
 };
-var dateOnly = (value, field) => {
+var dateOnly2 = (value, field) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
   return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
 };
@@ -10999,6 +11350,7 @@ async function dispenseFill(_root, args, context) {
       let expiryOn = null;
       let containerId = null;
       let csEntryId = null;
+      let draw = null;
       if (controlled) {
         if (!can(actor, "canAdministerControlled")) throw new DomainError(Codes.NOT_AUTHORIZED, "Dispensing a controlled drug needs the controlled-substance permission.");
         await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rx.location.id, action: "administer_controlled", at: uow.now });
@@ -11018,14 +11370,11 @@ async function dispenseFill(_root, args, context) {
         lotNumber = c.lotNumber;
         expiryOn = c.lotExpiresOn;
       } else {
-        const lots = await uow.tx.inventoryLot.findMany({ where: { drugId: line.productId, locationId: rx.location.id, status: "available", expiresOn: { gte: /* @__PURE__ */ new Date(`${on}T00:00:00Z`) } }, orderBy: { expiresOn: "asc" }, select: { id: true, lotNumber: true, expiresOn: true } });
-        const pick = args.lotId ? lots.find((l) => l.id === args.lotId) : lots[0];
-        if (args.lotId && !pick) throw new DomainError(Codes.GUARD_FAILED, "That lot is not available here (expired, quarantined or another drug).");
-        if (pick) {
-          lotId = pick.id;
-          lotNumber = pick.lotNumber;
-          expiryOn = pick.expiresOn;
-        }
+        if (!line.productId) throw new DomainError(Codes.GUARD_FAILED, "The prescription line has no drug.");
+        draw = await lotToDraw(uow, { product: { drugId: line.productId }, productName: line.product?.displayName ?? "this drug", lotId: args.lotId, locationId: rx.location.id, on, qty: qty2 });
+        lotId = draw.lotId;
+        lotNumber = draw.lotNumber;
+        expiryOn = draw.expiresOn;
       }
       const ref = await nextReference(uow.tx, "DSP", uow.now);
       const policy = await resolvePolicy(uow.tx, "prescription", { locationId: rx.location.id, on });
@@ -11052,12 +11401,13 @@ async function dispenseFill(_root, args, context) {
       const row = await uow.tx.dispense.create({
         data: { ref, prescriptionId: rx.id, lineId: line.id, patientId: rx.patient.id, clientId: rx.client?.id ?? null, locationId: rx.location.id, productId: line.productId, lotId, containerId, csLogEntryId: csEntryId, refillRequestId: args.refillRequestId ?? null, quantity: toScale(dec(qty2), "qty"), quantityUnit: line.quantityUnit, refillNumber: fills, dispensedById: staff.id, dispensedAt: uow.now, label: labelJson }
       });
-      auditCreate(uow, actor, "Dispense", row.id, "dispense.filled", { ref, rx: rx.ref, lineId: line.id, refillNumber: fills, quantity: qty2, containerId, lotId });
+      const movementId = draw ? (await takeFromLot(uow, draw, { kind: "dispense", sourceType: "dispense", sourceId: row.id, actorId: staff.id })).id : null;
+      auditCreate(uow, actor, "Dispense", row.id, "dispense.filled", { ref, rx: rx.ref, lineId: line.id, refillNumber: fills, quantity: qty2, containerId, lotId, movementId });
       if (controlled) {
         const cs = await resolvePolicy(uow.tx, "controlled_substances", { locationId: rx.location.id, on });
         if (cs.rules.pdmp.required && cs.rules.pdmp.schedules.includes(line.csSchedule)) {
           const prefix = await nextReference(uow.tx, "PDM", uow.now);
-          await uow.tx.pdmpReport.create({ data: { ref: prefix, locationId: rx.location.id, dispenseId: row.id, program: cs.rules.pdmp.program, format: cs.rules.pdmp.format, dueOn: dateOnly(addDays(on, cs.rules.pdmp.maxDays), "dueOn"), status: "pending" } });
+          await uow.tx.pdmpReport.create({ data: { ref: prefix, locationId: rx.location.id, dispenseId: row.id, program: cs.rules.pdmp.program, format: cs.rules.pdmp.format, dueOn: dateOnly2(addDays(on, cs.rules.pdmp.maxDays), "dueOn"), status: "pending" } });
         }
       }
       const filled = fills + 1;
@@ -11072,7 +11422,7 @@ async function dispenseFill(_root, args, context) {
 async function receiveStockLot(_root, args, context) {
   return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive", humanOnly: true }, args, async (actor) => {
     const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const expiresOn = dateOnly(args.expiresOn, "Expires");
+    const expiresOn = dateOnly2(args.expiresOn, "Expires");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
     const result = await command(context.prisma, { name: "stock.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const { on } = await locationDay2(uow, args.locationId, uow.now);
@@ -11115,7 +11465,7 @@ async function setLotQuarantine(_root, args, context) {
 async function receiveControlled(_root, args, context) {
   return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive", humanOnly: true }, args, async (actor) => {
     const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const lotExpiresOn = dateOnly(args.lotExpiresOn, "Expires");
+    const lotExpiresOn = dateOnly2(args.lotExpiresOn, "Expires");
     const labelQty = positiveQty(args.labelQty, "labelQty");
     if (!CS_UNITS.has(args.labelUnit)) throw new DomainError(Codes.INVALID_INPUT, "Choose a unit.", { field: "labelUnit" });
     const result = await command(context.prisma, { name: "cs.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -11184,8 +11534,8 @@ async function openCase(uow, input) {
       discoveredById: input.staffId,
       description: input.description.slice(0, 500),
       status: "open",
-      noticeDueOn: dateOnly(addBusinessDays(calendar, on, policy.rules.theftLossNoticeBusinessDays), "noticeDueOn"),
-      form106DueOn: dateOnly(addDays(on, policy.rules.form106Days), "form106DueOn")
+      noticeDueOn: dateOnly2(addBusinessDays(calendar, on, policy.rules.theftLossNoticeBusinessDays), "noticeDueOn"),
+      form106DueOn: dateOnly2(addDays(on, policy.rules.form106Days), "form106DueOn")
     }
   });
 }
@@ -11299,323 +11649,6 @@ async function submitPdmp(_root, args, context) {
     const result = await command(context.prisma, { name: "cs.pdmp_submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "PdmpReport", id: args.reportId, from: ["pending"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "cs.pdmp_submitted", reason: confirmation, data: { submittedAt: uow.now, submittedById: staff.id, confirmation } });
-      return { id: row.id, status: row.status, version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-
-// features/keystone/mutations/inventory.ts
-var dateOnly2 = (value, field) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
-  return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
-};
-var positive = (value, field) => {
-  const t = decimalText(value, field);
-  if (!dec(t).gt(0)) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
-  return t;
-};
-async function moveStock(uow, m) {
-  return uow.tx.stockMovement.create({
-    data: { itemId: m.itemId, lotId: m.lotId ?? null, stockLocationId: m.stockLocationId, kind: m.kind, qtySigned: toScale(dec(m.qtySigned), "qty"), unit: m.unit ?? null, sourceType: m.sourceType, sourceId: m.sourceId, reason: m.reason ?? "", actorId: m.actorId, occurredAt: uow.now }
-  });
-}
-async function ensureItem(uow, input) {
-  const found = await uow.tx.item.findFirst({ where: input.drugId ? { drugId: input.drugId } : { vaccineId: input.vaccineId }, select: { id: true } });
-  if (found) return found.id;
-  if (input.drugId) {
-    const d = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: input.drugId }, select: { displayName: true, csSchedule: true, form: true } });
-    if (d.csSchedule !== "none") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are stocked through the controlled-substance register.");
-    return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: d.displayName, kind: "drug", drugId: input.drugId, baseUnit: "unit" } })).id;
-  }
-  const v = await uow.tx.vaccineProduct.findUniqueOrThrow({ where: { id: input.vaccineId }, select: { name: true } });
-  return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: v.name, kind: "vaccine", vaccineId: input.vaccineId, baseUnit: "dose", coldChain: true } })).id;
-}
-async function addStockLocation(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory"], tool: "stock.add_place", humanOnly: true }, args, async (actor) => {
-    const name = text16(args.name, "name", 80);
-    if (!["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of place.", { field: "kind" });
-    const cold = args.kind === "fridge" || args.kind === "freezer";
-    if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
-    if (cold && !dec(args.minTempC).lt(dec(args.maxTempC))) throw new DomainError(Codes.INVALID_INPUT, "The lowest allowed temperature must be below the highest.", { field: "minTempC" });
-    const result = await command(context.prisma, { name: "stock.add_place", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      await locationDay2(uow, args.locationId, uow.now);
-      const row = await uow.tx.stockLocation.create({ data: { name, locationId: args.locationId, kind: args.kind, minTempC: cold ? toScale(dec(args.minTempC), "qty") : null, maxTempC: cold ? toScale(dec(args.maxTempC), "qty") : null } });
-      auditCreate(uow, actor, "StockLocation", row.id, "stock.place_added", { name, kind: args.kind });
-      return { id: row.id, status: "active" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function receiveStock(_root, args, context) {
-  return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive_lot", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const expiresOn = dateOnly2(args.expiresOn, "Expires");
-    const quantity = positive(args.quantity, "quantity");
-    if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
-    const result = await command(context.prisma, { name: "stock.receive_lot", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
-      if (!place?.active || !place.locationId) throw new DomainError(Codes.NOT_FOUND, "That storage place is not available.");
-      if (place.kind === "controlled_cabinet") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are received through the controlled-substance register.");
-      const { on } = await locationDay2(uow, place.locationId, uow.now);
-      if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
-      const itemId = await ensureItem(uow, args);
-      let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: place.locationId, lotNumber, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null }, select: { id: true, expiresOn: true, status: true } });
-      if (lot && lot.status !== "available") throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is ${lot.status} and cannot take more stock.`);
-      if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
-      lot ??= await uow.tx.inventoryLot.create({ data: { drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, locationId: place.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true, status: true } });
-      const mv = await moveStock(uow, { itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: quantity, unit: args.unit, sourceType: "receive", sourceId: lot.id, actorId: staff.id });
-      auditCreate(uow, actor, "InventoryLot", lot.id, "stock.received", { lotNumber, quantity, stockLocationId: place.id, movementId: mv.id });
-      return { id: lot.id, movementId: mv.id, status: "available" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-var day3 = (d) => d.toISOString().slice(0, 10);
-async function adjustStock(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
-    const quantity = positive(args.quantity, "quantity");
-    const reason = text16(args.reason, "reason", 200);
-    if (reason.length < 4) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 4 characters).", { field: "reason" });
-    if (args.kind !== "dispose" && args.kind !== "use") throw new DomainError(Codes.INVALID_INPUT, "Choose dispose or use.", { field: "kind" });
-    const result = await command(context.prisma, { name: "stock.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const mv = await moveStock(uow, { itemId: args.itemId, lotId: args.lotId, stockLocationId: args.stockLocationId, kind: args.kind, qtySigned: `-${quantity}`, sourceType: "adjustment", sourceId: args.lotId ?? args.itemId, reason, actorId: staff.id });
-      auditCreate(uow, actor, "StockMovement", mv.id, "stock.adjusted", { kind: args.kind, quantity, reason }, { reason });
-      return { id: mv.id, status: "recorded" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function addSupplier(_root, args, context) {
-  return gated(context, { permissions: ["canOrderStock", "canManageInventory"], tool: "supplier.create", humanOnly: true }, args, async (actor) => {
-    const name = text16(args.name, "name", 100);
-    const result = await command(context.prisma, { name: "supplier.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      if (await uow.tx.supplier.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `${name} is already a supplier.`);
-      const row = await uow.tx.supplier.create({ data: { name, accountNumber: String(args.accountNumber ?? "").trim().slice(0, 60), phone: String(args.phone ?? "").trim().slice(0, 40), email: String(args.email ?? "").trim().slice(0, 120), deaNumber: String(args.deaNumber ?? "").trim().slice(0, 20) } });
-      auditCreate(uow, actor, "Supplier", row.id, "supplier.created", { name });
-      return { id: row.id, status: "active" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function draftPurchaseOrder(_root, args, context) {
-  return gated(context, { permissions: ["canOrderStock"], tool: "po.draft", humanOnly: true }, args, async (actor) => {
-    if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 60) throw new DomainError(Codes.INVALID_INPUT, "An order needs between one and sixty lines.", { field: "lines" });
-    const result = await command(context.prisma, { name: "po.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      await locationDay2(uow, args.locationId, uow.now);
-      if (!await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
-      for (const l of args.lines) {
-        positive(l.quantity, "quantity");
-        if (!/^\d{1,9}$/.test(String(l.unitCostMinor))) throw new DomainError(Codes.INVALID_INPUT, "Cost is in whole cents.", { field: "unitCostMinor" });
-        if (!await uow.tx.item.findFirst({ where: { id: l.itemId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "An item on the order is not in the catalogue.");
-      }
-      const ref = await nextReference(uow.tx, "PO", uow.now);
-      const row = await uow.tx.purchaseOrder.create({
-        data: { ref, supplierId: args.supplierId, locationId: args.locationId, status: "draft", orderedById: staff.id, note: String(args.note ?? "").slice(0, 300), lines: { create: args.lines.map((l) => ({ itemId: l.itemId, qtyOrdered: toScale(dec(l.quantity), "qty"), qtyReceived: "0", unit: l.unit ?? null, unitCostMinor: BigInt(l.unitCostMinor) })) } }
-      });
-      auditCreate(uow, actor, "PurchaseOrder", row.id, "po.drafted", { ref, lines: args.lines.length });
-      return { id: row.id, ref, status: "draft", version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function submitPurchaseOrder(_root, args, context) {
-  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.submit", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "po.submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const lines = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: args.orderId }, select: { qtyOrdered: true, unitCostMinor: true } });
-      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "The order has no lines.");
-      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "po.submitted", data: { orderedAt: uow.now, approvedById: staff.id } });
-      return { id: row.id, status: row.status, version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function cancelPurchaseOrder(_root, args, context) {
-  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 200);
-    const result = await command(context.prisma, { name: "po.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft", "submitted"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "po.cancelled", reason });
-      return { id: row.id, status: row.status, version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function receivePurchaseOrder(_root, args, context) {
-  return gated(context, { permissions: ["canReceiveStock"], tool: "po.receive", humanOnly: true }, args, async (actor) => {
-    if (!Array.isArray(args.lines) || !args.lines.length) throw new DomainError(Codes.INVALID_INPUT, "Enter what arrived.", { field: "lines" });
-    const result = await command(context.prisma, { name: "po.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const po = await lockRow(uow.tx, "PurchaseOrder", args.orderId);
-      if (!["submitted", "partially_received"].includes(po.status)) throw new DomainError(Codes.INVALID_TRANSITION, `${po.ref} is ${po.status.replaceAll("_", " ")}; it cannot be received.`);
-      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
-      if (!place?.active || place.locationId !== po.locationId) throw new DomainError(Codes.GUARD_FAILED, "Choose a storage place at the ordering location.");
-      const { on } = await locationDay2(uow, po.locationId, uow.now);
-      const receiptRef = await nextReference(uow.tx, "GRN", uow.now);
-      const receipt = await uow.tx.goodsReceipt.create({ data: { ref: receiptRef, purchaseOrderId: po.id, locationId: po.locationId, receivedById: staff.id, receivedAt: uow.now, packingSlip: String(args.packingSlip ?? "").trim().slice(0, 60) } });
-      for (const l of args.lines) {
-        const qty2 = positive(l.quantity, "quantity");
-        const line = await lockRow(uow.tx, "PurchaseOrderLine", l.lineId);
-        if (line.purchaseOrderId !== po.id) throw new DomainError(Codes.GUARD_FAILED, "A line does not belong to this order.");
-        const remaining = dec(String(line.qtyOrdered)).minus(dec(String(line.qtyReceived)));
-        if (dec(qty2).gt(remaining)) throw new DomainError(Codes.GUARD_FAILED, `Only ${plain(remaining)} more of that line is expected.`);
-        const expiresOn = dateOnly2(l.expiresOn, "Expires");
-        if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
-        const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
-        const lotNumber = text16(l.lotNumber, "lotNumber", 60);
-        let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
-        if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
-        lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
-        await moveStock(uow, { itemId: line.itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: qty2, unit: line.unit, sourceType: "goods_receipt", sourceId: receipt.id, actorId: staff.id });
-        await uow.tx.goodsReceiptLine.create({ data: { receiptId: receipt.id, purchaseOrderLineId: line.id, itemId: line.itemId, lotId: lot.id, qty: toScale(dec(qty2), "qty"), unit: line.unit ?? null } });
-        await uow.tx.purchaseOrderLine.update({ where: { id: line.id }, data: { qtyReceived: toScale(dec(String(line.qtyReceived)).plus(dec(qty2)), "qty") } });
-      }
-      const all = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: po.id }, select: { qtyOrdered: true, qtyReceived: true } });
-      const done = all.every((l) => dec(l.qtyReceived.toString()).gte(dec(l.qtyOrdered.toString())));
-      await transition(uow, { model: "PurchaseOrder", id: po.id, from: ["submitted", "partially_received"], to: done ? "received" : "partially_received", actor, eventType: "po.received" });
-      auditCreate(uow, actor, "GoodsReceipt", receipt.id, "po.goods_received", { ref: receiptRef, order: po.ref, lines: args.lines.length });
-      return { id: receipt.id, ref: receiptRef, status: done ? "received" : "partially_received" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function setReorderRule(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory"], tool: "stock.reorder_rule", humanOnly: true }, args, async (actor) => {
-    const minQty = decimalText(args.minQty, "minQty");
-    const targetQty = positive(args.targetQty, "targetQty");
-    if (!dec(targetQty).gt(dec(minQty))) throw new DomainError(Codes.INVALID_INPUT, "The target must be above the re-order point.", { field: "targetQty" });
-    const result = await command(context.prisma, { name: "stock.reorder_rule", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      await locationDay2(uow, args.locationId, uow.now);
-      const existing = await uow.tx.reorderRule.findFirst({ where: { itemId: args.itemId, locationId: args.locationId }, select: { id: true } });
-      const data = { minQty: toScale(dec(minQty), "qty"), targetQty: toScale(dec(targetQty), "qty") };
-      const row = existing ? await uow.tx.reorderRule.update({ where: { id: existing.id }, data }) : await uow.tx.reorderRule.create({ data: { itemId: args.itemId, locationId: args.locationId, ...data } });
-      auditCreate(uow, actor, "ReorderRule", row.id, "stock.reorder_rule_set", { minQty, targetQty });
-      return { id: row.id, status: "active" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function countStock(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.count", humanOnly: true }, args, async (actor) => {
-    if (!Array.isArray(args.counts) || !args.counts.length || args.counts.length > 300) throw new DomainError(Codes.INVALID_INPUT, "Enter at least one counted amount.", { field: "counts" });
-    const result = await command(context.prisma, { name: "stock.count", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true } });
-      if (!place) throw new DomainError(Codes.NOT_FOUND, "Storage place not found.");
-      const ref = await nextReference(uow.tx, "SCN", uow.now);
-      const count = await uow.tx.stockCount.create({ data: { ref, locationId: place.locationId, stockLocationId: place.id, status: "closed", countedById: staff.id, countedAt: uow.now } });
-      let variances = 0;
-      for (const c of args.counts) {
-        const counted = dec(decimalText(c.countedQty, "countedQty"));
-        const level = await uow.tx.stockLevel.findFirst({ where: { itemId: c.itemId, lotId: c.lotId ?? null, stockLocationId: place.id }, select: { onHand: true } });
-        const expected = dec(level?.onHand?.toString() ?? "0");
-        const variance = counted.minus(expected);
-        await uow.tx.stockCountLine.create({ data: { countId: count.id, itemId: c.itemId, lotId: c.lotId ?? null, expectedQty: toScale(expected, "qty"), countedQty: toScale(counted, "qty"), variance: toScale(variance, "qty") } });
-        if (!variance.isZero()) {
-          variances += 1;
-          await moveStock(uow, { itemId: c.itemId, lotId: c.lotId, stockLocationId: place.id, kind: "count", qtySigned: plain(variance), sourceType: "stock_count", sourceId: count.id, reason: `Count ${ref}`, actorId: staff.id });
-        }
-      }
-      auditCreate(uow, actor, "StockCount", count.id, "stock.counted", { ref, lines: args.counts.length, variances });
-      return { id: count.id, ref, status: "closed", variances };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function openRecall(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory"], tool: "recall.open", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const title = text16(args.title, "title", 160);
-    const result = await command(context.prisma, { name: "recall.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const item = await uow.tx.item.findUnique({ where: { id: args.itemId }, select: { id: true, drugId: true, vaccineId: true } });
-      if (!item) throw new DomainError(Codes.NOT_FOUND, "Item not found.");
-      if (await uow.tx.recallCase.findFirst({ where: { itemId: item.id, lotNumber, status: "open" }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "A recall for that lot is already open.");
-      const ref = await nextReference(uow.tx, "RCL", uow.now);
-      const recall = await uow.tx.recallCase.create({ data: { ref, title, source: String(args.source ?? "").slice(0, 120), itemId: item.id, lotNumber, status: "open", openedAt: uow.now } });
-      const lots = await uow.tx.inventoryLot.findMany({ where: { lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, status: true } });
-      const lotIds = lots.map((l) => l.id);
-      let quarantined = 0;
-      for (const l of lots.filter((x) => x.status === "available")) {
-        await transition(uow, { model: "InventoryLot", id: l.id, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Recall ${ref}`, data: { quarantineReason: `Recall ${ref}: ${title}` } });
-        quarantined += 1;
-      }
-      const exposures = [];
-      for (const d of await uow.tx.dispense.findMany({ where: { lotId: { in: lotIds } }, select: { id: true, patientId: true, clientId: true, dispensedAt: true } })) exposures.push({ patientId: d.patientId, clientId: d.clientId, sourceType: "dispense", sourceId: d.id, givenOn: d.dispensedAt });
-      for (const a of await uow.tx.administration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, givenAt: true } })) exposures.push({ patientId: a.patientId, clientId: null, sourceType: "administration", sourceId: a.id, givenOn: a.givenAt });
-      for (const v of await uow.tx.vaccineAdministration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, administeredOn: true } })) exposures.push({ patientId: v.patientId, clientId: null, sourceType: "vaccine", sourceId: v.id, givenOn: v.administeredOn });
-      for (const e of exposures) {
-        const clientId = e.clientId ?? (e.patientId ? (await uow.tx.patientOwnership.findFirst({ where: { patientId: e.patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } }))?.clientId ?? null : null);
-        await uow.tx.recallExposure.create({ data: { recallId: recall.id, patientId: e.patientId, clientId, sourceType: e.sourceType, sourceId: e.sourceId, givenOn: e.givenOn, status: "to_contact" } });
-      }
-      auditCreate(uow, actor, "RecallCase", recall.id, "recall.opened", { ref, lotNumber, quarantined, exposures: exposures.length });
-      return { id: recall.id, ref, status: "open", quarantinedLots: quarantined, exposures: exposures.length };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function markRecallExposure(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory"], tool: "recall.exposure", humanOnly: true }, args, async (actor) => {
-    if (args.status !== "contacted" && args.status !== "resolved") throw new DomainError(Codes.INVALID_INPUT, "Choose contacted or resolved.", { field: "status" });
-    const result = await command(context.prisma, { name: "recall.exposure", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await transition(uow, { model: "RecallExposure", id: args.exposureId, from: args.status === "contacted" ? ["to_contact"] : ["to_contact", "contacted"], to: args.status, expectedVersion: args.expectedVersion, actor, eventType: "recall.exposure_updated", data: { note: String(args.note ?? "").slice(0, 300) } });
-      return { id: row.id, status: row.status, version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function closeRecall(_root, args, context) {
-  return gated(context, { permissions: ["canManageInventory"], tool: "recall.close", humanOnly: true }, args, async (actor) => {
-    const resolution = text16(args.resolution, "resolution", 300);
-    const result = await command(context.prisma, { name: "recall.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const open = await uow.tx.recallExposure.count({ where: { recallId: args.recallId, status: { not: "resolved" } } });
-      if (open) throw new DomainError(Codes.GUARD_FAILED, `${open} ${open === 1 ? "patient has" : "patients have"} not been marked resolved.`);
-      const row = await transition(uow, { model: "RecallCase", id: args.recallId, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "recall.closed", reason: resolution, data: { closedAt: uow.now, resolution } });
-      return { id: row.id, status: row.status, version: row.version };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function logTemperature(_root, args, context) {
-  return gated(context, { permissions: ["canReceiveStock", "canManageInventory", "canAdminister"], tool: "temperature.log", humanOnly: true }, args, async (actor) => {
-    if (!/^-?\d{1,3}(\.\d{1,2})?$/.test(String(args.readingC ?? "").trim())) throw new DomainError(Codes.INVALID_INPUT, "Temperature: a number like 4.2", { field: "readingC" });
-    const result = await command(context.prisma, { name: "temperature.log", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const staff = await staffOf(uow, actor);
-      const place = await lockRow(uow.tx, "StockLocation", args.stockLocationId);
-      if (!["fridge", "freezer"].includes(place.kind) || place.minTempC === null || place.maxTempC === null) throw new DomainError(Codes.GUARD_FAILED, `${place.name} is not a fridge or freezer.`);
-      const reading = dec(args.readingC.trim());
-      const inRange = reading.gte(dec(String(place.minTempC))) && reading.lte(dec(String(place.maxTempC)));
-      const log = await uow.tx.temperatureLog.create({ data: { stockLocationId: place.id, readingC: toScale(reading, "qty"), inRange, recordedById: staff.id, recordedAt: uow.now } });
-      let excursionId = null;
-      let quarantined = 0;
-      if (!inRange) {
-        const openOne = await uow.tx.temperatureExcursion.findFirst({ where: { stockLocationId: place.id, status: "open" }, select: { id: true } });
-        if (openOne) excursionId = openOne.id;
-        else {
-          const ref = await nextReference(uow.tx, "TEX", uow.now);
-          const ex = await uow.tx.temperatureExcursion.create({ data: { ref, stockLocationId: place.id, logId: log.id, status: "open", openedAt: uow.now } });
-          excursionId = ex.id;
-        }
-        const levels = await uow.tx.stockLevel.findMany({ where: { stockLocationId: place.id, onHand: { gt: 0 }, lotId: { not: null }, lot: { status: "available" }, item: { coldChain: true } }, select: { lotId: true } });
-        for (const lotId of [...new Set(levels.map((l) => l.lotId))]) {
-          await transition(uow, { model: "InventoryLot", id: lotId, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Fridge out of range (${plain(reading)} \xB0C)`, data: { quarantineReason: `${place.name} read ${plain(reading)} \xB0C, outside ${plain(dec(String(place.minTempC)))} to ${plain(dec(String(place.maxTempC)))} \xB0C` } });
-          quarantined += 1;
-        }
-        await uow.tx.temperatureExcursion.update({ where: { id: excursionId }, data: { quarantinedLots: { increment: quarantined } } });
-        auditCreate(uow, actor, "TemperatureExcursion", excursionId, "temperature.excursion", { place: place.name, readingC: plain(reading), quarantined });
-      }
-      return { id: log.id, status: inRange ? "in_range" : "excursion", excursionId, quarantinedLots: quarantined };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function resolveExcursion(_root, args, context) {
-  return gated(context, { permissions: ["canReleaseQuarantine", "canManageInventory"], tool: "temperature.resolve", humanOnly: true }, args, async (actor) => {
-    const resolution = text16(args.resolution, "resolution", 300);
-    const result = await command(context.prisma, { name: "temperature.resolve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await transition(uow, { model: "TemperatureExcursion", id: args.excursionId, from: ["open"], to: "resolved", expectedVersion: args.expectedVersion, actor, eventType: "temperature.resolved", reason: resolution, data: { resolvedAt: uow.now, resolution } });
       return { id: row.id, status: row.status, version: row.version };
     });
     return { replay: result.replay, ...result.value };
