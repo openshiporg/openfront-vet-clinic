@@ -26,7 +26,7 @@ const dr = (await gql(`{patients(take:1,orderBy:{ref:asc}){id} clients(take:1,or
 const bigClient = [...d.bigC].sort((a, b) => b.ownershipsCount - a.ownershipsCount)[0]?.id
 const tally = {}; for (const e of d.bigP) if (e.patient) tally[e.patient.id] = (tally[e.patient.id] ?? 0) + 1
 const bigPatient = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0]
-const sections = ['today', 'schedule', 'whiteboard', 'hospital', 'patients', 'clients', 'encounters', 'vaccines', 'imports', 'approvals', 'team', 'agents', 'waitlist', 'calls', 'messages', 'records-requests', 'compliance', 'audit', 'read-audit', 'policies', 'settings']
+const sections = ['today', 'schedule', 'whiteboard', 'hospital', 'patients', 'clients', 'encounters', 'vaccines', 'imports', 'approvals', 'team', 'agents', 'waitlist', 'calls', 'messages', 'records-requests', 'prescriptions', 'controlled', 'controlled?view=orders', 'inventory', 'compliance', 'audit', 'read-audit', 'policies', 'settings']
 const extra = {
   patient: 'patients/' + d.patients[0].id, bigPatient: bigPatient && 'patients/' + bigPatient,
   client: 'clients/' + d.clients[0].id, bigClient: bigClient && 'clients/' + bigClient,

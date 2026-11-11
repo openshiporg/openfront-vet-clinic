@@ -15,14 +15,14 @@ const UNITS = ['mg', 'mL', 'tablet', 'capsule', 'g', 'unit'].map(u => ({ value: 
 /** Order forms, transfers to other registrants, cabinet access and the state-report files (BUILD-PLAN P3). */
 export default async function OrdersTransfers({ path, tz, today, location, witnesses, containers }: { path: string; tz: string; today: string; location?: { id: string; name: string }; witnesses: { value: string; label: string }[]; containers: { value: string; label: string }[] }) {
   const d = await q<{ csOrderForms: Form[]; csTransfers: Transfer[]; cabinetAccessEvents: Cabinet[]; pdmpSubmissions: Submission[]; suppliers: { id: string; name: string }[]; deaRegistrations: { id: string; registrantName: string; registrationNumber: string }[]; drugProducts: { id: string; displayName: string }[]; pending: number }>(`{
-    csOrderForms(orderBy: { issuedOn: desc }, take: 30) { id ref formNumber kind status issuedOn expiresOn supplier { name } lines { id packages packagesReceived product { displayName } } }
-    csTransfers(orderBy: { sentAt: desc }, take: 30) { id ref status version qty unit sentAt fromContainer { ref } toRegistration { registrantName } witness { displayName } }
+    csOrderForms(orderBy: { issuedOn: desc }, take: 12) { id ref formNumber kind status issuedOn expiresOn supplier { name } lines(take: 6) { id packages packagesReceived product { displayName } } }
+    csTransfers(orderBy: { sentAt: desc }, take: 15) { id ref status version qty unit sentAt fromContainer { ref } toRegistration { registrantName } witness { displayName } }
     cabinetAccessEvents(orderBy: { occurredAt: desc }, take: 20) { id kind occurredAt note staff { displayName } }
     pdmpSubmissions(orderBy: { generatedAt: desc }, take: 20) { id ref reportCount generatedAt fileSha256 generatedBy { displayName } }
     suppliers(where: { active: { equals: true } }, orderBy: { name: asc }, take: 100) { id name }
     deaRegistrations(where: { status: { equals: "active" } }, orderBy: { registrantName: asc }, take: 100) { id registrantName registrationNumber }
     drugProducts(where: { active: { equals: true }, csSchedule: { in: ["CII", "CIIN"] } }, orderBy: { displayName: asc }, take: 100) { id displayName }
-    pending: pdmpReportsCount(where: { status: { equals: "pending" }, submissionId: { equals: null } })
+    pending: pdmpReportsCount(where: { status: { equals: "pending" }, submission: null })
   }`);
   const here = `${path}?view=orders`;
   return (
