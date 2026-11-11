@@ -556,6 +556,7 @@ model DeaRegistration {
   from_Prescription_deaRegistration      Prescription[]       @relation("Prescription_deaRegistration")
   from_CsContainer_deaRegistration       CsContainer[]        @relation("CsContainer_deaRegistration")
   from_CsLogEntry_deaRegistration        CsLogEntry[]         @relation("CsLogEntry_deaRegistration")
+  from_CsTransfer_toRegistration         CsTransfer[]         @relation("CsTransfer_toRegistration")
 
   @@index([staffMemberId])
   @@index([locationId])
@@ -637,6 +638,14 @@ model Location {
   from_CsDiscrepancyCase_location     CsDiscrepancyCase[]     @relation("CsDiscrepancyCase_location")
   from_CsDestructionRecord_location   CsDestructionRecord[]   @relation("CsDestructionRecord_location")
   from_PdmpReport_location            PdmpReport[]            @relation("PdmpReport_location")
+  from_CsOrderForm_location           CsOrderForm[]           @relation("CsOrderForm_location")
+  from_PdmpSubmission_location        PdmpSubmission[]        @relation("PdmpSubmission_location")
+  from_CabinetAccessEvent_location    CabinetAccessEvent[]    @relation("CabinetAccessEvent_location")
+  from_StockLocation_location         StockLocation[]         @relation("StockLocation_location")
+  from_PurchaseOrder_location         PurchaseOrder[]         @relation("PurchaseOrder_location")
+  from_GoodsReceipt_location          GoodsReceipt[]          @relation("GoodsReceipt_location")
+  from_ReorderRule_location           ReorderRule[]           @relation("ReorderRule_location")
+  from_StockCount_location            StockCount[]            @relation("StockCount_location")
   from_Encounter_location             Encounter[]             @relation("Encounter_location")
   from_ClinicalOrder_location         ClinicalOrder[]         @relation("ClinicalOrder_location")
   from_InventoryLot_location          InventoryLot[]          @relation("InventoryLot_location")
@@ -745,6 +754,21 @@ model StaffMember {
   from_CsDestructionRecord_witnessA         CsDestructionRecord[]   @relation("CsDestructionRecord_witnessA")
   from_CsDestructionRecord_witnessB         CsDestructionRecord[]   @relation("CsDestructionRecord_witnessB")
   from_PdmpReport_submittedBy               PdmpReport[]            @relation("PdmpReport_submittedBy")
+  from_CsWitness_witness                    CsWitness[]             @relation("CsWitness_witness")
+  from_CsOrderForm_signedBy                 CsOrderForm[]           @relation("CsOrderForm_signedBy")
+  from_CsTransfer_sentBy                    CsTransfer[]            @relation("CsTransfer_sentBy")
+  from_CsTransfer_witness                   CsTransfer[]            @relation("CsTransfer_witness")
+  from_PdmpSubmission_generatedBy           PdmpSubmission[]        @relation("PdmpSubmission_generatedBy")
+  from_CabinetAccessEvent_staff             CabinetAccessEvent[]    @relation("CabinetAccessEvent_staff")
+  from_DispenseLabel_printedBy              DispenseLabel[]         @relation("DispenseLabel_printedBy")
+  from_ExternalDispense_decidedBy           ExternalDispense[]      @relation("ExternalDispense_decidedBy")
+  from_WrittenRxExport_exportedBy           WrittenRxExport[]       @relation("WrittenRxExport_exportedBy")
+  from_StockMovement_actor                  StockMovement[]         @relation("StockMovement_actor")
+  from_PurchaseOrder_orderedBy              PurchaseOrder[]         @relation("PurchaseOrder_orderedBy")
+  from_PurchaseOrder_approvedBy             PurchaseOrder[]         @relation("PurchaseOrder_approvedBy")
+  from_GoodsReceipt_receivedBy              GoodsReceipt[]          @relation("GoodsReceipt_receivedBy")
+  from_StockCount_countedBy                 StockCount[]            @relation("StockCount_countedBy")
+  from_TemperatureLog_recordedBy            TemperatureLog[]        @relation("TemperatureLog_recordedBy")
   from_Encounter_attendingDvm               Encounter[]             @relation("Encounter_attendingDvm")
   from_Encounter_participants               Encounter[]             @relation("Encounter_participants")
   from_Encounter_signedBy                   Encounter[]             @relation("Encounter_signedBy")
@@ -1069,6 +1093,7 @@ model Client {
   from_Prescription_client     Prescription[]     @relation("Prescription_client")
   from_CsLogEntry_client       CsLogEntry[]       @relation("CsLogEntry_client")
   from_Dispense_client         Dispense[]         @relation("Dispense_client")
+  from_RecallExposure_client   RecallExposure[]   @relation("RecallExposure_client")
 
   @@index([primaryLocationId])
   @@index([mergedIntoId])
@@ -1233,6 +1258,8 @@ model Patient {
   from_Prescription_patient          Prescription[]          @relation("Prescription_patient")
   from_CsLogEntry_patient            CsLogEntry[]            @relation("CsLogEntry_patient")
   from_Dispense_patient              Dispense[]              @relation("Dispense_patient")
+  from_ExternalDispense_patient      ExternalDispense[]      @relation("ExternalDispense_patient")
+  from_RecallExposure_patient        RecallExposure[]        @relation("RecallExposure_patient")
   from_Encounter_patient             Encounter[]             @relation("Encounter_patient")
   from_VitalsObservation_patient     VitalsObservation[]     @relation("VitalsObservation_patient")
   from_Problem_patient               Problem[]               @relation("Problem_patient")
@@ -2106,6 +2133,8 @@ model DrugProduct {
   from_PrescriptionLine_product PrescriptionLine[]   @relation("PrescriptionLine_product")
   from_CsContainer_product      CsContainer[]        @relation("CsContainer_product")
   from_Dispense_product         Dispense[]           @relation("Dispense_product")
+  from_CsOrderFormLine_product  CsOrderFormLine[]    @relation("CsOrderFormLine_product")
+  from_Item_drug                Item[]               @relation("Item_drug")
   from_ClinicalOrder_drug       ClinicalOrder[]      @relation("ClinicalOrder_drug")
   from_DoseCalculation_product  DoseCalculation[]    @relation("DoseCalculation_product")
   from_InventoryLot_drug        InventoryLot[]       @relation("InventoryLot_drug")
@@ -2115,32 +2144,34 @@ model DrugProduct {
 }
 
 model Prescription {
-  id                         String             @id @default(cuid())
-  ref                        String             @unique @default("")
-  patient                    Patient?           @relation("Prescription_patient", fields: [patientId], references: [id])
-  patientId                  String?            @map("patient")
-  client                     Client?            @relation("Prescription_client", fields: [clientId], references: [id])
-  clientId                   String?            @map("client")
-  location                   Location?          @relation("Prescription_location", fields: [locationId], references: [id])
-  locationId                 String?            @map("location")
-  prescriber                 StaffMember?       @relation("Prescription_prescriber", fields: [prescriberId], references: [id])
-  prescriberId               String?            @map("prescriber")
-  deaRegistration            DeaRegistration?   @relation("Prescription_deaRegistration", fields: [deaRegistrationId], references: [id])
-  deaRegistrationId          String?            @map("deaRegistration")
-  vcpr                       VcprRecord?        @relation("Prescription_vcpr", fields: [vcprId], references: [id])
-  vcprId                     String?            @map("vcpr")
-  issuedAt                   DateTime
-  status                     String             @default("draft")
-  signedAt                   DateTime?
-  licenseEvaluation          LicenseEvaluation? @relation("Prescription_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
-  licenseEvaluationId        String?            @map("licenseEvaluation")
-  policyVersion              PolicyVersion?     @relation("Prescription_policyVersion", fields: [policyVersionId], references: [id])
-  policyVersionId            String?            @map("policyVersion")
-  lines                      PrescriptionLine[] @relation("PrescriptionLine_prescription")
-  version                    Int                @default(0)
-  createdAt                  DateTime           @default(now())
-  updatedAt                  DateTime           @default(now()) @updatedAt
-  from_Dispense_prescription Dispense[]         @relation("Dispense_prescription")
+  id                                 String             @id @default(cuid())
+  ref                                String             @unique @default("")
+  patient                            Patient?           @relation("Prescription_patient", fields: [patientId], references: [id])
+  patientId                          String?            @map("patient")
+  client                             Client?            @relation("Prescription_client", fields: [clientId], references: [id])
+  clientId                           String?            @map("client")
+  location                           Location?          @relation("Prescription_location", fields: [locationId], references: [id])
+  locationId                         String?            @map("location")
+  prescriber                         StaffMember?       @relation("Prescription_prescriber", fields: [prescriberId], references: [id])
+  prescriberId                       String?            @map("prescriber")
+  deaRegistration                    DeaRegistration?   @relation("Prescription_deaRegistration", fields: [deaRegistrationId], references: [id])
+  deaRegistrationId                  String?            @map("deaRegistration")
+  vcpr                               VcprRecord?        @relation("Prescription_vcpr", fields: [vcprId], references: [id])
+  vcprId                             String?            @map("vcpr")
+  issuedAt                           DateTime
+  status                             String             @default("draft")
+  signedAt                           DateTime?
+  licenseEvaluation                  LicenseEvaluation? @relation("Prescription_licenseEvaluation", fields: [licenseEvaluationId], references: [id])
+  licenseEvaluationId                String?            @map("licenseEvaluation")
+  policyVersion                      PolicyVersion?     @relation("Prescription_policyVersion", fields: [policyVersionId], references: [id])
+  policyVersionId                    String?            @map("policyVersion")
+  lines                              PrescriptionLine[] @relation("PrescriptionLine_prescription")
+  version                            Int                @default(0)
+  createdAt                          DateTime           @default(now())
+  updatedAt                          DateTime           @default(now()) @updatedAt
+  from_Dispense_prescription         Dispense[]         @relation("Dispense_prescription")
+  from_ExternalDispense_prescription ExternalDispense[] @relation("ExternalDispense_prescription")
+  from_WrittenRxExport_prescription  WrittenRxExport[]  @relation("WrittenRxExport_prescription")
 
   @@index([patientId])
   @@index([clientId])
@@ -2202,6 +2233,8 @@ model CsContainer {
   from_CsCountLine_container         CsCountLine[]         @relation("CsCountLine_container")
   from_CsDiscrepancyCase_container   CsDiscrepancyCase[]   @relation("CsDiscrepancyCase_container")
   from_CsDestructionRecord_container CsDestructionRecord[] @relation("CsDestructionRecord_container")
+  from_CsTransfer_fromContainer      CsTransfer[]          @relation("CsTransfer_fromContainer")
+  from_CsTransfer_toContainer        CsTransfer[]          @relation("CsTransfer_toContainer")
   from_Administration_csContainer    Administration[]      @relation("Administration_csContainer")
 
   @@index([productId])
@@ -2241,6 +2274,9 @@ model CsLogEntry {
   from_CsLogEntry_reverses            CsLogEntry[]          @relation("CsLogEntry_reverses")
   from_Dispense_csLogEntry            Dispense[]            @relation("Dispense_csLogEntry")
   from_CsDestructionRecord_csLogEntry CsDestructionRecord[] @relation("CsDestructionRecord_csLogEntry")
+  from_CsWitness_entry                CsWitness[]           @relation("CsWitness_entry")
+  from_CsTransfer_outEntry            CsTransfer[]          @relation("CsTransfer_outEntry")
+  from_CsTransfer_inEntry             CsTransfer[]          @relation("CsTransfer_inEntry")
   from_Administration_csLogEntry      Administration[]      @relation("Administration_csLogEntry")
   from_Administration_wasteLogEntry   Administration[]      @relation("Administration_wasteLogEntry")
 
@@ -2254,38 +2290,39 @@ model CsLogEntry {
 }
 
 model Dispense {
-  id                       String            @id @default(cuid())
-  ref                      String            @unique @default("")
-  prescription             Prescription?     @relation("Dispense_prescription", fields: [prescriptionId], references: [id])
-  prescriptionId           String?           @map("prescription")
-  line                     PrescriptionLine? @relation("Dispense_line", fields: [lineId], references: [id])
-  lineId                   String?           @map("line")
-  patient                  Patient?          @relation("Dispense_patient", fields: [patientId], references: [id])
-  patientId                String?           @map("patient")
-  client                   Client?           @relation("Dispense_client", fields: [clientId], references: [id])
-  clientId                 String?           @map("client")
-  location                 Location?         @relation("Dispense_location", fields: [locationId], references: [id])
-  locationId               String?           @map("location")
-  product                  DrugProduct?      @relation("Dispense_product", fields: [productId], references: [id])
-  productId                String?           @map("product")
-  lot                      InventoryLot?     @relation("Dispense_lot", fields: [lotId], references: [id])
-  lotId                    String?           @map("lot")
-  container                CsContainer?      @relation("Dispense_container", fields: [containerId], references: [id])
-  containerId              String?           @map("container")
-  csLogEntry               CsLogEntry?       @relation("Dispense_csLogEntry", fields: [csLogEntryId], references: [id])
-  csLogEntryId             String?           @map("csLogEntry")
-  refillRequest            RefillRequest?    @relation("Dispense_refillRequest", fields: [refillRequestId], references: [id])
-  refillRequestId          String?           @map("refillRequest")
-  quantity                 Decimal           @postgresql.Decimal(18, 6)
-  quantityUnit             String?
-  refillNumber             Int               @default(0)
-  dispensedBy              StaffMember?      @relation("Dispense_dispensedBy", fields: [dispensedById], references: [id])
-  dispensedById            String?           @map("dispensedBy")
-  dispensedAt              DateTime
-  label                    Json?
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @default(now()) @updatedAt
-  from_PdmpReport_dispense PdmpReport[]      @relation("PdmpReport_dispense")
+  id                          String            @id @default(cuid())
+  ref                         String            @unique @default("")
+  prescription                Prescription?     @relation("Dispense_prescription", fields: [prescriptionId], references: [id])
+  prescriptionId              String?           @map("prescription")
+  line                        PrescriptionLine? @relation("Dispense_line", fields: [lineId], references: [id])
+  lineId                      String?           @map("line")
+  patient                     Patient?          @relation("Dispense_patient", fields: [patientId], references: [id])
+  patientId                   String?           @map("patient")
+  client                      Client?           @relation("Dispense_client", fields: [clientId], references: [id])
+  clientId                    String?           @map("client")
+  location                    Location?         @relation("Dispense_location", fields: [locationId], references: [id])
+  locationId                  String?           @map("location")
+  product                     DrugProduct?      @relation("Dispense_product", fields: [productId], references: [id])
+  productId                   String?           @map("product")
+  lot                         InventoryLot?     @relation("Dispense_lot", fields: [lotId], references: [id])
+  lotId                       String?           @map("lot")
+  container                   CsContainer?      @relation("Dispense_container", fields: [containerId], references: [id])
+  containerId                 String?           @map("container")
+  csLogEntry                  CsLogEntry?       @relation("Dispense_csLogEntry", fields: [csLogEntryId], references: [id])
+  csLogEntryId                String?           @map("csLogEntry")
+  refillRequest               RefillRequest?    @relation("Dispense_refillRequest", fields: [refillRequestId], references: [id])
+  refillRequestId             String?           @map("refillRequest")
+  quantity                    Decimal           @postgresql.Decimal(18, 6)
+  quantityUnit                String?
+  refillNumber                Int               @default(0)
+  dispensedBy                 StaffMember?      @relation("Dispense_dispensedBy", fields: [dispensedById], references: [id])
+  dispensedById               String?           @map("dispensedBy")
+  dispensedAt                 DateTime
+  label                       Json?
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @default(now()) @updatedAt
+  from_PdmpReport_dispense    PdmpReport[]      @relation("PdmpReport_dispense")
+  from_DispenseLabel_dispense DispenseLabel[]   @relation("DispenseLabel_dispense")
 
   @@index([prescriptionId])
   @@index([lineId])
@@ -2404,27 +2441,572 @@ model CsDestructionRecord {
 }
 
 model PdmpReport {
-  id            String       @id @default(cuid())
-  ref           String       @unique @default("")
-  location      Location?    @relation("PdmpReport_location", fields: [locationId], references: [id])
-  locationId    String?      @map("location")
-  dispense      Dispense?    @relation("PdmpReport_dispense", fields: [dispenseId], references: [id])
-  dispenseId    String?      @map("dispense")
-  program       String       @default("")
-  format        String       @default("")
-  dueOn         DateTime?    @postgresql.Date
-  status        String       @default("pending")
+  id            String          @id @default(cuid())
+  ref           String          @unique @default("")
+  location      Location?       @relation("PdmpReport_location", fields: [locationId], references: [id])
+  locationId    String?         @map("location")
+  dispense      Dispense?       @relation("PdmpReport_dispense", fields: [dispenseId], references: [id])
+  dispenseId    String?         @map("dispense")
+  program       String          @default("")
+  format        String          @default("")
+  dueOn         DateTime?       @postgresql.Date
+  status        String          @default("pending")
   submittedAt   DateTime?
-  submittedBy   StaffMember? @relation("PdmpReport_submittedBy", fields: [submittedById], references: [id])
-  submittedById String?      @map("submittedBy")
-  confirmation  String       @default("")
-  version       Int          @default(0)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @default(now()) @updatedAt
+  submittedBy   StaffMember?    @relation("PdmpReport_submittedBy", fields: [submittedById], references: [id])
+  submittedById String?         @map("submittedBy")
+  confirmation  String          @default("")
+  submission    PdmpSubmission? @relation("PdmpReport_submission", fields: [submissionId], references: [id])
+  submissionId  String?         @map("submission")
+  version       Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @default(now()) @updatedAt
 
   @@index([locationId])
   @@index([dispenseId])
   @@index([submittedById])
+  @@index([submissionId])
+}
+
+model CsWitness {
+  id         String       @id @default(cuid())
+  entry      CsLogEntry?  @relation("CsWitness_entry", fields: [entryId], references: [id])
+  entryId    String?      @map("entry")
+  witness    StaffMember? @relation("CsWitness_witness", fields: [witnessId], references: [id])
+  witnessId  String?      @map("witness")
+  attestedAt DateTime
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @default(now()) @updatedAt
+
+  @@index([entryId])
+  @@index([witnessId])
+}
+
+model CsOrderForm {
+  id         String            @id @default(cuid())
+  ref        String            @unique @default("")
+  formNumber String            @default("")
+  kind       String
+  location   Location?         @relation("CsOrderForm_location", fields: [locationId], references: [id])
+  locationId String?           @map("location")
+  supplier   Supplier?         @relation("CsOrderForm_supplier", fields: [supplierId], references: [id])
+  supplierId String?           @map("supplier")
+  issuedOn   DateTime          @postgresql.Date
+  expiresOn  DateTime          @postgresql.Date
+  status     String            @default("open")
+  signedBy   StaffMember?      @relation("CsOrderForm_signedBy", fields: [signedById], references: [id])
+  signedById String?           @map("signedBy")
+  lines      CsOrderFormLine[] @relation("CsOrderFormLine_orderForm")
+  version    Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([supplierId])
+  @@index([signedById])
+}
+
+model CsOrderFormLine {
+  id               String       @id @default(cuid())
+  orderForm        CsOrderForm? @relation("CsOrderFormLine_orderForm", fields: [orderFormId], references: [id])
+  orderFormId      String?      @map("orderForm")
+  product          DrugProduct? @relation("CsOrderFormLine_product", fields: [productId], references: [id])
+  productId        String?      @map("product")
+  packages         Int
+  packagesReceived Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+
+  @@index([orderFormId])
+  @@index([productId])
+}
+
+model CsTransfer {
+  id               String           @id @default(cuid())
+  ref              String           @unique @default("")
+  fromContainer    CsContainer?     @relation("CsTransfer_fromContainer", fields: [fromContainerId], references: [id])
+  fromContainerId  String?          @map("fromContainer")
+  toContainer      CsContainer?     @relation("CsTransfer_toContainer", fields: [toContainerId], references: [id])
+  toContainerId    String?          @map("toContainer")
+  toRegistration   DeaRegistration? @relation("CsTransfer_toRegistration", fields: [toRegistrationId], references: [id])
+  toRegistrationId String?          @map("toRegistration")
+  qty              Decimal          @postgresql.Decimal(18, 6)
+  unit             String?
+  status           String           @default("sent")
+  outEntry         CsLogEntry?      @relation("CsTransfer_outEntry", fields: [outEntryId], references: [id])
+  outEntryId       String?          @map("outEntry")
+  inEntry          CsLogEntry?      @relation("CsTransfer_inEntry", fields: [inEntryId], references: [id])
+  inEntryId        String?          @map("inEntry")
+  sentBy           StaffMember?     @relation("CsTransfer_sentBy", fields: [sentById], references: [id])
+  sentById         String?          @map("sentBy")
+  witness          StaffMember?     @relation("CsTransfer_witness", fields: [witnessId], references: [id])
+  witnessId        String?          @map("witness")
+  sentAt           DateTime
+  receivedAt       DateTime?
+  version          Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @default(now()) @updatedAt
+
+  @@index([fromContainerId])
+  @@index([toContainerId])
+  @@index([toRegistrationId])
+  @@index([outEntryId])
+  @@index([inEntryId])
+  @@index([sentById])
+  @@index([witnessId])
+}
+
+model PdmpSubmission {
+  id            String       @id @default(cuid())
+  ref           String       @unique @default("")
+  location      Location?    @relation("PdmpSubmission_location", fields: [locationId], references: [id])
+  locationId    String?      @map("location")
+  format        String       @default("")
+  reportCount   Int?         @default(0)
+  fileSha256    String       @default("")
+  fileBody      Json?
+  reports       PdmpReport[] @relation("PdmpReport_submission")
+  generatedBy   StaffMember? @relation("PdmpSubmission_generatedBy", fields: [generatedById], references: [id])
+  generatedById String?      @map("generatedBy")
+  generatedAt   DateTime
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([generatedById])
+}
+
+model CabinetAccessEvent {
+  id         String       @id @default(cuid())
+  location   Location?    @relation("CabinetAccessEvent_location", fields: [locationId], references: [id])
+  locationId String?      @map("location")
+  staff      StaffMember? @relation("CabinetAccessEvent_staff", fields: [staffId], references: [id])
+  staffId    String?      @map("staff")
+  kind       String
+  note       String       @default("")
+  occurredAt DateTime
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([staffId])
+}
+
+model DispenseLabel {
+  id          String       @id @default(cuid())
+  dispense    Dispense?    @relation("DispenseLabel_dispense", fields: [dispenseId], references: [id])
+  dispenseId  String?      @map("dispense")
+  fields      Json?
+  printedBy   StaffMember? @relation("DispenseLabel_printedBy", fields: [printedById], references: [id])
+  printedById String?      @map("printedBy")
+  printedAt   DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+
+  @@index([dispenseId])
+  @@index([printedById])
+}
+
+model ExternalDispense {
+  id             String        @id @default(cuid())
+  ref            String        @unique @default("")
+  prescription   Prescription? @relation("ExternalDispense_prescription", fields: [prescriptionId], references: [id])
+  prescriptionId String?       @map("prescription")
+  patient        Patient?      @relation("ExternalDispense_patient", fields: [patientId], references: [id])
+  patientId      String?       @map("patient")
+  pharmacyName   String        @default("")
+  orderReference String        @default("")
+  status         String        @default("requested")
+  decidedBy      StaffMember?  @relation("ExternalDispense_decidedBy", fields: [decidedById], references: [id])
+  decidedById    String?       @map("decidedBy")
+  decidedAt      DateTime?
+  note           String        @default("")
+  version        Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+
+  @@index([prescriptionId])
+  @@index([patientId])
+  @@index([decidedById])
+}
+
+model WrittenRxExport {
+  id             String        @id @default(cuid())
+  ref            String        @unique @default("")
+  prescription   Prescription? @relation("WrittenRxExport_prescription", fields: [prescriptionId], references: [id])
+  prescriptionId String?       @map("prescription")
+  exportedBy     StaffMember?  @relation("WrittenRxExport_exportedBy", fields: [exportedById], references: [id])
+  exportedById   String?       @map("exportedBy")
+  exportedAt     DateTime
+  contentSha256  String        @default("")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+
+  @@index([prescriptionId])
+  @@index([exportedById])
+}
+
+model UnitOfMeasure {
+  id        String   @id @default(cuid())
+  code      String   @unique @default("")
+  name      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Item {
+  id                          String              @id @default(cuid())
+  ref                         String              @unique @default("")
+  name                        String              @default("")
+  kind                        String
+  drug                        DrugProduct?        @relation("Item_drug", fields: [drugId], references: [id])
+  drugId                      String?             @map("drug")
+  vaccine                     VaccineProduct?     @relation("Item_vaccine", fields: [vaccineId], references: [id])
+  vaccineId                   String?             @map("vaccine")
+  baseUnit                    String?
+  sku                         String              @default("")
+  coldChain                   Boolean             @default(false)
+  active                      Boolean             @default(true)
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @default(now()) @updatedAt
+  from_ItemUomConversion_item ItemUomConversion[] @relation("ItemUomConversion_item")
+  from_StockMovement_item     StockMovement[]     @relation("StockMovement_item")
+  from_StockLevel_item        StockLevel[]        @relation("StockLevel_item")
+  from_SupplierItem_item      SupplierItem[]      @relation("SupplierItem_item")
+  from_PurchaseOrderLine_item PurchaseOrderLine[] @relation("PurchaseOrderLine_item")
+  from_GoodsReceiptLine_item  GoodsReceiptLine[]  @relation("GoodsReceiptLine_item")
+  from_ReorderRule_item       ReorderRule[]       @relation("ReorderRule_item")
+  from_StockCountLine_item    StockCountLine[]    @relation("StockCountLine_item")
+  from_RecallCase_item        RecallCase[]        @relation("RecallCase_item")
+
+  @@index([drugId])
+  @@index([vaccineId])
+}
+
+model ItemUomConversion {
+  id        String   @id @default(cuid())
+  item      Item?    @relation("ItemUomConversion_item", fields: [itemId], references: [id])
+  itemId    String?  @map("item")
+  fromUnit  String   @default("")
+  toUnit    String   @default("")
+  factor    Decimal  @postgresql.Decimal(18, 6)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([itemId])
+}
+
+model StockLocation {
+  id                                      String                 @id @default(cuid())
+  name                                    String                 @default("")
+  location                                Location?              @relation("StockLocation_location", fields: [locationId], references: [id])
+  locationId                              String?                @map("location")
+  kind                                    String
+  minTempC                                Decimal?               @postgresql.Decimal(18, 6)
+  maxTempC                                Decimal?               @postgresql.Decimal(18, 6)
+  active                                  Boolean                @default(true)
+  createdAt                               DateTime               @default(now())
+  updatedAt                               DateTime               @default(now()) @updatedAt
+  from_StockMovement_stockLocation        StockMovement[]        @relation("StockMovement_stockLocation")
+  from_StockLevel_stockLocation           StockLevel[]           @relation("StockLevel_stockLocation")
+  from_StockCount_stockLocation           StockCount[]           @relation("StockCount_stockLocation")
+  from_TemperatureLog_stockLocation       TemperatureLog[]       @relation("TemperatureLog_stockLocation")
+  from_TemperatureExcursion_stockLocation TemperatureExcursion[] @relation("TemperatureExcursion_stockLocation")
+
+  @@index([locationId])
+}
+
+model StockMovement {
+  id              String         @id @default(cuid())
+  item            Item?          @relation("StockMovement_item", fields: [itemId], references: [id])
+  itemId          String?        @map("item")
+  lot             InventoryLot?  @relation("StockMovement_lot", fields: [lotId], references: [id])
+  lotId           String?        @map("lot")
+  stockLocation   StockLocation? @relation("StockMovement_stockLocation", fields: [stockLocationId], references: [id])
+  stockLocationId String?        @map("stockLocation")
+  kind            String
+  qtySigned       Decimal        @postgresql.Decimal(18, 6)
+  unit            String?
+  sourceType      String         @default("")
+  sourceId        String         @default("")
+  reason          String         @default("")
+  actor           StaffMember?   @relation("StockMovement_actor", fields: [actorId], references: [id])
+  actorId         String?        @map("actor")
+  occurredAt      DateTime
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
+
+  @@index([itemId])
+  @@index([lotId])
+  @@index([stockLocationId])
+  @@index([actorId])
+}
+
+model StockLevel {
+  id              String         @id @default(cuid())
+  item            Item?          @relation("StockLevel_item", fields: [itemId], references: [id])
+  itemId          String?        @map("item")
+  lot             InventoryLot?  @relation("StockLevel_lot", fields: [lotId], references: [id])
+  lotId           String?        @map("lot")
+  stockLocation   StockLocation? @relation("StockLevel_stockLocation", fields: [stockLocationId], references: [id])
+  stockLocationId String?        @map("stockLocation")
+  onHand          Decimal        @postgresql.Decimal(18, 6)
+  unit            String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
+
+  @@index([itemId])
+  @@index([lotId])
+  @@index([stockLocationId])
+}
+
+model Supplier {
+  id                          String          @id @default(cuid())
+  name                        String          @default("")
+  accountNumber               String          @default("")
+  phone                       String          @default("")
+  email                       String          @default("")
+  deaNumber                   String          @default("")
+  active                      Boolean         @default(true)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @default(now()) @updatedAt
+  from_CsOrderForm_supplier   CsOrderForm[]   @relation("CsOrderForm_supplier")
+  from_SupplierItem_supplier  SupplierItem[]  @relation("SupplierItem_supplier")
+  from_PurchaseOrder_supplier PurchaseOrder[] @relation("PurchaseOrder_supplier")
+}
+
+model SupplierItem {
+  id            String    @id @default(cuid())
+  supplier      Supplier? @relation("SupplierItem_supplier", fields: [supplierId], references: [id])
+  supplierId    String?   @map("supplier")
+  item          Item?     @relation("SupplierItem_item", fields: [itemId], references: [id])
+  itemId        String?   @map("item")
+  sku           String    @default("")
+  packSize      Decimal?  @postgresql.Decimal(18, 6)
+  packUnit      String?
+  lastCostMinor BigInt?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  @@index([supplierId])
+  @@index([itemId])
+}
+
+model PurchaseOrder {
+  id                              String              @id @default(cuid())
+  ref                             String              @unique @default("")
+  supplier                        Supplier?           @relation("PurchaseOrder_supplier", fields: [supplierId], references: [id])
+  supplierId                      String?             @map("supplier")
+  location                        Location?           @relation("PurchaseOrder_location", fields: [locationId], references: [id])
+  locationId                      String?             @map("location")
+  status                          String              @default("draft")
+  orderedBy                       StaffMember?        @relation("PurchaseOrder_orderedBy", fields: [orderedById], references: [id])
+  orderedById                     String?             @map("orderedBy")
+  orderedAt                       DateTime?
+  approvedBy                      StaffMember?        @relation("PurchaseOrder_approvedBy", fields: [approvedById], references: [id])
+  approvedById                    String?             @map("approvedBy")
+  note                            String              @default("")
+  lines                           PurchaseOrderLine[] @relation("PurchaseOrderLine_purchaseOrder")
+  version                         Int                 @default(0)
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @default(now()) @updatedAt
+  from_GoodsReceipt_purchaseOrder GoodsReceipt[]      @relation("GoodsReceipt_purchaseOrder")
+
+  @@index([supplierId])
+  @@index([locationId])
+  @@index([orderedById])
+  @@index([approvedById])
+}
+
+model PurchaseOrderLine {
+  id                                      String             @id @default(cuid())
+  purchaseOrder                           PurchaseOrder?     @relation("PurchaseOrderLine_purchaseOrder", fields: [purchaseOrderId], references: [id])
+  purchaseOrderId                         String?            @map("purchaseOrder")
+  item                                    Item?              @relation("PurchaseOrderLine_item", fields: [itemId], references: [id])
+  itemId                                  String?            @map("item")
+  qtyOrdered                              Decimal            @postgresql.Decimal(18, 6)
+  qtyReceived                             Decimal            @postgresql.Decimal(18, 6)
+  unit                                    String?
+  unitCostMinor                           BigInt
+  createdAt                               DateTime           @default(now())
+  updatedAt                               DateTime           @default(now()) @updatedAt
+  from_GoodsReceiptLine_purchaseOrderLine GoodsReceiptLine[] @relation("GoodsReceiptLine_purchaseOrderLine")
+
+  @@index([purchaseOrderId])
+  @@index([itemId])
+}
+
+model GoodsReceipt {
+  id              String             @id @default(cuid())
+  ref             String             @unique @default("")
+  purchaseOrder   PurchaseOrder?     @relation("GoodsReceipt_purchaseOrder", fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String?            @map("purchaseOrder")
+  location        Location?          @relation("GoodsReceipt_location", fields: [locationId], references: [id])
+  locationId      String?            @map("location")
+  receivedBy      StaffMember?       @relation("GoodsReceipt_receivedBy", fields: [receivedById], references: [id])
+  receivedById    String?            @map("receivedBy")
+  receivedAt      DateTime
+  packingSlip     String             @default("")
+  lines           GoodsReceiptLine[] @relation("GoodsReceiptLine_receipt")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @default(now()) @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([locationId])
+  @@index([receivedById])
+}
+
+model GoodsReceiptLine {
+  id                  String             @id @default(cuid())
+  receipt             GoodsReceipt?      @relation("GoodsReceiptLine_receipt", fields: [receiptId], references: [id])
+  receiptId           String?            @map("receipt")
+  purchaseOrderLine   PurchaseOrderLine? @relation("GoodsReceiptLine_purchaseOrderLine", fields: [purchaseOrderLineId], references: [id])
+  purchaseOrderLineId String?            @map("purchaseOrderLine")
+  item                Item?              @relation("GoodsReceiptLine_item", fields: [itemId], references: [id])
+  itemId              String?            @map("item")
+  lot                 InventoryLot?      @relation("GoodsReceiptLine_lot", fields: [lotId], references: [id])
+  lotId               String?            @map("lot")
+  qty                 Decimal            @postgresql.Decimal(18, 6)
+  unit                String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @default(now()) @updatedAt
+
+  @@index([receiptId])
+  @@index([purchaseOrderLineId])
+  @@index([itemId])
+  @@index([lotId])
+}
+
+model ReorderRule {
+  id         String    @id @default(cuid())
+  item       Item?     @relation("ReorderRule_item", fields: [itemId], references: [id])
+  itemId     String?   @map("item")
+  location   Location? @relation("ReorderRule_location", fields: [locationId], references: [id])
+  locationId String?   @map("location")
+  minQty     Decimal   @postgresql.Decimal(18, 6)
+  targetQty  Decimal   @postgresql.Decimal(18, 6)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@index([itemId])
+  @@index([locationId])
+}
+
+model StockCount {
+  id              String           @id @default(cuid())
+  ref             String           @unique @default("")
+  location        Location?        @relation("StockCount_location", fields: [locationId], references: [id])
+  locationId      String?          @map("location")
+  stockLocation   StockLocation?   @relation("StockCount_stockLocation", fields: [stockLocationId], references: [id])
+  stockLocationId String?          @map("stockLocation")
+  status          String           @default("closed")
+  countedBy       StaffMember?     @relation("StockCount_countedBy", fields: [countedById], references: [id])
+  countedById     String?          @map("countedBy")
+  countedAt       DateTime
+  lines           StockCountLine[] @relation("StockCountLine_count")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([stockLocationId])
+  @@index([countedById])
+}
+
+model StockCountLine {
+  id          String        @id @default(cuid())
+  count       StockCount?   @relation("StockCountLine_count", fields: [countId], references: [id])
+  countId     String?       @map("count")
+  item        Item?         @relation("StockCountLine_item", fields: [itemId], references: [id])
+  itemId      String?       @map("item")
+  lot         InventoryLot? @relation("StockCountLine_lot", fields: [lotId], references: [id])
+  lotId       String?       @map("lot")
+  expectedQty Decimal       @postgresql.Decimal(18, 6)
+  countedQty  Decimal       @postgresql.Decimal(18, 6)
+  variance    Decimal       @postgresql.Decimal(18, 6)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@index([countId])
+  @@index([itemId])
+  @@index([lotId])
+}
+
+model RecallCase {
+  id         String           @id @default(cuid())
+  ref        String           @unique @default("")
+  title      String           @default("")
+  source     String           @default("")
+  item       Item?            @relation("RecallCase_item", fields: [itemId], references: [id])
+  itemId     String?          @map("item")
+  lotNumber  String           @default("")
+  status     String           @default("open")
+  openedAt   DateTime
+  closedAt   DateTime?
+  resolution String           @default("")
+  exposures  RecallExposure[] @relation("RecallExposure_recall")
+  version    Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @default(now()) @updatedAt
+
+  @@index([itemId])
+}
+
+model RecallExposure {
+  id         String      @id @default(cuid())
+  recall     RecallCase? @relation("RecallExposure_recall", fields: [recallId], references: [id])
+  recallId   String?     @map("recall")
+  patient    Patient?    @relation("RecallExposure_patient", fields: [patientId], references: [id])
+  patientId  String?     @map("patient")
+  client     Client?     @relation("RecallExposure_client", fields: [clientId], references: [id])
+  clientId   String?     @map("client")
+  sourceType String
+  sourceId   String      @default("")
+  givenOn    DateTime?   @postgresql.Date
+  status     String      @default("to_contact")
+  note       String      @default("")
+  version    Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now()) @updatedAt
+
+  @@index([recallId])
+  @@index([patientId])
+  @@index([clientId])
+}
+
+model TemperatureLog {
+  id                            String                 @id @default(cuid())
+  stockLocation                 StockLocation?         @relation("TemperatureLog_stockLocation", fields: [stockLocationId], references: [id])
+  stockLocationId               String?                @map("stockLocation")
+  readingC                      Decimal                @postgresql.Decimal(18, 6)
+  inRange                       Boolean                @default(true)
+  recordedBy                    StaffMember?           @relation("TemperatureLog_recordedBy", fields: [recordedById], references: [id])
+  recordedById                  String?                @map("recordedBy")
+  recordedAt                    DateTime
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @default(now()) @updatedAt
+  from_TemperatureExcursion_log TemperatureExcursion[] @relation("TemperatureExcursion_log")
+
+  @@index([stockLocationId])
+  @@index([recordedById])
+}
+
+model TemperatureExcursion {
+  id              String          @id @default(cuid())
+  ref             String          @unique @default("")
+  stockLocation   StockLocation?  @relation("TemperatureExcursion_stockLocation", fields: [stockLocationId], references: [id])
+  stockLocationId String?         @map("stockLocation")
+  log             TemperatureLog? @relation("TemperatureExcursion_log", fields: [logId], references: [id])
+  logId           String?         @map("log")
+  status          String          @default("open")
+  openedAt        DateTime
+  quarantinedLots Int?            @default(0)
+  resolvedAt      DateTime?
+  resolution      String          @default("")
+  version         Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
+
+  @@index([stockLocationId])
+  @@index([logId])
 }
 
 model Encounter {
@@ -2942,6 +3524,10 @@ model InventoryLot {
   createdAt                      DateTime                @default(now())
   updatedAt                      DateTime                @default(now()) @updatedAt
   from_Dispense_lot              Dispense[]              @relation("Dispense_lot")
+  from_StockMovement_lot         StockMovement[]         @relation("StockMovement_lot")
+  from_StockLevel_lot            StockLevel[]            @relation("StockLevel_lot")
+  from_GoodsReceiptLine_lot      GoodsReceiptLine[]      @relation("GoodsReceiptLine_lot")
+  from_StockCountLine_lot        StockCountLine[]        @relation("StockCountLine_lot")
   from_Administration_lot        Administration[]        @relation("Administration_lot")
   from_VaccineAdministration_lot VaccineAdministration[] @relation("VaccineAdministration_lot")
 
@@ -3292,6 +3878,7 @@ model VaccineProduct {
   active                             Boolean                 @default(true)
   createdAt                          DateTime                @default(now())
   updatedAt                          DateTime                @default(now()) @updatedAt
+  from_Item_vaccine                  Item[]                  @relation("Item_vaccine")
   from_ClinicalOrder_vaccine         ClinicalOrder[]         @relation("ClinicalOrder_vaccine")
   from_InventoryLot_vaccine          InventoryLot[]          @relation("InventoryLot_vaccine")
   from_VaccineAdministration_product VaccineAdministration[] @relation("VaccineAdministration_product")

@@ -27,7 +27,7 @@ export const AUDITED_TYPES = new Set<string>([
   // Phase 1 lists that carry PHI-grade detail: ownership, weights, chips, VCPR, insurance, schedule, triage, board
   'PatientOwnership', 'WeightMeasurement', 'AlertAcknowledgement', 'Microchip', 'VcprRecord', 'PetInsurancePolicy',
   'AppointmentPatient', 'AppointmentSegment', 'WaitlistEntry', 'TriageAssessment', 'WhiteboardEntry', 'Suppression',
-  'CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport',
+  'CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport', 'DispenseLabel', 'ExternalDispense', 'WrittenRxExport', 'RecallExposure', 'CsWitness', 'CsOrderForm', 'CsOrderFormLine', 'CsTransfer', 'PdmpSubmission', 'CabinetAccessEvent',
   // Phase 2: the medical record, orders and treatment, preventive care
   'SoapSection', 'SoapSectionRevision', 'VitalsObservation', 'PhysicalExamFinding', 'Problem', 'Diagnosis', 'ClinicalAttachment', 'ScribeSession',
   'ClinicalOrder', 'DoseCalculation', 'Administration', 'HospitalStay', 'CageAssignment', 'TreatmentSheetOrder', 'TreatmentTask', 'MonitoringReading',

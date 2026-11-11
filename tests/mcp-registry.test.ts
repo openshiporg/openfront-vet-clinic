@@ -14,7 +14,8 @@ describe('MCP registry never-list', () => {
     'establishVcpr', 'signPrescription', 'sign_rx', 'decideRefill', 'approveRefill', 'signEncounter', 'addAddendum',
     'csAdminister', 'recordControlledWaste', 'readCsLog', 'createCsCount', 'submitPdmp', 'euthanasiaConsent',
     'applyDiscount', 'issueRefund', 'postWriteOff', 'publishFeeSchedule', 'updatePolicy', 'mergeClients',
-    'captureCardNumber', 'decideApprovalRequest', 'createPatient', 'updateClient', 'deleteAppointment',
+    'captureCardNumber', 'decideApprovalRequest',
+    'receiveControlled', 'wasteControlled', 'countControlled', 'destroyControlled', 'transferControlled', 'issueOrderForm', 'receiveOnOrderForm', 'generatePdmpFile', 'logCabinetAccess', 'reportCsLoss', 'advanceDiscrepancy', 'writePrescription', 'createPatient', 'updateClient', 'deleteAppointment',
   ]
 
   it.each(forbidden)('refuses %s', name => {

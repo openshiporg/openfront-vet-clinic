@@ -9442,6 +9442,7 @@ type PdmpReport {
   submittedAt: DateTime
   submittedBy: StaffMember
   confirmation: String
+  submission: PdmpSubmission
   version: Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -9467,6 +9468,7 @@ input PdmpReportWhereInput {
   submittedAt: DateTimeNullableFilter
   submittedBy: StaffMemberWhereInput
   confirmation: StringFilter
+  submission: PdmpSubmissionWhereInput
   version: IntFilter
   createdAt: DateTimeFilter
   updatedAt: DateTimeFilter
@@ -9497,6 +9499,7 @@ input PdmpReportUpdateInput {
   submittedAt: DateTime
   submittedBy: StaffMemberRelateToOneForUpdateInput
   confirmation: String
+  submission: PdmpSubmissionRelateToOneForUpdateInput
   version: Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -9505,6 +9508,12 @@ input PdmpReportUpdateInput {
 input DispenseRelateToOneForUpdateInput {
   create: DispenseCreateInput
   connect: DispenseWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PdmpSubmissionRelateToOneForUpdateInput {
+  create: PdmpSubmissionCreateInput
+  connect: PdmpSubmissionWhereUniqueInput
   disconnect: Boolean
 }
 
@@ -9524,6 +9533,7 @@ input PdmpReportCreateInput {
   submittedAt: DateTime
   submittedBy: StaffMemberRelateToOneForCreateInput
   confirmation: String
+  submission: PdmpSubmissionRelateToOneForCreateInput
   version: Int
   createdAt: DateTime
   updatedAt: DateTime
@@ -9532,6 +9542,2271 @@ input PdmpReportCreateInput {
 input DispenseRelateToOneForCreateInput {
   create: DispenseCreateInput
   connect: DispenseWhereUniqueInput
+}
+
+input PdmpSubmissionRelateToOneForCreateInput {
+  create: PdmpSubmissionCreateInput
+  connect: PdmpSubmissionWhereUniqueInput
+}
+
+type CsWitness {
+  id: ID!
+  entry: CsLogEntry
+  witness: StaffMember
+  attestedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsWitnessWhereUniqueInput {
+  id: ID
+}
+
+input CsWitnessWhereInput {
+  AND: [CsWitnessWhereInput!]
+  OR: [CsWitnessWhereInput!]
+  NOT: [CsWitnessWhereInput!]
+  id: IDFilter
+  entry: CsLogEntryWhereInput
+  witness: StaffMemberWhereInput
+  attestedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsWitnessOrderByInput {
+  id: OrderDirection
+  attestedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsWitnessUpdateInput {
+  entry: CsLogEntryRelateToOneForUpdateInput
+  witness: StaffMemberRelateToOneForUpdateInput
+  attestedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsWitnessUpdateArgs {
+  where: CsWitnessWhereUniqueInput!
+  data: CsWitnessUpdateInput!
+}
+
+input CsWitnessCreateInput {
+  entry: CsLogEntryRelateToOneForCreateInput
+  witness: StaffMemberRelateToOneForCreateInput
+  attestedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type CsOrderForm {
+  id: ID!
+  ref: String
+  formNumber: String
+  kind: String
+  location: Location
+  supplier: Supplier
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  signedBy: StaffMember
+  lines(where: CsOrderFormLineWhereInput! = {}, orderBy: [CsOrderFormLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CsOrderFormLineWhereUniqueInput): [CsOrderFormLine!]
+  linesCount(where: CsOrderFormLineWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsOrderFormWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input CsOrderFormWhereInput {
+  AND: [CsOrderFormWhereInput!]
+  OR: [CsOrderFormWhereInput!]
+  NOT: [CsOrderFormWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  formNumber: StringFilter
+  kind: StringFilter
+  location: LocationWhereInput
+  supplier: SupplierWhereInput
+  issuedOn: CalendarDayFilter
+  expiresOn: CalendarDayFilter
+  status: StringFilter
+  signedBy: StaffMemberWhereInput
+  lines: CsOrderFormLineManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsOrderFormLineManyRelationFilter {
+  every: CsOrderFormLineWhereInput
+  some: CsOrderFormLineWhereInput
+  none: CsOrderFormLineWhereInput
+}
+
+input CsOrderFormOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  formNumber: OrderDirection
+  kind: OrderDirection
+  issuedOn: OrderDirection
+  expiresOn: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsOrderFormUpdateInput {
+  ref: String
+  formNumber: String
+  kind: String
+  location: LocationRelateToOneForUpdateInput
+  supplier: SupplierRelateToOneForUpdateInput
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  signedBy: StaffMemberRelateToOneForUpdateInput
+  lines: CsOrderFormLineRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierRelateToOneForUpdateInput {
+  create: SupplierCreateInput
+  connect: SupplierWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CsOrderFormLineRelateToManyForUpdateInput {
+  disconnect: [CsOrderFormLineWhereUniqueInput!]
+  set: [CsOrderFormLineWhereUniqueInput!]
+  create: [CsOrderFormLineCreateInput!]
+  connect: [CsOrderFormLineWhereUniqueInput!]
+}
+
+input CsOrderFormUpdateArgs {
+  where: CsOrderFormWhereUniqueInput!
+  data: CsOrderFormUpdateInput!
+}
+
+input CsOrderFormCreateInput {
+  ref: String
+  formNumber: String
+  kind: String
+  location: LocationRelateToOneForCreateInput
+  supplier: SupplierRelateToOneForCreateInput
+  issuedOn: CalendarDay
+  expiresOn: CalendarDay
+  status: String
+  signedBy: StaffMemberRelateToOneForCreateInput
+  lines: CsOrderFormLineRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierRelateToOneForCreateInput {
+  create: SupplierCreateInput
+  connect: SupplierWhereUniqueInput
+}
+
+input CsOrderFormLineRelateToManyForCreateInput {
+  create: [CsOrderFormLineCreateInput!]
+  connect: [CsOrderFormLineWhereUniqueInput!]
+}
+
+type CsOrderFormLine {
+  id: ID!
+  orderForm: CsOrderForm
+  product: DrugProduct
+  packages: Int
+  packagesReceived: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsOrderFormLineWhereUniqueInput {
+  id: ID
+}
+
+input CsOrderFormLineWhereInput {
+  AND: [CsOrderFormLineWhereInput!]
+  OR: [CsOrderFormLineWhereInput!]
+  NOT: [CsOrderFormLineWhereInput!]
+  id: IDFilter
+  orderForm: CsOrderFormWhereInput
+  product: DrugProductWhereInput
+  packages: IntFilter
+  packagesReceived: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsOrderFormLineOrderByInput {
+  id: OrderDirection
+  packages: OrderDirection
+  packagesReceived: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsOrderFormLineUpdateInput {
+  orderForm: CsOrderFormRelateToOneForUpdateInput
+  product: DrugProductRelateToOneForUpdateInput
+  packages: Int
+  packagesReceived: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsOrderFormRelateToOneForUpdateInput {
+  create: CsOrderFormCreateInput
+  connect: CsOrderFormWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CsOrderFormLineUpdateArgs {
+  where: CsOrderFormLineWhereUniqueInput!
+  data: CsOrderFormLineUpdateInput!
+}
+
+input CsOrderFormLineCreateInput {
+  orderForm: CsOrderFormRelateToOneForCreateInput
+  product: DrugProductRelateToOneForCreateInput
+  packages: Int
+  packagesReceived: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsOrderFormRelateToOneForCreateInput {
+  create: CsOrderFormCreateInput
+  connect: CsOrderFormWhereUniqueInput
+}
+
+type CsTransfer {
+  id: ID!
+  ref: String
+  fromContainer: CsContainer
+  toContainer: CsContainer
+  toRegistration: DeaRegistration
+  qty: Decimal
+  unit: String
+  status: String
+  outEntry: CsLogEntry
+  inEntry: CsLogEntry
+  sentBy: StaffMember
+  witness: StaffMember
+  sentAt: DateTime
+  receivedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsTransferWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input CsTransferWhereInput {
+  AND: [CsTransferWhereInput!]
+  OR: [CsTransferWhereInput!]
+  NOT: [CsTransferWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  fromContainer: CsContainerWhereInput
+  toContainer: CsContainerWhereInput
+  toRegistration: DeaRegistrationWhereInput
+  qty: DecimalFilter
+  unit: StringNullableFilter
+  status: StringFilter
+  outEntry: CsLogEntryWhereInput
+  inEntry: CsLogEntryWhereInput
+  sentBy: StaffMemberWhereInput
+  witness: StaffMemberWhereInput
+  sentAt: DateTimeFilter
+  receivedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CsTransferOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  qty: OrderDirection
+  unit: OrderDirection
+  status: OrderDirection
+  sentAt: OrderDirection
+  receivedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CsTransferUpdateInput {
+  ref: String
+  fromContainer: CsContainerRelateToOneForUpdateInput
+  toContainer: CsContainerRelateToOneForUpdateInput
+  toRegistration: DeaRegistrationRelateToOneForUpdateInput
+  qty: Decimal
+  unit: String
+  status: String
+  outEntry: CsLogEntryRelateToOneForUpdateInput
+  inEntry: CsLogEntryRelateToOneForUpdateInput
+  sentBy: StaffMemberRelateToOneForUpdateInput
+  witness: StaffMemberRelateToOneForUpdateInput
+  sentAt: DateTime
+  receivedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CsTransferUpdateArgs {
+  where: CsTransferWhereUniqueInput!
+  data: CsTransferUpdateInput!
+}
+
+input CsTransferCreateInput {
+  ref: String
+  fromContainer: CsContainerRelateToOneForCreateInput
+  toContainer: CsContainerRelateToOneForCreateInput
+  toRegistration: DeaRegistrationRelateToOneForCreateInput
+  qty: Decimal
+  unit: String
+  status: String
+  outEntry: CsLogEntryRelateToOneForCreateInput
+  inEntry: CsLogEntryRelateToOneForCreateInput
+  sentBy: StaffMemberRelateToOneForCreateInput
+  witness: StaffMemberRelateToOneForCreateInput
+  sentAt: DateTime
+  receivedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type PdmpSubmission {
+  id: ID!
+  ref: String
+  location: Location
+  format: String
+  reportCount: Int
+  fileSha256: String
+  fileBody: JSON
+  reports(where: PdmpReportWhereInput! = {}, orderBy: [PdmpReportOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PdmpReportWhereUniqueInput): [PdmpReport!]
+  reportsCount(where: PdmpReportWhereInput! = {}): Int
+  generatedBy: StaffMember
+  generatedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PdmpSubmissionWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input PdmpSubmissionWhereInput {
+  AND: [PdmpSubmissionWhereInput!]
+  OR: [PdmpSubmissionWhereInput!]
+  NOT: [PdmpSubmissionWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  location: LocationWhereInput
+  format: StringFilter
+  reportCount: IntNullableFilter
+  fileSha256: StringFilter
+  reports: PdmpReportManyRelationFilter
+  generatedBy: StaffMemberWhereInput
+  generatedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PdmpReportManyRelationFilter {
+  every: PdmpReportWhereInput
+  some: PdmpReportWhereInput
+  none: PdmpReportWhereInput
+}
+
+input PdmpSubmissionOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  format: OrderDirection
+  reportCount: OrderDirection
+  fileSha256: OrderDirection
+  generatedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PdmpSubmissionUpdateInput {
+  ref: String
+  location: LocationRelateToOneForUpdateInput
+  format: String
+  reportCount: Int
+  fileSha256: String
+  fileBody: JSON
+  reports: PdmpReportRelateToManyForUpdateInput
+  generatedBy: StaffMemberRelateToOneForUpdateInput
+  generatedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PdmpReportRelateToManyForUpdateInput {
+  disconnect: [PdmpReportWhereUniqueInput!]
+  set: [PdmpReportWhereUniqueInput!]
+  create: [PdmpReportCreateInput!]
+  connect: [PdmpReportWhereUniqueInput!]
+}
+
+input PdmpSubmissionUpdateArgs {
+  where: PdmpSubmissionWhereUniqueInput!
+  data: PdmpSubmissionUpdateInput!
+}
+
+input PdmpSubmissionCreateInput {
+  ref: String
+  location: LocationRelateToOneForCreateInput
+  format: String
+  reportCount: Int
+  fileSha256: String
+  fileBody: JSON
+  reports: PdmpReportRelateToManyForCreateInput
+  generatedBy: StaffMemberRelateToOneForCreateInput
+  generatedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PdmpReportRelateToManyForCreateInput {
+  create: [PdmpReportCreateInput!]
+  connect: [PdmpReportWhereUniqueInput!]
+}
+
+type CabinetAccessEvent {
+  id: ID!
+  location: Location
+  staff: StaffMember
+  kind: String
+  note: String
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CabinetAccessEventWhereUniqueInput {
+  id: ID
+}
+
+input CabinetAccessEventWhereInput {
+  AND: [CabinetAccessEventWhereInput!]
+  OR: [CabinetAccessEventWhereInput!]
+  NOT: [CabinetAccessEventWhereInput!]
+  id: IDFilter
+  location: LocationWhereInput
+  staff: StaffMemberWhereInput
+  kind: StringFilter
+  note: StringFilter
+  occurredAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CabinetAccessEventOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  note: OrderDirection
+  occurredAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CabinetAccessEventUpdateInput {
+  location: LocationRelateToOneForUpdateInput
+  staff: StaffMemberRelateToOneForUpdateInput
+  kind: String
+  note: String
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CabinetAccessEventUpdateArgs {
+  where: CabinetAccessEventWhereUniqueInput!
+  data: CabinetAccessEventUpdateInput!
+}
+
+input CabinetAccessEventCreateInput {
+  location: LocationRelateToOneForCreateInput
+  staff: StaffMemberRelateToOneForCreateInput
+  kind: String
+  note: String
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type DispenseLabel {
+  id: ID!
+  dispense: Dispense
+  fields: JSON
+  printedBy: StaffMember
+  printedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DispenseLabelWhereUniqueInput {
+  id: ID
+}
+
+input DispenseLabelWhereInput {
+  AND: [DispenseLabelWhereInput!]
+  OR: [DispenseLabelWhereInput!]
+  NOT: [DispenseLabelWhereInput!]
+  id: IDFilter
+  dispense: DispenseWhereInput
+  printedBy: StaffMemberWhereInput
+  printedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DispenseLabelOrderByInput {
+  id: OrderDirection
+  printedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DispenseLabelUpdateInput {
+  dispense: DispenseRelateToOneForUpdateInput
+  fields: JSON
+  printedBy: StaffMemberRelateToOneForUpdateInput
+  printedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DispenseLabelUpdateArgs {
+  where: DispenseLabelWhereUniqueInput!
+  data: DispenseLabelUpdateInput!
+}
+
+input DispenseLabelCreateInput {
+  dispense: DispenseRelateToOneForCreateInput
+  fields: JSON
+  printedBy: StaffMemberRelateToOneForCreateInput
+  printedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ExternalDispense {
+  id: ID!
+  ref: String
+  prescription: Prescription
+  patient: Patient
+  pharmacyName: String
+  orderReference: String
+  status: String
+  decidedBy: StaffMember
+  decidedAt: DateTime
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExternalDispenseWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input ExternalDispenseWhereInput {
+  AND: [ExternalDispenseWhereInput!]
+  OR: [ExternalDispenseWhereInput!]
+  NOT: [ExternalDispenseWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  prescription: PrescriptionWhereInput
+  patient: PatientWhereInput
+  pharmacyName: StringFilter
+  orderReference: StringFilter
+  status: StringFilter
+  decidedBy: StaffMemberWhereInput
+  decidedAt: DateTimeNullableFilter
+  note: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ExternalDispenseOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  pharmacyName: OrderDirection
+  orderReference: OrderDirection
+  status: OrderDirection
+  decidedAt: OrderDirection
+  note: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ExternalDispenseUpdateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  pharmacyName: String
+  orderReference: String
+  status: String
+  decidedBy: StaffMemberRelateToOneForUpdateInput
+  decidedAt: DateTime
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExternalDispenseUpdateArgs {
+  where: ExternalDispenseWhereUniqueInput!
+  data: ExternalDispenseUpdateInput!
+}
+
+input ExternalDispenseCreateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  pharmacyName: String
+  orderReference: String
+  status: String
+  decidedBy: StaffMemberRelateToOneForCreateInput
+  decidedAt: DateTime
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type WrittenRxExport {
+  id: ID!
+  ref: String
+  prescription: Prescription
+  exportedBy: StaffMember
+  exportedAt: DateTime
+  contentSha256: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WrittenRxExportWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input WrittenRxExportWhereInput {
+  AND: [WrittenRxExportWhereInput!]
+  OR: [WrittenRxExportWhereInput!]
+  NOT: [WrittenRxExportWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  prescription: PrescriptionWhereInput
+  exportedBy: StaffMemberWhereInput
+  exportedAt: DateTimeFilter
+  contentSha256: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input WrittenRxExportOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  exportedAt: OrderDirection
+  contentSha256: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input WrittenRxExportUpdateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForUpdateInput
+  exportedBy: StaffMemberRelateToOneForUpdateInput
+  exportedAt: DateTime
+  contentSha256: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WrittenRxExportUpdateArgs {
+  where: WrittenRxExportWhereUniqueInput!
+  data: WrittenRxExportUpdateInput!
+}
+
+input WrittenRxExportCreateInput {
+  ref: String
+  prescription: PrescriptionRelateToOneForCreateInput
+  exportedBy: StaffMemberRelateToOneForCreateInput
+  exportedAt: DateTime
+  contentSha256: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type UnitOfMeasure {
+  id: ID!
+  code: String
+  name: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input UnitOfMeasureWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input UnitOfMeasureWhereInput {
+  AND: [UnitOfMeasureWhereInput!]
+  OR: [UnitOfMeasureWhereInput!]
+  NOT: [UnitOfMeasureWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input UnitOfMeasureOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input UnitOfMeasureUpdateInput {
+  code: String
+  name: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input UnitOfMeasureUpdateArgs {
+  where: UnitOfMeasureWhereUniqueInput!
+  data: UnitOfMeasureUpdateInput!
+}
+
+input UnitOfMeasureCreateInput {
+  code: String
+  name: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Item {
+  id: ID!
+  ref: String
+  name: String
+  kind: String
+  drug: DrugProduct
+  vaccine: VaccineProduct
+  baseUnit: String
+  sku: String
+  coldChain: Boolean
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ItemWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input ItemWhereInput {
+  AND: [ItemWhereInput!]
+  OR: [ItemWhereInput!]
+  NOT: [ItemWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  name: StringFilter
+  kind: StringFilter
+  drug: DrugProductWhereInput
+  vaccine: VaccineProductWhereInput
+  baseUnit: StringNullableFilter
+  sku: StringFilter
+  coldChain: BooleanFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ItemOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  baseUnit: OrderDirection
+  sku: OrderDirection
+  coldChain: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ItemUpdateInput {
+  ref: String
+  name: String
+  kind: String
+  drug: DrugProductRelateToOneForUpdateInput
+  vaccine: VaccineProductRelateToOneForUpdateInput
+  baseUnit: String
+  sku: String
+  coldChain: Boolean
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input VaccineProductRelateToOneForUpdateInput {
+  create: VaccineProductCreateInput
+  connect: VaccineProductWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ItemUpdateArgs {
+  where: ItemWhereUniqueInput!
+  data: ItemUpdateInput!
+}
+
+input ItemCreateInput {
+  ref: String
+  name: String
+  kind: String
+  drug: DrugProductRelateToOneForCreateInput
+  vaccine: VaccineProductRelateToOneForCreateInput
+  baseUnit: String
+  sku: String
+  coldChain: Boolean
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input VaccineProductRelateToOneForCreateInput {
+  create: VaccineProductCreateInput
+  connect: VaccineProductWhereUniqueInput
+}
+
+type ItemUomConversion {
+  id: ID!
+  item: Item
+  fromUnit: String
+  toUnit: String
+  factor: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ItemUomConversionWhereUniqueInput {
+  id: ID
+}
+
+input ItemUomConversionWhereInput {
+  AND: [ItemUomConversionWhereInput!]
+  OR: [ItemUomConversionWhereInput!]
+  NOT: [ItemUomConversionWhereInput!]
+  id: IDFilter
+  item: ItemWhereInput
+  fromUnit: StringFilter
+  toUnit: StringFilter
+  factor: DecimalFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ItemUomConversionOrderByInput {
+  id: OrderDirection
+  fromUnit: OrderDirection
+  toUnit: OrderDirection
+  factor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ItemUomConversionUpdateInput {
+  item: ItemRelateToOneForUpdateInput
+  fromUnit: String
+  toUnit: String
+  factor: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ItemRelateToOneForUpdateInput {
+  create: ItemCreateInput
+  connect: ItemWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ItemUomConversionUpdateArgs {
+  where: ItemUomConversionWhereUniqueInput!
+  data: ItemUomConversionUpdateInput!
+}
+
+input ItemUomConversionCreateInput {
+  item: ItemRelateToOneForCreateInput
+  fromUnit: String
+  toUnit: String
+  factor: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ItemRelateToOneForCreateInput {
+  create: ItemCreateInput
+  connect: ItemWhereUniqueInput
+}
+
+type StockLocation {
+  id: ID!
+  name: String
+  location: Location
+  kind: String
+  minTempC: Decimal
+  maxTempC: Decimal
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLocationWhereUniqueInput {
+  id: ID
+}
+
+input StockLocationWhereInput {
+  AND: [StockLocationWhereInput!]
+  OR: [StockLocationWhereInput!]
+  NOT: [StockLocationWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  location: LocationWhereInput
+  kind: StringFilter
+  minTempC: DecimalNullableFilter
+  maxTempC: DecimalNullableFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input StockLocationOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  minTempC: OrderDirection
+  maxTempC: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StockLocationUpdateInput {
+  name: String
+  location: LocationRelateToOneForUpdateInput
+  kind: String
+  minTempC: Decimal
+  maxTempC: Decimal
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLocationUpdateArgs {
+  where: StockLocationWhereUniqueInput!
+  data: StockLocationUpdateInput!
+}
+
+input StockLocationCreateInput {
+  name: String
+  location: LocationRelateToOneForCreateInput
+  kind: String
+  minTempC: Decimal
+  maxTempC: Decimal
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type StockMovement {
+  id: ID!
+  item: Item
+  lot: InventoryLot
+  stockLocation: StockLocation
+  kind: String
+  qtySigned: Decimal
+  unit: String
+  sourceType: String
+  sourceId: String
+  reason: String
+  actor: StaffMember
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockMovementWhereUniqueInput {
+  id: ID
+}
+
+input StockMovementWhereInput {
+  AND: [StockMovementWhereInput!]
+  OR: [StockMovementWhereInput!]
+  NOT: [StockMovementWhereInput!]
+  id: IDFilter
+  item: ItemWhereInput
+  lot: InventoryLotWhereInput
+  stockLocation: StockLocationWhereInput
+  kind: StringFilter
+  qtySigned: DecimalFilter
+  unit: StringNullableFilter
+  sourceType: StringFilter
+  sourceId: StringFilter
+  reason: StringFilter
+  actor: StaffMemberWhereInput
+  occurredAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input StockMovementOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  qtySigned: OrderDirection
+  unit: OrderDirection
+  sourceType: OrderDirection
+  sourceId: OrderDirection
+  reason: OrderDirection
+  occurredAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StockMovementUpdateInput {
+  item: ItemRelateToOneForUpdateInput
+  lot: InventoryLotRelateToOneForUpdateInput
+  stockLocation: StockLocationRelateToOneForUpdateInput
+  kind: String
+  qtySigned: Decimal
+  unit: String
+  sourceType: String
+  sourceId: String
+  reason: String
+  actor: StaffMemberRelateToOneForUpdateInput
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLocationRelateToOneForUpdateInput {
+  create: StockLocationCreateInput
+  connect: StockLocationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input StockMovementUpdateArgs {
+  where: StockMovementWhereUniqueInput!
+  data: StockMovementUpdateInput!
+}
+
+input StockMovementCreateInput {
+  item: ItemRelateToOneForCreateInput
+  lot: InventoryLotRelateToOneForCreateInput
+  stockLocation: StockLocationRelateToOneForCreateInput
+  kind: String
+  qtySigned: Decimal
+  unit: String
+  sourceType: String
+  sourceId: String
+  reason: String
+  actor: StaffMemberRelateToOneForCreateInput
+  occurredAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLocationRelateToOneForCreateInput {
+  create: StockLocationCreateInput
+  connect: StockLocationWhereUniqueInput
+}
+
+type StockLevel {
+  id: ID!
+  item: Item
+  lot: InventoryLot
+  stockLocation: StockLocation
+  onHand: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLevelWhereUniqueInput {
+  id: ID
+}
+
+input StockLevelWhereInput {
+  AND: [StockLevelWhereInput!]
+  OR: [StockLevelWhereInput!]
+  NOT: [StockLevelWhereInput!]
+  id: IDFilter
+  item: ItemWhereInput
+  lot: InventoryLotWhereInput
+  stockLocation: StockLocationWhereInput
+  onHand: DecimalFilter
+  unit: StringNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input StockLevelOrderByInput {
+  id: OrderDirection
+  onHand: OrderDirection
+  unit: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StockLevelUpdateInput {
+  item: ItemRelateToOneForUpdateInput
+  lot: InventoryLotRelateToOneForUpdateInput
+  stockLocation: StockLocationRelateToOneForUpdateInput
+  onHand: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockLevelUpdateArgs {
+  where: StockLevelWhereUniqueInput!
+  data: StockLevelUpdateInput!
+}
+
+input StockLevelCreateInput {
+  item: ItemRelateToOneForCreateInput
+  lot: InventoryLotRelateToOneForCreateInput
+  stockLocation: StockLocationRelateToOneForCreateInput
+  onHand: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Supplier {
+  id: ID!
+  name: String
+  accountNumber: String
+  phone: String
+  email: String
+  deaNumber: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierWhereUniqueInput {
+  id: ID
+}
+
+input SupplierWhereInput {
+  AND: [SupplierWhereInput!]
+  OR: [SupplierWhereInput!]
+  NOT: [SupplierWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  accountNumber: StringFilter
+  phone: StringFilter
+  email: StringFilter
+  deaNumber: StringFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input SupplierOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  accountNumber: OrderDirection
+  phone: OrderDirection
+  email: OrderDirection
+  deaNumber: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input SupplierUpdateInput {
+  name: String
+  accountNumber: String
+  phone: String
+  email: String
+  deaNumber: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierUpdateArgs {
+  where: SupplierWhereUniqueInput!
+  data: SupplierUpdateInput!
+}
+
+input SupplierCreateInput {
+  name: String
+  accountNumber: String
+  phone: String
+  email: String
+  deaNumber: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type SupplierItem {
+  id: ID!
+  supplier: Supplier
+  item: Item
+  sku: String
+  packSize: Decimal
+  packUnit: String
+  lastCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierItemWhereUniqueInput {
+  id: ID
+}
+
+input SupplierItemWhereInput {
+  AND: [SupplierItemWhereInput!]
+  OR: [SupplierItemWhereInput!]
+  NOT: [SupplierItemWhereInput!]
+  id: IDFilter
+  supplier: SupplierWhereInput
+  item: ItemWhereInput
+  sku: StringFilter
+  packSize: DecimalNullableFilter
+  packUnit: StringNullableFilter
+  lastCostMinor: BigIntNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input SupplierItemOrderByInput {
+  id: OrderDirection
+  sku: OrderDirection
+  packSize: OrderDirection
+  packUnit: OrderDirection
+  lastCostMinor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input SupplierItemUpdateInput {
+  supplier: SupplierRelateToOneForUpdateInput
+  item: ItemRelateToOneForUpdateInput
+  sku: String
+  packSize: Decimal
+  packUnit: String
+  lastCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SupplierItemUpdateArgs {
+  where: SupplierItemWhereUniqueInput!
+  data: SupplierItemUpdateInput!
+}
+
+input SupplierItemCreateInput {
+  supplier: SupplierRelateToOneForCreateInput
+  item: ItemRelateToOneForCreateInput
+  sku: String
+  packSize: Decimal
+  packUnit: String
+  lastCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type PurchaseOrder {
+  id: ID!
+  ref: String
+  supplier: Supplier
+  location: Location
+  status: String
+  orderedBy: StaffMember
+  orderedAt: DateTime
+  approvedBy: StaffMember
+  note: String
+  lines(where: PurchaseOrderLineWhereInput! = {}, orderBy: [PurchaseOrderLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PurchaseOrderLineWhereUniqueInput): [PurchaseOrderLine!]
+  linesCount(where: PurchaseOrderLineWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input PurchaseOrderWhereInput {
+  AND: [PurchaseOrderWhereInput!]
+  OR: [PurchaseOrderWhereInput!]
+  NOT: [PurchaseOrderWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  supplier: SupplierWhereInput
+  location: LocationWhereInput
+  status: StringFilter
+  orderedBy: StaffMemberWhereInput
+  orderedAt: DateTimeNullableFilter
+  approvedBy: StaffMemberWhereInput
+  note: StringFilter
+  lines: PurchaseOrderLineManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PurchaseOrderLineManyRelationFilter {
+  every: PurchaseOrderLineWhereInput
+  some: PurchaseOrderLineWhereInput
+  none: PurchaseOrderLineWhereInput
+}
+
+input PurchaseOrderOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  status: OrderDirection
+  orderedAt: OrderDirection
+  note: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PurchaseOrderUpdateInput {
+  ref: String
+  supplier: SupplierRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  status: String
+  orderedBy: StaffMemberRelateToOneForUpdateInput
+  orderedAt: DateTime
+  approvedBy: StaffMemberRelateToOneForUpdateInput
+  note: String
+  lines: PurchaseOrderLineRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderLineRelateToManyForUpdateInput {
+  disconnect: [PurchaseOrderLineWhereUniqueInput!]
+  set: [PurchaseOrderLineWhereUniqueInput!]
+  create: [PurchaseOrderLineCreateInput!]
+  connect: [PurchaseOrderLineWhereUniqueInput!]
+}
+
+input PurchaseOrderUpdateArgs {
+  where: PurchaseOrderWhereUniqueInput!
+  data: PurchaseOrderUpdateInput!
+}
+
+input PurchaseOrderCreateInput {
+  ref: String
+  supplier: SupplierRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  status: String
+  orderedBy: StaffMemberRelateToOneForCreateInput
+  orderedAt: DateTime
+  approvedBy: StaffMemberRelateToOneForCreateInput
+  note: String
+  lines: PurchaseOrderLineRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderLineRelateToManyForCreateInput {
+  create: [PurchaseOrderLineCreateInput!]
+  connect: [PurchaseOrderLineWhereUniqueInput!]
+}
+
+type PurchaseOrderLine {
+  id: ID!
+  purchaseOrder: PurchaseOrder
+  item: Item
+  qtyOrdered: Decimal
+  qtyReceived: Decimal
+  unit: String
+  unitCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderLineWhereUniqueInput {
+  id: ID
+}
+
+input PurchaseOrderLineWhereInput {
+  AND: [PurchaseOrderLineWhereInput!]
+  OR: [PurchaseOrderLineWhereInput!]
+  NOT: [PurchaseOrderLineWhereInput!]
+  id: IDFilter
+  purchaseOrder: PurchaseOrderWhereInput
+  item: ItemWhereInput
+  qtyOrdered: DecimalFilter
+  qtyReceived: DecimalFilter
+  unit: StringNullableFilter
+  unitCostMinor: BigIntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PurchaseOrderLineOrderByInput {
+  id: OrderDirection
+  qtyOrdered: OrderDirection
+  qtyReceived: OrderDirection
+  unit: OrderDirection
+  unitCostMinor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PurchaseOrderLineUpdateInput {
+  purchaseOrder: PurchaseOrderRelateToOneForUpdateInput
+  item: ItemRelateToOneForUpdateInput
+  qtyOrdered: Decimal
+  qtyReceived: Decimal
+  unit: String
+  unitCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderRelateToOneForUpdateInput {
+  create: PurchaseOrderCreateInput
+  connect: PurchaseOrderWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PurchaseOrderLineUpdateArgs {
+  where: PurchaseOrderLineWhereUniqueInput!
+  data: PurchaseOrderLineUpdateInput!
+}
+
+input PurchaseOrderLineCreateInput {
+  purchaseOrder: PurchaseOrderRelateToOneForCreateInput
+  item: ItemRelateToOneForCreateInput
+  qtyOrdered: Decimal
+  qtyReceived: Decimal
+  unit: String
+  unitCostMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PurchaseOrderRelateToOneForCreateInput {
+  create: PurchaseOrderCreateInput
+  connect: PurchaseOrderWhereUniqueInput
+}
+
+type GoodsReceipt {
+  id: ID!
+  ref: String
+  purchaseOrder: PurchaseOrder
+  location: Location
+  receivedBy: StaffMember
+  receivedAt: DateTime
+  packingSlip: String
+  lines(where: GoodsReceiptLineWhereInput! = {}, orderBy: [GoodsReceiptLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: GoodsReceiptLineWhereUniqueInput): [GoodsReceiptLine!]
+  linesCount(where: GoodsReceiptLineWhereInput! = {}): Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input GoodsReceiptWhereInput {
+  AND: [GoodsReceiptWhereInput!]
+  OR: [GoodsReceiptWhereInput!]
+  NOT: [GoodsReceiptWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  purchaseOrder: PurchaseOrderWhereInput
+  location: LocationWhereInput
+  receivedBy: StaffMemberWhereInput
+  receivedAt: DateTimeFilter
+  packingSlip: StringFilter
+  lines: GoodsReceiptLineManyRelationFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input GoodsReceiptLineManyRelationFilter {
+  every: GoodsReceiptLineWhereInput
+  some: GoodsReceiptLineWhereInput
+  none: GoodsReceiptLineWhereInput
+}
+
+input GoodsReceiptOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  receivedAt: OrderDirection
+  packingSlip: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input GoodsReceiptUpdateInput {
+  ref: String
+  purchaseOrder: PurchaseOrderRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  receivedBy: StaffMemberRelateToOneForUpdateInput
+  receivedAt: DateTime
+  packingSlip: String
+  lines: GoodsReceiptLineRelateToManyForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptLineRelateToManyForUpdateInput {
+  disconnect: [GoodsReceiptLineWhereUniqueInput!]
+  set: [GoodsReceiptLineWhereUniqueInput!]
+  create: [GoodsReceiptLineCreateInput!]
+  connect: [GoodsReceiptLineWhereUniqueInput!]
+}
+
+input GoodsReceiptUpdateArgs {
+  where: GoodsReceiptWhereUniqueInput!
+  data: GoodsReceiptUpdateInput!
+}
+
+input GoodsReceiptCreateInput {
+  ref: String
+  purchaseOrder: PurchaseOrderRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  receivedBy: StaffMemberRelateToOneForCreateInput
+  receivedAt: DateTime
+  packingSlip: String
+  lines: GoodsReceiptLineRelateToManyForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptLineRelateToManyForCreateInput {
+  create: [GoodsReceiptLineCreateInput!]
+  connect: [GoodsReceiptLineWhereUniqueInput!]
+}
+
+type GoodsReceiptLine {
+  id: ID!
+  receipt: GoodsReceipt
+  purchaseOrderLine: PurchaseOrderLine
+  item: Item
+  lot: InventoryLot
+  qty: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptLineWhereUniqueInput {
+  id: ID
+}
+
+input GoodsReceiptLineWhereInput {
+  AND: [GoodsReceiptLineWhereInput!]
+  OR: [GoodsReceiptLineWhereInput!]
+  NOT: [GoodsReceiptLineWhereInput!]
+  id: IDFilter
+  receipt: GoodsReceiptWhereInput
+  purchaseOrderLine: PurchaseOrderLineWhereInput
+  item: ItemWhereInput
+  lot: InventoryLotWhereInput
+  qty: DecimalFilter
+  unit: StringNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input GoodsReceiptLineOrderByInput {
+  id: OrderDirection
+  qty: OrderDirection
+  unit: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input GoodsReceiptLineUpdateInput {
+  receipt: GoodsReceiptRelateToOneForUpdateInput
+  purchaseOrderLine: PurchaseOrderLineRelateToOneForUpdateInput
+  item: ItemRelateToOneForUpdateInput
+  lot: InventoryLotRelateToOneForUpdateInput
+  qty: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptRelateToOneForUpdateInput {
+  create: GoodsReceiptCreateInput
+  connect: GoodsReceiptWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PurchaseOrderLineRelateToOneForUpdateInput {
+  create: PurchaseOrderLineCreateInput
+  connect: PurchaseOrderLineWhereUniqueInput
+  disconnect: Boolean
+}
+
+input GoodsReceiptLineUpdateArgs {
+  where: GoodsReceiptLineWhereUniqueInput!
+  data: GoodsReceiptLineUpdateInput!
+}
+
+input GoodsReceiptLineCreateInput {
+  receipt: GoodsReceiptRelateToOneForCreateInput
+  purchaseOrderLine: PurchaseOrderLineRelateToOneForCreateInput
+  item: ItemRelateToOneForCreateInput
+  lot: InventoryLotRelateToOneForCreateInput
+  qty: Decimal
+  unit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GoodsReceiptRelateToOneForCreateInput {
+  create: GoodsReceiptCreateInput
+  connect: GoodsReceiptWhereUniqueInput
+}
+
+input PurchaseOrderLineRelateToOneForCreateInput {
+  create: PurchaseOrderLineCreateInput
+  connect: PurchaseOrderLineWhereUniqueInput
+}
+
+type ReorderRule {
+  id: ID!
+  item: Item
+  location: Location
+  minQty: Decimal
+  targetQty: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ReorderRuleWhereUniqueInput {
+  id: ID
+}
+
+input ReorderRuleWhereInput {
+  AND: [ReorderRuleWhereInput!]
+  OR: [ReorderRuleWhereInput!]
+  NOT: [ReorderRuleWhereInput!]
+  id: IDFilter
+  item: ItemWhereInput
+  location: LocationWhereInput
+  minQty: DecimalFilter
+  targetQty: DecimalFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ReorderRuleOrderByInput {
+  id: OrderDirection
+  minQty: OrderDirection
+  targetQty: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ReorderRuleUpdateInput {
+  item: ItemRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  minQty: Decimal
+  targetQty: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ReorderRuleUpdateArgs {
+  where: ReorderRuleWhereUniqueInput!
+  data: ReorderRuleUpdateInput!
+}
+
+input ReorderRuleCreateInput {
+  item: ItemRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  minQty: Decimal
+  targetQty: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type StockCount {
+  id: ID!
+  ref: String
+  location: Location
+  stockLocation: StockLocation
+  status: String
+  countedBy: StaffMember
+  countedAt: DateTime
+  lines(where: StockCountLineWhereInput! = {}, orderBy: [StockCountLineOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: StockCountLineWhereUniqueInput): [StockCountLine!]
+  linesCount(where: StockCountLineWhereInput! = {}): Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input StockCountWhereInput {
+  AND: [StockCountWhereInput!]
+  OR: [StockCountWhereInput!]
+  NOT: [StockCountWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  location: LocationWhereInput
+  stockLocation: StockLocationWhereInput
+  status: StringFilter
+  countedBy: StaffMemberWhereInput
+  countedAt: DateTimeFilter
+  lines: StockCountLineManyRelationFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input StockCountLineManyRelationFilter {
+  every: StockCountLineWhereInput
+  some: StockCountLineWhereInput
+  none: StockCountLineWhereInput
+}
+
+input StockCountOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  status: OrderDirection
+  countedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StockCountUpdateInput {
+  ref: String
+  location: LocationRelateToOneForUpdateInput
+  stockLocation: StockLocationRelateToOneForUpdateInput
+  status: String
+  countedBy: StaffMemberRelateToOneForUpdateInput
+  countedAt: DateTime
+  lines: StockCountLineRelateToManyForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountLineRelateToManyForUpdateInput {
+  disconnect: [StockCountLineWhereUniqueInput!]
+  set: [StockCountLineWhereUniqueInput!]
+  create: [StockCountLineCreateInput!]
+  connect: [StockCountLineWhereUniqueInput!]
+}
+
+input StockCountUpdateArgs {
+  where: StockCountWhereUniqueInput!
+  data: StockCountUpdateInput!
+}
+
+input StockCountCreateInput {
+  ref: String
+  location: LocationRelateToOneForCreateInput
+  stockLocation: StockLocationRelateToOneForCreateInput
+  status: String
+  countedBy: StaffMemberRelateToOneForCreateInput
+  countedAt: DateTime
+  lines: StockCountLineRelateToManyForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountLineRelateToManyForCreateInput {
+  create: [StockCountLineCreateInput!]
+  connect: [StockCountLineWhereUniqueInput!]
+}
+
+type StockCountLine {
+  id: ID!
+  count: StockCount
+  item: Item
+  lot: InventoryLot
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountLineWhereUniqueInput {
+  id: ID
+}
+
+input StockCountLineWhereInput {
+  AND: [StockCountLineWhereInput!]
+  OR: [StockCountLineWhereInput!]
+  NOT: [StockCountLineWhereInput!]
+  id: IDFilter
+  count: StockCountWhereInput
+  item: ItemWhereInput
+  lot: InventoryLotWhereInput
+  expectedQty: DecimalFilter
+  countedQty: DecimalFilter
+  variance: DecimalFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input StockCountLineOrderByInput {
+  id: OrderDirection
+  expectedQty: OrderDirection
+  countedQty: OrderDirection
+  variance: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input StockCountLineUpdateInput {
+  count: StockCountRelateToOneForUpdateInput
+  item: ItemRelateToOneForUpdateInput
+  lot: InventoryLotRelateToOneForUpdateInput
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountRelateToOneForUpdateInput {
+  create: StockCountCreateInput
+  connect: StockCountWhereUniqueInput
+  disconnect: Boolean
+}
+
+input StockCountLineUpdateArgs {
+  where: StockCountLineWhereUniqueInput!
+  data: StockCountLineUpdateInput!
+}
+
+input StockCountLineCreateInput {
+  count: StockCountRelateToOneForCreateInput
+  item: ItemRelateToOneForCreateInput
+  lot: InventoryLotRelateToOneForCreateInput
+  expectedQty: Decimal
+  countedQty: Decimal
+  variance: Decimal
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input StockCountRelateToOneForCreateInput {
+  create: StockCountCreateInput
+  connect: StockCountWhereUniqueInput
+}
+
+type RecallCase {
+  id: ID!
+  ref: String
+  title: String
+  source: String
+  item: Item
+  lotNumber: String
+  status: String
+  openedAt: DateTime
+  closedAt: DateTime
+  resolution: String
+  exposures(where: RecallExposureWhereInput! = {}, orderBy: [RecallExposureOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: RecallExposureWhereUniqueInput): [RecallExposure!]
+  exposuresCount(where: RecallExposureWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallCaseWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input RecallCaseWhereInput {
+  AND: [RecallCaseWhereInput!]
+  OR: [RecallCaseWhereInput!]
+  NOT: [RecallCaseWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  title: StringFilter
+  source: StringFilter
+  item: ItemWhereInput
+  lotNumber: StringFilter
+  status: StringFilter
+  openedAt: DateTimeFilter
+  closedAt: DateTimeNullableFilter
+  resolution: StringFilter
+  exposures: RecallExposureManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RecallExposureManyRelationFilter {
+  every: RecallExposureWhereInput
+  some: RecallExposureWhereInput
+  none: RecallExposureWhereInput
+}
+
+input RecallCaseOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  title: OrderDirection
+  source: OrderDirection
+  lotNumber: OrderDirection
+  status: OrderDirection
+  openedAt: OrderDirection
+  closedAt: OrderDirection
+  resolution: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RecallCaseUpdateInput {
+  ref: String
+  title: String
+  source: String
+  item: ItemRelateToOneForUpdateInput
+  lotNumber: String
+  status: String
+  openedAt: DateTime
+  closedAt: DateTime
+  resolution: String
+  exposures: RecallExposureRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallExposureRelateToManyForUpdateInput {
+  disconnect: [RecallExposureWhereUniqueInput!]
+  set: [RecallExposureWhereUniqueInput!]
+  create: [RecallExposureCreateInput!]
+  connect: [RecallExposureWhereUniqueInput!]
+}
+
+input RecallCaseUpdateArgs {
+  where: RecallCaseWhereUniqueInput!
+  data: RecallCaseUpdateInput!
+}
+
+input RecallCaseCreateInput {
+  ref: String
+  title: String
+  source: String
+  item: ItemRelateToOneForCreateInput
+  lotNumber: String
+  status: String
+  openedAt: DateTime
+  closedAt: DateTime
+  resolution: String
+  exposures: RecallExposureRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallExposureRelateToManyForCreateInput {
+  create: [RecallExposureCreateInput!]
+  connect: [RecallExposureWhereUniqueInput!]
+}
+
+type RecallExposure {
+  id: ID!
+  recall: RecallCase
+  patient: Patient
+  client: Client
+  sourceType: String
+  sourceId: String
+  givenOn: CalendarDay
+  status: String
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallExposureWhereUniqueInput {
+  id: ID
+}
+
+input RecallExposureWhereInput {
+  AND: [RecallExposureWhereInput!]
+  OR: [RecallExposureWhereInput!]
+  NOT: [RecallExposureWhereInput!]
+  id: IDFilter
+  recall: RecallCaseWhereInput
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  sourceType: StringFilter
+  sourceId: StringFilter
+  givenOn: CalendarDayNullableFilter
+  status: StringFilter
+  note: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RecallExposureOrderByInput {
+  id: OrderDirection
+  sourceType: OrderDirection
+  sourceId: OrderDirection
+  givenOn: OrderDirection
+  status: OrderDirection
+  note: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RecallExposureUpdateInput {
+  recall: RecallCaseRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  sourceType: String
+  sourceId: String
+  givenOn: CalendarDay
+  status: String
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallCaseRelateToOneForUpdateInput {
+  create: RecallCaseCreateInput
+  connect: RecallCaseWhereUniqueInput
+  disconnect: Boolean
+}
+
+input RecallExposureUpdateArgs {
+  where: RecallExposureWhereUniqueInput!
+  data: RecallExposureUpdateInput!
+}
+
+input RecallExposureCreateInput {
+  recall: RecallCaseRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  sourceType: String
+  sourceId: String
+  givenOn: CalendarDay
+  status: String
+  note: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RecallCaseRelateToOneForCreateInput {
+  create: RecallCaseCreateInput
+  connect: RecallCaseWhereUniqueInput
+}
+
+type TemperatureLog {
+  id: ID!
+  stockLocation: StockLocation
+  readingC: Decimal
+  inRange: Boolean
+  recordedBy: StaffMember
+  recordedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TemperatureLogWhereUniqueInput {
+  id: ID
+}
+
+input TemperatureLogWhereInput {
+  AND: [TemperatureLogWhereInput!]
+  OR: [TemperatureLogWhereInput!]
+  NOT: [TemperatureLogWhereInput!]
+  id: IDFilter
+  stockLocation: StockLocationWhereInput
+  readingC: DecimalFilter
+  inRange: BooleanFilter
+  recordedBy: StaffMemberWhereInput
+  recordedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input TemperatureLogOrderByInput {
+  id: OrderDirection
+  readingC: OrderDirection
+  inRange: OrderDirection
+  recordedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input TemperatureLogUpdateInput {
+  stockLocation: StockLocationRelateToOneForUpdateInput
+  readingC: Decimal
+  inRange: Boolean
+  recordedBy: StaffMemberRelateToOneForUpdateInput
+  recordedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TemperatureLogUpdateArgs {
+  where: TemperatureLogWhereUniqueInput!
+  data: TemperatureLogUpdateInput!
+}
+
+input TemperatureLogCreateInput {
+  stockLocation: StockLocationRelateToOneForCreateInput
+  readingC: Decimal
+  inRange: Boolean
+  recordedBy: StaffMemberRelateToOneForCreateInput
+  recordedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type TemperatureExcursion {
+  id: ID!
+  ref: String
+  stockLocation: StockLocation
+  log: TemperatureLog
+  status: String
+  openedAt: DateTime
+  quarantinedLots: Int
+  resolvedAt: DateTime
+  resolution: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TemperatureExcursionWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input TemperatureExcursionWhereInput {
+  AND: [TemperatureExcursionWhereInput!]
+  OR: [TemperatureExcursionWhereInput!]
+  NOT: [TemperatureExcursionWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  stockLocation: StockLocationWhereInput
+  log: TemperatureLogWhereInput
+  status: StringFilter
+  openedAt: DateTimeFilter
+  quarantinedLots: IntNullableFilter
+  resolvedAt: DateTimeNullableFilter
+  resolution: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input TemperatureExcursionOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  status: OrderDirection
+  openedAt: OrderDirection
+  quarantinedLots: OrderDirection
+  resolvedAt: OrderDirection
+  resolution: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input TemperatureExcursionUpdateInput {
+  ref: String
+  stockLocation: StockLocationRelateToOneForUpdateInput
+  log: TemperatureLogRelateToOneForUpdateInput
+  status: String
+  openedAt: DateTime
+  quarantinedLots: Int
+  resolvedAt: DateTime
+  resolution: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TemperatureLogRelateToOneForUpdateInput {
+  create: TemperatureLogCreateInput
+  connect: TemperatureLogWhereUniqueInput
+  disconnect: Boolean
+}
+
+input TemperatureExcursionUpdateArgs {
+  where: TemperatureExcursionWhereUniqueInput!
+  data: TemperatureExcursionUpdateInput!
+}
+
+input TemperatureExcursionCreateInput {
+  ref: String
+  stockLocation: StockLocationRelateToOneForCreateInput
+  log: TemperatureLogRelateToOneForCreateInput
+  status: String
+  openedAt: DateTime
+  quarantinedLots: Int
+  resolvedAt: DateTime
+  resolution: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input TemperatureLogRelateToOneForCreateInput {
+  create: TemperatureLogCreateInput
+  connect: TemperatureLogWhereUniqueInput
 }
 
 type Encounter {
@@ -11352,12 +13627,6 @@ input ClinicalOrderUpdateInput {
   updatedAt: DateTime
 }
 
-input VaccineProductRelateToOneForUpdateInput {
-  create: VaccineProductCreateInput
-  connect: VaccineProductWhereUniqueInput
-  disconnect: Boolean
-}
-
 input DoseCalculationRelateToOneForUpdateInput {
   create: DoseCalculationCreateInput
   connect: DoseCalculationWhereUniqueInput
@@ -11403,11 +13672,6 @@ input ClinicalOrderCreateInput {
   version: Int
   createdAt: DateTime
   updatedAt: DateTime
-}
-
-input VaccineProductRelateToOneForCreateInput {
-  create: VaccineProductCreateInput
-  connect: VaccineProductWhereUniqueInput
 }
 
 input DoseCalculationRelateToOneForCreateInput {
@@ -15024,6 +17288,174 @@ type Mutation {
   updatePdmpReports(data: [PdmpReportUpdateArgs!]!): [PdmpReport]
   deletePdmpReport(where: PdmpReportWhereUniqueInput!): PdmpReport
   deletePdmpReports(where: [PdmpReportWhereUniqueInput!]!): [PdmpReport]
+  createCsWitness(data: CsWitnessCreateInput!): CsWitness
+  createCsWitnesses(data: [CsWitnessCreateInput!]!): [CsWitness]
+  updateCsWitness(where: CsWitnessWhereUniqueInput!, data: CsWitnessUpdateInput!): CsWitness
+  updateCsWitnesses(data: [CsWitnessUpdateArgs!]!): [CsWitness]
+  deleteCsWitness(where: CsWitnessWhereUniqueInput!): CsWitness
+  deleteCsWitnesses(where: [CsWitnessWhereUniqueInput!]!): [CsWitness]
+  createCsOrderForm(data: CsOrderFormCreateInput!): CsOrderForm
+  createCsOrderForms(data: [CsOrderFormCreateInput!]!): [CsOrderForm]
+  updateCsOrderForm(where: CsOrderFormWhereUniqueInput!, data: CsOrderFormUpdateInput!): CsOrderForm
+  updateCsOrderForms(data: [CsOrderFormUpdateArgs!]!): [CsOrderForm]
+  deleteCsOrderForm(where: CsOrderFormWhereUniqueInput!): CsOrderForm
+  deleteCsOrderForms(where: [CsOrderFormWhereUniqueInput!]!): [CsOrderForm]
+  createCsOrderFormLine(data: CsOrderFormLineCreateInput!): CsOrderFormLine
+  createCsOrderFormLines(data: [CsOrderFormLineCreateInput!]!): [CsOrderFormLine]
+  updateCsOrderFormLine(where: CsOrderFormLineWhereUniqueInput!, data: CsOrderFormLineUpdateInput!): CsOrderFormLine
+  updateCsOrderFormLines(data: [CsOrderFormLineUpdateArgs!]!): [CsOrderFormLine]
+  deleteCsOrderFormLine(where: CsOrderFormLineWhereUniqueInput!): CsOrderFormLine
+  deleteCsOrderFormLines(where: [CsOrderFormLineWhereUniqueInput!]!): [CsOrderFormLine]
+  createCsTransfer(data: CsTransferCreateInput!): CsTransfer
+  createCsTransfers(data: [CsTransferCreateInput!]!): [CsTransfer]
+  updateCsTransfer(where: CsTransferWhereUniqueInput!, data: CsTransferUpdateInput!): CsTransfer
+  updateCsTransfers(data: [CsTransferUpdateArgs!]!): [CsTransfer]
+  deleteCsTransfer(where: CsTransferWhereUniqueInput!): CsTransfer
+  deleteCsTransfers(where: [CsTransferWhereUniqueInput!]!): [CsTransfer]
+  createPdmpSubmission(data: PdmpSubmissionCreateInput!): PdmpSubmission
+  createPdmpSubmissions(data: [PdmpSubmissionCreateInput!]!): [PdmpSubmission]
+  updatePdmpSubmission(where: PdmpSubmissionWhereUniqueInput!, data: PdmpSubmissionUpdateInput!): PdmpSubmission
+  updatePdmpSubmissions(data: [PdmpSubmissionUpdateArgs!]!): [PdmpSubmission]
+  deletePdmpSubmission(where: PdmpSubmissionWhereUniqueInput!): PdmpSubmission
+  deletePdmpSubmissions(where: [PdmpSubmissionWhereUniqueInput!]!): [PdmpSubmission]
+  createCabinetAccessEvent(data: CabinetAccessEventCreateInput!): CabinetAccessEvent
+  createCabinetAccessEvents(data: [CabinetAccessEventCreateInput!]!): [CabinetAccessEvent]
+  updateCabinetAccessEvent(where: CabinetAccessEventWhereUniqueInput!, data: CabinetAccessEventUpdateInput!): CabinetAccessEvent
+  updateCabinetAccessEvents(data: [CabinetAccessEventUpdateArgs!]!): [CabinetAccessEvent]
+  deleteCabinetAccessEvent(where: CabinetAccessEventWhereUniqueInput!): CabinetAccessEvent
+  deleteCabinetAccessEvents(where: [CabinetAccessEventWhereUniqueInput!]!): [CabinetAccessEvent]
+  createDispenseLabel(data: DispenseLabelCreateInput!): DispenseLabel
+  createDispenseLabels(data: [DispenseLabelCreateInput!]!): [DispenseLabel]
+  updateDispenseLabel(where: DispenseLabelWhereUniqueInput!, data: DispenseLabelUpdateInput!): DispenseLabel
+  updateDispenseLabels(data: [DispenseLabelUpdateArgs!]!): [DispenseLabel]
+  deleteDispenseLabel(where: DispenseLabelWhereUniqueInput!): DispenseLabel
+  deleteDispenseLabels(where: [DispenseLabelWhereUniqueInput!]!): [DispenseLabel]
+  createExternalDispense(data: ExternalDispenseCreateInput!): ExternalDispense
+  createExternalDispenses(data: [ExternalDispenseCreateInput!]!): [ExternalDispense]
+  updateExternalDispense(where: ExternalDispenseWhereUniqueInput!, data: ExternalDispenseUpdateInput!): ExternalDispense
+  updateExternalDispenses(data: [ExternalDispenseUpdateArgs!]!): [ExternalDispense]
+  deleteExternalDispense(where: ExternalDispenseWhereUniqueInput!): ExternalDispense
+  deleteExternalDispenses(where: [ExternalDispenseWhereUniqueInput!]!): [ExternalDispense]
+  createWrittenRxExport(data: WrittenRxExportCreateInput!): WrittenRxExport
+  createWrittenRxExports(data: [WrittenRxExportCreateInput!]!): [WrittenRxExport]
+  updateWrittenRxExport(where: WrittenRxExportWhereUniqueInput!, data: WrittenRxExportUpdateInput!): WrittenRxExport
+  updateWrittenRxExports(data: [WrittenRxExportUpdateArgs!]!): [WrittenRxExport]
+  deleteWrittenRxExport(where: WrittenRxExportWhereUniqueInput!): WrittenRxExport
+  deleteWrittenRxExports(where: [WrittenRxExportWhereUniqueInput!]!): [WrittenRxExport]
+  createUnitOfMeasure(data: UnitOfMeasureCreateInput!): UnitOfMeasure
+  createUnitOfMeasures(data: [UnitOfMeasureCreateInput!]!): [UnitOfMeasure]
+  updateUnitOfMeasure(where: UnitOfMeasureWhereUniqueInput!, data: UnitOfMeasureUpdateInput!): UnitOfMeasure
+  updateUnitOfMeasures(data: [UnitOfMeasureUpdateArgs!]!): [UnitOfMeasure]
+  deleteUnitOfMeasure(where: UnitOfMeasureWhereUniqueInput!): UnitOfMeasure
+  deleteUnitOfMeasures(where: [UnitOfMeasureWhereUniqueInput!]!): [UnitOfMeasure]
+  createItem(data: ItemCreateInput!): Item
+  createItems(data: [ItemCreateInput!]!): [Item]
+  updateItem(where: ItemWhereUniqueInput!, data: ItemUpdateInput!): Item
+  updateItems(data: [ItemUpdateArgs!]!): [Item]
+  deleteItem(where: ItemWhereUniqueInput!): Item
+  deleteItems(where: [ItemWhereUniqueInput!]!): [Item]
+  createItemUomConversion(data: ItemUomConversionCreateInput!): ItemUomConversion
+  createItemUomConversions(data: [ItemUomConversionCreateInput!]!): [ItemUomConversion]
+  updateItemUomConversion(where: ItemUomConversionWhereUniqueInput!, data: ItemUomConversionUpdateInput!): ItemUomConversion
+  updateItemUomConversions(data: [ItemUomConversionUpdateArgs!]!): [ItemUomConversion]
+  deleteItemUomConversion(where: ItemUomConversionWhereUniqueInput!): ItemUomConversion
+  deleteItemUomConversions(where: [ItemUomConversionWhereUniqueInput!]!): [ItemUomConversion]
+  createStockLocation(data: StockLocationCreateInput!): StockLocation
+  createStockLocations(data: [StockLocationCreateInput!]!): [StockLocation]
+  updateStockLocation(where: StockLocationWhereUniqueInput!, data: StockLocationUpdateInput!): StockLocation
+  updateStockLocations(data: [StockLocationUpdateArgs!]!): [StockLocation]
+  deleteStockLocation(where: StockLocationWhereUniqueInput!): StockLocation
+  deleteStockLocations(where: [StockLocationWhereUniqueInput!]!): [StockLocation]
+  createStockMovement(data: StockMovementCreateInput!): StockMovement
+  createStockMovements(data: [StockMovementCreateInput!]!): [StockMovement]
+  updateStockMovement(where: StockMovementWhereUniqueInput!, data: StockMovementUpdateInput!): StockMovement
+  updateStockMovements(data: [StockMovementUpdateArgs!]!): [StockMovement]
+  deleteStockMovement(where: StockMovementWhereUniqueInput!): StockMovement
+  deleteStockMovements(where: [StockMovementWhereUniqueInput!]!): [StockMovement]
+  createStockLevel(data: StockLevelCreateInput!): StockLevel
+  createStockLevels(data: [StockLevelCreateInput!]!): [StockLevel]
+  updateStockLevel(where: StockLevelWhereUniqueInput!, data: StockLevelUpdateInput!): StockLevel
+  updateStockLevels(data: [StockLevelUpdateArgs!]!): [StockLevel]
+  deleteStockLevel(where: StockLevelWhereUniqueInput!): StockLevel
+  deleteStockLevels(where: [StockLevelWhereUniqueInput!]!): [StockLevel]
+  createSupplier(data: SupplierCreateInput!): Supplier
+  createSuppliers(data: [SupplierCreateInput!]!): [Supplier]
+  updateSupplier(where: SupplierWhereUniqueInput!, data: SupplierUpdateInput!): Supplier
+  updateSuppliers(data: [SupplierUpdateArgs!]!): [Supplier]
+  deleteSupplier(where: SupplierWhereUniqueInput!): Supplier
+  deleteSuppliers(where: [SupplierWhereUniqueInput!]!): [Supplier]
+  createSupplierItem(data: SupplierItemCreateInput!): SupplierItem
+  createSupplierItems(data: [SupplierItemCreateInput!]!): [SupplierItem]
+  updateSupplierItem(where: SupplierItemWhereUniqueInput!, data: SupplierItemUpdateInput!): SupplierItem
+  updateSupplierItems(data: [SupplierItemUpdateArgs!]!): [SupplierItem]
+  deleteSupplierItem(where: SupplierItemWhereUniqueInput!): SupplierItem
+  deleteSupplierItems(where: [SupplierItemWhereUniqueInput!]!): [SupplierItem]
+  createPurchaseOrder(data: PurchaseOrderCreateInput!): PurchaseOrder
+  createPurchaseOrders(data: [PurchaseOrderCreateInput!]!): [PurchaseOrder]
+  updatePurchaseOrder(where: PurchaseOrderWhereUniqueInput!, data: PurchaseOrderUpdateInput!): PurchaseOrder
+  updatePurchaseOrders(data: [PurchaseOrderUpdateArgs!]!): [PurchaseOrder]
+  deletePurchaseOrder(where: PurchaseOrderWhereUniqueInput!): PurchaseOrder
+  deletePurchaseOrders(where: [PurchaseOrderWhereUniqueInput!]!): [PurchaseOrder]
+  createPurchaseOrderLine(data: PurchaseOrderLineCreateInput!): PurchaseOrderLine
+  createPurchaseOrderLines(data: [PurchaseOrderLineCreateInput!]!): [PurchaseOrderLine]
+  updatePurchaseOrderLine(where: PurchaseOrderLineWhereUniqueInput!, data: PurchaseOrderLineUpdateInput!): PurchaseOrderLine
+  updatePurchaseOrderLines(data: [PurchaseOrderLineUpdateArgs!]!): [PurchaseOrderLine]
+  deletePurchaseOrderLine(where: PurchaseOrderLineWhereUniqueInput!): PurchaseOrderLine
+  deletePurchaseOrderLines(where: [PurchaseOrderLineWhereUniqueInput!]!): [PurchaseOrderLine]
+  createGoodsReceipt(data: GoodsReceiptCreateInput!): GoodsReceipt
+  createGoodsReceipts(data: [GoodsReceiptCreateInput!]!): [GoodsReceipt]
+  updateGoodsReceipt(where: GoodsReceiptWhereUniqueInput!, data: GoodsReceiptUpdateInput!): GoodsReceipt
+  updateGoodsReceipts(data: [GoodsReceiptUpdateArgs!]!): [GoodsReceipt]
+  deleteGoodsReceipt(where: GoodsReceiptWhereUniqueInput!): GoodsReceipt
+  deleteGoodsReceipts(where: [GoodsReceiptWhereUniqueInput!]!): [GoodsReceipt]
+  createGoodsReceiptLine(data: GoodsReceiptLineCreateInput!): GoodsReceiptLine
+  createGoodsReceiptLines(data: [GoodsReceiptLineCreateInput!]!): [GoodsReceiptLine]
+  updateGoodsReceiptLine(where: GoodsReceiptLineWhereUniqueInput!, data: GoodsReceiptLineUpdateInput!): GoodsReceiptLine
+  updateGoodsReceiptLines(data: [GoodsReceiptLineUpdateArgs!]!): [GoodsReceiptLine]
+  deleteGoodsReceiptLine(where: GoodsReceiptLineWhereUniqueInput!): GoodsReceiptLine
+  deleteGoodsReceiptLines(where: [GoodsReceiptLineWhereUniqueInput!]!): [GoodsReceiptLine]
+  createReorderRule(data: ReorderRuleCreateInput!): ReorderRule
+  createReorderRules(data: [ReorderRuleCreateInput!]!): [ReorderRule]
+  updateReorderRule(where: ReorderRuleWhereUniqueInput!, data: ReorderRuleUpdateInput!): ReorderRule
+  updateReorderRules(data: [ReorderRuleUpdateArgs!]!): [ReorderRule]
+  deleteReorderRule(where: ReorderRuleWhereUniqueInput!): ReorderRule
+  deleteReorderRules(where: [ReorderRuleWhereUniqueInput!]!): [ReorderRule]
+  createStockCount(data: StockCountCreateInput!): StockCount
+  createStockCounts(data: [StockCountCreateInput!]!): [StockCount]
+  updateStockCount(where: StockCountWhereUniqueInput!, data: StockCountUpdateInput!): StockCount
+  updateStockCounts(data: [StockCountUpdateArgs!]!): [StockCount]
+  deleteStockCount(where: StockCountWhereUniqueInput!): StockCount
+  deleteStockCounts(where: [StockCountWhereUniqueInput!]!): [StockCount]
+  createStockCountLine(data: StockCountLineCreateInput!): StockCountLine
+  createStockCountLines(data: [StockCountLineCreateInput!]!): [StockCountLine]
+  updateStockCountLine(where: StockCountLineWhereUniqueInput!, data: StockCountLineUpdateInput!): StockCountLine
+  updateStockCountLines(data: [StockCountLineUpdateArgs!]!): [StockCountLine]
+  deleteStockCountLine(where: StockCountLineWhereUniqueInput!): StockCountLine
+  deleteStockCountLines(where: [StockCountLineWhereUniqueInput!]!): [StockCountLine]
+  createRecallCase(data: RecallCaseCreateInput!): RecallCase
+  createRecallCases(data: [RecallCaseCreateInput!]!): [RecallCase]
+  updateRecallCase(where: RecallCaseWhereUniqueInput!, data: RecallCaseUpdateInput!): RecallCase
+  updateRecallCases(data: [RecallCaseUpdateArgs!]!): [RecallCase]
+  deleteRecallCase(where: RecallCaseWhereUniqueInput!): RecallCase
+  deleteRecallCases(where: [RecallCaseWhereUniqueInput!]!): [RecallCase]
+  createRecallExposure(data: RecallExposureCreateInput!): RecallExposure
+  createRecallExposures(data: [RecallExposureCreateInput!]!): [RecallExposure]
+  updateRecallExposure(where: RecallExposureWhereUniqueInput!, data: RecallExposureUpdateInput!): RecallExposure
+  updateRecallExposures(data: [RecallExposureUpdateArgs!]!): [RecallExposure]
+  deleteRecallExposure(where: RecallExposureWhereUniqueInput!): RecallExposure
+  deleteRecallExposures(where: [RecallExposureWhereUniqueInput!]!): [RecallExposure]
+  createTemperatureLog(data: TemperatureLogCreateInput!): TemperatureLog
+  createTemperatureLogs(data: [TemperatureLogCreateInput!]!): [TemperatureLog]
+  updateTemperatureLog(where: TemperatureLogWhereUniqueInput!, data: TemperatureLogUpdateInput!): TemperatureLog
+  updateTemperatureLogs(data: [TemperatureLogUpdateArgs!]!): [TemperatureLog]
+  deleteTemperatureLog(where: TemperatureLogWhereUniqueInput!): TemperatureLog
+  deleteTemperatureLogs(where: [TemperatureLogWhereUniqueInput!]!): [TemperatureLog]
+  createTemperatureExcursion(data: TemperatureExcursionCreateInput!): TemperatureExcursion
+  createTemperatureExcursions(data: [TemperatureExcursionCreateInput!]!): [TemperatureExcursion]
+  updateTemperatureExcursion(where: TemperatureExcursionWhereUniqueInput!, data: TemperatureExcursionUpdateInput!): TemperatureExcursion
+  updateTemperatureExcursions(data: [TemperatureExcursionUpdateArgs!]!): [TemperatureExcursion]
+  deleteTemperatureExcursion(where: TemperatureExcursionWhereUniqueInput!): TemperatureExcursion
+  deleteTemperatureExcursions(where: [TemperatureExcursionWhereUniqueInput!]!): [TemperatureExcursion]
   createEncounter(data: EncounterCreateInput!): Encounter
   createEncounters(data: [EncounterCreateInput!]!): [Encounter]
   updateEncounter(where: EncounterWhereUniqueInput!, data: EncounterUpdateInput!): Encounter
@@ -15386,6 +17818,44 @@ type Mutation {
   addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
   previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
   applyImport(batchId: ID!, idempotencyKey: String!): JSON
+  writePrescription(patientId: ID!, locationId: ID!, lines: JSON!, idempotencyKey: String!): JSON
+  decideRefill(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  dispenseFill(lineId: ID!, quantity: String!, lotId: ID, csContainerId: ID, refillRequestId: ID, idempotencyKey: String!): JSON
+  receiveStockLot(drugId: ID, vaccineId: ID, locationId: ID!, lotNumber: String!, expiresOn: String!, idempotencyKey: String!): JSON
+  setLotQuarantine(lotId: ID!, quarantine: Boolean!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  receiveControlled(productId: ID!, locationId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, orderFormReference: String, idempotencyKey: String!): JSON
+  openControlled(containerId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  wasteControlled(containerId: ID!, qty: String!, reason: String!, witnessId: ID!, idempotencyKey: String!): JSON
+  countControlled(locationId: ID!, kind: String!, witnessId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+  reportCsLoss(containerId: ID!, kind: String!, qty: String!, description: String!, witnessId: ID!, idempotencyKey: String!): JSON
+  advanceDiscrepancy(caseId: ID!, step: String!, reference: String, resolution: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
+  submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
+  receiveStock(drugId: ID, vaccineId: ID, stockLocationId: ID!, lotNumber: String!, expiresOn: String!, quantity: String!, unit: String, idempotencyKey: String!): JSON
+  adjustStock(itemId: ID!, lotId: ID, stockLocationId: ID!, kind: String!, quantity: String!, reason: String!, idempotencyKey: String!): JSON
+  addSupplier(name: String!, accountNumber: String, phone: String, email: String, deaNumber: String, idempotencyKey: String!): JSON
+  draftPurchaseOrder(supplierId: ID!, locationId: ID!, lines: JSON!, note: String, idempotencyKey: String!): JSON
+  submitPurchaseOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  cancelPurchaseOrder(orderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  receivePurchaseOrder(orderId: ID!, stockLocationId: ID!, packingSlip: String, lines: JSON!, idempotencyKey: String!): JSON
+  setReorderRule(itemId: ID!, locationId: ID!, minQty: String!, targetQty: String!, idempotencyKey: String!): JSON
+  countStock(stockLocationId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+  openRecall(itemId: ID!, lotNumber: String!, title: String!, source: String, idempotencyKey: String!): JSON
+  markRecallExposure(exposureId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  closeRecall(recallId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  logTemperature(stockLocationId: ID!, readingC: String!, idempotencyKey: String!): JSON
+  resolveExcursion(excursionId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  issueOrderForm(supplierId: ID!, locationId: ID!, formNumber: String!, kind: String!, issuedOn: String!, lines: JSON!, idempotencyKey: String!): JSON
+  receiveOnOrderForm(lineId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, idempotencyKey: String!): JSON
+  transferControlled(containerId: ID!, qty: String!, toRegistrationId: ID!, witnessId: ID!, idempotencyKey: String!): JSON
+  confirmTransfer(transferId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  logCabinetAccess(locationId: ID!, kind: String!, note: String, idempotencyKey: String!): JSON
+  generatePdmpFile(locationId: ID!, idempotencyKey: String!): JSON
+  printDispenseLabel(dispenseId: ID!, idempotencyKey: String!): JSON
+  requestExternalFill(prescriptionId: ID!, pharmacyName: String!, orderReference: String, idempotencyKey: String!): JSON
+  decideExternalFill(externalId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  exportWrittenRx(prescriptionId: ID!, idempotencyKey: String!): JSON
 }
 
 union UserAuthenticationWithPasswordResult = UserAuthenticationWithPasswordSuccess | UserAuthenticationWithPasswordFailure
@@ -15684,6 +18154,90 @@ type Query {
   pdmpReport(where: PdmpReportWhereUniqueInput!): PdmpReport
   pdmpReports(where: PdmpReportWhereInput! = {}, orderBy: [PdmpReportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PdmpReportWhereUniqueInput): [PdmpReport!]
   pdmpReportsCount(where: PdmpReportWhereInput! = {}): Int
+  csWitness(where: CsWitnessWhereUniqueInput!): CsWitness
+  csWitnesses(where: CsWitnessWhereInput! = {}, orderBy: [CsWitnessOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsWitnessWhereUniqueInput): [CsWitness!]
+  csWitnessesCount(where: CsWitnessWhereInput! = {}): Int
+  csOrderForm(where: CsOrderFormWhereUniqueInput!): CsOrderForm
+  csOrderForms(where: CsOrderFormWhereInput! = {}, orderBy: [CsOrderFormOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsOrderFormWhereUniqueInput): [CsOrderForm!]
+  csOrderFormsCount(where: CsOrderFormWhereInput! = {}): Int
+  csOrderFormLine(where: CsOrderFormLineWhereUniqueInput!): CsOrderFormLine
+  csOrderFormLines(where: CsOrderFormLineWhereInput! = {}, orderBy: [CsOrderFormLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsOrderFormLineWhereUniqueInput): [CsOrderFormLine!]
+  csOrderFormLinesCount(where: CsOrderFormLineWhereInput! = {}): Int
+  csTransfer(where: CsTransferWhereUniqueInput!): CsTransfer
+  csTransfers(where: CsTransferWhereInput! = {}, orderBy: [CsTransferOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CsTransferWhereUniqueInput): [CsTransfer!]
+  csTransfersCount(where: CsTransferWhereInput! = {}): Int
+  pdmpSubmission(where: PdmpSubmissionWhereUniqueInput!): PdmpSubmission
+  pdmpSubmissions(where: PdmpSubmissionWhereInput! = {}, orderBy: [PdmpSubmissionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PdmpSubmissionWhereUniqueInput): [PdmpSubmission!]
+  pdmpSubmissionsCount(where: PdmpSubmissionWhereInput! = {}): Int
+  cabinetAccessEvent(where: CabinetAccessEventWhereUniqueInput!): CabinetAccessEvent
+  cabinetAccessEvents(where: CabinetAccessEventWhereInput! = {}, orderBy: [CabinetAccessEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CabinetAccessEventWhereUniqueInput): [CabinetAccessEvent!]
+  cabinetAccessEventsCount(where: CabinetAccessEventWhereInput! = {}): Int
+  dispenseLabel(where: DispenseLabelWhereUniqueInput!): DispenseLabel
+  dispenseLabels(where: DispenseLabelWhereInput! = {}, orderBy: [DispenseLabelOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DispenseLabelWhereUniqueInput): [DispenseLabel!]
+  dispenseLabelsCount(where: DispenseLabelWhereInput! = {}): Int
+  externalDispense(where: ExternalDispenseWhereUniqueInput!): ExternalDispense
+  externalDispenses(where: ExternalDispenseWhereInput! = {}, orderBy: [ExternalDispenseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ExternalDispenseWhereUniqueInput): [ExternalDispense!]
+  externalDispensesCount(where: ExternalDispenseWhereInput! = {}): Int
+  writtenRxExport(where: WrittenRxExportWhereUniqueInput!): WrittenRxExport
+  writtenRxExports(where: WrittenRxExportWhereInput! = {}, orderBy: [WrittenRxExportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WrittenRxExportWhereUniqueInput): [WrittenRxExport!]
+  writtenRxExportsCount(where: WrittenRxExportWhereInput! = {}): Int
+  unitOfMeasure(where: UnitOfMeasureWhereUniqueInput!): UnitOfMeasure
+  unitOfMeasures(where: UnitOfMeasureWhereInput! = {}, orderBy: [UnitOfMeasureOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: UnitOfMeasureWhereUniqueInput): [UnitOfMeasure!]
+  unitOfMeasuresCount(where: UnitOfMeasureWhereInput! = {}): Int
+  item(where: ItemWhereUniqueInput!): Item
+  items(where: ItemWhereInput! = {}, orderBy: [ItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ItemWhereUniqueInput): [Item!]
+  itemsCount(where: ItemWhereInput! = {}): Int
+  itemUomConversion(where: ItemUomConversionWhereUniqueInput!): ItemUomConversion
+  itemUomConversions(where: ItemUomConversionWhereInput! = {}, orderBy: [ItemUomConversionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ItemUomConversionWhereUniqueInput): [ItemUomConversion!]
+  itemUomConversionsCount(where: ItemUomConversionWhereInput! = {}): Int
+  stockLocation(where: StockLocationWhereUniqueInput!): StockLocation
+  stockLocations(where: StockLocationWhereInput! = {}, orderBy: [StockLocationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StockLocationWhereUniqueInput): [StockLocation!]
+  stockLocationsCount(where: StockLocationWhereInput! = {}): Int
+  stockMovement(where: StockMovementWhereUniqueInput!): StockMovement
+  stockMovements(where: StockMovementWhereInput! = {}, orderBy: [StockMovementOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StockMovementWhereUniqueInput): [StockMovement!]
+  stockMovementsCount(where: StockMovementWhereInput! = {}): Int
+  stockLevel(where: StockLevelWhereUniqueInput!): StockLevel
+  stockLevels(where: StockLevelWhereInput! = {}, orderBy: [StockLevelOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StockLevelWhereUniqueInput): [StockLevel!]
+  stockLevelsCount(where: StockLevelWhereInput! = {}): Int
+  supplier(where: SupplierWhereUniqueInput!): Supplier
+  suppliers(where: SupplierWhereInput! = {}, orderBy: [SupplierOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SupplierWhereUniqueInput): [Supplier!]
+  suppliersCount(where: SupplierWhereInput! = {}): Int
+  supplierItem(where: SupplierItemWhereUniqueInput!): SupplierItem
+  supplierItems(where: SupplierItemWhereInput! = {}, orderBy: [SupplierItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SupplierItemWhereUniqueInput): [SupplierItem!]
+  supplierItemsCount(where: SupplierItemWhereInput! = {}): Int
+  purchaseOrder(where: PurchaseOrderWhereUniqueInput!): PurchaseOrder
+  purchaseOrders(where: PurchaseOrderWhereInput! = {}, orderBy: [PurchaseOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PurchaseOrderWhereUniqueInput): [PurchaseOrder!]
+  purchaseOrdersCount(where: PurchaseOrderWhereInput! = {}): Int
+  purchaseOrderLine(where: PurchaseOrderLineWhereUniqueInput!): PurchaseOrderLine
+  purchaseOrderLines(where: PurchaseOrderLineWhereInput! = {}, orderBy: [PurchaseOrderLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PurchaseOrderLineWhereUniqueInput): [PurchaseOrderLine!]
+  purchaseOrderLinesCount(where: PurchaseOrderLineWhereInput! = {}): Int
+  goodsReceipt(where: GoodsReceiptWhereUniqueInput!): GoodsReceipt
+  goodsReceipts(where: GoodsReceiptWhereInput! = {}, orderBy: [GoodsReceiptOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: GoodsReceiptWhereUniqueInput): [GoodsReceipt!]
+  goodsReceiptsCount(where: GoodsReceiptWhereInput! = {}): Int
+  goodsReceiptLine(where: GoodsReceiptLineWhereUniqueInput!): GoodsReceiptLine
+  goodsReceiptLines(where: GoodsReceiptLineWhereInput! = {}, orderBy: [GoodsReceiptLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: GoodsReceiptLineWhereUniqueInput): [GoodsReceiptLine!]
+  goodsReceiptLinesCount(where: GoodsReceiptLineWhereInput! = {}): Int
+  reorderRule(where: ReorderRuleWhereUniqueInput!): ReorderRule
+  reorderRules(where: ReorderRuleWhereInput! = {}, orderBy: [ReorderRuleOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReorderRuleWhereUniqueInput): [ReorderRule!]
+  reorderRulesCount(where: ReorderRuleWhereInput! = {}): Int
+  stockCount(where: StockCountWhereUniqueInput!): StockCount
+  stockCounts(where: StockCountWhereInput! = {}, orderBy: [StockCountOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StockCountWhereUniqueInput): [StockCount!]
+  stockCountsCount(where: StockCountWhereInput! = {}): Int
+  stockCountLine(where: StockCountLineWhereUniqueInput!): StockCountLine
+  stockCountLines(where: StockCountLineWhereInput! = {}, orderBy: [StockCountLineOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: StockCountLineWhereUniqueInput): [StockCountLine!]
+  stockCountLinesCount(where: StockCountLineWhereInput! = {}): Int
+  recallCase(where: RecallCaseWhereUniqueInput!): RecallCase
+  recallCases(where: RecallCaseWhereInput! = {}, orderBy: [RecallCaseOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecallCaseWhereUniqueInput): [RecallCase!]
+  recallCasesCount(where: RecallCaseWhereInput! = {}): Int
+  recallExposure(where: RecallExposureWhereUniqueInput!): RecallExposure
+  recallExposures(where: RecallExposureWhereInput! = {}, orderBy: [RecallExposureOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RecallExposureWhereUniqueInput): [RecallExposure!]
+  recallExposuresCount(where: RecallExposureWhereInput! = {}): Int
+  temperatureLog(where: TemperatureLogWhereUniqueInput!): TemperatureLog
+  temperatureLogs(where: TemperatureLogWhereInput! = {}, orderBy: [TemperatureLogOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TemperatureLogWhereUniqueInput): [TemperatureLog!]
+  temperatureLogsCount(where: TemperatureLogWhereInput! = {}): Int
+  temperatureExcursion(where: TemperatureExcursionWhereUniqueInput!): TemperatureExcursion
+  temperatureExcursions(where: TemperatureExcursionWhereInput! = {}, orderBy: [TemperatureExcursionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: TemperatureExcursionWhereUniqueInput): [TemperatureExcursion!]
+  temperatureExcursionsCount(where: TemperatureExcursionWhereInput! = {}): Int
   encounter(where: EncounterWhereUniqueInput!): Encounter
   encounters(where: EncounterWhereInput! = {}, orderBy: [EncounterOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EncounterWhereUniqueInput): [Encounter!]
   encountersCount(where: EncounterWhereInput! = {}): Int

@@ -31,9 +31,9 @@ export type DomainTool = {
  */
 export const NEVER_TOOL_PATTERNS: { pattern: RegExp; why: string }[] = [
   { pattern: /vcpr/i, why: 'VCPR is established only by a DVM examination' },
-  { pattern: /sign_?(prescription|rx|encounter|record|soap|section)|prescri(be|ption_?sign)|addend/i, why: 'prescribing and record signing are licensed human acts' },
+  { pattern: /sign_?(prescription|rx|encounter|record|soap|section)|prescri(be|ption_?sign)|write_?prescription|addend/i, why: 'prescribing and record signing are licensed human acts' },
   { pattern: /(approve|deny|decide)_?refill|refill_?(approve|deny|decide)/i, why: 'refill decisions belong to the DVM' },
-  { pattern: /(^|[^a-z])cs[A-Z_]|controlled|cs_?(log|container|count|witness|order|destruction|waste)|pdmp|cures|dea_?(registration|form)|form_?222|csos|register_read/i, why: 'agents never touch the controlled-substance register' },
+  { pattern: /(^|[^a-z])cs[A-Z_]|controlled|cs_?(log|container|count|witness|order|destruction|waste)|pdmp|cures|dea_?(registration|form)|form_?222|csos|register_read|cs_?loss|order_?form|cabinet_?access|discrepanc/i, why: 'agents never touch the controlled-substance register' },
   { pattern: /euthan/i, why: 'euthanasia consent and administration are human-only' },
   { pattern: /discount|refund|write_?off|credit_?note/i, why: 'agents never move money against the client' },
   { pattern: /publish|(update|set)_?(fee|price|policy|protocol)/i, why: 'fees, policies and protocols change only by maker-checker' },

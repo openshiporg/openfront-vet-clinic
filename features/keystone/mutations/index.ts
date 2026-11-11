@@ -18,6 +18,8 @@ import * as vaccines from './vaccines'
 import * as imports from './imports'
 import * as clocks from './clocks'
 import * as pharmacy from './pharmacy'
+import * as inventory from './inventory'
+import * as register from './register'
 import '../lib/practiceControls'
 import { limitNestedLists } from '../security/breadthLimit'
 import { limitSignIn } from '../security/signInLimit'
@@ -132,6 +134,31 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         advanceDiscrepancy(caseId: ID!, step: String!, reference: String, resolution: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
         submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
+        receiveStock(drugId: ID, vaccineId: ID, stockLocationId: ID!, lotNumber: String!, expiresOn: String!, quantity: String!, unit: String, idempotencyKey: String!): JSON
+        adjustStock(itemId: ID!, lotId: ID, stockLocationId: ID!, kind: String!, quantity: String!, reason: String!, idempotencyKey: String!): JSON
+        addSupplier(name: String!, accountNumber: String, phone: String, email: String, deaNumber: String, idempotencyKey: String!): JSON
+        draftPurchaseOrder(supplierId: ID!, locationId: ID!, lines: JSON!, note: String, idempotencyKey: String!): JSON
+        submitPurchaseOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelPurchaseOrder(orderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        receivePurchaseOrder(orderId: ID!, stockLocationId: ID!, packingSlip: String, lines: JSON!, idempotencyKey: String!): JSON
+        setReorderRule(itemId: ID!, locationId: ID!, minQty: String!, targetQty: String!, idempotencyKey: String!): JSON
+        countStock(stockLocationId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+        openRecall(itemId: ID!, lotNumber: String!, title: String!, source: String, idempotencyKey: String!): JSON
+        markRecallExposure(exposureId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        closeRecall(recallId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        logTemperature(stockLocationId: ID!, readingC: String!, idempotencyKey: String!): JSON
+        resolveExcursion(excursionId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        issueOrderForm(supplierId: ID!, locationId: ID!, formNumber: String!, kind: String!, issuedOn: String!, lines: JSON!, idempotencyKey: String!): JSON
+        receiveOnOrderForm(lineId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, idempotencyKey: String!): JSON
+        transferControlled(containerId: ID!, qty: String!, toRegistrationId: ID!, witnessId: ID!, idempotencyKey: String!): JSON
+        confirmTransfer(transferId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        logCabinetAccess(locationId: ID!, kind: String!, note: String, idempotencyKey: String!): JSON
+        generatePdmpFile(locationId: ID!, idempotencyKey: String!): JSON
+        printDispenseLabel(dispenseId: ID!, idempotencyKey: String!): JSON
+        requestExternalFill(prescriptionId: ID!, pharmacyName: String!, orderReference: String, idempotencyKey: String!): JSON
+        decideExternalFill(externalId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        exportWrittenRx(prescriptionId: ID!, idempotencyKey: String!): JSON
       }
     `,
     resolvers: {
@@ -235,6 +262,31 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         advanceDiscrepancy: op(pharmacy.advanceDiscrepancy),
         destroyControlled: op(pharmacy.destroyControlled),
         submitPdmp: op(pharmacy.submitPdmp),
+        addStockLocation: op(inventory.addStockLocation),
+        receiveStock: op(inventory.receiveStock),
+        adjustStock: op(inventory.adjustStock),
+        addSupplier: op(inventory.addSupplier),
+        draftPurchaseOrder: op(inventory.draftPurchaseOrder),
+        submitPurchaseOrder: op(inventory.submitPurchaseOrder),
+        cancelPurchaseOrder: op(inventory.cancelPurchaseOrder),
+        receivePurchaseOrder: op(inventory.receivePurchaseOrder),
+        setReorderRule: op(inventory.setReorderRule),
+        countStock: op(inventory.countStock),
+        openRecall: op(inventory.openRecall),
+        markRecallExposure: op(inventory.markRecallExposure),
+        closeRecall: op(inventory.closeRecall),
+        logTemperature: op(inventory.logTemperature),
+        resolveExcursion: op(inventory.resolveExcursion),
+        issueOrderForm: op(register.issueOrderForm),
+        receiveOnOrderForm: op(register.receiveOnOrderForm),
+        transferControlled: op(register.transferControlled),
+        confirmTransfer: op(register.confirmTransfer),
+        logCabinetAccess: op(register.logCabinetAccess),
+        generatePdmpFile: op(register.generatePdmpFile),
+        printDispenseLabel: op(register.printDispenseLabel),
+        requestExternalFill: op(register.requestExternalFill),
+        decideExternalFill: op(register.decideExternalFill),
+        exportWrittenRx: op(register.exportWrittenRx),
       },
     },
   })))

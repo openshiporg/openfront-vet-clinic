@@ -9,6 +9,7 @@ import * as clients from './clients'
 import * as schedule from './schedule'
 import * as comms from './comms'
 import * as pharmacy from './pharmacy'
+import { INVENTORY_LISTS } from './inventory'
 import * as record from './record'
 import * as treatment from './treatment'
 import * as preventive from './preventive'
@@ -38,6 +39,16 @@ export const models = {
   CsDiscrepancyCase: pharmacy.CsDiscrepancyCase,
   CsDestructionRecord: pharmacy.CsDestructionRecord,
   PdmpReport: pharmacy.PdmpReport,
+  CsWitness: pharmacy.CsWitness,
+  CsOrderForm: pharmacy.CsOrderForm,
+  CsOrderFormLine: pharmacy.CsOrderFormLine,
+  CsTransfer: pharmacy.CsTransfer,
+  PdmpSubmission: pharmacy.PdmpSubmission,
+  CabinetAccessEvent: pharmacy.CabinetAccessEvent,
+  DispenseLabel: pharmacy.DispenseLabel,
+  ExternalDispense: pharmacy.ExternalDispense,
+  WrittenRxExport: pharmacy.WrittenRxExport,
+  ...INVENTORY_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter: record.Encounter,
   SoapSection: record.SoapSection,

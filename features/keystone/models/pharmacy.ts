@@ -146,7 +146,7 @@ export const CsLogEntry = list({
   },
 })
 
-export const CS_REGISTER_LISTS = ['CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport'] as const
+export const CS_REGISTER_LISTS = ['CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport', 'CsWitness', 'CsOrderForm', 'CsOrderFormLine', 'CsTransfer', 'PdmpSubmission', 'CabinetAccessEvent'] as const
 
 /** What was handed to a client (or used for an in-house sale) against a prescription line. Immutable. */
 export const Dispense = list({
@@ -273,7 +273,151 @@ export const PdmpReport = list({
     submittedAt: timestamp({ ...readOnly }),
     submittedBy: relationship({ ref: 'StaffMember', ...readOnly }),
     confirmation: systemText(),
+    submission: relationship({ ref: 'PdmpSubmission.reports', ...readOnly }),
     version: versionField(),
+    ...trackingFields,
+  },
+})
+
+/** The second person's attestation on a register entry. Immutable. */
+export const CsWitness = list({
+  access: governed('canViewControlled'),
+  ui: { listView: { initialColumns: ['entry', 'witness', 'attestedAt'] } },
+  fields: {
+    entry: relationship({ ref: 'CsLogEntry', ...readOnly }),
+    witness: relationship({ ref: 'StaffMember', ...readOnly }),
+    attestedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields,
+  },
+})
+
+/** A DEA Form 222 / CSOS order for Schedule I–II. Valid 60 days from issue; receipts may be partial. */
+export const CsOrderForm = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'formNumber', 'supplier', 'status', 'issuedOn', 'expiresOn'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    formNumber: systemText({ required: true }),
+    kind: fixedChoice(['form_222', 'csos']),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    supplier: relationship({ ref: 'Supplier', ...readOnly }),
+    issuedOn: calendarDay({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: calendarDay({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(['open', 'partially_filled', 'filled', 'expired', 'cancelled']),
+    signedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    lines: relationship({ ref: 'CsOrderFormLine.orderForm', many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields,
+  },
+})
+
+export const CsOrderFormLine = list({
+  access: governed('canViewControlled'),
+  fields: {
+    orderForm: relationship({ ref: 'CsOrderForm.lines', ...readOnly }),
+    product: relationship({ ref: 'DrugProduct', ...readOnly }),
+    packages: integer({ ...readOnly, validation: { isRequired: true, min: 1 } }),
+    packagesReceived: integer({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
+    ...trackingFields,
+  },
+})
+
+/** Stock moved between two DEA registrations (or to a reverse distributor). Out and in are both register entries. */
+export const CsTransfer = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'fromContainer', 'toRegistration', 'qty', 'status'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    fromContainer: relationship({ ref: 'CsContainer', ...readOnly }),
+    toContainer: relationship({ ref: 'CsContainer', ...readOnly }),
+    toRegistration: relationship({ ref: 'DeaRegistration', ...readOnly }),
+    qty: qty({ required: true }),
+    unit: unit(),
+    status: lifecycle(['sent', 'received']),
+    outEntry: relationship({ ref: 'CsLogEntry', ...readOnly }),
+    inEntry: relationship({ ref: 'CsLogEntry', ...readOnly }),
+    sentBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    witness: relationship({ ref: 'StaffMember', ...readOnly }),
+    sentAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    receivedAt: timestamp({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields,
+  },
+})
+
+/** The file sent to the state programme (ASAP 4.2B). Immutable; the hash proves what was uploaded. */
+export const PdmpSubmission = list({
+  access: governed('canViewControlled'),
+  ui: { labelField: 'ref' },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    location: relationship({ ref: 'Location', ...readOnly }),
+    format: systemText(),
+    reportCount: integer({ ...readOnly, defaultValue: 0 }),
+    fileSha256: systemText(),
+    fileBody: json({ ...readOnly }),
+    reports: relationship({ ref: 'PdmpReport.submission', many: true, ...readOnly }),
+    generatedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    generatedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields,
+  },
+})
+
+/** A controlled cabinet opened or closed, by whom. Immutable. */
+export const CabinetAccessEvent = list({
+  access: governed('canViewControlled'),
+  ui: { listView: { initialColumns: ['occurredAt', 'location', 'staff', 'kind'] } },
+  fields: {
+    location: relationship({ ref: 'Location', ...readOnly }),
+    staff: relationship({ ref: 'StaffMember', ...readOnly }),
+    kind: fixedChoice(['opened', 'closed', 'failed_attempt']),
+    note: systemText(),
+    occurredAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields,
+  },
+})
+
+/** The label as printed for one dispense. Immutable. */
+export const DispenseLabel = list({
+  access: governed(['canReadClinical', 'canDispense', 'canFulfilRefill']),
+  fields: {
+    dispense: relationship({ ref: 'Dispense', ...readOnly }),
+    fields: json({ ...readOnly }),
+    printedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    printedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields,
+  },
+})
+
+/** A prescription filled by an outside or online pharmacy, recorded by hand. */
+export const ExternalDispense = list({
+  access: governed(['canReadClinical', 'canDispense', 'canFulfilRefill']),
+  ui: { labelField: 'ref', listView: { initialColumns: ['ref', 'prescription', 'pharmacyName', 'status', 'decidedAt'] } },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    prescription: relationship({ ref: 'Prescription', ...readOnly }),
+    patient: relationship({ ref: 'Patient', ...readOnly }),
+    pharmacyName: systemText({ required: true }),
+    orderReference: systemText(),
+    status: lifecycle(['requested', 'approved', 'declined', 'filled']),
+    decidedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    decidedAt: timestamp({ ...readOnly }),
+    note: systemText(),
+    version: versionField(),
+    ...trackingFields,
+  },
+})
+
+/** A written (paper) prescription handed over for a client to take elsewhere. */
+export const WrittenRxExport = list({
+  access: governed(['canReadClinical', 'canDispense', 'canPrescribe']),
+  ui: { labelField: 'ref' },
+  fields: {
+    ref: systemText({ indexed: 'unique', required: true }),
+    prescription: relationship({ ref: 'Prescription', ...readOnly }),
+    exportedBy: relationship({ ref: 'StaffMember', ...readOnly }),
+    exportedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
+    contentSha256: systemText(),
     ...trackingFields,
   },
 })

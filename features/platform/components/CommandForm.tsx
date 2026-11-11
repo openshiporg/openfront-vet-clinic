@@ -305,5 +305,46 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     required(v, 'caseId', 'step', 'expectedVersion');
     return { caseId: v.caseId, step: v.step, reference: v.reference?.trim() || undefined, resolution: v.resolution?.trim() || undefined, expectedVersion: Number(v.expectedVersion) };
   },
+  addStockLocation: (v) => { required(v, 'locationId', 'name', 'kind'); return { locationId: v.locationId, name: v.name.trim(), kind: v.kind, minTempC: v.minTempC?.trim() || undefined, maxTempC: v.maxTempC?.trim() || undefined }; },
+  receiveStock: (v) => {
+    required(v, 'stockLocationId', 'lotNumber', 'expiresOn', 'quantity');
+    if (!v.drugId && !v.vaccineId) throw new Error('Choose a drug or a vaccine.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.expiresOn.trim())) throw new Error('Expires: use YYYY-MM-DD.');
+    return { drugId: v.drugId || undefined, vaccineId: v.drugId ? undefined : v.vaccineId || undefined, stockLocationId: v.stockLocationId, lotNumber: v.lotNumber.trim(), expiresOn: v.expiresOn.trim(), quantity: v.quantity.trim() };
+  },
+  adjustStock: (v) => { required(v, 'itemId', 'stockLocationId', 'kind', 'quantity', 'reason'); return { itemId: v.itemId, lotId: v.lotId || undefined, stockLocationId: v.stockLocationId, kind: v.kind, quantity: v.quantity.trim(), reason: v.reason.trim() }; },
+  addSupplier: (v) => { required(v, 'name'); return { name: v.name.trim(), accountNumber: v.accountNumber?.trim() || undefined, phone: v.phone?.trim() || undefined, email: v.email?.trim() || undefined, deaNumber: v.deaNumber?.trim() || undefined }; },
+  draftPurchaseOrder: (v) => {
+    required(v, 'supplierId', 'locationId', 'itemId', 'quantity', 'cost');
+    return { supplierId: v.supplierId, locationId: v.locationId, note: v.note?.trim() || undefined, lines: [{ itemId: v.itemId, quantity: v.quantity.trim(), unitCostMinor: String(cents(v.cost, 'Cost each')) }] };
+  },
+  orderStep: (v) => { required(v, 'orderId', 'expectedVersion'); return { orderId: v.orderId, expectedVersion: Number(v.expectedVersion), reason: v.reason?.trim() || undefined }; },
+  receivePurchaseOrder: (v) => {
+    required(v, 'orderId', 'stockLocationId', 'lineId', 'lotNumber', 'expiresOn', 'quantity');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.expiresOn.trim())) throw new Error('Expires: use YYYY-MM-DD.');
+    return { orderId: v.orderId, stockLocationId: v.stockLocationId, packingSlip: v.packingSlip?.trim() || undefined, lines: [{ lineId: v.lineId, lotNumber: v.lotNumber.trim(), expiresOn: v.expiresOn.trim(), quantity: v.quantity.trim() }] };
+  },
+  setReorderRule: (v) => { required(v, 'itemId', 'locationId', 'minQty', 'targetQty'); return { itemId: v.itemId, locationId: v.locationId, minQty: v.minQty.trim(), targetQty: v.targetQty.trim() }; },
+  countStock: (v) => { required(v, 'stockLocationId', 'itemId', 'countedQty'); return { stockLocationId: v.stockLocationId, counts: [{ itemId: v.itemId, lotId: v.lotId || undefined, countedQty: v.countedQty.trim() }] }; },
+  openRecall: (v) => { required(v, 'itemId', 'lotNumber', 'title'); return { itemId: v.itemId, lotNumber: v.lotNumber.trim(), title: v.title.trim(), source: v.source?.trim() || undefined }; },
+  recallExposure: (v) => { required(v, 'exposureId', 'status', 'expectedVersion'); return { exposureId: v.exposureId, status: v.status, note: v.note?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }; },
+  closeRecall: (v) => { required(v, 'recallId', 'resolution', 'expectedVersion'); return { recallId: v.recallId, resolution: v.resolution.trim(), expectedVersion: Number(v.expectedVersion) }; },
+  logTemperature: (v) => { required(v, 'stockLocationId', 'readingC'); return { stockLocationId: v.stockLocationId, readingC: v.readingC.trim() }; },
+  resolveExcursion: (v) => { required(v, 'excursionId', 'resolution', 'expectedVersion'); return { excursionId: v.excursionId, resolution: v.resolution.trim(), expectedVersion: Number(v.expectedVersion) }; },
+  issueOrderForm: (v) => {
+    required(v, 'supplierId', 'locationId', 'formNumber', 'kind', 'issuedOn', 'productId', 'packages');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.issuedOn.trim())) throw new Error('Issued: use YYYY-MM-DD.');
+    return { supplierId: v.supplierId, locationId: v.locationId, formNumber: v.formNumber.trim(), kind: v.kind, issuedOn: v.issuedOn.trim(), lines: [{ productId: v.productId, packages: ints(v.packages, 'Packages', 1, 1000) }] };
+  },
+  receiveOnOrderForm: (v) => {
+    required(v, 'lineId', 'lotNumber', 'lotExpiresOn', 'labelQty', 'labelUnit');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.lotExpiresOn.trim())) throw new Error('Expires: use YYYY-MM-DD.');
+    return { lineId: v.lineId, lotNumber: v.lotNumber.trim(), lotExpiresOn: v.lotExpiresOn.trim(), labelQty: v.labelQty.trim(), labelUnit: v.labelUnit };
+  },
+  transferControlled: (v) => { required(v, 'containerId', 'qty', 'toRegistrationId', 'witnessId'); return { containerId: v.containerId, qty: v.qty.trim(), toRegistrationId: v.toRegistrationId, witnessId: v.witnessId }; },
+  logCabinetAccess: (v) => { required(v, 'locationId', 'kind'); return { locationId: v.locationId, kind: v.kind, note: v.note?.trim() || undefined }; },
+  requestExternalFill: (v) => { required(v, 'prescriptionId', 'pharmacyName'); return { prescriptionId: v.prescriptionId, pharmacyName: v.pharmacyName.trim(), orderReference: v.orderReference?.trim() || undefined }; },
+  decideExternalFill: (v) => { required(v, 'externalId', 'status', 'expectedVersion'); return { externalId: v.externalId, status: v.status, note: v.note?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }; },
+  generatePdmpFile: (v) => { required(v, 'locationId'); return { locationId: v.locationId }; },
   killSwitch: (v) => ({ agentId: v.agentId, killSwitch: v.killSwitch === 'on', reason: v.reason?.trim() || undefined, expectedVersion: Number(v.expectedVersion) }),
 };

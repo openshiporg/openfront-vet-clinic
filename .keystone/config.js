@@ -215,6 +215,16 @@ var init_readAudit = __esm({
       "CsDiscrepancyCase",
       "CsDestructionRecord",
       "PdmpReport",
+      "DispenseLabel",
+      "ExternalDispense",
+      "WrittenRxExport",
+      "RecallExposure",
+      "CsWitness",
+      "CsOrderForm",
+      "CsOrderFormLine",
+      "CsTransfer",
+      "PdmpSubmission",
+      "CabinetAccessEvent",
       // Phase 2: the medical record, orders and treatment, preventive care
       "SoapSection",
       "SoapSectionRevision",
@@ -257,7 +267,7 @@ module.exports = __toCommonJS(keystone_exports);
 
 // features/keystone/index.ts
 var import_auth = require("@keystone-6/auth");
-var import_core20 = require("@keystone-6/core");
+var import_core21 = require("@keystone-6/core");
 var import_config = require("dotenv/config");
 
 // features/keystone/models/User.ts
@@ -269,7 +279,7 @@ var import_fields3 = require("@keystone-6/core/fields");
 var import_fields = require("@keystone-6/core/fields");
 var registry = /* @__PURE__ */ new Map();
 function registerListAccess(lists) {
-  for (const [key2, list18] of Object.entries(lists)) registry.set(key2, list18.access);
+  for (const [key2, list19] of Object.entries(lists)) registry.set(key2, list19.access);
 }
 var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
 async function canReadWholeList(listKey, args) {
@@ -2439,9 +2449,9 @@ function dec(value) {
     if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
     return new Decimal(value);
   }
-  const text16 = String(value).trim();
-  if (!DECIMAL_TEXT.test(text16)) throw new Error(`Not a decimal number: ${JSON.stringify(text16).slice(0, 40)}`);
-  return new Decimal(text16);
+  const text17 = String(value).trim();
+  if (!DECIMAL_TEXT.test(text17)) throw new Error(`Not a decimal number: ${JSON.stringify(text17).slice(0, 40)}`);
+  return new Decimal(text17);
 }
 function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
   const places = typeof scale === "number" ? scale : Scale[scale];
@@ -2452,9 +2462,9 @@ var ZERO = new Decimal(0);
 var ONE = new Decimal(1);
 var BPS = new Decimal(1e4);
 function toBpsInt(fraction) {
-  const text16 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
-  const n = Number.parseInt(text16, 10);
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text16}`);
+  const text17 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
+  const n = Number.parseInt(text17, 10);
+  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text17}`);
   return n;
 }
 var KG_PER_LB = new Decimal("0.45359237");
@@ -2486,7 +2496,7 @@ function canonicalize(value) {
   throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
 }
 var canonicalJson = (value) => JSON.stringify(canonicalize(value));
-var sha256 = (text16) => (0, import_node_crypto2.createHash)("sha256").update(text16).digest("hex");
+var sha256 = (text17) => (0, import_node_crypto2.createHash)("sha256").update(text17).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
 var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
@@ -2835,19 +2845,431 @@ var PdmpReport = (0, import_core13.list)({
     submittedAt: (0, import_fields14.timestamp)({ ...readOnly }),
     submittedBy: relationship({ ref: "StaffMember", ...readOnly }),
     confirmation: systemText(),
+    submission: relationship({ ref: "PdmpSubmission.reports", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
+var CsWitness = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { listView: { initialColumns: ["entry", "witness", "attestedAt"] } },
+  fields: {
+    entry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    attestedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var CsOrderForm = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "formNumber", "supplier", "status", "issuedOn", "expiresOn"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    formNumber: systemText({ required: true }),
+    kind: fixedChoice(["form_222", "csos"]),
+    location: relationship({ ref: "Location", ...readOnly }),
+    supplier: relationship({ ref: "Supplier", ...readOnly }),
+    issuedOn: (0, import_fields14.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields14.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["open", "partially_filled", "filled", "expired", "cancelled"]),
+    signedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    lines: relationship({ ref: "CsOrderFormLine.orderForm", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var CsOrderFormLine = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  fields: {
+    orderForm: relationship({ ref: "CsOrderForm.lines", ...readOnly }),
+    product: relationship({ ref: "DrugProduct", ...readOnly }),
+    packages: (0, import_fields14.integer)({ ...readOnly, validation: { isRequired: true, min: 1 } }),
+    packagesReceived: (0, import_fields14.integer)({ ...readOnly, defaultValue: 0, validation: { isRequired: true, min: 0 } }),
+    ...trackingFields
+  }
+});
+var CsTransfer = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "fromContainer", "toRegistration", "qty", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    fromContainer: relationship({ ref: "CsContainer", ...readOnly }),
+    toContainer: relationship({ ref: "CsContainer", ...readOnly }),
+    toRegistration: relationship({ ref: "DeaRegistration", ...readOnly }),
+    qty: qty({ required: true }),
+    unit: unit(),
+    status: lifecycle(["sent", "received"]),
+    outEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    inEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
+    sentBy: relationship({ ref: "StaffMember", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    sentAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    receivedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PdmpSubmission = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    format: systemText(),
+    reportCount: (0, import_fields14.integer)({ ...readOnly, defaultValue: 0 }),
+    fileSha256: systemText(),
+    fileBody: (0, import_fields14.json)({ ...readOnly }),
+    reports: relationship({ ref: "PdmpReport.submission", many: true, ...readOnly }),
+    generatedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    generatedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var CabinetAccessEvent = (0, import_core13.list)({
+  access: governed("canViewControlled"),
+  ui: { listView: { initialColumns: ["occurredAt", "location", "staff", "kind"] } },
+  fields: {
+    location: relationship({ ref: "Location", ...readOnly }),
+    staff: relationship({ ref: "StaffMember", ...readOnly }),
+    kind: fixedChoice(["opened", "closed", "failed_attempt"]),
+    note: systemText(),
+    occurredAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var DispenseLabel = (0, import_core13.list)({
+  access: governed(["canReadClinical", "canDispense", "canFulfilRefill"]),
+  fields: {
+    dispense: relationship({ ref: "Dispense", ...readOnly }),
+    fields: (0, import_fields14.json)({ ...readOnly }),
+    printedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    printedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var ExternalDispense = (0, import_core13.list)({
+  access: governed(["canReadClinical", "canDispense", "canFulfilRefill"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "prescription", "pharmacyName", "status", "decidedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    prescription: relationship({ ref: "Prescription", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    pharmacyName: systemText({ required: true }),
+    orderReference: systemText(),
+    status: lifecycle(["requested", "approved", "declined", "filled"]),
+    decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    decidedAt: (0, import_fields14.timestamp)({ ...readOnly }),
+    note: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var WrittenRxExport = (0, import_core13.list)({
+  access: governed(["canReadClinical", "canDispense", "canPrescribe"]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    prescription: relationship({ ref: "Prescription", ...readOnly }),
+    exportedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    exportedAt: (0, import_fields14.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    contentSha256: systemText(),
+    ...trackingFields
+  }
+});
 
-// features/keystone/models/record.ts
+// features/keystone/models/inventory.ts
 var import_core14 = require("@keystone-6/core");
 var import_fields15 = require("@keystone-6/core/fields");
+var STOCK_READ = ["canAccessDashboard"];
+var PURCHASING = ["canOrderStock", "canManageInventory", "canApprovePurchase", "canViewFinance"];
+var UnitOfMeasure = (0, import_core14.list)({
+  access: managed("signedIn", "canManageInventory"),
+  ui: { labelField: "name" },
+  fields: {
+    code: (0, import_fields15.text)({ isIndexed: "unique", validation: { isRequired: true } }),
+    name: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var Item = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { labelField: "name", listView: { initialColumns: ["ref", "name", "kind", "baseUnit", "active"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    name: systemText({ required: true }),
+    kind: fixedChoice(["drug", "vaccine", "supply", "retail_food", "retail_other"]),
+    drug: relationship({ ref: "DrugProduct", ...readOnly }),
+    vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
+    baseUnit: unit(),
+    sku: systemText(),
+    /** Held in a fridge: a lot of it is quarantined when its fridge goes out of range. */
+    coldChain: (0, import_fields15.checkbox)({ defaultValue: false, ...readOnly }),
+    active: (0, import_fields15.checkbox)({ defaultValue: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var ItemUomConversion = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  fields: {
+    item: relationship({ ref: "Item", ...readOnly }),
+    fromUnit: systemText({ required: true }),
+    toUnit: systemText({ required: true }),
+    factor: qty({ required: true }),
+    ...trackingFields
+  }
+});
+var StockLocation = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { labelField: "name", listView: { initialColumns: ["name", "location", "kind", "active"] } },
+  fields: {
+    name: systemText({ required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    kind: fixedChoice(["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"]),
+    minTempC: qty(),
+    maxTempC: qty(),
+    active: (0, import_fields15.checkbox)({ defaultValue: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var StockMovement = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { listView: { initialColumns: ["occurredAt", "item", "kind", "qtySigned", "unit", "stockLocation"] } },
+  fields: {
+    item: relationship({ ref: "Item", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
+    stockLocation: relationship({ ref: "StockLocation", ...readOnly }),
+    kind: fixedChoice(["receive", "use", "dispense", "adjust", "count", "transfer_out", "transfer_in", "dispose", "return"]),
+    qtySigned: qty({ required: true }),
+    unit: unit(),
+    sourceType: systemText(),
+    sourceId: systemText(),
+    reason: systemText(),
+    actor: relationship({ ref: "StaffMember", ...readOnly }),
+    occurredAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var StockLevel = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { listView: { initialColumns: ["item", "lot", "stockLocation", "onHand", "unit"] } },
+  fields: {
+    item: relationship({ ref: "Item", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
+    stockLocation: relationship({ ref: "StockLocation", ...readOnly }),
+    onHand: qty({ required: true }),
+    unit: unit(),
+    ...trackingFields
+  }
+});
+var Supplier = (0, import_core14.list)({
+  access: governed([...PURCHASING]),
+  ui: { labelField: "name" },
+  fields: {
+    name: systemText({ required: true }),
+    accountNumber: systemText(),
+    phone: systemText(),
+    email: systemText(),
+    /** Hold DEA registration for suppliers of controlled drugs. */
+    deaNumber: systemText(),
+    active: (0, import_fields15.checkbox)({ defaultValue: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var SupplierItem = (0, import_core14.list)({
+  access: governed([...PURCHASING]),
+  fields: {
+    supplier: relationship({ ref: "Supplier", ...readOnly }),
+    item: relationship({ ref: "Item", ...readOnly }),
+    sku: systemText(),
+    packSize: qty(),
+    packUnit: unit(),
+    lastCostMinor: minor(),
+    ...trackingFields
+  }
+});
+var PurchaseOrder = (0, import_core14.list)({
+  access: governed([...PURCHASING]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "supplier", "location", "status", "orderedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    supplier: relationship({ ref: "Supplier", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    status: lifecycle(["draft", "submitted", "partially_received", "received", "cancelled"]),
+    orderedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    orderedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    approvedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    note: systemText(),
+    lines: relationship({ ref: "PurchaseOrderLine.purchaseOrder", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PurchaseOrderLine = (0, import_core14.list)({
+  access: governed([...PURCHASING]),
+  fields: {
+    purchaseOrder: relationship({ ref: "PurchaseOrder.lines", ...readOnly }),
+    item: relationship({ ref: "Item", ...readOnly }),
+    qtyOrdered: qty({ required: true }),
+    qtyReceived: qty({ required: true }),
+    unit: unit(),
+    unitCostMinor: minor({ required: true }),
+    ...trackingFields
+  }
+});
+var GoodsReceipt = (0, import_core14.list)({
+  access: governed([...PURCHASING, "canReceiveStock"]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    purchaseOrder: relationship({ ref: "PurchaseOrder", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    receivedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    receivedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    packingSlip: systemText(),
+    lines: relationship({ ref: "GoodsReceiptLine.receipt", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var GoodsReceiptLine = (0, import_core14.list)({
+  access: governed([...PURCHASING, "canReceiveStock"]),
+  fields: {
+    receipt: relationship({ ref: "GoodsReceipt.lines", ...readOnly }),
+    purchaseOrderLine: relationship({ ref: "PurchaseOrderLine", ...readOnly }),
+    item: relationship({ ref: "Item", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
+    qty: qty({ required: true }),
+    unit: unit(),
+    ...trackingFields
+  }
+});
+var ReorderRule = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  fields: {
+    item: relationship({ ref: "Item", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    minQty: qty({ required: true }),
+    targetQty: qty({ required: true }),
+    ...trackingFields
+  }
+});
+var StockCount = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    stockLocation: relationship({ ref: "StockLocation", ...readOnly }),
+    status: lifecycle(["closed"]),
+    countedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    countedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    lines: relationship({ ref: "StockCountLine.count", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var StockCountLine = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  fields: {
+    count: relationship({ ref: "StockCount.lines", ...readOnly }),
+    item: relationship({ ref: "Item", ...readOnly }),
+    lot: relationship({ ref: "InventoryLot", ...readOnly }),
+    expectedQty: qty({ required: true }),
+    countedQty: qty({ required: true }),
+    variance: qty({ required: true }),
+    ...trackingFields
+  }
+});
+var RecallCase = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "title", "lotNumber", "status", "openedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    title: systemText({ required: true }),
+    source: systemText(),
+    item: relationship({ ref: "Item", ...readOnly }),
+    lotNumber: systemText({ required: true }),
+    status: lifecycle(["open", "closed"]),
+    openedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    closedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    resolution: systemText(),
+    exposures: relationship({ ref: "RecallExposure.recall", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var RecallExposure = (0, import_core14.list)({
+  access: governed(["canReadClinical", "canManageInventory"]),
+  ui: { listView: { initialColumns: ["recall", "patient", "sourceType", "status"] } },
+  fields: {
+    recall: relationship({ ref: "RecallCase.exposures", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    sourceType: fixedChoice(["dispense", "administration", "vaccine"]),
+    sourceId: systemText({ required: true }),
+    givenOn: (0, import_fields15.calendarDay)({ ...readOnly }),
+    status: lifecycle(["to_contact", "contacted", "resolved"]),
+    note: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var TemperatureLog = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { listView: { initialColumns: ["recordedAt", "stockLocation", "readingC", "inRange"] } },
+  fields: {
+    stockLocation: relationship({ ref: "StockLocation", ...readOnly }),
+    readingC: qty({ required: true }),
+    inRange: (0, import_fields15.checkbox)({ defaultValue: true, ...readOnly }),
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    recordedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var TemperatureExcursion = (0, import_core14.list)({
+  access: governed([...STOCK_READ]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "stockLocation", "status", "openedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    stockLocation: relationship({ ref: "StockLocation", ...readOnly }),
+    log: relationship({ ref: "TemperatureLog", ...readOnly }),
+    status: lifecycle(["open", "resolved"]),
+    openedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    quarantinedLots: (0, import_fields15.integer)({ ...readOnly, defaultValue: 0 }),
+    resolvedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    resolution: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var INVENTORY_LISTS = {
+  UnitOfMeasure,
+  Item,
+  ItemUomConversion,
+  StockLocation,
+  StockMovement,
+  StockLevel,
+  Supplier,
+  SupplierItem,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  GoodsReceipt,
+  GoodsReceiptLine,
+  ReorderRule,
+  StockCount,
+  StockCountLine,
+  RecallCase,
+  RecallExposure,
+  TemperatureLog,
+  TemperatureExcursion
+};
+
+// features/keystone/models/record.ts
+var import_core15 = require("@keystone-6/core");
+var import_fields16 = require("@keystone-6/core/fields");
 var CLINICAL_READ = ["canReadClinical"];
 var ENCOUNTER_KINDS = ["outpatient", "inpatient_day", "surgery", "dental", "emergency", "telehealth", "phone_consult", "records_import", "euthanasia", "tech_visit"];
 var SECTION_KINDS = ["history", "subjective", "objective", "assessment", "plan", "discharge", "surgery_report", "dental_chart", "anaesthesia_summary", "communication"];
 var REPEATABLE_SECTIONS = ["communication"];
-var Encounter = (0, import_core14.list)({
+var Encounter = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "status", "attendingDvm", "startedAt"] } },
   fields: {
@@ -2857,23 +3279,23 @@ var Encounter = (0, import_core14.list)({
     appointment: relationship({ ref: "Appointment", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     kind: fixedChoice(ENCOUNTER_KINDS),
-    vcprQualifying: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    vcprQualifying: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["open", "in_progress", "pending_signature", "signed", "voided"]),
     reason: systemText(),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
     participants: relationship({ ref: "StaffMember", many: true, ...readOnly }),
     weightUsed: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    startedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    submittedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    submittedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    signedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    signedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     contentHash: systemText(),
-    signedContent: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
+    signedContent: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
-    completeness: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
+    completeness: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
     voidReason: systemText(),
     voidApproval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     importedFrom: systemText(),
@@ -2887,55 +3309,55 @@ var Encounter = (0, import_core14.list)({
     ...trackingFields
   }
 });
-var SoapSection = (0, import_core14.list)({
+var SoapSection = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "kind", "ordinal", "version", "lockedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.sections", ...readOnly }),
     kind: fixedChoice(SECTION_KINDS),
-    ordinal: (0, import_fields15.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
+    ordinal: (0, import_fields16.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields15.json)({ ...readOnly }),
+    structured: (0, import_fields16.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     lastAuthor: relationship({ ref: "StaffMember", ...readOnly }),
     revisions: relationship({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
-    lockedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    lockedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var SoapSectionRevision = (0, import_core14.list)({
+var SoapSectionRevision = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["section", "source", "author", "at"] } },
   fields: {
     section: relationship({ ref: "SoapSection.revisions", ...readOnly }),
-    revisionNumber: (0, import_fields15.integer)({ ...readOnly, validation: { isRequired: true } }),
+    revisionNumber: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields15.json)({ ...readOnly }),
+    structured: (0, import_fields16.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     template: relationship({ ref: "RecordTemplate", ...readOnly }),
     scribeDraft: relationship({ ref: "ScribeDraft", ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     authorUser: relationship({ ref: "User", ...readOnly }),
-    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     contentHash: systemText({ required: true })
   }
 });
-var Addendum = (0, import_core14.list)({
+var Addendum = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "sectionKind", "author", "signedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.addenda", ...readOnly }),
     sectionKind: fixedChoice([...SECTION_KINDS, "general"]),
     author: relationship({ ref: "StaffMember", ...readOnly }),
-    authorIsDvm: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    authorIsDvm: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
     reason: systemText({ required: true }),
     body: systemText({ required: true }),
-    signedAt: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    signedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     hash: systemText({ required: true })
   }
 });
-var VitalsObservation = (0, import_core14.list)({
+var VitalsObservation = (0, import_core15.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "temperature", "heartRate", "respRate", "painScore", "at"] } },
   fields: {
@@ -2943,20 +3365,20 @@ var VitalsObservation = (0, import_core14.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     temperature: qty(),
     temperatureUnit: choice(["F", "C"], "F"),
-    heartRate: (0, import_fields15.integer)({ ...readOnly }),
-    respRate: (0, import_fields15.integer)({ ...readOnly }),
+    heartRate: (0, import_fields16.integer)({ ...readOnly }),
+    respRate: (0, import_fields16.integer)({ ...readOnly }),
     mucousMembranes: choice(["pink", "pale", "white", "cyanotic", "icteric", "injected", "brick_red", "not_assessed"], null),
     crtSeconds: qty(),
-    painScore: (0, import_fields15.integer)({ ...readOnly }),
-    bodyConditionScore: (0, import_fields15.integer)({ ...readOnly }),
+    painScore: (0, import_fields16.integer)({ ...readOnly }),
+    bodyConditionScore: (0, import_fields16.integer)({ ...readOnly }),
     mentation: choice(["bar", "qar", "dull", "obtunded", "stuporous", "comatose"], null),
     hydrationPct: qty(),
-    at: (0, import_fields15.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var EXAM_SYSTEMS = ["general", "integument", "eyes", "ears", "oral", "cardiovascular", "respiratory", "gi", "urogenital", "musculoskeletal", "neurologic", "lymphatic"];
-var PhysicalExamFinding = (0, import_core14.list)({
+var PhysicalExamFinding = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "system", "status", "text"] } },
   fields: {
@@ -2969,19 +3391,19 @@ var PhysicalExamFinding = (0, import_core14.list)({
     ...trackingFields
   }
 });
-var DiagnosisCode = (0, import_core14.list)({
+var DiagnosisCode = (0, import_core15.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term", listView: { initialColumns: ["codeSystem", "code", "term", "active"] } },
   fields: {
     codeSystem: choice(["practice", "venomcode", "snomed_vet"], "practice"),
-    code: (0, import_fields15.text)({ validation: { isRequired: true } }),
-    term: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields16.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields16.text)({ validation: { isRequired: true } }),
     species: relationship({ ref: "Species", many: true }),
-    active: (0, import_fields15.checkbox)({ defaultValue: true }),
+    active: (0, import_fields16.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Problem = (0, import_core14.list)({
+var Problem = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["patient", "term", "status", "chronic", "onset"] } },
   fields: {
@@ -2990,14 +3412,14 @@ var Problem = (0, import_core14.list)({
     code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     status: lifecycle(["active", "resolved", "inactive"]),
-    chronic: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
-    onset: (0, import_fields15.calendarDay)({ ...readOnly }),
-    resolvedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    chronic: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    onset: (0, import_fields16.calendarDay)({ ...readOnly }),
+    resolvedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Diagnosis = (0, import_core14.list)({
+var Diagnosis = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["encounter", "term", "certainty"] } },
   fields: {
@@ -3011,7 +3433,7 @@ var Diagnosis = (0, import_core14.list)({
     ...trackingFields
   }
 });
-var ClinicalAttachment = (0, import_core14.list)({
+var ClinicalAttachment = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "caption" },
   fields: {
@@ -3024,7 +3446,7 @@ var ClinicalAttachment = (0, import_core14.list)({
     ...trackingFields
   }
 });
-var ClinicalDocument = (0, import_core14.list)({
+var ClinicalDocument = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "title", listView: { initialColumns: ["patient", "kind", "title", "status", "createdAt"] } },
   fields: {
@@ -3038,41 +3460,41 @@ var ClinicalDocument = (0, import_core14.list)({
     sourceHash: systemText(),
     document: relationship({ ref: "Document", ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    renderedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    renderedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     // The rendered document (database store, the default; an object-store adapter keeps only the
     // key). Deterministic from the frozen source, so sha256 proves it was not altered.
     mimeType: systemText(),
-    body: (0, import_fields15.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields16.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     sha256: systemText(),
     renderError: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var RecordTemplate = (0, import_core14.list)({
+var RecordTemplate = (0, import_core15.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "sectionKind", "active"] } },
   fields: {
-    name: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields16.text)({ validation: { isRequired: true } }),
     kind: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "discharge", "phone"], "wellness"),
     sectionKind: choice([...SECTION_KINDS], "objective"),
     species: relationship({ ref: "Species" }),
-    body: (0, import_fields15.text)({ ui: { displayMode: "textarea" } }),
-    templateVersion: (0, import_fields15.integer)({ defaultValue: 1 }),
-    active: (0, import_fields15.checkbox)({ defaultValue: true }),
+    body: (0, import_fields16.text)({ ui: { displayMode: "textarea" } }),
+    templateVersion: (0, import_fields16.integer)({ defaultValue: 1 }),
+    active: (0, import_fields16.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Glossary = (0, import_core14.list)({
+var Glossary = (0, import_core15.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term" },
   fields: {
-    term: (0, import_fields15.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
-    expansion: (0, import_fields15.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields16.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    expansion: (0, import_fields16.text)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var ScribeSession = (0, import_core14.list)({
+var ScribeSession = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "status", "transcriptionProvider", "modelProvider", "createdAt"] } },
   fields: {
@@ -3080,9 +3502,9 @@ var ScribeSession = (0, import_core14.list)({
     startedBy: relationship({ ref: "StaffMember", ...readOnly }),
     startedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     clientConsent: relationship({ ref: "ConsentRecord", ...readOnly }),
-    staffAcknowledged: (0, import_fields15.checkbox)({ ...readOnly, defaultValue: false }),
+    staffAcknowledged: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
     audioDocument: relationship({ ref: "Document", ...readOnly }),
-    audioDeleteAfter: (0, import_fields15.timestamp)({ ...readOnly }),
+    audioDeleteAfter: (0, import_fields16.timestamp)({ ...readOnly }),
     transcriptRef: systemText(),
     transcript: systemText(),
     transcriptionProvider: systemText(),
@@ -3094,23 +3516,23 @@ var ScribeSession = (0, import_core14.list)({
     ...trackingFields
   }
 });
-var ScribeDraft = (0, import_core14.list)({
+var ScribeDraft = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   fields: {
     session: relationship({ ref: "ScribeSession.drafts", ...readOnly }),
-    sections: (0, import_fields15.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
-    suggestedCharges: (0, import_fields15.json)({ ...readOnly }),
+    sections: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
+    suggestedCharges: (0, import_fields16.json)({ ...readOnly }),
     confidence: rate(),
     modelRef: systemText(),
-    acceptedBlocks: (0, import_fields15.json)({ ...readOnly }),
+    acceptedBlocks: (0, import_fields16.json)({ ...readOnly }),
     status: lifecycle(["proposed", "partly_accepted", "accepted", "rejected"]),
     decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields15.timestamp)({ ...readOnly }),
+    decidedAt: (0, import_fields16.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Referral = (0, import_core14.list)({
+var Referral = (0, import_core15.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["patient", "direction", "hospital", "urgency", "status"] } },
   fields: {
@@ -3130,11 +3552,11 @@ var Referral = (0, import_core14.list)({
 });
 
 // features/keystone/models/treatment.ts
-var import_core15 = require("@keystone-6/core");
-var import_fields16 = require("@keystone-6/core/fields");
+var import_core16 = require("@keystone-6/core");
+var import_fields17 = require("@keystone-6/core/fields");
 var CLINICAL_READ2 = ["canReadClinical"];
 var ROUTES = ["po", "iv", "im", "sc", "topical", "otic", "ophthalmic", "inhaled", "intranasal", "io", "rectal", "transdermal", "other"];
-var ClinicalOrder = (0, import_core15.list)({
+var ClinicalOrder = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "description", "status", "orderedBy"] } },
   fields: {
@@ -3151,28 +3573,28 @@ var ClinicalOrder = (0, import_core15.list)({
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     dose: relationship({ ref: "DoseCalculation", ...readOnly }),
     frequency: systemText(),
-    schedule: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
+    schedule: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
     route: fixedChoice(ROUTES),
     quantity: qty(),
     quantityUnit: unit(),
-    extralabel: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
-    emergencyStabilisation: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    extralabel: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    emergencyStabilisation: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     overrideReason: systemText(),
-    warnings: (0, import_fields16.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
+    warnings: (0, import_fields17.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
     cancelReason: systemText(),
     administrations: relationship({ ref: "Administration.order", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DoseCalculation = (0, import_core15.list)({
+var DoseCalculation = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["product", "weightKg", "doseAmount", "doseUnit", "totalAmount", "roundedQty", "computedUnit"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
     weight: relationship({ ref: "WeightMeasurement", ...readOnly }),
     weightKg: wt({ required: true }),
-    weightAgeHours: (0, import_fields16.integer)({ ...readOnly }),
+    weightAgeHours: (0, import_fields17.integer)({ ...readOnly }),
     doseAmount: qty({ required: true }),
     doseUnit: fixedChoice(["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"]),
     dosePer: fixedChoice(["kg", "m2", "animal"]),
@@ -3185,20 +3607,20 @@ var DoseCalculation = (0, import_core15.list)({
     concentrationUnit: systemText(),
     computedQty: qty(),
     computedUnit: systemText(),
-    roundingRule: (0, import_fields16.json)({ ...readOnly }),
+    roundingRule: (0, import_fields17.json)({ ...readOnly }),
     roundedQty: qty(),
     deliveredAmount: qty(),
-    deviationBps: (0, import_fields16.integer)({ ...readOnly }),
+    deviationBps: (0, import_fields17.integer)({ ...readOnly }),
     manualOverrideQty: qty(),
     overrideReason: systemText(),
-    warnings: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
+    warnings: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
     calcVersion: systemText({ required: true }),
     hash: systemText({ required: true }),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var InventoryLot = (0, import_core15.list)({
+var InventoryLot = (0, import_core16.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "lotNumber", listView: { initialColumns: ["lotNumber", "drug", "vaccine", "expiresOn", "status", "location"] } },
   fields: {
@@ -3206,14 +3628,14 @@ var InventoryLot = (0, import_core15.list)({
     vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    expiresOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["available", "quarantined", "disposed"]),
     quarantineReason: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var Administration = (0, import_core15.list)({
+var Administration = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["order", "patient", "qty", "unit", "route", "givenBy", "givenAt"] } },
   fields: {
@@ -3223,7 +3645,7 @@ var Administration = (0, import_core15.list)({
     treatmentTask: relationship({ ref: "TreatmentTask", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText(),
-    lotExpiresOn: (0, import_fields16.calendarDay)({ ...readOnly }),
+    lotExpiresOn: (0, import_fields17.calendarDay)({ ...readOnly }),
     csContainer: relationship({ ref: "CsContainer", ...readOnly }),
     csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
     qty: qty({ required: true }),
@@ -3235,7 +3657,7 @@ var Administration = (0, import_core15.list)({
     witness: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     wasteLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
-    givenAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    givenAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
     reverses: relationship({ ref: "Administration", ...readOnly }),
     reason: systemText(),
@@ -3243,7 +3665,7 @@ var Administration = (0, import_core15.list)({
     qtyOverrideReason: systemText()
   }
 });
-var Ward = (0, import_core15.list)({
+var Ward = (0, import_core16.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
@@ -3254,19 +3676,19 @@ var Ward = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var Cage = (0, import_core15.list)({
+var Cage = (0, import_core16.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "ward", "size", "active"] } },
   fields: {
     ward: relationship({ ref: "Ward.cages" }),
     code: systemText({ required: true, indexed: "unique" }),
     size: choice(["small", "medium", "large", "run"], "medium"),
-    features: (0, import_fields16.json)({ defaultValue: {} }),
-    active: (0, import_fields16.checkbox)({ defaultValue: true }),
+    features: (0, import_fields17.json)({ defaultValue: {} }),
+    active: (0, import_fields17.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var HospitalStay = (0, import_core15.list)({
+var HospitalStay = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "cage", "admittedAt", "attendingDvm"] } },
   fields: {
@@ -3275,8 +3697,8 @@ var HospitalStay = (0, import_core15.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    admittedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    dischargedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    admittedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dischargedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     status: lifecycle(["admitted", "in_care", "ready_for_discharge", "discharged", "transferred", "deceased"]),
     codeStatus: fixedChoice(["full", "closed_chest_only", "dnr"]),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
@@ -3287,17 +3709,17 @@ var HospitalStay = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var CageAssignment = (0, import_core15.list)({
+var CageAssignment = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     stay: relationship({ ref: "HospitalStay.assignments", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    fromAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    toAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    fromAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    toAt: (0, import_fields17.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
-var TreatmentSheetOrder = (0, import_core15.list)({
+var TreatmentSheetOrder = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["stay", "order", "frequency", "active", "materialisedThrough"] } },
   fields: {
@@ -3305,37 +3727,37 @@ var TreatmentSheetOrder = (0, import_core15.list)({
     order: relationship({ ref: "ClinicalOrder", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
     frequency: fixedChoice(["q1h", "q2h", "q4h", "q6h", "q8h", "q12h", "sid", "bid", "tid", "qid", "prn", "cri", "once"]),
-    startAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    startAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endAt: (0, import_fields17.timestamp)({ ...readOnly }),
     instructions: systemText(),
-    materialisedThrough: (0, import_fields16.timestamp)({ ...readOnly }),
-    graceMinutes: (0, import_fields16.integer)({ ...readOnly, defaultValue: 30 }),
-    active: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: true }),
+    materialisedThrough: (0, import_fields17.timestamp)({ ...readOnly }),
+    graceMinutes: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
+    active: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: true }),
     tasks: relationship({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var TreatmentTask = (0, import_core15.list)({
+var TreatmentTask = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["patient", "sheetOrder", "dueAt", "status", "doneBy"] } },
   fields: {
     sheetOrder: relationship({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    dueAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dueAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
     doneBy: relationship({ ref: "StaffMember", ...readOnly }),
-    doneAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    doneAt: (0, import_fields17.timestamp)({ ...readOnly }),
     skipReason: systemText(),
     rescheduledTo: relationship({ ref: "TreatmentTask", ...readOnly }),
     administration: relationship({ ref: "Administration", ...readOnly }),
-    observation: (0, import_fields16.json)({ ...readOnly }),
+    observation: (0, import_fields17.json)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AnaesthesiaRecord = (0, import_core15.list)({
+var AnaesthesiaRecord = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "asaStatus", "status", "anaesthetist", "inductionAt"] } },
   fields: {
@@ -3344,16 +3766,16 @@ var AnaesthesiaRecord = (0, import_core15.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     procedure: systemText({ required: true }),
     asaStatus: fixedChoice(["I", "II", "III", "IV", "V", "IE", "IIE", "IIIE", "IVE", "VE"]),
-    fastingConfirmed: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
-    consentConfirmed: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    fastingConfirmed: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    consentConfirmed: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     preWeight: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    ivCatheter: (0, import_fields16.json)({ ...readOnly }),
-    protocol: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
-    checklist: (0, import_fields16.json)({ ...readOnly }),
-    inductionAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    intubatedAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    extubatedAt: (0, import_fields16.timestamp)({ ...readOnly }),
-    recoveryEndAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    ivCatheter: (0, import_fields17.json)({ ...readOnly }),
+    protocol: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
+    checklist: (0, import_fields17.json)({ ...readOnly }),
+    inductionAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    intubatedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    extubatedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    recoveryEndAt: (0, import_fields17.timestamp)({ ...readOnly }),
     anaesthetist: relationship({ ref: "StaffMember", ...readOnly }),
     dvm: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
@@ -3365,19 +3787,19 @@ var AnaesthesiaRecord = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var MonitoringReading = (0, import_core15.list)({
+var MonitoringReading = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["record", "at", "hr", "rr", "spo2", "etco2", "map", "tempC"] } },
   fields: {
     record: relationship({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
-    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    hr: (0, import_fields16.integer)({ ...readOnly }),
-    rr: (0, import_fields16.integer)({ ...readOnly }),
-    spo2: (0, import_fields16.integer)({ ...readOnly }),
-    etco2: (0, import_fields16.integer)({ ...readOnly }),
-    sbp: (0, import_fields16.integer)({ ...readOnly }),
-    dbp: (0, import_fields16.integer)({ ...readOnly }),
-    map: (0, import_fields16.integer)({ ...readOnly }),
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    hr: (0, import_fields17.integer)({ ...readOnly }),
+    rr: (0, import_fields17.integer)({ ...readOnly }),
+    spo2: (0, import_fields17.integer)({ ...readOnly }),
+    etco2: (0, import_fields17.integer)({ ...readOnly }),
+    sbp: (0, import_fields17.integer)({ ...readOnly }),
+    dbp: (0, import_fields17.integer)({ ...readOnly }),
+    map: (0, import_fields17.integer)({ ...readOnly }),
     tempC: qty(),
     agentPct: qty(),
     o2FlowLpm: qty(),
@@ -3386,7 +3808,7 @@ var MonitoringReading = (0, import_core15.list)({
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
-var SurgeryReport = (0, import_core15.list)({
+var SurgeryReport = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -3403,17 +3825,17 @@ var SurgeryReport = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var DentalChart = (0, import_core15.list)({
+var DentalChart = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    teeth: (0, import_fields16.json)({ ...readOnly, defaultValue: {} }),
+    teeth: (0, import_fields17.json)({ ...readOnly, defaultValue: {} }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DischargeInstruction = (0, import_core15.list)({
+var DischargeInstruction = (0, import_core16.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -3421,37 +3843,37 @@ var DischargeInstruction = (0, import_core15.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     body: systemText({ required: true }),
     medsSummary: systemText(),
-    recheckOn: (0, import_fields16.calendarDay)({ ...readOnly }),
-    sentAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    recheckOn: (0, import_fields17.calendarDay)({ ...readOnly }),
+    sentAt: (0, import_fields17.timestamp)({ ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/preventive.ts
-var import_core16 = require("@keystone-6/core");
-var import_fields17 = require("@keystone-6/core/fields");
+var import_core17 = require("@keystone-6/core");
+var import_fields18 = require("@keystone-6/core/fields");
 var CLINICAL_READ3 = ["canReadClinical"];
 var REMINDER_READ = ["canReadClinical", "canBook", "canMessageClients"];
-var VaccineProduct = (0, import_core16.list)({
+var VaccineProduct = (0, import_core17.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "manufacturer", "isRabies", "licensedDoiMonths", "minAgeWeeks", "active"] } },
   fields: {
-    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
-    manufacturer: (0, import_fields17.text)({ validation: { isRequired: true } }),
-    antigens: (0, import_fields17.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
+    name: (0, import_fields18.text)({ validation: { isRequired: true } }),
+    manufacturer: (0, import_fields18.text)({ validation: { isRequired: true } }),
+    antigens: (0, import_fields18.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
     species: relationship({ ref: "Species", many: true }),
-    licensedDoiMonths: (0, import_fields17.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
-    minAgeWeeks: (0, import_fields17.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
-    isRabies: (0, import_fields17.checkbox)({ defaultValue: false }),
-    usdaProductCode: (0, import_fields17.text)(),
+    licensedDoiMonths: (0, import_fields18.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
+    minAgeWeeks: (0, import_fields18.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
+    isRabies: (0, import_fields18.checkbox)({ defaultValue: false }),
+    usdaProductCode: (0, import_fields18.text)(),
     defaultRoute: choice(["sc", "im", "intranasal", "po", "transdermal"], "sc"),
     reminderType: relationship({ ref: "ReminderType" }),
-    active: (0, import_fields17.checkbox)({ defaultValue: true }),
+    active: (0, import_fields18.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var VaccineAdministration = (0, import_core16.list)({
+var VaccineAdministration = (0, import_core17.list)({
   access: immutable([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "lotNumber", "administeredOn", "dueNextOn", "vaccinatedBy"] } },
   fields: {
@@ -3461,17 +3883,17 @@ var VaccineAdministration = (0, import_core16.list)({
     product: relationship({ ref: "VaccineProduct", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    doseSeries: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
-    isInitialSeries: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    lotExpiresOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    doseSeries: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    isInitialSeries: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
     route: fixedChoice(["sc", "im", "intranasal", "po", "transdermal"]),
     site: systemText({ required: true }),
-    administeredOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
-    dueNextOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    administeredOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    dueNextOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     vaccinatedBy: relationship({ ref: "StaffMember", ...readOnly }),
     supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
-    policyVersions: (0, import_fields17.json)({ ...readOnly }),
+    policyVersions: (0, import_fields18.json)({ ...readOnly }),
     certificate: relationship({ ref: "RabiesCertificate", ...readOnly }),
     source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
     /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
@@ -3479,45 +3901,45 @@ var VaccineAdministration = (0, import_core16.list)({
     reason: systemText()
   }
 });
-var RabiesCertificate = (0, import_core16.list)({
+var RabiesCertificate = (0, import_core17.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "vaccinatedOn", "nextDueOn", "tagNumber"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    ownerSnapshot: (0, import_fields17.json)({ ...readOnly }),
-    patientSnapshot: (0, import_fields17.json)({ ...readOnly }),
-    vaccineSnapshot: (0, import_fields17.json)({ ...readOnly }),
-    vetSnapshot: (0, import_fields17.json)({ ...readOnly }),
-    vaccinatedOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
-    nextDueOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    ownerSnapshot: (0, import_fields18.json)({ ...readOnly }),
+    patientSnapshot: (0, import_fields18.json)({ ...readOnly }),
+    vaccineSnapshot: (0, import_fields18.json)({ ...readOnly }),
+    vetSnapshot: (0, import_fields18.json)({ ...readOnly }),
+    vaccinatedOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    nextDueOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     tagNumber: systemText(),
     tagJurisdiction: systemText(),
-    fields: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
-    missingFields: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
+    fields: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
+    missingFields: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     reportedTo: fixedChoice(["none", "county", "city"]),
-    reportedAt: (0, import_fields17.timestamp)({ ...readOnly }),
-    policyVersions: (0, import_fields17.json)({ ...readOnly }),
+    reportedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    policyVersions: (0, import_fields18.json)({ ...readOnly }),
     /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
-    voidedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    voidedAt: (0, import_fields18.timestamp)({ ...readOnly }),
     voidReason: systemText(),
     ...trackingFields
   }
 });
-var ReminderType = (0, import_core16.list)({
+var ReminderType = (0, import_core17.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields17.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
-    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields18.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
+    name: (0, import_fields18.text)({ validation: { isRequired: true } }),
     kind: choice(["vaccine", "test", "procedure", "recheck", "preventive_med"], "vaccine"),
-    active: (0, import_fields17.checkbox)({ defaultValue: true }),
+    active: (0, import_fields18.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var ReminderProtocol = (0, import_core16.list)({
+var ReminderProtocol = (0, import_core17.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "name" },
   fields: {
@@ -3528,25 +3950,25 @@ var ReminderProtocol = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var ReminderProtocolVersion = (0, import_core16.list)({
+var ReminderProtocolVersion = (0, import_core17.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "label" },
   fields: {
     protocol: relationship({ ref: "ReminderProtocol.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    versionNumber: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
     rules: relationship({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
-    sourceRefs: (0, import_fields17.json)({ ...readOnly }),
-    verified: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
+    sourceRefs: (0, import_fields18.json)({ ...readOnly }),
+    verified: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    publishedAt: (0, import_fields18.timestamp)({ ...readOnly }),
     contentHash: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderRule = (0, import_core16.list)({
+var ReminderRule = (0, import_core17.list)({
   access: governed("canAccessDashboard"),
   fields: {
     protocolVersion: relationship({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
@@ -3554,14 +3976,14 @@ var ReminderRule = (0, import_core16.list)({
     triggerVaccines: relationship({ ref: "VaccineProduct", many: true, ...readOnly }),
     triggerServiceCode: systemText(),
     satisfies: relationship({ ref: "ReminderType", ...readOnly }),
-    schedule: (0, import_fields17.json)({ ...readOnly }),
-    leadDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
-    graceDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
-    lapseDays: (0, import_fields17.integer)({ ...readOnly, defaultValue: 180 }),
+    schedule: (0, import_fields18.json)({ ...readOnly }),
+    leadDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
+    graceDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
+    lapseDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 180 }),
     ...trackingFields
   }
 });
-var PatientReminder = (0, import_core16.list)({
+var PatientReminder = (0, import_core17.list)({
   access: governed([...REMINDER_READ]),
   ui: { listView: { initialColumns: ["patient", "type", "dueOn", "status", "source"] } },
   fields: {
@@ -3569,19 +3991,19 @@ var PatientReminder = (0, import_core16.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     type: relationship({ ref: "ReminderType", ...readOnly }),
     rule: relationship({ ref: "ReminderRule", ...readOnly }),
-    dueOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    dueOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "satisfied", "suppressed", "lapsed"]),
     suppressedReason: systemText(),
     protocolVersion: relationship({ ref: "ReminderProtocolVersion", ...readOnly }),
     source: fixedChoice(["protocol", "vaccine", "manual", "import"]),
     sourceKey: systemText({ required: true }),
-    lastNotifiedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    lastNotifiedAt: (0, import_fields18.timestamp)({ ...readOnly }),
     satisfactions: relationship({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderSatisfaction = (0, import_core16.list)({
+var ReminderSatisfaction = (0, import_core17.list)({
   access: immutable([...CLINICAL_READ3]),
   fields: {
     reminder: relationship({ ref: "PatientReminder.satisfactions", ...readOnly }),
@@ -3591,10 +4013,10 @@ var ReminderSatisfaction = (0, import_core16.list)({
     externalEvidence: relationship({ ref: "Document", ...readOnly }),
     note: systemText(),
     recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var AdverseEventReport = (0, import_core16.list)({
+var AdverseEventReport = (0, import_core17.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "severity", "reportedTo", "status"] } },
   fields: {
@@ -3609,7 +4031,7 @@ var AdverseEventReport = (0, import_core16.list)({
     reportedTo: fixedChoice(["manufacturer", "fda_cvm", "usda_cvb"]),
     status: lifecycle(["draft", "submitted", "acknowledged"]),
     reference: systemText(),
-    submittedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    submittedAt: (0, import_fields18.timestamp)({ ...readOnly }),
     createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -3617,9 +4039,9 @@ var AdverseEventReport = (0, import_core16.list)({
 });
 
 // features/keystone/models/imports.ts
-var import_core17 = require("@keystone-6/core");
-var import_fields18 = require("@keystone-6/core/fields");
-var ImportBatch = (0, import_core17.list)({
+var import_core18 = require("@keystone-6/core");
+var import_fields19 = require("@keystone-6/core/fields");
+var ImportBatch = (0, import_core18.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "system", "entity", "status", "rowsTotal", "rowsCreated", "rowsFailed"] } },
   fields: {
@@ -3631,36 +4053,36 @@ var ImportBatch = (0, import_core17.list)({
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(["received", "validated", "applying", "applied", "failed"]),
-    rowsTotal: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsCreated: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsSkipped: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsFailed: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
-    mapping: (0, import_fields18.json)({ ...readOnly }),
+    rowsTotal: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsCreated: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsSkipped: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsFailed: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
+    mapping: (0, import_fields19.json)({ ...readOnly }),
     startedBy: relationship({ ref: "User", ...readOnly }),
-    finishedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    finishedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     rows: relationship({ ref: "ImportRow.batch", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ImportRow = (0, import_core17.list)({
+var ImportRow = (0, import_core18.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { listView: { initialColumns: ["batch", "rowNumber", "externalId", "result", "recordType"] } },
   fields: {
     batch: relationship({ ref: "ImportBatch.rows", ...readOnly }),
-    rowNumber: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rowNumber: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
     externalId: systemText({ required: true }),
     result: fixedChoice(["created", "skipped_existing", "failed"]),
     recordType: systemText(),
     recordId: systemText(),
-    errors: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
+    errors: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/agents.ts
-var import_core18 = require("@keystone-6/core");
-var import_fields19 = require("@keystone-6/core/fields");
+var import_core19 = require("@keystone-6/core");
+var import_fields20 = require("@keystone-6/core/fields");
 var AGENT_SCOPES = [
   "reception.read",
   "reception.book",
@@ -3690,43 +4112,43 @@ var PROPOSAL_KINDS = [
   "boarding.reserve",
   "reminder.send"
 ];
-var AgentToolGrant = (0, import_core18.list)({
+var AgentToolGrant = (0, import_core19.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "scope", listView: { initialColumns: ["agent", "scope", "status", "createdAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.grants", ...readOnly }),
     scope: fixedChoice(AGENT_SCOPES),
-    constraints: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
+    constraints: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
     status: lifecycle(["requested", "active", "revoked"]),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    revokedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    revokedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentRun = (0, import_core18.list)({
+var AgentRun = (0, import_core19.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "callRecordId", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.runs", ...readOnly }),
-    startedAt: (0, import_fields19.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    endedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields20.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    endedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     status: lifecycle(["started", "completed", "failed", "aborted"]),
     promptHash: hiddenHash(),
-    toolCalls: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
-    costMeta: (0, import_fields19.json)({ ...readOnly }),
+    toolCalls: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
+    costMeta: (0, import_fields20.json)({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
     proposals: relationship({ ref: "Proposal.agentRun", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Proposal = (0, import_core18.list)({
+var Proposal = (0, import_core19.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "kind", listView: { initialColumns: ["kind", "status", "proposedByAgent", "proposedByUser", "createdAt"] } },
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
-    payload: (0, import_fields19.json)({ ...readOnly }),
+    payload: (0, import_fields20.json)({ ...readOnly }),
     payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
     agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
@@ -3735,12 +4157,12 @@ var Proposal = (0, import_core18.list)({
     targetList: systemText(),
     targetId: systemText({ indexed: true }),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    validation: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
+    validation: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentAction = (0, import_core18.list)({
+var AgentAction = (0, import_core19.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "tool", listView: { initialColumns: ["tool", "outcome", "agent", "at"] } },
   fields: {
@@ -3751,7 +4173,7 @@ var AgentAction = (0, import_core18.list)({
     outcome: fixedChoice(["ok", "scope_denied", "never_allowed", "guard_failed", "error", "killed"]),
     errorCode: systemText(),
     auditEventId: systemText(),
-    at: (0, import_fields19.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields20.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 
@@ -3778,6 +4200,16 @@ var models = {
   CsDiscrepancyCase,
   CsDestructionRecord,
   PdmpReport,
+  CsWitness,
+  CsOrderForm,
+  CsOrderFormLine,
+  CsTransfer,
+  PdmpSubmission,
+  CabinetAccessEvent,
+  DispenseLabel,
+  ExternalDispense,
+  WrittenRxExport,
+  ...INVENTORY_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter,
   SoapSection,
@@ -3828,8 +4260,8 @@ var models = {
   Proposal
 };
 var API_MAX_TAKE = 500;
-for (const list18 of Object.values(models)) {
-  list18.graphql = { ...list18.graphql ?? {}, maxTake: API_MAX_TAKE };
+for (const list19 of Object.values(models)) {
+  list19.graphql = { ...list19.graphql ?? {}, maxTake: API_MAX_TAKE };
 }
 registerListAccess(models);
 
@@ -3912,6 +4344,9 @@ function actorFromSession(session) {
   const role = session.data.role;
   const granted = new Set(role ? permissionNames.filter((name) => role[name] === true) : []);
   return { kind: "user", userId: session.itemId, name: session.data.name, permissions: granted };
+}
+function can(actor, permission) {
+  return actor.kind === "user" && actor.permissions.has(permission);
 }
 function requirePermission(actor, ...anyOf2) {
   if (actor.kind === "system") return;
@@ -4211,6 +4646,18 @@ var US_FED = {
 };
 var US_FED_SOURCE = "5 U.S.C. 6103 federal holidays with OPM observance rules, 2026-2028";
 var US_FED_HOLIDAYS = FEDERAL_HOLIDAYS;
+function locationCalendar(input) {
+  return {
+    code: input.code,
+    timeZone: input.timeZone,
+    weekendDays: input.weekendDays ?? [0, 6],
+    regularOpen: input.regularOpen ?? "08:00",
+    regularClose: input.regularClose ?? "18:00",
+    holidays: /* @__PURE__ */ new Set([...FEDERAL_HOLIDAYS, ...input.closures ?? []]),
+    earlyCloses: /* @__PURE__ */ new Map(),
+    coverageThrough: US_FED.coverageThrough
+  };
+}
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
 function assertDate(date) {
   if (!DATE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) throw new Error(`Invalid date ${date}`);
@@ -4219,6 +4666,30 @@ function addDays(date, days2) {
   assertDate(date);
   const t = Date.parse(`${date}T12:00:00Z`) + days2 * 864e5;
   return new Date(t).toISOString().slice(0, 10);
+}
+var weekday = (date) => (/* @__PURE__ */ new Date(`${date}T12:00:00Z`)).getUTCDay();
+function covered(calendar, date) {
+  if (date > calendar.coverageThrough) throw new Error(`${calendar.code} has no verified schedule for ${date}`);
+}
+function isBusinessDay(calendar, date) {
+  assertDate(date);
+  covered(calendar, date);
+  return !calendar.weekendDays.includes(weekday(date)) && !calendar.holidays.has(date);
+}
+function nextBusinessDay(calendar, date) {
+  let d = addDays(date, 1);
+  while (!isBusinessDay(calendar, d)) d = addDays(d, 1);
+  return d;
+}
+function previousBusinessDay(calendar, date) {
+  let d = addDays(date, -1);
+  while (!isBusinessDay(calendar, d)) d = addDays(d, -1);
+  return d;
+}
+function addBusinessDays(calendar, date, n) {
+  let d = date;
+  for (let i = 0; i < Math.abs(n); i += 1) d = n > 0 ? nextBusinessDay(calendar, d) : previousBusinessDay(calendar, d);
+  return d;
 }
 var zoneParts = (timeZone, at) => Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at)).map((p) => [p.type, p.value]));
 function localDate(calendar, at) {
@@ -5512,7 +5983,7 @@ function parseProtocol(input) {
   return parsed.data;
 }
 var protocolHash = (p) => payloadHash(p);
-var normalise = (text16) => ` ${String(text16 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+var normalise = (text17) => ` ${String(text17 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
 var mentions = (complaint, keyword) => complaint.includes(normalise(keyword));
 function scoreTriage(protocol, input) {
   const complaint = normalise(input.complaint);
@@ -5556,11 +6027,11 @@ function subtract(free, busy) {
   return out.sort((x, y) => x.start - y.start);
 }
 function workingIntervals(blocks, date, timeZone, category) {
-  const weekday = (/* @__PURE__ */ new Date(`${date}T12:00:00Z`)).getUTCDay();
+  const weekday2 = (/* @__PURE__ */ new Date(`${date}T12:00:00Z`)).getUTCDay();
   const inEffect = (b) => (!b.effectiveFrom || b.effectiveFrom <= date) && (!b.effectiveTo || b.effectiveTo >= date);
   const allows = (b) => !category || !b.categories?.length || b.categories.includes(category);
   const toInterval = (b) => ({ start: zonedInstant(timeZone, date, b.startTime).getTime(), end: zonedInstant(timeZone, date, b.endTime).getTime() });
-  const work = blocks.filter((b) => inEffect(b) && allows(b) && (b.kind === "recurring" && b.weekday === weekday || b.kind === "one_time" && b.localDate === date)).map(toInterval);
+  const work = blocks.filter((b) => inEffect(b) && allows(b) && (b.kind === "recurring" && b.weekday === weekday2 || b.kind === "one_time" && b.localDate === date)).map(toInterval);
   const off = blocks.filter((b) => inEffect(b) && b.kind === "time_off" && b.localDate === date).map(toInterval);
   return subtract(work.filter((i) => i.end > i.start), off);
 }
@@ -5590,8 +6061,8 @@ function findSlots(input) {
   return out;
 }
 function buildSegments(template, start, totalMinutes) {
-  const list18 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
-  return list18.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
+  const list19 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
+  return list19.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
 }
 var SLOT_TTL_MS = 5 * 6e4;
 var DEVELOPMENT_SECRET3 = "this secret should only be used in testing";
@@ -6193,7 +6664,7 @@ async function seedClinic(uow, actor) {
     count("appointmentTypes", 1);
   }
   if (!await tx.staffSchedule.findFirst({ where: { id: { startsWith: "seed_sch_" } }, select: { id: true } })) {
-    const rows = SCHEDULES.flatMap((s, i) => s.days.map((weekday) => ({ id: `seed_sch_${i}_${weekday}`, staffMemberId: s.staffId, locationId: s.locationId, kind: "recurring", weekday, startTime: s.start, endTime: s.end, appointmentCategories: s.categories ?? null, effectiveFrom: DAY3("2026-01-01") })));
+    const rows = SCHEDULES.flatMap((s, i) => s.days.map((weekday2) => ({ id: `seed_sch_${i}_${weekday2}`, staffMemberId: s.staffId, locationId: s.locationId, kind: "recurring", weekday: weekday2, startTime: s.start, endTime: s.end, appointmentCategories: s.categories ?? null, effectiveFrom: DAY3("2026-01-01") })));
     await tx.staffSchedule.createMany({ data: rows });
     auditCreate(uow, actor, "StaffSchedule", "seed_schedules", "schedules.loaded", { blocks: rows.length }, meta3);
     count("scheduleBlocks", rows.length);
@@ -6470,9 +6941,9 @@ function validatePracticeControls(input) {
   if (!keys.length) throw new DomainError(Codes.INVALID_INPUT, "Nothing to change.");
   for (const key2 of keys) if (!CONTROL_KEYS.includes(key2)) throw new DomainError(Codes.INVALID_INPUT, `${key2} is not a practice control.`, { field: key2 });
   if (input.refundApprovalThresholdMinor !== void 0) {
-    const text16 = String(input.refundApprovalThresholdMinor);
-    if (!/^\d{1,12}$/.test(text16)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
-    out.refundApprovalThresholdMinor = text16;
+    const text17 = String(input.refundApprovalThresholdMinor);
+    if (!/^\d{1,12}$/.test(text17)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
+    out.refundApprovalThresholdMinor = text17;
   }
   if (input.discountApprovalThresholdBps !== void 0) {
     intIn(input.discountApprovalThresholdBps, 0, 1e4, "discountApprovalThresholdBps");
@@ -6623,7 +7094,7 @@ async function policyMatrix(_root, _args, context) {
 }
 
 // features/keystone/mutations/clients.ts
-var text14 = (value, field, max = 200, required = true) => {
+var text15 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -6638,8 +7109,8 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   const row = await uow.tx.clientPerson.create({
     data: {
       clientId,
-      firstName: text14(person.firstName, "firstName", 80),
-      lastName: text14(person.lastName, "lastName", 80),
+      firstName: text15(person.firstName, "firstName", 80),
+      lastName: text15(person.lastName, "lastName", 80),
       relationship: person.relationship ?? "owner",
       isPrimary,
       canBook: true,
@@ -6662,7 +7133,7 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   return row;
 }
 async function createPatient(uow, actor, clientId, input, status) {
-  const species = await uow.tx.species.findUnique({ where: { code: text14(input.speciesCode, "speciesCode", 40) } });
+  const species = await uow.tx.species.findUnique({ where: { code: text15(input.speciesCode, "speciesCode", 40) } });
   if (!species || !species.active) throw new DomainError(Codes.INVALID_INPUT, `Unknown species ${input.speciesCode}.`, { field: "speciesCode" });
   const breed = input.breedName ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: input.breedName.trim(), mode: "insensitive" } } }) : null;
   if (input.dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth)) throw new DomainError(Codes.INVALID_INPUT, "dateOfBirth is YYYY-MM-DD.", { field: "dateOfBirth" });
@@ -6678,7 +7149,7 @@ async function createPatient(uow, actor, clientId, input, status) {
   const patient = await uow.tx.patient.create({
     data: {
       ref,
-      name: text14(input.name, "name", 80),
+      name: text15(input.name, "name", 80),
       kind: "individual",
       speciesId: species.id,
       breedId: breed?.id ?? null,
@@ -6713,7 +7184,7 @@ async function registerClient(_root, args, context) {
         data: {
           ref,
           publicCode: publicCode("CL"),
-          displayName: text14(input.displayName || `${primary.lastName} household`, "displayName", 120),
+          displayName: text15(input.displayName || `${primary.lastName} household`, "displayName", 120),
           kind: input.kind ?? "household",
           status: "active",
           primaryLocationId: location.id,
@@ -6745,7 +7216,7 @@ async function registerPendingClient(_root, args, context) {
       const ref = await nextSerial(uow.tx, "C");
       const source = actor.kind === "agent" ? "ai_voice" : "csr";
       const client = await uow.tx.client.create({
-        data: { ref, publicCode: publicCode("CL"), displayName: `${text14(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
+        data: { ref, publicCode: publicCode("CL"), displayName: `${text15(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
       });
       auditCreate(uow, actor, "Client", client.id, "client.registered_pending", { ref, source, possibleDuplicate: dupes.length > 0 });
       await createPerson(uow, actor, client.id, { firstName: input.firstName, lastName: input.lastName, relationship: "owner", contacts }, true, source);
@@ -6823,7 +7294,7 @@ async function recordWeight(_root, args, context) {
 async function addPatientAlert(_root, args, context) {
   return gated(context, { permissions: ["canManagePatients", "canWriteRecord"], tool: "patient.alert", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "patient.alert.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text14(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
+      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text15(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
       auditCreate(uow, actor, "PatientAlert", row.id, "patient.alert_added", { patientId: args.patientId, kind: args.kind, severity: args.severity });
       return { id: row.id };
     });
@@ -6871,7 +7342,7 @@ async function recordPatientDeath(_root, args, context) {
 
 // features/keystone/mutations/schedule.ts
 var STEP_MINUTES = 15;
-var list17 = (v) => Array.isArray(v) ? v.map(String) : [];
+var list18 = (v) => Array.isArray(v) ? v.map(String) : [];
 async function loadAvailability(tx, input) {
   const [location, type] = await Promise.all([
     tx.location.findUnique({ where: { id: input.locationId }, select: { id: true, timeZone: true, active: true } }),
@@ -6879,8 +7350,8 @@ async function loadAvailability(tx, input) {
   ]);
   if (!location?.active) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
   if (!type?.active) throw new DomainError(Codes.NOT_FOUND, "Appointment type not found.");
-  const providerKinds = list17(type.providerKinds);
-  const resourceKinds = list17(type.requiredResourceKinds);
+  const providerKinds = list18(type.providerKinds);
+  const resourceKinds = list18(type.requiredResourceKinds);
   const windowStart = (/* @__PURE__ */ new Date(`${input.from}T00:00:00Z`)).getTime() - 864e5;
   const windowEnd = (/* @__PURE__ */ new Date(`${addDays(input.from, input.days)}T00:00:00Z`)).getTime() + 864e5;
   const range = { startsAt: { lt: new Date(windowEnd) }, endsAt: { gt: new Date(windowStart) }, status: { not: "released" } };
@@ -6915,7 +7386,7 @@ function computeSlots(data, input) {
           localDate: isoDay2(b.localDate),
           startTime: b.startTime,
           endTime: b.endTime,
-          categories: list17(b.appointmentCategories),
+          categories: list18(b.appointmentCategories),
           effectiveFrom: isoDay2(b.effectiveFrom),
           effectiveTo: isoDay2(b.effectiveTo)
         })),
@@ -7591,6 +8062,7 @@ async function receptionContext(_root, args, context) {
 }
 
 // features/keystone/domain/licensure.ts
+var DEA_SCHEDULE_CODE = { CI: "1", CII: "2", CIIN: "2N", CIII: "3", CIIIN: "3N", CIV: "4", CV: "5" };
 var day = (d) => d == null ? null : typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
 async function locationOf(tx, locationId) {
   const location = await tx.location.findUnique({ where: { id: locationId }, select: { id: true, stateCode: true, timeZone: true, active: true } });
@@ -7627,6 +8099,36 @@ async function requireLicence(tx, input) {
     }
   });
   return { evaluationId: evaluation.id, licenseId: valid.id, policyVersionIds: policy.versions.map((v) => v.id), onDate };
+}
+async function requireDeaRegistration(tx, input) {
+  const location = await locationOf(tx, input.locationId);
+  const onDate = localDate({ timeZone: location.timeZone }, input.at);
+  if (input.schedule === "CI") throw new DomainError(Codes.DEA_REGISTRATION_INVALID, "Schedule I substances have no veterinary use under a practitioner registration.");
+  const code = DEA_SCHEDULE_CODE[input.schedule];
+  const registrations = await tx.deaRegistration.findMany({
+    where: { locationId: location.id, ...input.registrantStaffMemberId ? { staffMemberId: input.registrantStaffMemberId } : {} },
+    orderBy: { expiresOn: "desc" }
+  });
+  const covers = (r) => Array.isArray(r.schedules) && r.schedules.includes(code);
+  const valid = registrations.find((r) => r.status === "active" && (!r.issuedOn || day(r.issuedOn) <= onDate) && day(r.expiresOn) >= onDate && covers(r));
+  if (!valid) {
+    const latest = registrations[0];
+    const why = !latest ? "no DEA registration for this location" + (input.registrantStaffMemberId ? " held by this prescriber" : "") : latest.status !== "active" ? `the registration is ${latest.status}` : day(latest.expiresOn) < onDate ? `the registration expired on ${day(latest.expiresOn)}` : `the registration does not cover schedule ${code}`;
+    throw new DomainError(Codes.DEA_REGISTRATION_INVALID, `This controlled-substance action needs a valid DEA registration: ${why}.`, { locationId: location.id, schedule: input.schedule, onDate });
+  }
+  const evaluation = await tx.licenseEvaluation.create({
+    data: {
+      action: input.action,
+      staffMemberId: input.actorStaffMemberId ?? input.registrantStaffMemberId ?? null,
+      locationId: location.id,
+      at: input.at,
+      onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
+      deaRegistrationId: valid.id,
+      result: "allowed",
+      findings: { schedule: input.schedule, code }
+    }
+  });
+  return { evaluationId: evaluation.id, deaRegistrationId: valid.id, registrationNumber: valid.registrationNumber, onDate };
 }
 
 // features/keystone/domain/record.ts
@@ -7856,7 +8358,7 @@ async function renderDischargeDocument(uow, instructionId) {
 }
 
 // features/keystone/mutations/clinical.ts
-var text15 = (value, field, max = 200, required = true) => {
+var text16 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -7961,7 +8463,7 @@ async function openEncounter(_root, args, context) {
           kind: args.kind,
           vcprQualifying: IN_PERSON.has(args.kind),
           status: "open",
-          reason: text15(args.reason ?? "", "reason", 300, false),
+          reason: text16(args.reason ?? "", "reason", 300, false),
           attendingDvmId: attending?.id ?? null,
           weightUsedId: weight?.id ?? null,
           startedAt: uow.now,
@@ -7976,7 +8478,7 @@ async function openEncounter(_root, args, context) {
 }
 async function writeSection(uow, actor, staff, encounterId, input) {
   if (!SECTION_KINDS.includes(input.kind)) throw new DomainError(Codes.INVALID_INPUT, "Unknown record section.", { field: "kind" });
-  const body = text15(input.body, "body", 2e4, false);
+  const body = text16(input.body, "body", 2e4, false);
   const enc = await chartableEncounter(uow, encounterId);
   const repeatable = REPEATABLE_SECTIONS.includes(input.kind);
   let ordinal = input.ordinal ?? 1;
@@ -8088,7 +8590,7 @@ async function setExamFinding(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       const existing = await uow.tx.physicalExamFinding.findFirst({ where: { encounterId: enc.id, system: args.system }, select: { id: true } });
-      const data = { status: args.status, text: text15(args.text ?? "", "text", 2e3, false), byId: staff.id };
+      const data = { status: args.status, text: text16(args.text ?? "", "text", 2e3, false), byId: staff.id };
       const row = existing ? await uow.tx.physicalExamFinding.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.physicalExamFinding.create({ data: { encounterId: enc.id, system: args.system, ...data } });
       await markInProgress(uow, enc);
       auditCreate(uow, actor, "PhysicalExamFinding", row.id, "record.exam_finding_set", { encounterId: enc.id, system: args.system, status: args.status });
@@ -8105,7 +8607,7 @@ async function addDiagnosis(_root, args, context) {
       const enc = await chartableEncounter(uow, args.encounterId);
       const code = args.codeId ? await uow.tx.diagnosisCode.findUnique({ where: { id: args.codeId }, select: { id: true, term: true, active: true } }) : null;
       if (args.codeId && (!code || !code.active)) throw new DomainError(Codes.NOT_FOUND, "Diagnosis code not found.");
-      const term = code?.term ?? text15(args.term, "term", 200);
+      const term = code?.term ?? text16(args.term, "term", 200);
       let problemId = null;
       if (args.addToProblems && args.certainty !== "ruled_out") {
         const open = await uow.tx.problem.findFirst({ where: { patientId: enc.patientId, term, status: "active" }, select: { id: true } });
@@ -8218,7 +8720,7 @@ async function submitEncounter(_root, args, context) {
 }
 async function returnEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.return", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.return", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "Encounter", id: args.encounterId, from: ["pending_signature"], to: "in_progress", expectedVersion: args.expectedVersion, actor, eventType: "encounter.returned", reason });
       return { id: row.id, status: row.status, version: row.version };
@@ -8287,8 +8789,8 @@ async function signEncounter(_root, args, context) {
 }
 async function addAddendum(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "record.addendum", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
-    const body = text15(args.body, "body", 1e4);
+    const reason = text16(args.reason, "reason", 300);
+    const body = text16(args.body, "body", 1e4);
     if (![...SECTION_KINDS, "general"].includes(args.sectionKind)) throw new DomainError(Codes.INVALID_INPUT, "Choose which part of the record this amends.", { field: "sectionKind" });
     const result = await command(context.prisma, { name: "record.addendum", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -8319,7 +8821,7 @@ async function voidBlockers(uow, encounterId) {
 }
 async function requestVoidEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.void_request", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.void_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, ref: true, status: true, version: true } });
       if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
@@ -8379,8 +8881,8 @@ var DraftSchema = import_zod3.z.object({
   suggestedCharges: import_zod3.z.array(import_zod3.z.object({ description: import_zod3.z.string().max(200), reason: import_zod3.z.string().max(400) })).max(20).default([]),
   confidence: import_zod3.z.string().regex(/^(0(\.\d{1,4})?|1(\.0{1,4})?)$/).default("0")
 });
-function parsePasted(text16) {
-  const lines = text16.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+function parsePasted(text17) {
+  const lines = text17.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return lines.map((line) => {
     const m = /^([A-Za-z][A-Za-z .'-]{0,30}):\s*(.+)$/.exec(line);
     return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: "unknown", text: line };
@@ -8389,9 +8891,9 @@ function parsePasted(text16) {
 var manualTranscription = {
   key: "manual",
   async transcribe(input) {
-    const text16 = (input.pastedText ?? "").trim();
-    if (!text16) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
-    return { text: text16, segments: parsePasted(text16), provider: "manual", ref: `manual:${text16.length}` };
+    const text17 = (input.pastedText ?? "").trim();
+    if (!text17) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
+    return { text: text17, segments: parsePasted(text17), provider: "manual", ref: `manual:${text17.length}` };
   }
 };
 var manualScribeModel = {
@@ -8478,7 +8980,7 @@ async function acceptScribeDraft(_root, args, context) {
         if (!section) throw new DomainError(Codes.INVALID_INPUT, "That draft block does not exist.", { field: "blocks" });
         if (accepted.has(block.index)) continue;
         const existing = await uow.tx.soapSection.findFirst({ where: { encounterId: session.encounterId, kind: section.kind, ordinal: 1 }, select: { version: true, body: true } });
-        const edited = block.body != null ? text15(block.body, "body", 2e4) : section.body;
+        const edited = block.body != null ? text16(block.body, "body", 2e4) : section.body;
         const body = existing?.body?.trim() ? `${existing.body.trim()}
 
 ${edited}` : edited;
@@ -8496,7 +8998,7 @@ ${edited}` : edited;
 }
 async function rejectScribeDraft(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "scribe.reject", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "scribe.reject", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const draft = await lockRow(uow.tx, "ScribeDraft", args.draftId);
@@ -8880,7 +9382,7 @@ async function placeOrder(_root, args, context) {
       const licensedAction = LICENSED_ORDER[args.kind];
       const licence = licensedAction ? await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: licensedAction, at: uow.now }) : null;
       let doseId = null;
-      let description = text15(args.description ?? "", "description", 300, args.kind !== "medication");
+      let description = text16(args.description ?? "", "description", 300, args.kind !== "medication");
       let warnings = [];
       let drug = null;
       if (args.kind === "medication") {
@@ -8940,7 +9442,7 @@ async function placeOrder(_root, args, context) {
 }
 async function cancelOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "order.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "order.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const given = await uow.tx.administration.count({ where: { orderId: args.orderId, reverses: null } });
       if (given) throw new DomainError(Codes.GUARD_FAILED, "Doses were already given on this order; reverse them instead of cancelling.");
@@ -9047,7 +9549,7 @@ async function administer(uow, actor, staff, args) {
       licenseEvaluationId: licenceId,
       givenAt: uow.now,
       wasteQty: args.wasteQty ? toScale(args.wasteQty, "qty") : null,
-      qtyOverrideReason: qtyProblem ? text15(qtyOverrideReason, "qtyOverrideReason", 300) : ""
+      qtyOverrideReason: qtyProblem ? text16(qtyOverrideReason, "qtyOverrideReason", 300) : ""
     }
   });
   if (order.status === "ordered") await uow.tx.clinicalOrder.update({ where: { id: order.id }, data: { status: "in_progress", version: { increment: 1 } } });
@@ -9056,7 +9558,7 @@ async function administer(uow, actor, staff, args) {
 }
 async function reverseAdministration(_root, args, context) {
   return gated(context, { permissions: ["canOrder", "canAdminister"], tool: "order.reverse_administration", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "order.reverse_administration", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -9140,7 +9642,7 @@ async function admitPatient(_root, args, context) {
       const live = await uow.tx.hospitalStay.findFirst({ where: { patientId: enc.patientId, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, select: { ref: true } });
       if (live) throw new DomainError(Codes.GUARD_FAILED, `The patient is already admitted (${live.ref}).`);
       const ref = await nextReference(uow.tx, "STAY", uow.now);
-      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text15(args.reason ?? "", "reason", 300, false) } });
+      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text16(args.reason ?? "", "reason", 300, false) } });
       await uow.tx.cageAssignment.create({ data: { stayId: stay.id, cageId: cage.id, fromAt: uow.now } });
       await uow.tx.encounter.update({ where: { id: enc.id }, data: { stayId: stay.id, version: { increment: 1 } } });
       await uow.tx.patient.update({ where: { id: enc.patientId }, data: { codeStatus: args.codeStatus, version: { increment: 1 } } });
@@ -9174,7 +9676,7 @@ async function moveCage(_root, args, context) {
 }
 async function dischargePatient(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "stay.discharge", humanOnly: true }, args, async (actor) => {
-    const body = text15(args.instructions, "instructions", 1e4);
+    const body = text16(args.instructions, "instructions", 1e4);
     if (args.recheckOn && !/^\d{4}-\d{2}-\d{2}$/.test(args.recheckOn)) throw new DomainError(Codes.INVALID_INPUT, "recheckOn is YYYY-MM-DD.", { field: "recheckOn" });
     const result = await command(context.prisma, { name: "stay.discharge", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -9263,7 +9765,7 @@ async function completeTreatmentTask(_root, args, context) {
       if (sheet.order?.kind === "medication" || sheet.order?.drugId) {
         administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id, qtyOverrideReason: args.qtyOverrideReason })).id;
       }
-      const note = args.observation ? text15(args.observation, "observation", 2e3) : "";
+      const note = args.observation ? text16(args.observation, "observation", 2e3) : "";
       const observation = note || earlyReason ? { ...note ? { note } : {}, ...earlyReason ? { earlyReason, earlyBy: staff.id } : {} } : void 0;
       await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: "done", doneById: staff.id, doneAt: uow.now, administrationId, observation, version: { increment: 1 } } });
       auditCreate(uow, actor, "TreatmentTask", task.id, "treatment.done", { administrationId, early: Boolean(earlyReason) }, { reason: earlyReason || null });
@@ -9274,7 +9776,7 @@ async function completeTreatmentTask(_root, args, context) {
 }
 async function skipTreatmentTask(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "treatment.skip", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "treatment.skip", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "TreatmentTask", id: args.taskId, from: ["scheduled", "due", "overdue"], to: "skipped", expectedVersion: args.expectedVersion, actor, eventType: "treatment.skipped", reason, data: { skipReason: reason, doneById: staff.id, doneAt: uow.now } });
@@ -9320,7 +9822,7 @@ async function openAnaesthesia(_root, args, context) {
           ref,
           encounterId: enc.id,
           patientId: enc.patientId,
-          procedure: text15(args.procedure, "procedure", 200),
+          procedure: text16(args.procedure, "procedure", 200),
           asaStatus: args.asaStatus,
           fastingConfirmed: args.fastingConfirmed,
           consentConfirmed: true,
@@ -9378,7 +9880,7 @@ async function recordMonitoring(_root, args, context) {
         return t;
       };
       const row = await uow.tx.monitoringReading.create({
-        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text15(args.notes ?? "", "notes", 500, false), byId: staff.id }
+        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text16(args.notes ?? "", "notes", 500, false), byId: staff.id }
       });
       auditCreate(uow, actor, "MonitoringReading", row.id, "anaesthesia.reading", { recordId: rec.id });
       return { id: row.id };
@@ -9393,7 +9895,7 @@ async function closeAnaesthesia(_root, args, context) {
       if (staff.kind !== "dvm") throw new DomainError(Codes.LICENSE_INACTIVE, "A veterinarian closes the anaesthesia record.");
       const rec = await uow.tx.anaesthesiaRecord.findUnique({ where: { id: args.recordId }, select: { encounter: { select: { locationId: true } } } });
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rec.encounter.locationId, action: "sign_record", at: uow.now });
-      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text15(args.complications ?? "", "complications", 2e3, false) } });
+      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text16(args.complications ?? "", "complications", 2e3, false) } });
       return { id: row.id, status: row.status };
     });
     return { replay: result.replay, ...result.value };
@@ -9405,7 +9907,7 @@ async function saveSurgeryReport(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: "perform_surgery", at: uow.now });
-      const data = { procedure: text15(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text15(args.technique ?? "", "technique", 5e3, false), findings: text15(args.findings ?? "", "findings", 5e3, false), closure: text15(args.closure ?? "", "closure", 2e3, false), sutures: text15(args.sutures ?? "", "sutures", 500, false), specimens: text15(args.specimens ?? "", "specimens", 500, false) };
+      const data = { procedure: text16(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text16(args.technique ?? "", "technique", 5e3, false), findings: text16(args.findings ?? "", "findings", 5e3, false), closure: text16(args.closure ?? "", "closure", 2e3, false), sutures: text16(args.sutures ?? "", "sutures", 500, false), specimens: text16(args.specimens ?? "", "specimens", 500, false) };
       const existing = await uow.tx.surgeryReport.findFirst({ where: { encounterId: enc.id }, select: { id: true, status: true } });
       if (existing?.status === "signed") throw new DomainError(Codes.GUARD_FAILED, "The surgery report is signed; add an addendum.");
       const row = existing ? await uow.tx.surgeryReport.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.surgeryReport.create({ data: { encounterId: enc.id, status: "draft", ...data } });
@@ -9426,10 +9928,10 @@ async function saveDentalChart(_root, args, context) {
       if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
       for (const key2 of ["findings", "procedures"]) {
-        const list18 = entry[key2];
-        if (list18 === void 0) continue;
-        if (!Array.isArray(list18) || list18.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
-        if (list18.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+        const list19 = entry[key2];
+        if (list19 === void 0) continue;
+        if (!Array.isArray(list19) || list19.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list19.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
       }
     }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -9475,7 +9977,7 @@ var RABIES_BOOSTER_MIN_DAYS = 270;
 var VACCINE_REPEAT_MIN_DAYS = 14;
 async function administerVaccine(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "vaccine.administer", humanOnly: true }, args, async (actor) => {
-    const site = text15(args.site, "site", 100);
+    const site = text16(args.site, "site", 100);
     const result = await command(context.prisma, { name: "vaccine.administer", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
@@ -9610,7 +10112,7 @@ async function issueRabiesCertificate(uow, input) {
 async function recordOutsideVaccine(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "vaccine.outside", humanOnly: true }, args, async (actor) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(args.administeredOn)) throw new DomainError(Codes.INVALID_INPUT, "administeredOn is YYYY-MM-DD.", { field: "administeredOn" });
-    const note = text15(args.evidenceNote, "evidenceNote", 500);
+    const note = text16(args.evidenceNote, "evidenceNote", 500);
     const result = await command(context.prisma, { name: "vaccine.outside", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const patient = await activePatient(uow, args.patientId);
@@ -9636,7 +10138,7 @@ async function recordOutsideVaccine(_root, args, context) {
 }
 async function reverseVaccineAdministration(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord", "canOrder"], tool: "vaccine.reverse", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "vaccine.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -9668,7 +10170,7 @@ async function reverseVaccineAdministration(_root, args, context) {
 }
 async function suppressReminder(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "reminder.suppress", humanOnly: true }, args, async (actor) => {
-    const reason = text15(args.reason, "reason", 300);
+    const reason = text16(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "reminder.suppress", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "PatientReminder", id: args.reminderId, from: ["scheduled", "due", "overdue", "lapsed"], to: "suppressed", expectedVersion: args.expectedVersion, actor, eventType: "reminder.suppressed", reason, data: { suppressedReason: reason } });
       return { id: row.id, status: row.status };
@@ -9729,12 +10231,12 @@ function parseCsv(input) {
   let row = [];
   let field = "";
   let quoted = false;
-  const text16 = input.replace(/^\uFEFF/, "");
-  for (let i = 0; i < text16.length; i++) {
-    const c = text16[i];
+  const text17 = input.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text17.length; i++) {
+    const c = text17[i];
     if (quoted) {
       if (c === '"') {
-        if (text16[i + 1] === '"') {
+        if (text17[i + 1] === '"') {
           field += '"';
           i++;
         } else quoted = false;
@@ -9746,7 +10248,7 @@ function parseCsv(input) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text16[i + 1] === "\n") i++;
+      if (c === "\r" && text17[i + 1] === "\n") i++;
       row.push(field);
       field = "";
       if (row.some((v) => v.trim() !== "")) rows.push(row);
@@ -10256,6 +10758,1054 @@ async function refreshClinicalClocks(_root, args, context) {
   return { replay: result.replay, ...result.value };
 }
 
+// features/keystone/mutations/pharmacy.ts
+var CS_UNITS = /* @__PURE__ */ new Set(["mg", "mcg", "g", "mL", "L", "tablet", "capsule", "unit", "each"]);
+var isCs = (s) => !!s && s !== "none";
+var addMonthsTo = (d, months) => {
+  const out = new Date(d.getTime());
+  out.setUTCMonth(out.getUTCMonth() + months);
+  return out;
+};
+var dateOnly = (value, field) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
+};
+var positiveQty = (value, field) => {
+  const t = decimalText(value, field);
+  if (!dec(t).gt(0)) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
+  return t;
+};
+async function calendarFor(uow, locationId) {
+  const location = await uow.tx.location.findUnique({ where: { id: locationId }, select: { code: true, timeZone: true, calendar: { select: { regularOpen: true, regularClose: true, exceptions: { select: { date: true } } } } } });
+  if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
+  return locationCalendar({ code: location.code, timeZone: location.timeZone, regularOpen: location.calendar?.regularOpen, regularClose: location.calendar?.regularClose, closures: (location.calendar?.exceptions ?? []).map((e) => day2(e.date)) });
+}
+async function lockedContainer(uow, id2) {
+  const c = await lockRow(uow.tx, "CsContainer", id2);
+  const product = await uow.tx.drugProduct.findUnique({ where: { id: c.productId }, select: { id: true, displayName: true, csSchedule: true, multiDoseBudDays: true } });
+  return { ...c, product };
+}
+async function writePrescription(_root, args, context) {
+  return gated(context, { permissions: ["canPrescribe"], tool: "prescription.write", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 10) throw new DomainError(Codes.INVALID_INPUT, "A prescription needs between one and ten lines.", { field: "lines" });
+    const result = await command(context.prisma, { name: "prescription.write", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can write a prescription.");
+      const patient = await activePatient(uow, args.patientId);
+      const { on, location } = await locationDay2(uow, args.locationId, uow.now);
+      const licence = await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: location.id, action: "prescribe", at: uow.now });
+      const vcprPolicy = await resolvePolicy(uow.tx, "vcpr", { locationId: location.id, on });
+      const vcpr = await uow.tx.vcprRecord.findFirst({
+        where: { patientId: patient.id, status: "active", expiresAt: { gt: uow.now }, establishedAt: { lte: uow.now }, ...vcprPolicy.rules.level === "dvm" ? { dvmId: staff.id } : {} },
+        orderBy: { expiresAt: "desc" },
+        select: { id: true }
+      });
+      if (!vcpr) throw new DomainError(Codes.VCPR_REQUIRED, vcprPolicy.rules.level === "dvm" ? "You have no current veterinarian-client-patient relationship with this patient." : "This patient has no current veterinarian-client-patient relationship.");
+      const rx = await resolvePolicy(uow.tx, "prescription", { locationId: location.id, on });
+      const owner = await uow.tx.patientOwnership.findFirst({ where: { patientId: patient.id, effectiveTo: null, role: "primary" }, select: { clientId: true } });
+      const products = await uow.tx.drugProduct.findMany({ where: { id: { in: args.lines.map((l) => l.productId) } }, select: { id: true, displayName: true, csSchedule: true, active: true, approvalStatus: true, isHumanLabel: true } });
+      const byId = new Map(products.map((p) => [p.id, p]));
+      let dea = null;
+      const lines = [];
+      for (const input of args.lines) {
+        const product = byId.get(input.productId);
+        if (!product || !product.active) throw new DomainError(Codes.NOT_FOUND, "That drug is not in the formulary.", { field: "productId" });
+        text16(input.directions, "directions", 500);
+        positiveQty(input.quantity, "quantity");
+        const refills = Number(input.refillsAuthorised ?? 0);
+        if (!Number.isInteger(refills) || refills < 0) throw new DomainError(Codes.INVALID_INPUT, "Refills must be a whole number, zero or more.", { field: "refillsAuthorised" });
+        const limit = rx.rules.refillLimits[product.csSchedule];
+        if (isCs(product.csSchedule)) {
+          if (!limit) throw new DomainError(Codes.POLICY_UNRESOLVED, `The prescription policy has no refill limit for ${product.csSchedule}.`);
+          if (refills > limit.maxRefills) throw new DomainError(Codes.GUARD_FAILED, limit.maxRefills === 0 ? `${product.displayName} is a Schedule II drug: no refills.` : `${product.displayName} allows at most ${limit.maxRefills} refills.`, { field: "refillsAuthorised" });
+          dea ??= await requireDeaRegistration(uow.tx, { locationId: location.id, schedule: product.csSchedule, at: uow.now, action: "prescribe_controlled", registrantStaffMemberId: staff.id, actorStaffMemberId: staff.id });
+        }
+        const months = Math.min(rx.rules.defaultExpiryMonths, isCs(product.csSchedule) && limit?.maxMonths ? limit.maxMonths : rx.rules.defaultExpiryMonths);
+        lines.push({ product, input, refills, expiresAt: addMonthsTo(uow.now, months), extralabel: product.approvalStatus === "human_label" || product.isHumanLabel || input.extralabel === true });
+      }
+      const ref = await nextReference(uow.tx, "RX", uow.now);
+      const row = await uow.tx.prescription.create({
+        data: {
+          ref,
+          patientId: patient.id,
+          clientId: owner?.clientId ?? null,
+          locationId: location.id,
+          prescriberId: staff.id,
+          deaRegistrationId: dea?.deaRegistrationId ?? null,
+          vcprId: vcpr.id,
+          issuedAt: uow.now,
+          status: "active",
+          signedAt: uow.now,
+          licenseEvaluationId: licence.evaluationId,
+          policyVersionId: rx.versions[rx.versions.length - 1]?.id ?? null,
+          lines: {
+            create: lines.map((l) => ({
+              productId: l.product.id,
+              csSchedule: l.product.csSchedule,
+              directions: text16(l.input.directions, "directions", 500),
+              route: String(l.input.route ?? "").slice(0, 60),
+              frequency: String(l.input.frequency ?? "").slice(0, 100),
+              quantity: toScale(dec(decimalText(l.input.quantity, "quantity")), "qty"),
+              quantityUnit: l.input.quantityUnit ?? null,
+              refillsAuthorised: l.refills,
+              expiresAt: l.expiresAt,
+              extralabel: l.extralabel,
+              substitutionAllowed: l.input.substitutionAllowed ?? true
+            }))
+          }
+        }
+      });
+      auditCreate(uow, actor, "Prescription", row.id, "prescription.signed", { ref, patientId: patient.id, lines: lines.map((l) => ({ productId: l.product.id, refills: l.refills })) });
+      return { id: row.id, ref, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var DECISIONS = { fulfil_existing: "fulfilled_under_existing_rx", approve_new: "approved_new_rx", deny: "denied", needs_exam: "needs_exam" };
+async function decideRefill(_root, args, context) {
+  return gated(context, { permissions: ["canManageRefills"], tool: "refill.decide", humanOnly: true }, args, async (actor) => {
+    const to = DECISIONS[args.decision];
+    if (!to) throw new DomainError(Codes.INVALID_INPUT, "Choose a decision.", { field: "decision" });
+    const reason = String(args.reason ?? "").trim().slice(0, 300);
+    if ((args.decision === "deny" || args.decision === "needs_exam") && reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the client (at least 5 characters).", { field: "reason" });
+    const result = await command(context.prisma, { name: "refill.decide", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian decides a refill.");
+      const request = await uow.tx.refillRequest.findUnique({ where: { id: args.requestId }, select: { id: true, ref: true, patientId: true } });
+      if (!request) throw new DomainError(Codes.NOT_FOUND, "Refill request not found.");
+      const { on, location } = await locationDay2(uow, staff.homeLocationId ?? (await uow.tx.location.findFirstOrThrow({ where: { active: true }, select: { id: true } })).id, uow.now);
+      await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: location.id, action: "approve_refill", at: uow.now });
+      if (args.decision !== "deny") {
+        const vcprPolicy = await resolvePolicy(uow.tx, "vcpr", { locationId: location.id, on });
+        const vcpr = await uow.tx.vcprRecord.findFirst({ where: { patientId: request.patientId, status: "active", expiresAt: { gt: uow.now }, ...vcprPolicy.rules.level === "dvm" ? { dvmId: staff.id } : {} }, select: { id: true } });
+        if (!vcpr && args.decision !== "needs_exam") throw new DomainError(Codes.VCPR_REQUIRED, "There is no current veterinarian-client-patient relationship; ask for an exam instead.");
+      }
+      if (args.decision === "fulfil_existing") {
+        const lines = await uow.tx.prescriptionLine.findMany({ where: { prescription: { patientId: request.patientId, status: "active" }, expiresAt: { gt: uow.now } }, select: { id: true, refillsAuthorised: true } });
+        const used = await Promise.all(lines.map(async (l) => await uow.tx.dispense.count({ where: { lineId: l.id } }) <= l.refillsAuthorised));
+        if (!used.some(Boolean)) throw new DomainError(Codes.GUARD_FAILED, "No active prescription has a fill left. Write a new prescription or ask for an exam.");
+      }
+      const row = await transition(uow, {
+        model: "RefillRequest",
+        id: args.requestId,
+        from: ["received", "in_review"],
+        to,
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: "refill.decided",
+        reason: reason || null,
+        data: { decidedById: staff.id, decidedAt: uow.now, denialReason: args.decision === "deny" ? reason : "", pharmacyNote: args.decision === "needs_exam" ? reason : void 0 }
+      });
+      await uow.tx.task.updateMany({ where: { subjectType: "RefillRequest", subjectId: request.id, kind: "refill_review", status: { in: ["open", "in_progress"] } }, data: { status: "done", completedAt: uow.now, version: { increment: 1 } } });
+      return { id: row.id, ref: request.ref, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function dispenseFill(_root, args, context) {
+  return gated(context, { permissions: ["canDispense", "canFulfilRefill"], tool: "dispense.fill", humanOnly: true }, args, async (actor) => {
+    const qty2 = positiveQty(args.quantity, "quantity");
+    const result = await command(context.prisma, { name: "dispense.fill", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const line0 = await uow.tx.prescriptionLine.findUnique({ where: { id: args.lineId }, select: { prescriptionId: true } });
+      if (!line0?.prescriptionId) throw new DomainError(Codes.NOT_FOUND, "Prescription line not found.");
+      const rxRow = await lockRow(uow.tx, "Prescription", line0.prescriptionId);
+      const rx = await uow.tx.prescription.findUniqueOrThrow({ where: { id: rxRow.id }, include: { prescriber: { select: { displayName: true } }, location: { select: { id: true, name: true, addressLine1: true, city: true, stateCode: true, phone: true } }, patient: { select: { id: true, name: true, species: { select: { name: true } } } }, client: { select: { id: true, displayName: true } }, lines: { select: { id: true } } } });
+      if (rx.status !== "active") throw new DomainError(Codes.GUARD_FAILED, `This prescription is ${rx.status}.`);
+      const line = await uow.tx.prescriptionLine.findUniqueOrThrow({ where: { id: args.lineId }, include: { product: true } });
+      if (line.expiresAt < uow.now) throw new DomainError(Codes.GUARD_FAILED, "This prescription line has expired.");
+      if (!rx.location || !rx.patient) throw new DomainError(Codes.GUARD_FAILED, "The prescription is missing its location or patient.");
+      await activePatient(uow, rx.patient.id);
+      const { on } = await locationDay2(uow, rx.location.id, uow.now);
+      const fills = await uow.tx.dispense.count({ where: { lineId: line.id } });
+      if (fills > line.refillsAuthorised) throw new DomainError(Codes.GUARD_FAILED, "Every fill of this prescription has been used.");
+      if (dec(qty2).gt(dec(line.quantity.toString()))) throw new DomainError(Codes.GUARD_FAILED, `A fill is at most ${line.quantity.toString()} ${line.quantityUnit ?? ""} (the quantity written).`.replace(/ +\./, "."));
+      if (fills > 0 || args.refillRequestId) {
+        const vcprPolicy = await resolvePolicy(uow.tx, "vcpr", { locationId: rx.location.id, on });
+        if (vcprPolicy.rules.requiredFor.includes("refill")) {
+          const vcpr = await uow.tx.vcprRecord.findFirst({ where: { patientId: rx.patient.id, status: "active", expiresAt: { gt: uow.now } }, select: { id: true } });
+          if (!vcpr) throw new DomainError(Codes.VCPR_REQUIRED, "There is no current veterinarian-client-patient relationship; this refill needs an exam first.");
+        }
+      }
+      if (args.refillRequestId) {
+        const req = await uow.tx.refillRequest.findUnique({ where: { id: args.refillRequestId }, select: { status: true, patientId: true } });
+        if (!req || req.patientId !== rx.patient.id) throw new DomainError(Codes.GUARD_FAILED, "That refill request is for another patient.");
+        if (req.status !== "fulfilled_under_existing_rx") throw new DomainError(Codes.GUARD_FAILED, "A veterinarian has not approved that refill request.");
+      }
+      const controlled = isCs(line.csSchedule);
+      let lotId = null;
+      let lotNumber = "";
+      let expiryOn = null;
+      let containerId = null;
+      let csEntryId = null;
+      if (controlled) {
+        if (!can(actor, "canAdministerControlled")) throw new DomainError(Codes.NOT_AUTHORIZED, "Dispensing a controlled drug needs the controlled-substance permission.");
+        await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rx.location.id, action: "administer_controlled", at: uow.now });
+        await requireDeaRegistration(uow.tx, { locationId: rx.location.id, schedule: line.csSchedule, at: uow.now, action: "dispense_controlled", actorStaffMemberId: staff.id });
+        if (!args.csContainerId) throw new DomainError(Codes.INVALID_INPUT, "Choose the container the drug comes from.", { field: "csContainerId" });
+        const c = await lockedContainer(uow, args.csContainerId);
+        if (c.productId !== line.productId) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} holds a different drug.`);
+        if (c.locationId !== rx.location.id) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} belongs to another location.`);
+        if (c.status !== "open") throw new DomainError(Codes.GUARD_FAILED, `${c.ref} is ${c.status}.`);
+        if (c.lotExpiresOn && day2(c.lotExpiresOn) < on) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} expired on ${day2(c.lotExpiresOn)}.`);
+        if (line.quantityUnit && line.quantityUnit !== c.labelUnit) throw new DomainError(Codes.GUARD_FAILED, `The prescription is in ${line.quantityUnit} but ${c.ref} is counted in ${c.labelUnit}.`);
+        const balance = await containerBalance(uow.tx, c.id);
+        if (balance.lt(dec(qty2))) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has ${plain(balance)} ${c.labelUnit} left; that is not enough.`);
+        const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: "dispense", qtySigned: dec(qty2).neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, patientId: rx.patient.id, clientId: rx.client?.id ?? null, reason: rx.ref }, uow.now);
+        containerId = c.id;
+        csEntryId = entry.id;
+        lotNumber = c.lotNumber;
+        expiryOn = c.lotExpiresOn;
+      } else {
+        const lots = await uow.tx.inventoryLot.findMany({ where: { drugId: line.productId, locationId: rx.location.id, status: "available", expiresOn: { gte: /* @__PURE__ */ new Date(`${on}T00:00:00Z`) } }, orderBy: { expiresOn: "asc" }, select: { id: true, lotNumber: true, expiresOn: true } });
+        const pick = args.lotId ? lots.find((l) => l.id === args.lotId) : lots[0];
+        if (args.lotId && !pick) throw new DomainError(Codes.GUARD_FAILED, "That lot is not available here (expired, quarantined or another drug).");
+        if (pick) {
+          lotId = pick.id;
+          lotNumber = pick.lotNumber;
+          expiryOn = pick.expiresOn;
+        }
+      }
+      const ref = await nextReference(uow.tx, "DSP", uow.now);
+      const policy = await resolvePolicy(uow.tx, "prescription", { locationId: rx.location.id, on });
+      const p = line.product;
+      if (!p) throw new DomainError(Codes.GUARD_FAILED, "The prescription line has no drug.");
+      const labelValues = {
+        patient_name: rx.patient.name,
+        species: rx.patient.species?.name ?? "",
+        client_name: rx.client?.displayName ?? "",
+        drug_name: p.displayName,
+        strength: [p.strength?.toString(), p.strengthUnit].filter(Boolean).join(" "),
+        quantity: `${qty2} ${line.quantityUnit ?? ""}`.trim(),
+        directions: line.directions,
+        prescriber_name: rx.prescriber?.displayName ?? "",
+        practice_name_address_phone: [rx.location.name, rx.location.addressLine1, rx.location.city, rx.location.stateCode, rx.location.phone].filter(Boolean).join(", "),
+        date_dispensed: on,
+        expiry_date: expiryOn ? day2(expiryOn) : "",
+        cautionary_statements: line.extralabel ? "Used in a way not on the drug label. Keep out of reach of children." : "Keep out of reach of children.",
+        rx_number: rx.ref,
+        lot_number: lotNumber,
+        refills_remaining: String(Math.max(line.refillsAuthorised - fills, 0))
+      };
+      const labelJson = Object.fromEntries([...policy.rules.labelFields, "lot_number", "refills_remaining"].map((f) => [f, labelValues[f] ?? ""]));
+      const row = await uow.tx.dispense.create({
+        data: { ref, prescriptionId: rx.id, lineId: line.id, patientId: rx.patient.id, clientId: rx.client?.id ?? null, locationId: rx.location.id, productId: line.productId, lotId, containerId, csLogEntryId: csEntryId, refillRequestId: args.refillRequestId ?? null, quantity: toScale(dec(qty2), "qty"), quantityUnit: line.quantityUnit, refillNumber: fills, dispensedById: staff.id, dispensedAt: uow.now, label: labelJson }
+      });
+      auditCreate(uow, actor, "Dispense", row.id, "dispense.filled", { ref, rx: rx.ref, lineId: line.id, refillNumber: fills, quantity: qty2, containerId, lotId });
+      if (controlled) {
+        const cs = await resolvePolicy(uow.tx, "controlled_substances", { locationId: rx.location.id, on });
+        if (cs.rules.pdmp.required && cs.rules.pdmp.schedules.includes(line.csSchedule)) {
+          const prefix = await nextReference(uow.tx, "PDM", uow.now);
+          await uow.tx.pdmpReport.create({ data: { ref: prefix, locationId: rx.location.id, dispenseId: row.id, program: cs.rules.pdmp.program, format: cs.rules.pdmp.format, dueOn: dateOnly(addDays(on, cs.rules.pdmp.maxDays), "dueOn"), status: "pending" } });
+        }
+      }
+      const filled = fills + 1;
+      const all = await uow.tx.prescriptionLine.findMany({ where: { prescriptionId: rx.id }, select: { id: true, refillsAuthorised: true } });
+      const counts = await Promise.all(all.map(async (l) => ({ l, n: l.id === line.id ? filled : await uow.tx.dispense.count({ where: { lineId: l.id } }) })));
+      if (counts.every((c) => c.n > c.l.refillsAuthorised)) await transition(uow, { model: "Prescription", id: rx.id, from: ["active"], to: "exhausted", actor, eventType: "prescription.exhausted" });
+      return { id: row.id, ref, status: "dispensed", refillNumber: fills, registerEntryId: csEntryId };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receiveStockLot(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const expiresOn = dateOnly(args.expiresOn, "Expires");
+    if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
+    const result = await command(context.prisma, { name: "stock.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      if (day2(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
+      if (args.drugId) {
+        const drug = await uow.tx.drugProduct.findUnique({ where: { id: args.drugId }, select: { csSchedule: true, active: true } });
+        if (!drug?.active) throw new DomainError(Codes.NOT_FOUND, "Drug not found.");
+        if (isCs(drug.csSchedule)) throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are received through the controlled-substance register.");
+      } else if (!await uow.tx.vaccineProduct.findUnique({ where: { id: args.vaccineId }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Vaccine not found.");
+      const existing = await uow.tx.inventoryLot.findFirst({ where: { locationId: args.locationId, lotNumber, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null }, select: { id: true } });
+      if (existing) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already in stock here.`);
+      const row = await uow.tx.inventoryLot.create({ data: { drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, locationId: args.locationId, lotNumber, expiresOn, status: "available" } });
+      auditCreate(uow, actor, "InventoryLot", row.id, "stock.received", { lotNumber, expiresOn: args.expiresOn, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function setLotQuarantine(_root, args, context) {
+  return gated(context, { permissions: args.quarantine ? ["canManageInventory", "canReceiveStock"] : ["canReleaseQuarantine"], tool: "stock.quarantine", humanOnly: true }, args, async (actor) => {
+    const reason = text16(args.reason, "reason", 300);
+    if (reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 5 characters).", { field: "reason" });
+    const result = await command(context.prisma, { name: "stock.quarantine", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, {
+        model: "InventoryLot",
+        id: args.lotId,
+        from: args.quarantine ? ["available"] : ["quarantined"],
+        to: args.quarantine ? "quarantined" : "available",
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: args.quarantine ? "stock.quarantined" : "stock.released",
+        reason,
+        data: { quarantineReason: args.quarantine ? reason : "" }
+      });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receiveControlled(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const lotExpiresOn = dateOnly(args.lotExpiresOn, "Expires");
+    const labelQty = positiveQty(args.labelQty, "labelQty");
+    if (!CS_UNITS.has(args.labelUnit)) throw new DomainError(Codes.INVALID_INPUT, "Choose a unit.", { field: "labelUnit" });
+    const result = await command(context.prisma, { name: "cs.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const product = await uow.tx.drugProduct.findUnique({ where: { id: args.productId }, select: { id: true, displayName: true, csSchedule: true, active: true } });
+      if (!product?.active || !isCs(product.csSchedule)) throw new DomainError(Codes.NOT_FOUND, "That is not a controlled drug in the formulary.", { field: "productId" });
+      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      if (day2(lotExpiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That bottle is already expired.");
+      const reg = await requireDeaRegistration(uow.tx, { locationId: args.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
+      const scheduleII = product.csSchedule === "CII" || product.csSchedule === "CIIN";
+      const form = String(args.orderFormReference ?? "").trim().slice(0, 40);
+      if (scheduleII && !form) throw new DomainError(Codes.INVALID_INPUT, "A Schedule II drug is received against a DEA Form 222 or CSOS order: enter its number.", { field: "orderFormReference" });
+      const ref = `CSC-${(await uow.tx.location.findUniqueOrThrow({ where: { id: args.locationId }, select: { code: true } })).code.toUpperCase()}-${(await nextReference(uow.tx, "CSB", uow.now)).slice(-6)}`;
+      const container = await uow.tx.csContainer.create({ data: { ref, productId: product.id, locationId: args.locationId, deaRegistrationId: reg.deaRegistrationId, lotNumber, lotExpiresOn, status: "sealed", labelQty, labelUnit: args.labelUnit } });
+      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: form ? `Received on order ${form}` : "Received" }, uow.now);
+      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, product: product.displayName, qty: labelQty, unit: args.labelUnit, orderForm: form || null, entry: entry.ref });
+      return { id: container.id, ref, status: "sealed" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function openControlled(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveControlled", "canAdministerControlled"], tool: "cs.open", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "cs.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const c = await lockedContainer(uow, args.containerId);
+      const bud = new Date(uow.now.getTime() + (c.product.multiDoseBudDays ?? 28) * 864e5);
+      const row = await transition(uow, { model: "CsContainer", id: c.id, from: ["sealed"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "cs.opened", data: { openedAt: uow.now, openedById: staff.id, budAt: bud } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function wasteControlled(_root, args, context) {
+  return gated(context, { permissions: ["canAdministerControlled"], tool: "cs.waste", humanOnly: true }, args, async (actor) => {
+    const qty2 = positiveQty(args.qty, "qty");
+    const reason = text16(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "cs.waste", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const witness = await witnessFor(uow, args.witnessId, staff.id);
+      const c = await lockedContainer(uow, args.containerId);
+      if (c.status !== "open") throw new DomainError(Codes.GUARD_FAILED, `${c.ref} is ${c.status}.`);
+      const balance = await containerBalance(uow.tx, c.id);
+      if (balance.lt(dec(qty2))) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has ${plain(balance)} ${c.labelUnit} left; that is not enough.`);
+      const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: "waste", qtySigned: dec(qty2).neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId: witness.id, reason }, uow.now);
+      auditCreate(uow, actor, "CsLogEntry", entry.id, "cs.wasted", { ref: entry.ref, container: c.ref, qty: qty2, witness: witness.displayName }, { reason });
+      return { id: entry.id, ref: entry.ref, status: "recorded" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function openCase(uow, input) {
+  const { on } = await locationDay2(uow, input.locationId, uow.now);
+  const policy = await resolvePolicy(uow.tx, "controlled_substances", { locationId: input.locationId, on });
+  const calendar = await calendarFor(uow, input.locationId);
+  const ref = await nextReference(uow.tx, "CSD", uow.now);
+  return uow.tx.csDiscrepancyCase.create({
+    data: {
+      ref,
+      locationId: input.locationId,
+      containerId: input.containerId,
+      kind: input.kind,
+      qty: input.qty,
+      unit: input.unit,
+      discoveredAt: uow.now,
+      discoveredById: input.staffId,
+      description: input.description.slice(0, 500),
+      status: "open",
+      noticeDueOn: dateOnly(addBusinessDays(calendar, on, policy.rules.theftLossNoticeBusinessDays), "noticeDueOn"),
+      form106DueOn: dateOnly(addDays(on, policy.rules.form106Days), "form106DueOn")
+    }
+  });
+}
+async function countControlled(_root, args, context) {
+  return gated(context, { permissions: ["canCountControlled"], tool: "cs.count", humanOnly: true }, args, async (actor) => {
+    if (!["initial", "biennial", "periodic", "spot"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of count.", { field: "kind" });
+    if (!Array.isArray(args.counts) || !args.counts.length || args.counts.length > 200) throw new DomainError(Codes.INVALID_INPUT, "Enter the counted amount for each container.", { field: "counts" });
+    const result = await command(context.prisma, { name: "cs.count", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const witness = await witnessFor(uow, args.witnessId, staff.id);
+      await locationDay2(uow, args.locationId, uow.now);
+      const open = await uow.tx.csContainer.findMany({ where: { locationId: args.locationId, status: "open" }, orderBy: { ref: "asc" }, select: { id: true, ref: true } });
+      const given = new Map(args.counts.map((c) => [c.containerId, c.countedQty]));
+      if (given.size !== args.counts.length) throw new DomainError(Codes.INVALID_INPUT, "A container is counted twice.");
+      const missing = open.filter((c) => !given.has(c.id));
+      if (missing.length) throw new DomainError(Codes.GUARD_FAILED, `Count every open container. Missing: ${missing.map((m) => m.ref).join(", ")}.`);
+      const stray = [...given.keys()].filter((id2) => !open.some((o) => o.id === id2));
+      if (stray.length) throw new DomainError(Codes.GUARD_FAILED, "One of those containers is not open at this location.");
+      const ref = await nextReference(uow.tx, "CSN", uow.now);
+      const count = await uow.tx.csCount.create({ data: { ref, locationId: args.locationId, kind: args.kind, countedById: staff.id, witnessId: witness.id, countedAt: uow.now, status: "closed" } });
+      const lines = [];
+      for (const o of open) {
+        const c = await lockedContainer(uow, o.id);
+        const counted = dec(decimalText(given.get(o.id), `count of ${o.ref}`));
+        const expected = await containerBalance(uow.tx, o.id);
+        const variance = counted.minus(expected);
+        let caseId = null;
+        if (!variance.isZero()) {
+          await appendCsEntry(uow.tx, { containerId: o.id, type: "count_variance", qtySigned: variance, unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId: witness.id, reason: `Count ${ref}: counted ${plain(counted)}, book ${plain(expected)}` }, uow.now);
+          const dc = await openCase(uow, { locationId: args.locationId, containerId: o.id, kind: "count_variance", qty: plain(variance.abs()), unit: c.labelUnit, staffId: staff.id, description: `Count ${ref} found ${plain(counted)} ${c.labelUnit}; the register said ${plain(expected)}.` });
+          caseId = dc.id;
+        }
+        await uow.tx.csCountLine.create({ data: { countId: count.id, containerId: o.id, expectedQty: toScale(expected, "qty"), countedQty: toScale(counted, "qty"), variance: toScale(variance, "qty"), unit: c.labelUnit, discrepancyCaseId: caseId } });
+        lines.push({ container: o.ref, expected: plain(expected), counted: plain(counted), variance: plain(variance), ...caseId ? { case: caseId } : {} });
+      }
+      auditCreate(uow, actor, "CsCount", count.id, "cs.counted", { ref, kind: args.kind, lines });
+      return { id: count.id, ref, status: "closed", variances: lines.filter((l) => l.case).length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reportCsLoss(_root, args, context) {
+  return gated(context, { permissions: ["canCountControlled", "canManageControlled"], tool: "cs.report_loss", humanOnly: true }, args, async (actor) => {
+    if (args.kind !== "theft" && args.kind !== "loss") throw new DomainError(Codes.INVALID_INPUT, "Choose theft or loss.", { field: "kind" });
+    const qty2 = positiveQty(args.qty, "qty");
+    const description = text16(args.description, "description", 500);
+    const result = await command(context.prisma, { name: "cs.report_loss", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const witness = await witnessFor(uow, args.witnessId, staff.id);
+      const c = await lockedContainer(uow, args.containerId);
+      const balance = await containerBalance(uow.tx, c.id);
+      if (balance.lt(dec(qty2))) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has only ${plain(balance)} ${c.labelUnit} on the register; record the count first.`);
+      const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: "theft_loss", qtySigned: dec(qty2).neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId: witness.id, reason: `${args.kind}: ${description}`.slice(0, 300) }, uow.now);
+      const dc = await openCase(uow, { locationId: c.locationId, containerId: c.id, kind: args.kind, qty: qty2, unit: c.labelUnit, staffId: staff.id, description });
+      auditCreate(uow, actor, "CsDiscrepancyCase", dc.id, "cs.loss_reported", { ref: dc.ref, kind: args.kind, container: c.ref, qty: qty2, entry: entry.ref, noticeDueOn: day2(dc.noticeDueOn), form106DueOn: day2(dc.form106DueOn) });
+      return { id: dc.id, ref: dc.ref, status: "open" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function advanceDiscrepancy(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled"], tool: "cs.advance_case", humanOnly: true }, args, async (actor) => {
+    if (!["notice", "form106", "close"].includes(args.step)) throw new DomainError(Codes.INVALID_INPUT, "Choose a step.", { field: "step" });
+    const reference = String(args.reference ?? "").trim().slice(0, 80);
+    const resolution = String(args.resolution ?? "").trim().slice(0, 500);
+    if (args.step !== "close" && !reference) throw new DomainError(Codes.INVALID_INPUT, args.step === "notice" ? "Enter the confirmation or case number from the DEA notice." : "Enter the Form 106 confirmation number.", { field: "reference" });
+    if (args.step === "close" && resolution.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say how this was resolved (at least 5 characters).", { field: "resolution" });
+    const result = await command(context.prisma, { name: "cs.advance_case", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const current = await uow.tx.csDiscrepancyCase.findUnique({ where: { id: args.caseId }, select: { kind: true } });
+      if (!current) throw new DomainError(Codes.NOT_FOUND, "Case not found.");
+      const spec = args.step === "notice" ? { from: ["open"], to: "notified", event: "cs.case_notified", data: { noticeGivenAt: uow.now, noticeReference: reference } } : args.step === "form106" ? { from: ["notified"], to: "form_filed", event: "cs.case_form106", data: { form106FiledAt: uow.now, form106Reference: reference } } : { from: current.kind === "count_variance" ? ["open", "notified", "form_filed"] : ["form_filed"], to: "closed", event: "cs.case_closed", data: { closedAt: uow.now, resolution } };
+      if (args.step === "close" && current.kind !== "count_variance") {
+        const c = await uow.tx.csDiscrepancyCase.findUniqueOrThrow({ where: { id: args.caseId }, select: { status: true } });
+        if (c.status !== "form_filed") throw new DomainError(Codes.GUARD_FAILED, "A theft or loss closes only after the DEA notice and Form 106 are recorded.");
+      }
+      const row = await transition(uow, { model: "CsDiscrepancyCase", id: args.caseId, from: spec.from, to: spec.to, expectedVersion: args.expectedVersion, actor, eventType: spec.event, reason: reference || resolution || null, data: spec.data, metadata: { by: staff.id } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function destroyControlled(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled"], tool: "cs.destroy", humanOnly: true }, args, async (actor) => {
+    const method = text16(args.method, "method", 200);
+    const result = await command(context.prisma, { name: "cs.destroy", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (args.witnessAId === args.witnessBId) throw new DomainError(Codes.GUARD_FAILED, "Destruction needs two different witnesses.");
+      const a = await witnessFor(uow, args.witnessAId, staff.id);
+      const b = await witnessFor(uow, args.witnessBId, staff.id);
+      const c = await lockedContainer(uow, args.containerId);
+      if (["disposed", "retired"].includes(c.status)) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} is already ${c.status}.`);
+      const balance = await containerBalance(uow.tx, c.id);
+      const qty2 = args.qty ? dec(positiveQty(args.qty, "qty")) : balance;
+      if (qty2.lte(0)) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has nothing left to destroy.`);
+      if (qty2.gt(balance)) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has ${plain(balance)} ${c.labelUnit} left; that is not enough.`);
+      const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: "destroy", qtySigned: qty2.neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId: a.id, reason: `Destroyed by ${method}` }, uow.now);
+      const ref = await nextReference(uow.tx, "CSX", uow.now);
+      const rec = await uow.tx.csDestructionRecord.create({ data: { ref, containerId: c.id, locationId: c.locationId, csLogEntryId: entry.id, qty: toScale(qty2, "qty"), unit: c.labelUnit, method, form41Reference: String(args.form41Reference ?? "").trim().slice(0, 60), recordedById: staff.id, witnessAId: a.id, witnessBId: b.id, destroyedAt: uow.now } });
+      const remaining = balance.minus(qty2);
+      if (remaining.isZero()) await transition(uow, { model: "CsContainer", id: c.id, from: ["sealed", "open", "emptied", "quarantined"], to: "disposed", actor, eventType: "cs.container_disposed" });
+      auditCreate(uow, actor, "CsDestructionRecord", rec.id, "cs.destroyed", { ref, container: c.ref, qty: plain(qty2), witnesses: [a.displayName, b.displayName] });
+      return { id: rec.id, ref, status: remaining.isZero() ? "disposed" : "recorded" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function submitPdmp(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled", "canCountControlled"], tool: "cs.pdmp_submit", humanOnly: true }, args, async (actor) => {
+    const confirmation = text16(args.confirmation, "confirmation", 100);
+    const result = await command(context.prisma, { name: "cs.pdmp_submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const row = await transition(uow, { model: "PdmpReport", id: args.reportId, from: ["pending"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "cs.pdmp_submitted", reason: confirmation, data: { submittedAt: uow.now, submittedById: staff.id, confirmation } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/inventory.ts
+var dateOnly2 = (value, field) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
+};
+var positive = (value, field) => {
+  const t = decimalText(value, field);
+  if (!dec(t).gt(0)) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
+  return t;
+};
+async function moveStock(uow, m) {
+  return uow.tx.stockMovement.create({
+    data: { itemId: m.itemId, lotId: m.lotId ?? null, stockLocationId: m.stockLocationId, kind: m.kind, qtySigned: toScale(dec(m.qtySigned), "qty"), unit: m.unit ?? null, sourceType: m.sourceType, sourceId: m.sourceId, reason: m.reason ?? "", actorId: m.actorId, occurredAt: uow.now }
+  });
+}
+async function ensureItem(uow, input) {
+  const found = await uow.tx.item.findFirst({ where: input.drugId ? { drugId: input.drugId } : { vaccineId: input.vaccineId }, select: { id: true } });
+  if (found) return found.id;
+  if (input.drugId) {
+    const d = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: input.drugId }, select: { displayName: true, csSchedule: true, form: true } });
+    if (d.csSchedule !== "none") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are stocked through the controlled-substance register.");
+    return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: d.displayName, kind: "drug", drugId: input.drugId, baseUnit: "unit" } })).id;
+  }
+  const v = await uow.tx.vaccineProduct.findUniqueOrThrow({ where: { id: input.vaccineId }, select: { name: true } });
+  return (await uow.tx.item.create({ data: { ref: await nextReference(uow.tx, "ITM", uow.now), name: v.name, kind: "vaccine", vaccineId: input.vaccineId, baseUnit: "dose", coldChain: true } })).id;
+}
+async function addStockLocation(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "stock.add_place", humanOnly: true }, args, async (actor) => {
+    const name = text16(args.name, "name", 80);
+    if (!["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of place.", { field: "kind" });
+    const cold = args.kind === "fridge" || args.kind === "freezer";
+    if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
+    if (cold && !dec(args.minTempC).lt(dec(args.maxTempC))) throw new DomainError(Codes.INVALID_INPUT, "The lowest allowed temperature must be below the highest.", { field: "minTempC" });
+    const result = await command(context.prisma, { name: "stock.add_place", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await locationDay2(uow, args.locationId, uow.now);
+      const row = await uow.tx.stockLocation.create({ data: { name, locationId: args.locationId, kind: args.kind, minTempC: cold ? toScale(dec(args.minTempC), "qty") : null, maxTempC: cold ? toScale(dec(args.maxTempC), "qty") : null } });
+      auditCreate(uow, actor, "StockLocation", row.id, "stock.place_added", { name, kind: args.kind });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receiveStock(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive_lot", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const expiresOn = dateOnly2(args.expiresOn, "Expires");
+    const quantity = positive(args.quantity, "quantity");
+    if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
+    const result = await command(context.prisma, { name: "stock.receive_lot", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
+      if (!place?.active || !place.locationId) throw new DomainError(Codes.NOT_FOUND, "That storage place is not available.");
+      if (place.kind === "controlled_cabinet") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are received through the controlled-substance register.");
+      const { on } = await locationDay2(uow, place.locationId, uow.now);
+      if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
+      const itemId = await ensureItem(uow, args);
+      let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: place.locationId, lotNumber, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null }, select: { id: true, expiresOn: true, status: true } });
+      if (lot && lot.status !== "available") throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is ${lot.status} and cannot take more stock.`);
+      if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+      lot ??= await uow.tx.inventoryLot.create({ data: { drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, locationId: place.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true, status: true } });
+      const mv = await moveStock(uow, { itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: quantity, unit: args.unit, sourceType: "receive", sourceId: lot.id, actorId: staff.id });
+      auditCreate(uow, actor, "InventoryLot", lot.id, "stock.received", { lotNumber, quantity, stockLocationId: place.id, movementId: mv.id });
+      return { id: lot.id, movementId: mv.id, status: "available" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var day3 = (d) => d.toISOString().slice(0, 10);
+async function adjustStock(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
+    const quantity = positive(args.quantity, "quantity");
+    const reason = text16(args.reason, "reason", 200);
+    if (reason.length < 4) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 4 characters).", { field: "reason" });
+    if (args.kind !== "dispose" && args.kind !== "use") throw new DomainError(Codes.INVALID_INPUT, "Choose dispose or use.", { field: "kind" });
+    const result = await command(context.prisma, { name: "stock.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const mv = await moveStock(uow, { itemId: args.itemId, lotId: args.lotId, stockLocationId: args.stockLocationId, kind: args.kind, qtySigned: `-${quantity}`, sourceType: "adjustment", sourceId: args.lotId ?? args.itemId, reason, actorId: staff.id });
+      auditCreate(uow, actor, "StockMovement", mv.id, "stock.adjusted", { kind: args.kind, quantity, reason }, { reason });
+      return { id: mv.id, status: "recorded" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addSupplier(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canManageInventory"], tool: "supplier.create", humanOnly: true }, args, async (actor) => {
+    const name = text16(args.name, "name", 100);
+    const result = await command(context.prisma, { name: "supplier.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (await uow.tx.supplier.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `${name} is already a supplier.`);
+      const row = await uow.tx.supplier.create({ data: { name, accountNumber: String(args.accountNumber ?? "").trim().slice(0, 60), phone: String(args.phone ?? "").trim().slice(0, 40), email: String(args.email ?? "").trim().slice(0, 120), deaNumber: String(args.deaNumber ?? "").trim().slice(0, 20) } });
+      auditCreate(uow, actor, "Supplier", row.id, "supplier.created", { name });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function draftPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock"], tool: "po.draft", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 60) throw new DomainError(Codes.INVALID_INPUT, "An order needs between one and sixty lines.", { field: "lines" });
+    const result = await command(context.prisma, { name: "po.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      await locationDay2(uow, args.locationId, uow.now);
+      if (!await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
+      for (const l of args.lines) {
+        positive(l.quantity, "quantity");
+        if (!/^\d{1,9}$/.test(String(l.unitCostMinor))) throw new DomainError(Codes.INVALID_INPUT, "Cost is in whole cents.", { field: "unitCostMinor" });
+        if (!await uow.tx.item.findFirst({ where: { id: l.itemId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "An item on the order is not in the catalogue.");
+      }
+      const ref = await nextReference(uow.tx, "PO", uow.now);
+      const row = await uow.tx.purchaseOrder.create({
+        data: { ref, supplierId: args.supplierId, locationId: args.locationId, status: "draft", orderedById: staff.id, note: String(args.note ?? "").slice(0, 300), lines: { create: args.lines.map((l) => ({ itemId: l.itemId, qtyOrdered: toScale(dec(l.quantity), "qty"), qtyReceived: "0", unit: l.unit ?? null, unitCostMinor: BigInt(l.unitCostMinor) })) } }
+      });
+      auditCreate(uow, actor, "PurchaseOrder", row.id, "po.drafted", { ref, lines: args.lines.length });
+      return { id: row.id, ref, status: "draft", version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function submitPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.submit", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "po.submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const lines = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: args.orderId }, select: { qtyOrdered: true, unitCostMinor: true } });
+      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "The order has no lines.");
+      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "po.submitted", data: { orderedAt: uow.now, approvedById: staff.id } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function cancelPurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.cancel", humanOnly: true }, args, async (actor) => {
+    const reason = text16(args.reason, "reason", 200);
+    const result = await command(context.prisma, { name: "po.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft", "submitted"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "po.cancelled", reason });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receivePurchaseOrder(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock"], tool: "po.receive", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.lines) || !args.lines.length) throw new DomainError(Codes.INVALID_INPUT, "Enter what arrived.", { field: "lines" });
+    const result = await command(context.prisma, { name: "po.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const po = await lockRow(uow.tx, "PurchaseOrder", args.orderId);
+      if (!["submitted", "partially_received"].includes(po.status)) throw new DomainError(Codes.INVALID_TRANSITION, `${po.ref} is ${po.status.replaceAll("_", " ")}; it cannot be received.`);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
+      if (!place?.active || place.locationId !== po.locationId) throw new DomainError(Codes.GUARD_FAILED, "Choose a storage place at the ordering location.");
+      const { on } = await locationDay2(uow, po.locationId, uow.now);
+      const receiptRef = await nextReference(uow.tx, "GRN", uow.now);
+      const receipt = await uow.tx.goodsReceipt.create({ data: { ref: receiptRef, purchaseOrderId: po.id, locationId: po.locationId, receivedById: staff.id, receivedAt: uow.now, packingSlip: String(args.packingSlip ?? "").trim().slice(0, 60) } });
+      for (const l of args.lines) {
+        const qty2 = positive(l.quantity, "quantity");
+        const line = await lockRow(uow.tx, "PurchaseOrderLine", l.lineId);
+        if (line.purchaseOrderId !== po.id) throw new DomainError(Codes.GUARD_FAILED, "A line does not belong to this order.");
+        const remaining = dec(String(line.qtyOrdered)).minus(dec(String(line.qtyReceived)));
+        if (dec(qty2).gt(remaining)) throw new DomainError(Codes.GUARD_FAILED, `Only ${plain(remaining)} more of that line is expected.`);
+        const expiresOn = dateOnly2(l.expiresOn, "Expires");
+        if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
+        const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
+        const lotNumber = text16(l.lotNumber, "lotNumber", 60);
+        let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
+        if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+        lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
+        await moveStock(uow, { itemId: line.itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: qty2, unit: line.unit, sourceType: "goods_receipt", sourceId: receipt.id, actorId: staff.id });
+        await uow.tx.goodsReceiptLine.create({ data: { receiptId: receipt.id, purchaseOrderLineId: line.id, itemId: line.itemId, lotId: lot.id, qty: toScale(dec(qty2), "qty"), unit: line.unit ?? null } });
+        await uow.tx.purchaseOrderLine.update({ where: { id: line.id }, data: { qtyReceived: toScale(dec(String(line.qtyReceived)).plus(dec(qty2)), "qty") } });
+      }
+      const all = await uow.tx.purchaseOrderLine.findMany({ where: { purchaseOrderId: po.id }, select: { qtyOrdered: true, qtyReceived: true } });
+      const done = all.every((l) => dec(l.qtyReceived.toString()).gte(dec(l.qtyOrdered.toString())));
+      await transition(uow, { model: "PurchaseOrder", id: po.id, from: ["submitted", "partially_received"], to: done ? "received" : "partially_received", actor, eventType: "po.received" });
+      auditCreate(uow, actor, "GoodsReceipt", receipt.id, "po.goods_received", { ref: receiptRef, order: po.ref, lines: args.lines.length });
+      return { id: receipt.id, ref: receiptRef, status: done ? "received" : "partially_received" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function setReorderRule(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "stock.reorder_rule", humanOnly: true }, args, async (actor) => {
+    const minQty = decimalText(args.minQty, "minQty");
+    const targetQty = positive(args.targetQty, "targetQty");
+    if (!dec(targetQty).gt(dec(minQty))) throw new DomainError(Codes.INVALID_INPUT, "The target must be above the re-order point.", { field: "targetQty" });
+    const result = await command(context.prisma, { name: "stock.reorder_rule", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await locationDay2(uow, args.locationId, uow.now);
+      const existing = await uow.tx.reorderRule.findFirst({ where: { itemId: args.itemId, locationId: args.locationId }, select: { id: true } });
+      const data = { minQty: toScale(dec(minQty), "qty"), targetQty: toScale(dec(targetQty), "qty") };
+      const row = existing ? await uow.tx.reorderRule.update({ where: { id: existing.id }, data }) : await uow.tx.reorderRule.create({ data: { itemId: args.itemId, locationId: args.locationId, ...data } });
+      auditCreate(uow, actor, "ReorderRule", row.id, "stock.reorder_rule_set", { minQty, targetQty });
+      return { id: row.id, status: "active" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function countStock(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.count", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.counts) || !args.counts.length || args.counts.length > 300) throw new DomainError(Codes.INVALID_INPUT, "Enter at least one counted amount.", { field: "counts" });
+    const result = await command(context.prisma, { name: "stock.count", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true } });
+      if (!place) throw new DomainError(Codes.NOT_FOUND, "Storage place not found.");
+      const ref = await nextReference(uow.tx, "SCN", uow.now);
+      const count = await uow.tx.stockCount.create({ data: { ref, locationId: place.locationId, stockLocationId: place.id, status: "closed", countedById: staff.id, countedAt: uow.now } });
+      let variances = 0;
+      for (const c of args.counts) {
+        const counted = dec(decimalText(c.countedQty, "countedQty"));
+        const level = await uow.tx.stockLevel.findFirst({ where: { itemId: c.itemId, lotId: c.lotId ?? null, stockLocationId: place.id }, select: { onHand: true } });
+        const expected = dec(level?.onHand?.toString() ?? "0");
+        const variance = counted.minus(expected);
+        await uow.tx.stockCountLine.create({ data: { countId: count.id, itemId: c.itemId, lotId: c.lotId ?? null, expectedQty: toScale(expected, "qty"), countedQty: toScale(counted, "qty"), variance: toScale(variance, "qty") } });
+        if (!variance.isZero()) {
+          variances += 1;
+          await moveStock(uow, { itemId: c.itemId, lotId: c.lotId, stockLocationId: place.id, kind: "count", qtySigned: plain(variance), sourceType: "stock_count", sourceId: count.id, reason: `Count ${ref}`, actorId: staff.id });
+        }
+      }
+      auditCreate(uow, actor, "StockCount", count.id, "stock.counted", { ref, lines: args.counts.length, variances });
+      return { id: count.id, ref, status: "closed", variances };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function openRecall(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.open", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const title = text16(args.title, "title", 160);
+    const result = await command(context.prisma, { name: "recall.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const item = await uow.tx.item.findUnique({ where: { id: args.itemId }, select: { id: true, drugId: true, vaccineId: true } });
+      if (!item) throw new DomainError(Codes.NOT_FOUND, "Item not found.");
+      if (await uow.tx.recallCase.findFirst({ where: { itemId: item.id, lotNumber, status: "open" }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "A recall for that lot is already open.");
+      const ref = await nextReference(uow.tx, "RCL", uow.now);
+      const recall = await uow.tx.recallCase.create({ data: { ref, title, source: String(args.source ?? "").slice(0, 120), itemId: item.id, lotNumber, status: "open", openedAt: uow.now } });
+      const lots = await uow.tx.inventoryLot.findMany({ where: { lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, status: true } });
+      const lotIds = lots.map((l) => l.id);
+      let quarantined = 0;
+      for (const l of lots.filter((x) => x.status === "available")) {
+        await transition(uow, { model: "InventoryLot", id: l.id, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Recall ${ref}`, data: { quarantineReason: `Recall ${ref}: ${title}` } });
+        quarantined += 1;
+      }
+      const exposures = [];
+      for (const d of await uow.tx.dispense.findMany({ where: { lotId: { in: lotIds } }, select: { id: true, patientId: true, clientId: true, dispensedAt: true } })) exposures.push({ patientId: d.patientId, clientId: d.clientId, sourceType: "dispense", sourceId: d.id, givenOn: d.dispensedAt });
+      for (const a of await uow.tx.administration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, givenAt: true } })) exposures.push({ patientId: a.patientId, clientId: null, sourceType: "administration", sourceId: a.id, givenOn: a.givenAt });
+      for (const v of await uow.tx.vaccineAdministration.findMany({ where: { lotId: { in: lotIds }, reversesId: null }, select: { id: true, patientId: true, administeredOn: true } })) exposures.push({ patientId: v.patientId, clientId: null, sourceType: "vaccine", sourceId: v.id, givenOn: v.administeredOn });
+      for (const e of exposures) {
+        const clientId = e.clientId ?? (e.patientId ? (await uow.tx.patientOwnership.findFirst({ where: { patientId: e.patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } }))?.clientId ?? null : null);
+        await uow.tx.recallExposure.create({ data: { recallId: recall.id, patientId: e.patientId, clientId, sourceType: e.sourceType, sourceId: e.sourceId, givenOn: e.givenOn, status: "to_contact" } });
+      }
+      auditCreate(uow, actor, "RecallCase", recall.id, "recall.opened", { ref, lotNumber, quarantined, exposures: exposures.length });
+      return { id: recall.id, ref, status: "open", quarantinedLots: quarantined, exposures: exposures.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function markRecallExposure(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.exposure", humanOnly: true }, args, async (actor) => {
+    if (args.status !== "contacted" && args.status !== "resolved") throw new DomainError(Codes.INVALID_INPUT, "Choose contacted or resolved.", { field: "status" });
+    const result = await command(context.prisma, { name: "recall.exposure", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "RecallExposure", id: args.exposureId, from: args.status === "contacted" ? ["to_contact"] : ["to_contact", "contacted"], to: args.status, expectedVersion: args.expectedVersion, actor, eventType: "recall.exposure_updated", data: { note: String(args.note ?? "").slice(0, 300) } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function closeRecall(_root, args, context) {
+  return gated(context, { permissions: ["canManageInventory"], tool: "recall.close", humanOnly: true }, args, async (actor) => {
+    const resolution = text16(args.resolution, "resolution", 300);
+    const result = await command(context.prisma, { name: "recall.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const open = await uow.tx.recallExposure.count({ where: { recallId: args.recallId, status: { not: "resolved" } } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, `${open} ${open === 1 ? "patient has" : "patients have"} not been marked resolved.`);
+      const row = await transition(uow, { model: "RecallCase", id: args.recallId, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "recall.closed", reason: resolution, data: { closedAt: uow.now, resolution } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function logTemperature(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveStock", "canManageInventory", "canAdminister"], tool: "temperature.log", humanOnly: true }, args, async (actor) => {
+    if (!/^-?\d{1,3}(\.\d{1,2})?$/.test(String(args.readingC ?? "").trim())) throw new DomainError(Codes.INVALID_INPUT, "Temperature: a number like 4.2", { field: "readingC" });
+    const result = await command(context.prisma, { name: "temperature.log", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const place = await lockRow(uow.tx, "StockLocation", args.stockLocationId);
+      if (!["fridge", "freezer"].includes(place.kind) || place.minTempC === null || place.maxTempC === null) throw new DomainError(Codes.GUARD_FAILED, `${place.name} is not a fridge or freezer.`);
+      const reading = dec(args.readingC.trim());
+      const inRange = reading.gte(dec(String(place.minTempC))) && reading.lte(dec(String(place.maxTempC)));
+      const log = await uow.tx.temperatureLog.create({ data: { stockLocationId: place.id, readingC: toScale(reading, "qty"), inRange, recordedById: staff.id, recordedAt: uow.now } });
+      let excursionId = null;
+      let quarantined = 0;
+      if (!inRange) {
+        const openOne = await uow.tx.temperatureExcursion.findFirst({ where: { stockLocationId: place.id, status: "open" }, select: { id: true } });
+        if (openOne) excursionId = openOne.id;
+        else {
+          const ref = await nextReference(uow.tx, "TEX", uow.now);
+          const ex = await uow.tx.temperatureExcursion.create({ data: { ref, stockLocationId: place.id, logId: log.id, status: "open", openedAt: uow.now } });
+          excursionId = ex.id;
+        }
+        const levels = await uow.tx.stockLevel.findMany({ where: { stockLocationId: place.id, onHand: { gt: 0 }, lotId: { not: null }, lot: { status: "available" }, item: { coldChain: true } }, select: { lotId: true } });
+        for (const lotId of [...new Set(levels.map((l) => l.lotId))]) {
+          await transition(uow, { model: "InventoryLot", id: lotId, from: ["available"], to: "quarantined", actor, eventType: "stock.quarantined", reason: `Fridge out of range (${plain(reading)} \xB0C)`, data: { quarantineReason: `${place.name} read ${plain(reading)} \xB0C, outside ${plain(dec(String(place.minTempC)))} to ${plain(dec(String(place.maxTempC)))} \xB0C` } });
+          quarantined += 1;
+        }
+        await uow.tx.temperatureExcursion.update({ where: { id: excursionId }, data: { quarantinedLots: { increment: quarantined } } });
+        auditCreate(uow, actor, "TemperatureExcursion", excursionId, "temperature.excursion", { place: place.name, readingC: plain(reading), quarantined });
+      }
+      return { id: log.id, status: inRange ? "in_range" : "excursion", excursionId, quarantinedLots: quarantined };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function resolveExcursion(_root, args, context) {
+  return gated(context, { permissions: ["canReleaseQuarantine", "canManageInventory"], tool: "temperature.resolve", humanOnly: true }, args, async (actor) => {
+    const resolution = text16(args.resolution, "resolution", 300);
+    const result = await command(context.prisma, { name: "temperature.resolve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "TemperatureExcursion", id: args.excursionId, from: ["open"], to: "resolved", expectedVersion: args.expectedVersion, actor, eventType: "temperature.resolved", reason: resolution, data: { resolvedAt: uow.now, resolution } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/lib/asap.ts
+var SPECIES2 = { canine: "02", feline: "03", equine: "04", other: "99" };
+var asapSpeciesCode = (species) => SPECIES2[species.toLowerCase()] ?? "99";
+var clean = (value) => String(value).replace(/[*~\r\n]/g, " ").trim();
+var ymd = (iso) => iso.slice(0, 10).replaceAll("-", "");
+var segment = (name, ...fields) => `${name}*${fields.map(clean).join("*")}~`;
+function buildAsapFile(file) {
+  const out = [];
+  out.push(segment("TH", "4.2", file.controlNumber, "01", "", file.createdDate, file.createdTime, "P", "~"));
+  out.push(segment("IS", file.senderDea, file.senderName, `${file.pharmacyName} controlled-substance dispensing report`));
+  out.push(segment("PHA", "", file.pharmacyDea, "", file.pharmacyName, file.pharmacyAddress, "", file.pharmacyCity, file.pharmacyState, file.pharmacyPostal));
+  for (const d of file.dispenses) {
+    out.push(segment("PAT", "", "", "", d.ownerLastName, d.ownerFirstName, "", "", "", d.ownerAddress, "", d.ownerCity, d.ownerState, d.ownerPostal, "", "", "", "", "", asapSpeciesCode(d.species), d.animalName));
+    out.push(segment("DSP", "00", d.rxNumber, ymd(d.dateWritten), d.refillsAuthorised, ymd(d.dateFilled), d.refillNumber, "01", d.ndc, d.quantity, d.daysSupply, "", "", "", "", d.schedule));
+    out.push(segment("PRE", "", d.prescriberDea, "", d.prescriberLastName, d.prescriberFirstName));
+  }
+  const count = out.length + 1;
+  out.push(segment("TT", file.controlNumber, count));
+  return out.join("\n") + "\n";
+}
+
+// features/keystone/domain/discrepancy.ts
+var ORDER_FORM_VALID_DAYS = 60;
+var orderFormExpiry = (issuedOn) => addDays(issuedOn, ORDER_FORM_VALID_DAYS);
+
+// features/keystone/mutations/register.ts
+var ymd2 = (value, field) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return value;
+};
+var asDate = (v) => /* @__PURE__ */ new Date(`${v}T00:00:00Z`);
+async function issueOrderForm(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled", "canReceiveControlled"], tool: "cs.order_form", humanOnly: true }, args, async (actor) => {
+    const formNumber = text16(args.formNumber, "formNumber", 40);
+    const issuedOn = ymd2(args.issuedOn, "Issued");
+    if (!["form_222", "csos"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose Form 222 or CSOS.", { field: "kind" });
+    if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 20) throw new DomainError(Codes.INVALID_INPUT, "A form lists between one and twenty drugs.", { field: "lines" });
+    const result = await command(context.prisma, { name: "cs.order_form", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      if (issuedOn > on) throw new DomainError(Codes.GUARD_FAILED, "A form cannot be issued in the future.");
+      const supplier = await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } });
+      if (!supplier) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
+      for (const l of args.lines) {
+        if (!Number.isInteger(l.packages) || l.packages < 1 || l.packages > 1e3) throw new DomainError(Codes.INVALID_INPUT, "Packages: a whole number from 1 to 1000.", { field: "packages" });
+        const p = await uow.tx.drugProduct.findUnique({ where: { id: l.productId }, select: { csSchedule: true } });
+        if (!p || p.csSchedule !== "CII" && p.csSchedule !== "CIIN") throw new DomainError(Codes.GUARD_FAILED, "Only Schedule II drugs are ordered on a Form 222 or CSOS.");
+        await requireDeaRegistration(uow.tx, { locationId: args.locationId, schedule: p.csSchedule, at: uow.now, action: "order_controlled", actorStaffMemberId: staff.id });
+      }
+      if (await uow.tx.csOrderForm.findFirst({ where: { supplierId: args.supplierId, formNumber }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `Form ${formNumber} has already been recorded for that supplier.`);
+      const ref = await nextReference(uow.tx, "OF", uow.now);
+      const row = await uow.tx.csOrderForm.create({
+        data: { ref, formNumber, kind: args.kind, locationId: args.locationId, supplierId: args.supplierId, issuedOn: asDate(issuedOn), expiresOn: asDate(orderFormExpiry(issuedOn)), status: "open", signedById: staff.id, lines: { create: args.lines.map((l) => ({ productId: l.productId, packages: l.packages, packagesReceived: 0 })) } }
+      });
+      auditCreate(uow, actor, "CsOrderForm", row.id, "cs.order_form_issued", { ref, formNumber, expiresOn: orderFormExpiry(issuedOn) });
+      return { id: row.id, ref, status: "open", version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function receiveOnOrderForm(_root, args, context) {
+  return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive_on_form", humanOnly: true }, args, async (actor) => {
+    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const lotExpiresOn = ymd2(args.lotExpiresOn, "Expires");
+    const labelQty = decimalText(args.labelQty, "labelQty");
+    if (!dec(labelQty).gt(0)) throw new DomainError(Codes.INVALID_INPUT, "Quantity must be more than zero.", { field: "labelQty" });
+    const result = await command(context.prisma, { name: "cs.receive_on_form", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const line = await lockRow(uow.tx, "CsOrderFormLine", args.lineId);
+      const form = await uow.tx.csOrderForm.findUnique({ where: { id: line.orderFormId }, select: { id: true, ref: true, formNumber: true, status: true, locationId: true, expiresOn: true, version: true } });
+      if (!form || !["open", "partially_filled"].includes(form.status)) throw new DomainError(Codes.GUARD_FAILED, `That order form is ${form?.status.replaceAll("_", " ") ?? "missing"}.`);
+      const { on } = await locationDay2(uow, form.locationId, uow.now);
+      if (form.expiresOn.toISOString().slice(0, 10) < on) throw new DomainError(Codes.GUARD_FAILED, `Form ${form.formNumber} expired on ${form.expiresOn.toISOString().slice(0, 10)}; it is valid for 60 days.`);
+      if (line.packagesReceived >= line.packages) throw new DomainError(Codes.GUARD_FAILED, "Every package on that line has arrived.");
+      const product = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: line.productId }, select: { id: true, csSchedule: true } });
+      const reg = await requireDeaRegistration(uow.tx, { locationId: form.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
+      const loc = await uow.tx.location.findUniqueOrThrow({ where: { id: form.locationId }, select: { code: true } });
+      const ref = `CSC-${loc.code.toUpperCase()}-${(await nextReference(uow.tx, "CSB", uow.now)).slice(-6)}`;
+      const container = await uow.tx.csContainer.create({ data: { ref, productId: product.id, locationId: form.locationId, deaRegistrationId: reg.deaRegistrationId, lotNumber, lotExpiresOn: asDate(lotExpiresOn), status: "sealed", labelQty: toScale(dec(labelQty), "qty"), labelUnit: args.labelUnit } });
+      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: `Received on order ${form.formNumber}` }, uow.now);
+      await uow.tx.csOrderFormLine.update({ where: { id: line.id }, data: { packagesReceived: { increment: 1 } } });
+      const lines = await uow.tx.csOrderFormLine.findMany({ where: { orderFormId: form.id }, select: { packages: true, packagesReceived: true } });
+      const done = lines.every((l) => l.packagesReceived >= l.packages);
+      await transition(uow, { model: "CsOrderForm", id: form.id, from: ["open", "partially_filled"], to: done ? "filled" : "partially_filled", actor, eventType: "cs.order_form_received" });
+      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, form: form.formNumber, entry: entry.ref });
+      return { id: container.id, ref, status: done ? "filled" : "partially_filled" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function transferControlled(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled", "canReceiveControlled"], tool: "cs.transfer", humanOnly: true }, args, async (actor) => {
+    const qty2 = decimalText(args.qty, "qty");
+    if (!dec(qty2).gt(0)) throw new DomainError(Codes.INVALID_INPUT, "Quantity must be more than zero.", { field: "qty" });
+    const result = await command(context.prisma, { name: "cs.transfer", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const witness = await witnessFor(uow, args.witnessId, staff.id);
+      const c = await lockRow(uow.tx, "CsContainer", args.containerId);
+      if (c.status !== "open" && c.status !== "sealed") throw new DomainError(Codes.GUARD_FAILED, `${c.ref} is ${c.status}.`);
+      if (args.toRegistrationId === c.deaRegistrationId) throw new DomainError(Codes.GUARD_FAILED, "Choose a different registrant to send it to.");
+      const to = await uow.tx.deaRegistration.findUnique({ where: { id: args.toRegistrationId }, select: { id: true, status: true, registrantName: true, expiresOn: true } });
+      if (!to || to.status !== "active" || to.expiresOn < uow.now) throw new DomainError(Codes.GUARD_FAILED, "The receiving registration is not current.");
+      const balance = await containerBalance(uow.tx, c.id);
+      if (balance.lt(dec(qty2))) throw new DomainError(Codes.GUARD_FAILED, `${c.ref} has ${balance.toString()} ${c.labelUnit} left; that is not enough.`);
+      const entry = await appendCsEntry(uow.tx, { containerId: c.id, type: "transfer_out", qtySigned: dec(qty2).neg(), unit: c.labelUnit, occurredAt: uow.now, actorId: staff.id, witnessId: witness.id, reason: `Sent to ${to.registrantName}` }, uow.now);
+      await uow.tx.csWitness.create({ data: { entryId: entry.id, witnessId: witness.id, attestedAt: uow.now } });
+      const ref = await nextReference(uow.tx, "CST", uow.now);
+      const row = await uow.tx.csTransfer.create({ data: { ref, fromContainerId: c.id, toRegistrationId: to.id, qty: toScale(dec(qty2), "qty"), unit: c.labelUnit, status: "sent", outEntryId: entry.id, sentById: staff.id, witnessId: witness.id, sentAt: uow.now } });
+      auditCreate(uow, actor, "CsTransfer", row.id, "cs.transferred", { ref, container: c.ref, qty: qty2, to: to.registrantName, witness: witness.displayName });
+      return { id: row.id, ref, status: "sent", version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function confirmTransfer(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled"], tool: "cs.transfer_confirm", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "cs.transfer_confirm", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "CsTransfer", id: args.transferId, from: ["sent"], to: "received", expectedVersion: args.expectedVersion, actor, eventType: "cs.transfer_received", data: { receivedAt: uow.now } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function logCabinetAccess(_root, args, context) {
+  return gated(context, { permissions: ["canAdministerControlled", "canManageControlled", "canCountControlled"], tool: "cs.cabinet", humanOnly: true }, args, async (actor) => {
+    if (!["opened", "closed", "failed_attempt"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose opened, closed or failed attempt.", { field: "kind" });
+    const result = await command(context.prisma, { name: "cs.cabinet", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      await locationDay2(uow, args.locationId, uow.now);
+      const row = await uow.tx.cabinetAccessEvent.create({ data: { locationId: args.locationId, staffId: staff.id, kind: args.kind, note: String(args.note ?? "").slice(0, 200), occurredAt: uow.now } });
+      return { id: row.id, status: args.kind };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var lastName = (full) => full.trim().split(/\s+/).slice(-1)[0] ?? "";
+var firstName = (full) => full.trim().split(/\s+/).slice(0, -1).join(" ");
+async function generatePdmpFile(_root, args, context) {
+  return gated(context, { permissions: ["canManageControlled", "canCountControlled"], tool: "cs.pdmp_file", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "cs.pdmp_file", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const location = await uow.tx.location.findUnique({ where: { id: args.locationId }, select: { id: true, name: true, addressLine1: true, city: true, stateCode: true, postalCode: true } });
+      if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
+      const reports = await uow.tx.pdmpReport.findMany({ where: { locationId: location.id, status: "pending", submissionId: null }, orderBy: { createdAt: "asc" }, take: 500, select: { id: true, ref: true, dispenseId: true } });
+      if (!reports.length) throw new DomainError(Codes.GUARD_FAILED, "Nothing is waiting to be reported.");
+      const reg = await uow.tx.deaRegistration.findFirst({ where: { locationId: location.id, status: "active" }, select: { registrationNumber: true } });
+      const rows = [];
+      for (const r of reports) {
+        const d = await uow.tx.dispense.findUnique({
+          where: { id: r.dispenseId },
+          select: { ref: true, quantity: true, refillNumber: true, dispensedAt: true, product: { select: { ndc: true, csSchedule: true } }, client: { select: { displayName: true, addressLine1: true, city: true, stateCode: true, postalCode: true } }, patient: { select: { name: true, species: { select: { code: true } } } }, prescription: { select: { ref: true, issuedAt: true, prescriber: { select: { displayName: true } }, deaRegistration: { select: { registrationNumber: true } } } }, line: { select: { refillsAuthorised: true } } }
+        });
+        if (!d) continue;
+        rows.push({
+          rxNumber: d.prescription?.ref ?? d.ref,
+          dateWritten: d.prescription?.issuedAt.toISOString() ?? d.dispensedAt.toISOString(),
+          refillsAuthorised: d.line?.refillsAuthorised ?? 0,
+          dateFilled: d.dispensedAt.toISOString(),
+          refillNumber: d.refillNumber,
+          ndc: d.product?.ndc ?? "",
+          quantity: d.quantity.toString(),
+          daysSupply: 0,
+          schedule: d.product?.csSchedule ?? "",
+          ownerLastName: lastName(d.client?.displayName ?? ""),
+          ownerFirstName: firstName(d.client?.displayName ?? ""),
+          ownerAddress: d.client?.addressLine1 ?? "",
+          ownerCity: d.client?.city ?? "",
+          ownerState: d.client?.stateCode ?? "",
+          ownerPostal: d.client?.postalCode ?? "",
+          species: d.patient?.species?.code ?? "other",
+          animalName: d.patient?.name ?? "",
+          prescriberDea: d.prescription?.deaRegistration?.registrationNumber ?? "",
+          prescriberLastName: lastName(d.prescription?.prescriber?.displayName ?? ""),
+          prescriberFirstName: firstName(d.prescription?.prescriber?.displayName ?? "")
+        });
+      }
+      const ref = await nextReference(uow.tx, "PDS", uow.now);
+      const iso = uow.now.toISOString();
+      const body = buildAsapFile({ controlNumber: ref, createdDate: iso.slice(0, 10).replaceAll("-", ""), createdTime: iso.slice(11, 19).replaceAll(":", ""), senderDea: reg?.registrationNumber ?? "", senderName: location.name, pharmacyDea: reg?.registrationNumber ?? "", pharmacyName: location.name, pharmacyAddress: location.addressLine1, pharmacyCity: location.city, pharmacyState: location.stateCode, pharmacyPostal: location.postalCode, dispenses: rows });
+      const sub = await uow.tx.pdmpSubmission.create({ data: { ref, locationId: location.id, format: "ASAP 4.2B", reportCount: reports.length, fileSha256: sha256(body), fileBody: { text: body }, generatedById: staff.id, generatedAt: uow.now } });
+      await uow.tx.pdmpReport.updateMany({ where: { id: { in: reports.map((r) => r.id) } }, data: { submissionId: sub.id } });
+      auditCreate(uow, actor, "PdmpSubmission", sub.id, "cs.pdmp_file_generated", { ref, reports: reports.length, sha256: sha256(body) });
+      return { id: sub.id, ref, status: "generated", reports: reports.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function printDispenseLabel(_root, args, context) {
+  return gated(context, { permissions: ["canDispense", "canFulfilRefill"], tool: "rx.print_label", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "rx.print_label", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const d = await uow.tx.dispense.findUnique({ where: { id: args.dispenseId }, select: { id: true, ref: true, label: true } });
+      if (!d) throw new DomainError(Codes.NOT_FOUND, "Dispense not found.");
+      const row = await uow.tx.dispenseLabel.create({ data: { dispenseId: d.id, fields: d.label ?? {}, printedById: staff.id, printedAt: uow.now } });
+      return { id: row.id, status: "printed" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function requestExternalFill(_root, args, context) {
+  return gated(context, { permissions: ["canFulfilRefill", "canDispense"], tool: "rx.external_request", humanOnly: true }, args, async (actor) => {
+    const pharmacyName = text16(args.pharmacyName, "pharmacyName", 100);
+    const result = await command(context.prisma, { name: "rx.external_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const rx = await uow.tx.prescription.findUnique({ where: { id: args.prescriptionId }, select: { id: true, status: true, patientId: true, lines: { select: { csSchedule: true } } } });
+      if (!rx || rx.status === "void") throw new DomainError(Codes.NOT_FOUND, "Prescription not found.");
+      if (rx.lines.some((l) => l.csSchedule !== "none")) throw new DomainError(Codes.GUARD_FAILED, "A controlled prescription is not sent to an outside pharmacy from here.");
+      const ref = await nextReference(uow.tx, "EXT", uow.now);
+      const row = await uow.tx.externalDispense.create({ data: { ref, prescriptionId: rx.id, patientId: rx.patientId, pharmacyName, orderReference: String(args.orderReference ?? "").slice(0, 60), status: "requested" } });
+      auditCreate(uow, actor, "ExternalDispense", row.id, "rx.external_requested", { ref, pharmacyName });
+      return { id: row.id, ref, status: "requested", version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function decideExternalFill(_root, args, context) {
+  return gated(context, { permissions: ["canManageRefills", "canFulfilRefill"], tool: "rx.external_decide", humanOnly: true }, args, async (actor) => {
+    if (!["approved", "declined", "filled"].includes(args.status)) throw new DomainError(Codes.INVALID_INPUT, "Choose approved, declined or filled.", { field: "status" });
+    const result = await command(context.prisma, { name: "rx.external_decide", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const from = args.status === "filled" ? ["approved"] : ["requested"];
+      const row = await transition(uow, { model: "ExternalDispense", id: args.externalId, from, to: args.status, expectedVersion: args.expectedVersion, actor, eventType: "rx.external_decided", reason: String(args.note ?? "").slice(0, 200) || null, data: { decidedById: staff.id, decidedAt: uow.now, note: String(args.note ?? "").slice(0, 200) } });
+      return { id: row.id, status: row.status, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function exportWrittenRx(_root, args, context) {
+  return gated(context, { permissions: ["canPrescribe", "canDispense"], tool: "rx.export_written", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "rx.export_written", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const rx = await uow.tx.prescription.findUnique({ where: { id: args.prescriptionId }, select: { id: true, ref: true, status: true, issuedAt: true, patient: { select: { name: true } }, prescriber: { select: { displayName: true } }, lines: { select: { directions: true, quantity: true, refillsAuthorised: true, product: { select: { displayName: true, csSchedule: true } } } } } });
+      if (!rx || rx.status === "void") throw new DomainError(Codes.NOT_FOUND, "Prescription not found.");
+      if (rx.lines.some((l) => l.product?.csSchedule && l.product.csSchedule !== "none")) throw new DomainError(Codes.GUARD_FAILED, "A controlled prescription cannot be handed over on paper from here.");
+      const hash2 = sha256(canonicalJson({ ref: rx.ref, lines: rx.lines.map((l) => [l.product?.displayName, l.directions, l.quantity.toString(), l.refillsAuthorised]) }));
+      const existing = await uow.tx.writtenRxExport.findFirst({ where: { prescriptionId: rx.id, contentSha256: hash2 }, select: { id: true, ref: true } });
+      if (existing) return { id: existing.id, ref: existing.ref, status: "exported" };
+      const ref = await nextReference(uow.tx, "WRX", uow.now);
+      const row = await uow.tx.writtenRxExport.create({ data: { ref, prescriptionId: rx.id, exportedById: staff.id, exportedAt: uow.now, contentSha256: hash2 } });
+      auditCreate(uow, actor, "WrittenRxExport", row.id, "rx.written_exported", { ref, prescription: rx.ref });
+      return { id: row.id, ref, status: "exported" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/security/breadthLimit.ts
 var import_graphql3 = require("graphql");
 var API_NESTED_DEFAULT = 50;
@@ -10298,12 +11848,12 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
   if (!loopback || secret2.length < 32) return null;
   const identity = String(headers["x-openfront-client-identity"] || "");
-  const timestamp16 = String(headers["x-openfront-client-timestamp"] || "");
+  const timestamp17 = String(headers["x-openfront-client-timestamp"] || "");
   const signature = String(headers["x-openfront-client-signature"] || "");
-  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp16) || !/^[a-f0-9]{64}$/.test(signature)) return null;
-  const age = Math.abs(now - Number(timestamp16) * 1e3);
+  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp17) || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const age = Math.abs(now - Number(timestamp17) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${timestamp16}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${timestamp17}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -10537,6 +12087,44 @@ function extendGraphqlSchema(baseSchema) {
         addManualReminder(patientId: ID!, typeId: ID!, dueOn: String!, idempotencyKey: String!): JSON
         previewImport(system: String!, entity: String!, locationId: ID!, fileName: String, csv: String, mapping: JSON, source: String, idempotencyKey: String!): JSON
         applyImport(batchId: ID!, idempotencyKey: String!): JSON
+        writePrescription(patientId: ID!, locationId: ID!, lines: JSON!, idempotencyKey: String!): JSON
+        decideRefill(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        dispenseFill(lineId: ID!, quantity: String!, lotId: ID, csContainerId: ID, refillRequestId: ID, idempotencyKey: String!): JSON
+        receiveStockLot(drugId: ID, vaccineId: ID, locationId: ID!, lotNumber: String!, expiresOn: String!, idempotencyKey: String!): JSON
+        setLotQuarantine(lotId: ID!, quarantine: Boolean!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        receiveControlled(productId: ID!, locationId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, orderFormReference: String, idempotencyKey: String!): JSON
+        openControlled(containerId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        wasteControlled(containerId: ID!, qty: String!, reason: String!, witnessId: ID!, idempotencyKey: String!): JSON
+        countControlled(locationId: ID!, kind: String!, witnessId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+        reportCsLoss(containerId: ID!, kind: String!, qty: String!, description: String!, witnessId: ID!, idempotencyKey: String!): JSON
+        advanceDiscrepancy(caseId: ID!, step: String!, reference: String, resolution: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
+        submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
+        receiveStock(drugId: ID, vaccineId: ID, stockLocationId: ID!, lotNumber: String!, expiresOn: String!, quantity: String!, unit: String, idempotencyKey: String!): JSON
+        adjustStock(itemId: ID!, lotId: ID, stockLocationId: ID!, kind: String!, quantity: String!, reason: String!, idempotencyKey: String!): JSON
+        addSupplier(name: String!, accountNumber: String, phone: String, email: String, deaNumber: String, idempotencyKey: String!): JSON
+        draftPurchaseOrder(supplierId: ID!, locationId: ID!, lines: JSON!, note: String, idempotencyKey: String!): JSON
+        submitPurchaseOrder(orderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelPurchaseOrder(orderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        receivePurchaseOrder(orderId: ID!, stockLocationId: ID!, packingSlip: String, lines: JSON!, idempotencyKey: String!): JSON
+        setReorderRule(itemId: ID!, locationId: ID!, minQty: String!, targetQty: String!, idempotencyKey: String!): JSON
+        countStock(stockLocationId: ID!, counts: JSON!, idempotencyKey: String!): JSON
+        openRecall(itemId: ID!, lotNumber: String!, title: String!, source: String, idempotencyKey: String!): JSON
+        markRecallExposure(exposureId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        closeRecall(recallId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        logTemperature(stockLocationId: ID!, readingC: String!, idempotencyKey: String!): JSON
+        resolveExcursion(excursionId: ID!, resolution: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        issueOrderForm(supplierId: ID!, locationId: ID!, formNumber: String!, kind: String!, issuedOn: String!, lines: JSON!, idempotencyKey: String!): JSON
+        receiveOnOrderForm(lineId: ID!, lotNumber: String!, lotExpiresOn: String!, labelQty: String!, labelUnit: String!, idempotencyKey: String!): JSON
+        transferControlled(containerId: ID!, qty: String!, toRegistrationId: ID!, witnessId: ID!, idempotencyKey: String!): JSON
+        confirmTransfer(transferId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        logCabinetAccess(locationId: ID!, kind: String!, note: String, idempotencyKey: String!): JSON
+        generatePdmpFile(locationId: ID!, idempotencyKey: String!): JSON
+        printDispenseLabel(dispenseId: ID!, idempotencyKey: String!): JSON
+        requestExternalFill(prescriptionId: ID!, pharmacyName: String!, orderReference: String, idempotencyKey: String!): JSON
+        decideExternalFill(externalId: ID!, status: String!, note: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        exportWrittenRx(prescriptionId: ID!, idempotencyKey: String!): JSON
       }
     `,
     resolvers: {
@@ -10626,7 +12214,45 @@ function extendGraphqlSchema(baseSchema) {
         suppressReminder: op(suppressReminder),
         addManualReminder: op(addManualReminder),
         previewImport: op(previewImport),
-        applyImport: op(applyImport)
+        applyImport: op(applyImport),
+        writePrescription: op(writePrescription),
+        decideRefill: op(decideRefill),
+        dispenseFill: op(dispenseFill),
+        receiveStockLot: op(receiveStockLot),
+        setLotQuarantine: op(setLotQuarantine),
+        receiveControlled: op(receiveControlled),
+        openControlled: op(openControlled),
+        wasteControlled: op(wasteControlled),
+        countControlled: op(countControlled),
+        reportCsLoss: op(reportCsLoss),
+        advanceDiscrepancy: op(advanceDiscrepancy),
+        destroyControlled: op(destroyControlled),
+        submitPdmp: op(submitPdmp),
+        addStockLocation: op(addStockLocation),
+        receiveStock: op(receiveStock),
+        adjustStock: op(adjustStock),
+        addSupplier: op(addSupplier),
+        draftPurchaseOrder: op(draftPurchaseOrder),
+        submitPurchaseOrder: op(submitPurchaseOrder),
+        cancelPurchaseOrder: op(cancelPurchaseOrder),
+        receivePurchaseOrder: op(receivePurchaseOrder),
+        setReorderRule: op(setReorderRule),
+        countStock: op(countStock),
+        openRecall: op(openRecall),
+        markRecallExposure: op(markRecallExposure),
+        closeRecall: op(closeRecall),
+        logTemperature: op(logTemperature),
+        resolveExcursion: op(resolveExcursion),
+        issueOrderForm: op(issueOrderForm),
+        receiveOnOrderForm: op(receiveOnOrderForm),
+        transferControlled: op(transferControlled),
+        confirmTransfer: op(confirmTransfer),
+        logCabinetAccess: op(logCabinetAccess),
+        generatePdmpFile: op(generatePdmpFile),
+        printDispenseLabel: op(printDispenseLabel),
+        requestExternalFill: op(requestExternalFill),
+        decideExternalFill: op(decideExternalFill),
+        exportWrittenRx: op(exportWrittenRx)
       }
     }
   })));
@@ -10850,7 +12476,7 @@ var { withAuth } = (0, import_auth.createAuth)({
   `
 });
 var keystone_default = withAuth(
-  (0, import_core20.config)({
+  (0, import_core21.config)({
     db: {
       provider: "postgresql",
       url: databaseURL,

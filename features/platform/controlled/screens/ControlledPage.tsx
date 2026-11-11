@@ -5,6 +5,7 @@ import { todayIn } from '../../lib/clinic';
 import { Page, Row, Empty, Status, Meta, Section, Tabs } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
 import { ActionButton } from '../../components/ActionButton';
+import OrdersTransfers from './OrdersTransfers';
 
 type Container = { id: string; ref: string; status: string; version: number; lotNumber: string; lotExpiresOn: string | null; labelUnit: string; balance: string | null; product: { displayName: string; csSchedule: string } | null; location: { id: string } | null };
 type Entry = { id: string; ref: string; type: string; qtySigned: string; unit: string | null; occurredAt: string; reason: string; container: { ref: string } | null; actor: { displayName: string } | null; witness: { displayName: string } | null };
@@ -12,7 +13,7 @@ type Case = { id: string; ref: string; kind: string; status: string; version: nu
 type Pdmp = { id: string; ref: string; status: string; version: number; dueOn: string | null; program: string; dispense: { ref: string } | null };
 type Staff = { id: string; displayName: string };
 
-const VIEWS = [['register', 'Register'], ['containers', 'Containers'], ['cases', 'Discrepancies'], ['pdmp', 'State reports']] as const;
+const VIEWS = [['register', 'Register'], ['containers', 'Containers'], ['cases', 'Discrepancies'], ['pdmp', 'State reports'], ['orders', 'Orders and transfers']] as const;
 const CS_UNITS = ['mg', 'mL', 'tablet', 'capsule', 'g', 'unit'];
 const signed = (v: string) => (v.startsWith('-') ? v : `+${v}`);
 const clean = (v: string | null) => (v ? String(Number(v)) : '0');
@@ -121,6 +122,7 @@ export default async function ControlledPage({ searchParams }: { searchParams?: 
           )) : <Empty>No discrepancies. Counts that match the register open nothing.</Empty>}
         </Section>
       ) : null}
+      {view === 'orders' ? <OrdersTransfers path={path} tz={tz} today={today} location={location} witnesses={witnesses.filter(w => w.value)} containers={d.csContainers.filter(c => c.status === 'open' || c.status === 'sealed').map(c => ({ value: c.id, label: `${c.ref} · ${c.product?.displayName}` }))} /> : null}
       {view === 'pdmp' ? (
         <Section title="State prescription-monitoring reports">
           <p className="text-xs text-muted-foreground">Upload on the state programme&apos;s site, then record the confirmation here.</p>
