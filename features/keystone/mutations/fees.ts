@@ -80,7 +80,16 @@ export async function requestFeePublish(_root: unknown, args: { versionId: strin
     const result = await command(context.prisma, { name: 'fees.publish.request', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const count = await uow.tx.feeItem.count({ where: { versionId: args.versionId } })
       if (!count) throw new DomainError(Codes.GUARD_FAILED, 'This fee schedule has no items yet.')
-      const row = await transition(uow, { model: 'FeeScheduleVersion', id: args.versionId, from: ['draft'], to: 'pending_approval', expectedVersion: args.expectedVersion, actor, eventType: 'fees.publish.requested' })
+      // A request that was cancelled or turned down leaves the version waiting; with no open request it goes back to a draft first.
+      let expectedVersion = args.expectedVersion
+      const current = await uow.tx.feeScheduleVersion.findUnique({ where: { id: args.versionId }, select: { status: true } })
+      if (current?.status === 'pending_approval') {
+        const open = await uow.tx.approvalRequest.count({ where: { targetList: 'FeeScheduleVersion', targetId: args.versionId, status: 'pending' } })
+        if (open) throw new DomainError(Codes.GUARD_FAILED, 'This fee schedule is already waiting for approval.')
+        const back = await transition(uow, { model: 'FeeScheduleVersion', id: args.versionId, from: ['pending_approval'], to: 'draft', expectedVersion, actor, eventType: 'fees.publish.withdrawn' })
+        expectedVersion = back.version as number
+      }
+      const row = await transition(uow, { model: 'FeeScheduleVersion', id: args.versionId, from: ['draft'], to: 'pending_approval', expectedVersion, actor, eventType: 'fees.publish.requested' })
       const request = await requestApproval(uow, actor, { action: 'fees.publish', targetList: 'FeeScheduleVersion', targetId: row.id as string, payload: { versionId: row.id, effectiveFrom: args.effectiveFrom ?? null }, requiredPermission: 'canApproveFees', summary: `Publish fee schedule ${String(row.label)}` })
       return { id: row.id, approvalRequestId: request.id }
     })
