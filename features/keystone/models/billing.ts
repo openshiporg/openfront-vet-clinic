@@ -262,6 +262,7 @@ export const Deposit = list({
     client: relationship({ ref: 'Client', ...readOnly }),
     estimate: relationship({ ref: 'Estimate', ...readOnly }),
     plan: relationship({ ref: 'TreatmentPlan', ...readOnly }),
+    reservation: relationship({ ref: 'BoardingReservation', ...readOnly }),
     requestedMinor: minor({ required: true }),
     currencyCode: ccy(),
     status: lifecycle(['requested', 'paid', 'applied', 'refunded', 'forfeited']),

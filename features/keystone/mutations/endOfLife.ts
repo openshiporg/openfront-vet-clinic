@@ -41,7 +41,7 @@ export async function deathEffects(uow: UnitOfWork, actor: Actor, patientId: str
     await transition(uow, { model: 'GroomAppointment', id: g.id, from: ['booked', 'checked_in'], to: 'cancelled', actor, eventType: 'groom.cancelled', reason: 'deceased', data: { cancelReason: 'The patient died' } })
     counts.groomsCancelled += 1
   }
-  counts.remindersSuppressed = (await uow.tx.patientReminder.updateMany({ where: { patientId, status: { in: ['scheduled', 'due', 'overdue'] } }, data: { status: 'suppressed' } })).count
+  counts.remindersSuppressed = (await uow.tx.patientReminder.updateMany({ where: { patientId, status: { in: ['scheduled', 'due', 'overdue'] } }, data: { status: 'suppressed', suppressedReason: 'deceased' } })).count
   counts.estimatesClosed = (await uow.tx.estimate.updateMany({ where: { patientId, status: 'open' }, data: { status: 'closed' } })).count
   return counts
 }

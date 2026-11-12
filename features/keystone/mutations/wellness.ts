@@ -4,7 +4,7 @@ import { auditCreate, casUpdate, lockRow, transition } from '../lib/cas'
 import { advisoryLock } from '../lib/db'
 import { DomainError, Codes, isDomainError } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
-import { periodFor, post } from '../lib/ledger'
+import { balanceOfInvoice, periodFor, post } from '../lib/ledger'
 import { localDate } from '../lib/calendar'
 import { resolvePolicy } from '../domain/policy'
 import { addMonths, ageOn, disclosureHash, disclosureText, parseEntitlements, PERIOD, periodLabel, termMonthsOf, monthOf } from '../domain/wellness'
@@ -14,7 +14,7 @@ import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
 import { dateOnly, minorText, pick } from './billingInput'
 import { locationDay, staffOf, text, type Ctx } from './clinical'
-import { newPayment, recordOutcome } from './billing'
+import { newPayment, recordOutcome, syncInvoiceStatus } from './billing'
 import { resolveUnknownPayment } from './billing'
 
 /*
@@ -164,6 +164,14 @@ export async function chargeEnrollment(prisma: any, actor: Actor, input: { enrol
       const live = prior.find(a => ['succeeded', 'processing', 'unknown'].includes(a.status))
       if (live) return { skip: live.status === 'succeeded' ? 'This month is already paid.' : 'The card processor has not given a final answer for this month. Check its status first.' }
       const lastFailed = prior[prior.length - 1]
+      // A declined month stays declined: no other month is charged automatically either, until staff replace the card and press Retry.
+      if (!input.retryOfAttemptId) {
+        const failed = await uow.tx.planBillingAttempt.findMany({ where: { enrollmentId: e.id, status: 'failed' }, select: { periodKey: true } })
+        for (const f of failed) {
+          const paid = await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, periodKey: f.periodKey, status: 'succeeded' } })
+          if (!paid) return { skip: `The card was declined for ${f.periodKey}. Replace the card, then use Retry.` }
+        }
+      }
       if (lastFailed && !input.retryOfAttemptId) return { skip: 'The card was declined. Replace the card, then use Retry.' }
       if (input.retryOfAttemptId) {
         if (!lastFailed || lastFailed.id !== input.retryOfAttemptId || lastFailed.status !== 'failed') return { skip: 'Only the latest declined charge can be retried.' }
@@ -187,7 +195,7 @@ export async function chargeEnrollment(prisma: any, actor: Actor, input: { enrol
       const amount = version.monthlyPriceMinor
       if (!e.customerRef || !e.paymentMethodRef) return { skip: 'There is no card on file.' }
       const generation = prior.length + 1
-      const attempt = await uow.tx.planBillingAttempt.create({ data: { enrollmentId: e.id, periodKey: input.periodKey, generation, status: 'processing', amountMinor: amount, cardVersion: e.cardVersion, termNo: e.termNo, runKey: input.runKey, startedAt: uow.now } })
+      const attempt = await uow.tx.planBillingAttempt.create({ data: { enrollmentId: e.id, periodKey: input.periodKey, generation, status: 'processing', amountMinor: amount, cardVersion: e.cardVersion, termNo: e.termNo, runKey: input.runKey, startedAt: uow.now, retryNote: input.retryOfAttemptId ? `Card replaced (card version ${e.cardVersion}); retry of ${input.retryOfAttemptId}` : '' } })
       const { on } = await locationDay(uow, e.locationId, uow.now)
       // The invoice for the month is made once (generation 1) and reused by a retry, so a month is never billed twice.
       let invoiceId = prior.find(a => a.invoiceId)?.invoiceId ?? null
@@ -357,6 +365,23 @@ export async function cancelEnrollment(_root: unknown, args: { enrollmentId: str
       }
       const open = await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, status: { in: ['processing', 'unknown'] } } })
       if (open) throw new DomainError(Codes.GUARD_FAILED, 'A monthly charge has no final answer yet. Check its status before cancelling.', { reason: 'charge_open' })
+      // A declined month leaves a posted invoice nobody will pay: close it with a credit note (history is never edited).
+      const declined = await uow.tx.planBillingAttempt.findMany({ where: { enrollmentId: e.id, status: 'failed', invoiceId: { not: null } }, select: { periodKey: true, invoiceId: true } })
+      const credited: string[] = []
+      for (const d of declined) {
+        if (credited.includes(d.invoiceId!) || (await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, periodKey: d.periodKey, status: 'succeeded' } }))) continue
+        const inv = await lockRow<any>(uow.tx, 'Invoice', d.invoiceId!)
+        if (!['posted', 'partially_paid'].includes(inv.status)) continue
+        const balance = await balanceOfInvoice(uow.tx, inv.id)
+        if (balance <= ZERO) continue
+        const ref = await nextReference(uow.tx, 'CRN', uow.now)
+        const note = await uow.tx.creditNote.create({ data: { ref, invoiceId: inv.id, clientId: inv.clientId, amountMinor: balance, currencyCode: inv.currencyCode, reason: `Plan ${e.ref} cancelled after a declined month (${d.periodKey})`, postedAt: uow.now } })
+        const { on } = await locationDay(uow, inv.locationId, uow.now)
+        await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: 'credit_note', amountMinor: -balance, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}`, memo: ref })
+        await syncInvoiceStatus(uow, actor, inv.id, ref)
+        auditCreate(uow, actor, 'CreditNote', note.id, 'credit.issued', { ref, amountMinor: balance.toString(), plan: e.ref, periodKey: d.periodKey }, { reason: 'declined plan month closed on cancel' })
+        credited.push(inv.id)
+      }
       const { used, paid, owed } = await trueUpFor(uow.tx, e.id)
       let chargeId: string | null = null
       const waived = args.waiveTrueUp === true
@@ -368,7 +393,7 @@ export async function cancelEnrollment(_root: unknown, args: { enrollmentId: str
         model: 'Enrollment', id: e.id, from: ['pending_payment', 'active', 'suspended', 'cancelling'], to: 'cancelled', expectedVersion: args.expectedVersion, actor, eventType: 'wellness.cancelled', reason,
         data: { cancelRequestedAt: uow.now, cancelReason: reason, endedAt: uow.now, autoRenew: false, trueUpMinor: waived ? ZERO : owed, trueUpWaived: waived && owed > ZERO },
       })
-      return { id: e.id, status: 'cancelled', usedMinor: used.toString(), paidMinor: paid.toString(), owedMinor: (waived ? ZERO : owed).toString(), chargeId }
+      return { id: e.id, status: 'cancelled', invoicesCredited: credited.length, usedMinor: used.toString(), paidMinor: paid.toString(), owedMinor: (waived ? ZERO : owed).toString(), chargeId }
     })
     return { replay: result.replay, ...result.value }
   })

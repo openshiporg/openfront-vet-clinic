@@ -181,6 +181,7 @@ export const PlanBillingAttempt = list({
     /** The press of "Run billing" that made this attempt; the run row is written when the press finishes. */
     runKey: systemText({ indexed: true }),
     message: systemText(),
+    retryNote: systemText(),
     startedAt: timestamp({ ...readOnly, validation: { isRequired: true } }),
     finishedAt: timestamp({ ...readOnly }),
     version: versionField(),

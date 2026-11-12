@@ -3379,31 +3379,34 @@ model OverageApproval {
 }
 
 model Deposit {
-  id                             String              @id @default(cuid())
-  ref                            String              @unique @default("")
-  client                         Client?             @relation("Deposit_client", fields: [clientId], references: [id])
-  clientId                       String?             @map("client")
-  estimate                       Estimate?           @relation("Deposit_estimate", fields: [estimateId], references: [id])
-  estimateId                     String?             @map("estimate")
-  plan                           TreatmentPlan?      @relation("Deposit_plan", fields: [planId], references: [id])
-  planId                         String?             @map("plan")
+  id                             String               @id @default(cuid())
+  ref                            String               @unique @default("")
+  client                         Client?              @relation("Deposit_client", fields: [clientId], references: [id])
+  clientId                       String?              @map("client")
+  estimate                       Estimate?            @relation("Deposit_estimate", fields: [estimateId], references: [id])
+  estimateId                     String?              @map("estimate")
+  plan                           TreatmentPlan?       @relation("Deposit_plan", fields: [planId], references: [id])
+  planId                         String?              @map("plan")
+  reservation                    BoardingReservation? @relation("Deposit_reservation", fields: [reservationId], references: [id])
+  reservationId                  String?              @map("reservation")
   requestedMinor                 BigInt
-  currencyCode                   String              @default("USD")
-  status                         String              @default("requested")
-  payment                        Payment?            @relation("Deposit_payment", fields: [paymentId], references: [id])
-  paymentId                      String?             @map("payment")
-  appliedInvoice                 Invoice?            @relation("Deposit_appliedInvoice", fields: [appliedInvoiceId], references: [id])
-  appliedInvoiceId               String?             @map("appliedInvoice")
+  currencyCode                   String               @default("USD")
+  status                         String               @default("requested")
+  payment                        Payment?             @relation("Deposit_payment", fields: [paymentId], references: [id])
+  paymentId                      String?              @map("payment")
+  appliedInvoice                 Invoice?             @relation("Deposit_appliedInvoice", fields: [appliedInvoiceId], references: [id])
+  appliedInvoiceId               String?              @map("appliedInvoice")
   appliedAt                      DateTime?
-  version                        Int                 @default(0)
-  createdAt                      DateTime            @default(now())
-  updatedAt                      DateTime            @default(now()) @updatedAt
-  from_Payment_forDeposit        Payment[]           @relation("Payment_forDeposit")
-  from_PaymentAllocation_deposit PaymentAllocation[] @relation("PaymentAllocation_deposit")
+  version                        Int                  @default(0)
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @default(now()) @updatedAt
+  from_Payment_forDeposit        Payment[]            @relation("Payment_forDeposit")
+  from_PaymentAllocation_deposit PaymentAllocation[]  @relation("PaymentAllocation_deposit")
 
   @@index([clientId])
   @@index([estimateId])
   @@index([planId])
+  @@index([reservationId])
   @@index([paymentId])
   @@index([appliedInvoiceId])
 }
@@ -3938,6 +3941,7 @@ model PlanBillingAttempt {
   chargeLineId String?     @map("chargeLine")
   runKey       String      @default("")
   message      String      @default("")
+  retryNote    String      @default("")
   startedAt    DateTime
   finishedAt   DateTime?
   version      Int         @default(0)
@@ -4041,6 +4045,7 @@ model BoardingReservation {
   version                       Int            @default(0)
   createdAt                     DateTime       @default(now())
   updatedAt                     DateTime       @default(now()) @updatedAt
+  from_Deposit_reservation      Deposit[]      @relation("Deposit_reservation")
   from_BoardingStay_reservation BoardingStay[] @relation("BoardingStay_reservation")
   from_RunCard_reservation      RunCard[]      @relation("RunCard_reservation")
 

@@ -13,6 +13,7 @@ import { adapterFor, cardConfigured, type ChargeResult } from '../../integration
 import { PAYMENT_METHODS } from '../models/billing'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { memberDiscountBps } from './serviceCharge'
 import { decimalText, locationDay, staffOf, text, type Ctx } from './clinical'
 import { billingSettings, dateOnly, minorText, pick } from './billingInput'
 
@@ -43,12 +44,13 @@ export async function createCharge(uow: UnitOfWork, actor: Actor, c: { patientId
   const { on } = await locationDay(uow, c.locationId, uow.now)
   const client = await uow.tx.client.findUnique({ where: { id: c.clientId }, select: { taxExempt: true } })
   const taxRules = await taxRulesFor(uow.tx, c.locationId, on)
-  const priced = priceCharge(fee, c.qty, { dispensing: c.dispensing, injection: c.injection, taxRules })
+  const discountBps = await memberDiscountBps(uow.tx, c.patientId)
+  const priced = priceCharge(fee, c.qty, { dispensing: c.dispensing, injection: c.injection, discountBps, taxRules })
   const tax = client?.taxExempt ? ZERO : priced.taxMinor
   const row = await uow.tx.chargeLine.create({
     data: {
       clientId: c.clientId, patientId: c.patientId, locationId: c.locationId, encounterId: c.encounterId, feeItemId: fee.id, description: (c.description || fee.name).slice(0, 200), qty: c.qty,
-      unitPriceMinor: fee.priceMinor, extendedMinor: priced.extendedMinor, discountMinor: ZERO, taxMinor: tax, taxCategory: fee.taxCategory, sourceType: c.sourceType, sourceId: c.sourceId,
+      unitPriceMinor: fee.priceMinor, extendedMinor: priced.extendedMinor, discountMinor: priced.discountMinor, taxMinor: tax, taxCategory: fee.taxCategory, sourceType: c.sourceType, sourceId: c.sourceId,
       manualReason: c.manualReason ?? '', performedById: c.performedById ?? null, capturedAt: uow.now,
     },
   })
@@ -211,27 +213,32 @@ export async function discountInvoice(_root: unknown, args: { invoiceId: string;
   })
 }
 
+/** Post a draft invoice: totals frozen, a number assigned, the amount owed written to the ledger. Shared by Post and boarding check-out. */
+export async function postDraftInvoice(uow: UnitOfWork, actor: Actor, invoiceId: string, expectedVersion: number | undefined, postedOnArg?: string | null) {
+  const inv = await lockRow<Inv>(uow.tx, 'Invoice', invoiceId)
+  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null } })
+  if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, 'An invoice needs at least one charge.')
+  const { on } = await locationDay(uow, inv.locationId, uow.now)
+  const postedOn = postedOnArg ? dateOnly(postedOnArg, 'posting day') : on
+  if (postedOn > on) throw new DomainError(Codes.INVALID_INPUT, 'An invoice cannot be posted for a future day.', { field: 'postedOn' })
+  const subtotal = lines.reduce((n, l) => n + l.extendedMinor, ZERO)
+  const discount = lines.reduce((n, l) => n + l.discountMinor, ZERO)
+  const tax = lines.reduce((n, l) => n + l.taxMinor, ZERO)
+  const total = subtotal - discount + tax
+  const { periodFor } = await import('../lib/ledger')
+  const period = await periodFor(uow.tx, postedOn)
+  const ref = await nextReference(uow.tx, 'INV', uow.now)
+  const row = await transition<Record<string, unknown>>(uow, { model: 'Invoice', id: inv.id, from: ['draft'], to: 'posted', expectedVersion, actor, eventType: 'invoice.posted', data: { ref, postedAt: uow.now, postedOn: new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } })
+  if (total > ZERO) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: 'invoice', amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref })
+  else await transition(uow, { model: 'Invoice', id: inv.id, from: ['posted'], to: 'paid', actor, eventType: 'invoice.paid' })
+  return { id: inv.id, ref, status: row.status, totalMinor: total.toString() }
+}
+
 /** Post the draft: totals frozen, a number assigned, the amount owed written to the ledger on its day. */
 export async function postInvoice(_root: unknown, args: { invoiceId: string; postedOn?: string | null; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: [...POSTERS], tool: 'invoice.post', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'invoice.post', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
-      const inv = await lockRow<Inv>(uow.tx, 'Invoice', args.invoiceId)
-      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null } })
-      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, 'An invoice needs at least one charge.')
-      const { on } = await locationDay(uow, inv.locationId, uow.now)
-      const postedOn = args.postedOn ? dateOnly(args.postedOn, 'posting day') : on
-      if (postedOn > on) throw new DomainError(Codes.INVALID_INPUT, 'An invoice cannot be posted for a future day.', { field: 'postedOn' })
-      const subtotal = lines.reduce((n, l) => n + l.extendedMinor, ZERO)
-      const discount = lines.reduce((n, l) => n + l.discountMinor, ZERO)
-      const tax = lines.reduce((n, l) => n + l.taxMinor, ZERO)
-      const total = subtotal - discount + tax
-      const { periodFor } = await import('../lib/ledger')
-      const period = await periodFor(uow.tx, postedOn)
-      const ref = await nextReference(uow.tx, 'INV', uow.now)
-      const row = await transition<Record<string, unknown>>(uow, { model: 'Invoice', id: inv.id, from: ['draft'], to: 'posted', expectedVersion: args.expectedVersion, actor, eventType: 'invoice.posted', data: { ref, postedAt: uow.now, postedOn: new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } })
-      if (total > ZERO) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: 'invoice', amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref })
-      else await transition(uow, { model: 'Invoice', id: inv.id, from: ['posted'], to: 'paid', actor, eventType: 'invoice.paid' })
-      return { id: inv.id, ref, status: row.status, totalMinor: total.toString() }
+      return postDraftInvoice(uow, actor, args.invoiceId, args.expectedVersion, args.postedOn)
     })
     return { replay: result.replay, ...result.value }
   })
@@ -431,25 +438,30 @@ async function applyPaymentEventOnce(prisma: any, actor: Actor, event: { provide
 
 // ── Deposits ────────────────────────────────────────────────────────────────────────────────
 
+/** Release a paid deposit and apply it to a posted invoice (as much as the balance allows). Shared by Apply and boarding check-out. */
+export async function applyDepositTo(uow: UnitOfWork, actor: Actor, depositId: string, invoiceId: string) {
+  const dep = await lockRow<{ id: string; clientId: string; status: string; paymentId: string | null; currencyCode: string; version: number }>(uow.tx, 'Deposit', depositId)
+  if (dep.status === 'applied') throw new DomainError(Codes.GUARD_FAILED, 'This deposit was already applied.', { reason: 'already_applied' })
+  if (dep.status !== 'paid') throw new DomainError(Codes.GUARD_FAILED, 'This deposit has not been paid yet.')
+  const inv = await lockRow<Inv>(uow.tx, 'Invoice', invoiceId)
+  if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, 'A deposit can only go against the same client\u2019s invoice.')
+  if (!['posted', 'partially_paid'].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, 'That invoice cannot take a deposit.')
+  const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId! }, select: { amountMinor: true } })
+  const balance = await balanceOfInvoice(uow.tx, inv.id)
+  const apply = pay.amountMinor < balance ? pay.amountMinor : balance
+  const { on } = await locationDay(uow, inv.locationId, uow.now)
+  await post(uow, { clientId: dep.clientId, kind: 'deposit_released', amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: 'Deposit applied' })
+  await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: 'deposit_applied', amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: 'Deposit applied' })
+  await casUpdate(uow, { model: 'Deposit', id: dep.id, version: dep.version, from: ['paid'], to: 'applied', actor, eventType: 'deposit.applied', data: { appliedInvoiceId: inv.id, appliedAt: uow.now } })
+  const status = await syncInvoiceStatus(uow, actor, inv.id, 'Deposit applied')
+  return { depositId: dep.id, invoiceId: inv.id, appliedMinor: apply.toString(), invoiceStatus: status }
+}
+
 /** Put a paid deposit against an invoice: once, to one invoice. Whatever the invoice cannot take stays on the client's account. */
 export async function applyDeposit(_root: unknown, args: { depositId: string; invoiceId: string; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: [...TAKERS, ...POSTERS], tool: 'deposit.apply', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'deposit.apply', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
-      const dep = await lockRow<{ id: string; clientId: string; status: string; paymentId: string | null; currencyCode: string; version: number }>(uow.tx, 'Deposit', args.depositId)
-      if (dep.status === 'applied') throw new DomainError(Codes.GUARD_FAILED, 'This deposit was already applied.', { reason: 'already_applied' })
-      if (dep.status !== 'paid') throw new DomainError(Codes.GUARD_FAILED, 'This deposit has not been paid yet.')
-      const inv = await lockRow<Inv>(uow.tx, 'Invoice', args.invoiceId)
-      if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, 'A deposit can only go against the same client\u2019s invoice.')
-      if (!['posted', 'partially_paid'].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, 'That invoice cannot take a deposit.')
-      const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId! }, select: { amountMinor: true } })
-      const balance = await balanceOfInvoice(uow.tx, inv.id)
-      const apply = pay.amountMinor < balance ? pay.amountMinor : balance
-      const { on } = await locationDay(uow, inv.locationId, uow.now)
-      await post(uow, { clientId: dep.clientId, kind: 'deposit_released', amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: 'Deposit applied' })
-      await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: 'deposit_applied', amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: 'Deposit applied' })
-      await casUpdate(uow, { model: 'Deposit', id: dep.id, version: dep.version, from: ['paid'], to: 'applied', actor, eventType: 'deposit.applied', data: { appliedInvoiceId: inv.id, appliedAt: uow.now } })
-      const status = await syncInvoiceStatus(uow, actor, inv.id, 'Deposit applied')
-      return { depositId: dep.id, invoiceId: inv.id, appliedMinor: apply.toString(), invoiceStatus: status }
+      return applyDepositTo(uow, actor, args.depositId, args.invoiceId)
     })
     return { replay: result.replay, ...result.value }
   })

@@ -6,7 +6,7 @@ import { DomainError, Codes } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
 import { resolvePolicy } from '../domain/policy'
 import { addDays } from '../domain/wellness'
-import { clientOfPatient } from './billing'
+import { applyDepositTo, clientOfPatient, postDraftInvoice } from './billing'
 import { serviceCharge, serviceItemCharge } from './serviceCharge'
 import { gated } from './agentGuard'
 import { activePatient, locationDay, staffOf, text, type Ctx } from './clinical'
@@ -175,6 +175,7 @@ export async function reserveBoarding(_root: unknown, args: { patientId: string;
       const row = await uow.tx.boardingReservation.create({
         data: { ref, patientId: patient.id, clientId, locationId: rt.locationId, runTypeId: rt.id, checkInOn: asDate(checkIn), checkOutOn: asDate(checkOut), status: 'requested', holdExpiresAt: holdsUntil, depositMinor: rt.depositMinor, vaccineOverrideReason: override, notes: text(args.notes ?? '', 'notes', 500, false) },
       })
+      if (rt.depositMinor > ZERO) await uow.tx.deposit.create({ data: { ref: await nextReference(uow.tx, 'DEP', uow.now), clientId, reservationId: row.id, requestedMinor: rt.depositMinor, status: 'requested' } })
       auditCreate(uow, actor, 'BoardingReservation', row.id, 'boarding.requested', { ref, nights: nights.length, runType: rt.name })
       return { id: row.id, ref, status: 'requested', nights: nights.length, holdExpiresAt: holdsUntil.toISOString(), totalMinor: (rt.nightlyRateMinor * BigInt(nights.length)).toString() }
     })
@@ -319,7 +320,15 @@ export async function checkOutBoarding(_root: unknown, args: { stayId: string; e
       await uow.tx.runAssignment.updateMany({ where: { stayId: stay.id, endsAt: null }, data: { endsAt: uow.now } })
       await transition(uow, { model: 'BoardingStay', id: stay.id, from: ['in_house'], to: 'checked_out', actor, eventType: 'boarding.checked_out', data: { checkedOutAt: uow.now } })
       await transition(uow, { model: 'BoardingReservation', id: r.id, from: ['checked_in'], to: 'checked_out', actor, eventType: 'boarding.completed' })
-      return { id: stay.id, status: 'checked_out', nights: stayed.length }
+      // The invoice: the nights stayed, less the deposit if it was paid. Made once (the stay can only be checked out once).
+      const lines = await uow.tx.chargeLine.findMany({ where: { clientId: stay.clientId, invoiceId: null, reversedAt: null, sourceType: 'boarding_night', sourceId: { startsWith: `${stay.id}:` } }, select: { id: true } })
+      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${randomUUID().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: 'draft', currencyCode: 'USD', note: '' } })
+      await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map(l => l.id) } }, data: { invoiceId: draft.id } })
+      const posted = await postDraftInvoice(uow, actor, draft.id, undefined)
+      const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: 'paid' }, select: { id: true } })
+      const applied = deposit ? await applyDepositTo(uow, actor, deposit.id, draft.id) : null
+      await uow.tx.boardingStay.update({ where: { id: stay.id }, data: { invoiceId: draft.id, version: { increment: 1 } } })
+      return { id: stay.id, status: 'checked_out', nights: stayed.length, invoiceId: draft.id, invoiceRef: posted.ref, totalMinor: posted.totalMinor, depositAppliedMinor: applied?.appliedMinor ?? '0' }
     })
     return { replay: result.replay, ...result.value }
   })

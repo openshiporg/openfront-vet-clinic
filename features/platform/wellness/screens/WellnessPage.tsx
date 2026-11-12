@@ -59,7 +59,7 @@ async function Members() {
         ]} />
         <Meta>The plan renews every term until the client cancels. The renewal terms and cancellation steps are shown to the signer and saved with their agreement.</Meta>
       </Section>
-      <Section title="Members">
+      <Section title="Members" aside={<Link className="inline-flex h-11 items-center px-2 text-sm underline sm:h-8" href="/dashboard/platform/wellness/export?kind=renewals" prefetch={false}>Export renewal notices</Link>}>
         {d.enrollments.length ? d.enrollments.map(e => (
           <div key={e.id} className="border-b py-2 last:border-0">
             <Row>
