@@ -525,7 +525,8 @@ export const InsuranceClaimPacket = list({
     patient: relationship({ ref: 'Patient', ...readOnly }),
     invoice: relationship({ ref: 'Invoice', ...readOnly }),
     recordsRelease: relationship({ ref: 'RecordsRelease', ...readOnly }),
-    formFields: json({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, defaultValue: {} }),
+    // Filter and sort take the same check as read: a where on hidden text is an oracle for it.
+    formFields: json({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, isFilterable: permissions.canReadClinical, isOrderable: permissions.canReadClinical, defaultValue: {} }),
     /** [{documentId, title, sha256}] — exactly what the release listed. */
     documents: json({ ...readOnly, defaultValue: [] }),
     submitter: fixedChoice(['client', 'clinic']),
@@ -533,7 +534,7 @@ export const InsuranceClaimPacket = list({
     approvedMinor: money(),
     paidTo: text({ db: { isNullable: true }, access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: 'hidden' }, itemView: { fieldMode: 'read' } } }),
     statusNote: systemText(),
-    packetBody: text({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, ui: { ...readOnly.ui, displayMode: 'textarea' } }),
+    packetBody: text({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, isFilterable: permissions.canReadClinical, isOrderable: permissions.canReadClinical, ui: { ...readOnly.ui, displayMode: 'textarea' } }),
     packetSha256: systemText(),
     version: versionField(),
     ...trackingFields,

@@ -10,6 +10,7 @@ import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { acceptEstimate, attachOrderToPlan, createEstimate, presentEstimate, recordOverageApproval } from './estimates'
 import { addFeeCharge, applyDeposit, applyPaymentEvent, checkPaymentStatus, closeArPeriod, draftInvoice, postInvoice, recordPayment, requestRefund, takeCardPayment } from './billing'
 import { buildClaimPacket } from './insurance'
+import { fakeStripe } from '../../../tests/helpers/fakeStripe'
 
 /** Phase 4 exit gate against a real database; raw SQL plays the hostile application role. */
 const sessionFor = (id: string, granted: string[]) => ({
@@ -128,6 +129,80 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     expect(both.filter(r => r.status === 'fulfilled')).toHaveLength(1)
     expect(await prisma.payment.count({ where: { forInvoiceId: inv2.id, method: 'card_on_file' } })).toBe(1)
     expect(charge).toHaveBeenCalledTimes(2)
+  })
+
+  it('Check status never charges: a named card whose reply was lost is found, not re-sent (15600-on-7800 review sequence)', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe()
+    try {
+      const inv = await postedInvoice(1)
+      stripe.loseNextReply()
+      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_mastercard', idempotencyKey: key() }, ctx)) as { id: string; status: string }
+      expect(first.status).toBe('unknown')
+      expect(stripe.captured).toBe(Number(inv.total))
+      const chk = (await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }
+      expect(chk.status).toBe('succeeded')
+      expect((await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })).providerRef).toBe('pi_fake_1')
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_mastercard', idempotencyKey: key() }, ctx)).rejects.toThrow(/already paid/i)
+      expect(stripe.posts()).toBe(1)
+      expect(stripe.calls.some(c => c.includes('pm_card_visa'))).toBe(false)
+      expect(stripe.captured).toBeLessThanOrEqual(Number(inv.total))
+      expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
+    } finally { stripe.restore() }
+  })
+
+  it('a pruned key (no providerRef, intent not found) stays unknown, Check status makes no charge, and a second charge is refused', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe()
+    try {
+      const inv = await postedInvoice(1)
+      stripe.loseNextReply()
+      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_mastercard', idempotencyKey: key() }, ctx)) as { id: string; status: string }
+      stripe.prune(); stripe.hide('pi_fake_1')
+      for (let i = 0; i < 3; i += 1) expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('unknown')
+      expect((await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('unknown')
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+      expect(stripe.posts()).toBe(1)
+      expect(stripe.captured).toBeLessThanOrEqual(Number(inv.total))
+    } finally { stripe.restore() }
+  })
+
+  it('a 3DS intent (requires_action) is pending, keeps its reference, and settles once when the bank confirms', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe({ status: () => 'requires_action' })
+    try {
+      const inv = await postedInvoice(1)
+      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_threeDSecure2Required', idempotencyKey: key() }, ctx)) as { id: string; status: string }
+      expect(first.status).toBe('pending')
+      const row = await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })
+      expect(row).toMatchObject({ status: 'pending', providerRef: 'pi_fake_1' })
+      expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('pending')
+      expect((await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('pending')
+      stripe.setStatus('pi_fake_1', 'succeeded')
+      expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('succeeded')
+      await checkPaymentStatus(null, { paymentId: first.id }, ctx)
+      expect(stripe.posts()).toBe(1)
+      expect(stripe.captured).toBeLessThanOrEqual(Number(inv.total))
+      expect(await prisma.clientLedgerEntry.count({ where: { paymentId: first.id } })).toBe(1)
+    } finally { stripe.restore() }
+  })
+
+  it('a card payment wrongly marked failed while its intent is live goes back to pending once Check status finds the intent', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe({ status: () => 'requires_action' })
+    try {
+      const inv = await postedInvoice(1)
+      stripe.loseNextReply()
+      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string }
+      // What the old Check status left behind on live (PAY-2026-000006): failed, no reference.
+      await prisma.payment.update({ where: { id: first.id }, data: { status: 'failed' } })
+      expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('pending')
+      expect(await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })).toMatchObject({ status: 'pending', providerRef: 'pi_fake_1' })
+      // The database allows that one way back only: a failed payment with a reference never reopens.
+      await prisma.payment.update({ where: { id: first.id }, data: { status: 'failed' } })
+      await expect(prisma.$executeRawUnsafe(`UPDATE "Payment" SET status = 'pending' WHERE id = '${first.id}'`)).rejects.toSatisfy(x => /result never changes/i.test(pgError(x)))
+      expect(stripe.posts()).toBe(1)
+    } finally { stripe.restore() }
   })
 
   it('only a veterinarian (staff kind dvm) can record the emergency overage override', async () => {

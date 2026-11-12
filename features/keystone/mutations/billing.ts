@@ -362,15 +362,26 @@ async function settleFromState(context: Ctx, actor: Actor, paymentId: string) {
 
 async function recordOutcome(context: Ctx, actor: Actor, paymentId: string, attemptId: string, outcome: ChargeResult, key: string) {
   const done = await command(context.prisma, { name: 'payment.card.result', actor, idempotencyKey: key, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async uow => {
-    const pay = await lockRow<{ id: string; ref: string; status: string; version: number }>(uow.tx, 'Payment', paymentId)
+    let pay = await lockRow<{ id: string; ref: string; status: string; version: number; providerRef: string }>(uow.tx, 'Payment', paymentId)
     if (pay.status === 'succeeded') return { id: pay.id, ref: pay.ref, status: 'succeeded', message: 'Paid.' }
+    const open = outcome.outcome === 'requires_action' || outcome.outcome === 'processing'
+    // A payment marked failed by the old "Check status" while its intent was still live: reopen it only when the processor names the intent.
+    if (pay.status === 'failed') {
+      if (pay.providerRef || !outcome.providerRef || !(open || outcome.outcome === 'succeeded')) return { id: pay.id, ref: pay.ref, status: 'failed', message: outcome.outcome === 'failed' ? outcome.message : `Still marked failed. ${outcome.message}` }
+      await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: ['failed'], to: 'pending', actor, eventType: 'payment.reopened', reason: 'The card processor reports this payment is not final.', data: { providerRef: outcome.providerRef } })
+      pay = await lockRow(uow.tx, 'Payment', paymentId)
+    }
     const attempt = await lockRow<{ id: string; status: string; version: number }>(uow.tx, 'PaymentAttempt', attemptId)
     const attemptStatus = outcome.outcome
-    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: 'PaymentAttempt', id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { providerRef: outcome.providerRef ?? '', message: outcome.message.slice(0, 200), ...(attemptStatus === 'unknown' || attemptStatus === 'requires_action' ? {} : { resolvedAt: uow.now }) } })
+    const ref = outcome.providerRef ?? ''
+    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: 'PaymentAttempt', id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { ...(ref ? { providerRef: ref } : {}), message: outcome.message.slice(0, 200), ...(attemptStatus === 'unknown' || open ? { resolvedAt: null } : { resolvedAt: uow.now }) } })
     if (outcome.outcome === 'succeeded') await settleSucceeded(uow, actor, paymentId, outcome.providerRef)
-    else if (outcome.outcome === 'failed') await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: [pay.status], to: 'failed', actor, eventType: 'payment.failed', data: { providerRef: outcome.providerRef ?? '' } })
-    else if (outcome.outcome === 'unknown' && pay.status === 'pending') await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: ['pending'], to: 'unknown', actor, eventType: 'payment.unknown', data: { providerRef: outcome.providerRef ?? '' } })
-    return { id: pay.id, ref: pay.ref, status: outcome.outcome === 'requires_action' ? 'pending' : outcome.outcome, message: outcome.message }
+    else if (outcome.outcome === 'failed') await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: [pay.status], to: 'failed', actor, eventType: 'payment.failed', data: ref ? { providerRef: ref } : {} })
+    else if (outcome.outcome === 'unknown' && pay.status === 'pending') await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: ['pending'], to: 'unknown', actor, eventType: 'payment.unknown', data: ref ? { providerRef: ref } : {} })
+    // Waiting on the cardholder or the bank: still open (pending), and the intent reference is kept so "Check status" reads it.
+    else if (open && (pay.status !== 'pending' || (ref && pay.providerRef !== ref))) await casUpdate(uow, { model: 'Payment', id: pay.id, version: pay.version, from: [pay.status], to: 'pending', actor, eventType: 'payment.pending', data: ref ? { providerRef: ref } : {} })
+    else if (ref && !pay.providerRef) await uow.tx.payment.update({ where: { id: pay.id }, data: { providerRef: ref } })
+    return { id: pay.id, ref: pay.ref, status: open ? 'pending' : outcome.outcome, message: outcome.message }
   })
   return done.value
 }
@@ -380,12 +391,14 @@ async function recordOutcome(context: Ctx, actor: Actor, paymentId: string, atte
  * returns the original result rather than charging again; a result already recorded is returned without calling out.
  */
 export async function resolveUnknownPayment(prisma: any, actor: Actor, paymentId: string) {
-  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true } } } })
+  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true, providerRef: true } } } })
   if (!pay) throw new DomainError(Codes.NOT_FOUND, 'Payment not found.')
-  if (!['unknown', 'pending'].includes(pay.status) || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: 'Nothing to check.' }
+  // A failed card payment can be checked too (read only): the old check could mark a live intent failed.
+  const checkable = ['unknown', 'pending'].includes(pay.status) || (pay.status === 'failed' && pay.provider === 'stripe')
+  if (!checkable || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: 'Nothing to check.' }
   const attempt = pay.attempts[0]
   if (!cardConfigured()) return { id: pay.id, ref: pay.ref, status: pay.status, message: 'The card processor is not reachable from here.' }
-  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || null })
+  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || attempt.providerRef || null })
   return recordOutcome({ prisma, session: null }, actor, pay.id, attempt.id, outcome, `resolve:${pay.id}:${outcome.outcome}:${outcome.providerRef ?? ''}`)
 }
 

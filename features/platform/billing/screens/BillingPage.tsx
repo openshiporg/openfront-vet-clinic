@@ -246,7 +246,7 @@ async function Payments() {
             <Row>
               <div className="min-w-0 flex-1"><span className="font-medium">{money(p.amountMinor, p.currencyCode)}</span> · {p.client?.displayName}<Meta>{p.ref} · {label(p.method)}{p.forInvoice ? ` · ${p.forInvoice.ref}` : ''}{BigInt(p.refundedMinor) > 0n ? ` · refunded ${money(p.refundedMinor, p.currencyCode)}` : ''}</Meta></div>
               <Status value={p.status} />
-              {['unknown', 'pending'].includes(p.status) ? <ActionButton op="checkPaymentStatus" vars={{ paymentId: p.id }} paths={[PATH]}>Check status</ActionButton> : null}
+              {['unknown', 'pending'].includes(p.status) || (p.status === 'failed' && p.method === 'card_on_file') ? <ActionButton op="checkPaymentStatus" vars={{ paymentId: p.id }} paths={[PATH]}>Check status</ActionButton> : null}
             </Row>
             {p.status === 'succeeded' ? <CommandForm className="mt-2" op="requestRefund" build="billing" submit="Refund" fixed={{ paymentId: p.id, invoiceId: p.forInvoice?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Refund (dollars)', width: 'sm' }, { name: 'reason', label: 'Reason' }]} /> : null}
           </div>
