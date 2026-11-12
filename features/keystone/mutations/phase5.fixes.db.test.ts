@@ -8,7 +8,7 @@ import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { cancelEnrollment, enrolPatient, replacePlanCard, retryPlanCharge, runPlanBilling } from './wellness'
 import { checkInBoarding, checkOutBoarding, confirmBoarding, reserveBoarding } from './boarding'
 import { recordPatientDeath } from './clients'
-import { recordPayment } from './billing'
+import { checkRefundStatus, recordPayment, requestRefund } from './billing'
 import { addManualReminder } from './vaccines'
 import { serviceItemCharge } from './serviceCharge'
 import { command } from '../lib/command'
@@ -180,5 +180,40 @@ describe.skipIf(!hasTestDatabase)('Phase 5 r1 fixes (database)', () => {
     expect((await prisma.boardingStay.findUniqueOrThrow({ where: { id: stay.id } })).invoiceId).toBe(out.invoiceId)
     await expect(checkOutBoarding(null, { stayId: stay.id, expectedVersion: s.version, idempotencyKey: key() }, ctx)).rejects.toThrow(/already/i)
     expect(await prisma.invoice.count({ where: { id: out.invoiceId } })).toBe(1)
+  })
+
+  it('refund: more than is still refundable is refused before the processor; a ledger refusal after the request ends the refund failed, never processing', async () => {
+    const rt = await prisma.runType.findFirstOrThrow({ where: { code: 'dog_small' } })
+    await prisma.runType.update({ where: { id: rt.id }, data: { depositMinor: 5000n } })
+    const pid = await newPatient('Refund Ray')
+    const r = (await reserveBoarding(null, { patientId: pid, runTypeId: rt.id, checkInOn: plusDays(0), checkOutOn: plusDays(2), vaccineOverrideReason: 'Vaccine card seen at the desk, approved', idempotencyKey: key() }, ctx)) as { id: string }
+    const dep = await prisma.deposit.findFirstOrThrow({ where: { reservationId: r.id } })
+    await recordPayment(null, { clientId, depositId: dep.id, method: 'cash', amountMinor: '5000', idempotencyKey: key() }, ctx)
+    const paid = await prisma.deposit.findUniqueOrThrow({ where: { id: dep.id } })
+    const row = await prisma.boardingReservation.findUniqueOrThrow({ where: { id: r.id } })
+    await confirmBoarding(null, { reservationId: r.id, expectedVersion: row.version, idempotencyKey: key() }, ctx)
+    const conf = await prisma.boardingReservation.findUniqueOrThrow({ where: { id: r.id } })
+    const stay = (await checkInBoarding(null, { reservationId: r.id, emergencyContactName: 'Dana Hill', emergencyContactPhone: '555-0100', expectedVersion: conf.version, idempotencyKey: key() }, ctx)) as { id: string }
+    const s = await prisma.boardingStay.findUniqueOrThrow({ where: { id: stay.id } })
+    const out = (await checkOutBoarding(null, { stayId: stay.id, expectedVersion: s.version, idempotencyKey: key() }, ctx)) as { depositAppliedMinor: string }
+    const applied = BigInt(out.depositAppliedMinor)
+    expect(applied).toBeGreaterThan(0n)
+    const left = 5000n - applied
+    const before = await prisma.refund.count({ where: { paymentId: paid.paymentId! } })
+    await expect(requestRefund(null, { paymentId: paid.paymentId!, amountMinor: '5000', reason: 'Too much', idempotencyKey: key() }, ctx)).rejects.toThrow(/can still be refunded/i)
+    expect(await prisma.refund.count({ where: { paymentId: paid.paymentId! } })).toBe(before)
+    // A request that got past the check (made by hand here) is refused by the books when it settles: it ends failed.
+    const bad = await prisma.refund.create({ data: { ref: `REF-T-${Date.now()}`, paymentId: paid.paymentId!, amountMinor: 5000n, currencyCode: 'USD', reason: 'forced', status: 'processing', providerIdempotencyKey: `t-${key()}` } as never })
+    const res = (await checkRefundStatus(null, { refundId: bad.id, idempotencyKey: key() }, ctx)) as { status: string; message: string }
+    expect(res.status).toBe('failed')
+    expect(res.message).toMatch(/books refused|go below zero/i)
+    const end = await prisma.refund.findUniqueOrThrow({ where: { id: bad.id } })
+    expect(end.status).toBe('failed')
+    expect(end.message).toMatch(/refused/i)
+    if (left > 0n) {
+      const ok = (await requestRefund(null, { paymentId: paid.paymentId!, amountMinor: left.toString(), reason: 'Balance returned', idempotencyKey: key() }, ctx)) as { status: string }
+      expect(ok.status).toBe('succeeded')
+      await expect(requestRefund(null, { paymentId: paid.paymentId!, amountMinor: '1', reason: 'Again', idempotencyKey: key() }, ctx)).rejects.toThrow(/can still be refunded/i)
+    }
   })
 })

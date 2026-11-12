@@ -4,9 +4,9 @@ import { auditCreate, casUpdate, lockRow, transition } from '../lib/cas'
 import { consumeApproval, requestApproval } from '../lib/approval'
 import { registerApplier } from '../lib/approvalAppliers'
 import { actorUserId, can, type Actor } from '../lib/actor'
-import { DomainError, Codes } from '../lib/errors'
+import { DomainError, Codes, isDomainError } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
-import { balanceOfInvoice, post } from '../lib/ledger'
+import { balanceOfInvoice, paymentTotals, post } from '../lib/ledger'
 import { activeFeeVersion, feeItemFor, priceCharge, taxRulesFor } from '../lib/pricing'
 import { adjustBps } from '../domain/billing'
 import { adapterFor, cardConfigured, type ChargeResult } from '../../integrations/payment'
@@ -16,6 +16,7 @@ import { gated } from './agentGuard'
 import { memberDiscountBps } from './serviceCharge'
 import { decimalText, locationDay, staffOf, text, type Ctx } from './clinical'
 import { billingSettings, dateOnly, minorText, pick } from './billingInput'
+const money = (minor: bigint) => `$${minor / 100n}.${String(minor % 100n).padStart(2, '0')}`
 
 /*
  * Charges, invoices, payments, refunds and write-offs (BUILD-PLAN P4, STATE-MACHINES §11).
@@ -511,7 +512,7 @@ async function runRefund(prisma: any, actor: Actor, refundId: string, key: strin
   if (start.value.skip) return { id: refundId, status: start.value.status, message: 'Already refunded.' }
   const s = start.value
   const out = await adapterFor(s.provider).refund({ providerRef: s.providerRef, amountMinor: s.amountMinor, idempotencyKey: s.key, reason: s.reason })
-  const done = await command(prisma, { name: 'refund.settle', actor, idempotencyKey: `${key}:settle:${out.outcome}:${out.providerRef ?? ''}`, params: { refundId, outcome: out.outcome } }, async uow => {
+  const settle = (outcome: typeof out) => command(prisma, { name: 'refund.settle', actor, idempotencyKey: `${key}:settle:${outcome.outcome}:${outcome.providerRef ?? ''}`, params: { refundId, outcome: outcome.outcome } }, async uow => {
     const r = await lockRow<{ id: string; status: string; version: number; paymentId: string; invoiceId: string | null; amountMinor: bigint; ref: string }>(uow.tx, 'Refund', refundId)
     if (r.status === 'succeeded') return { id: r.id, status: 'succeeded' }
     const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { clientId: true, currencyCode: true, locationId: true } })
@@ -533,7 +534,24 @@ async function runRefund(prisma: any, actor: Actor, refundId: string, key: strin
     }
     return { id: r.id, status: out.outcome, message: out.message }
   })
-  return done.value
+  try {
+    const done = await settle(out)
+    return done.value
+  } catch (error) {
+    // The ledger refused the entry after the processor answered. The refund must not stay 'processing': it ends 'failed' with the reason,
+    // so staff see it and reconcile with the processor (the message says whether money already left).
+    if (!isDomainError(error) && !/check_violation|cannot go below zero|database rule/i.test(String((error as Error)?.message))) throw error
+    const why = isDomainError(error) ? error.message : String((error as Error).message)
+    const message = `${out.outcome === 'succeeded' ? 'The processor made this refund, but the books refused the entry' : 'The books refused this refund'}: ${why}`.slice(0, 200)
+    const done = await command(prisma, { name: 'refund.settle_refused', actor, idempotencyKey: `${key}:refused`, params: { refundId } }, async uow => {
+      const r = await lockRow<{ id: string; status: string; version: number }>(uow.tx, 'Refund', refundId)
+      if (r.status === 'succeeded' || r.status === 'failed') return { id: r.id, status: r.status, message }
+      await casUpdate(uow, { model: 'Refund', id: r.id, version: r.version, from: [r.status], to: 'failed', actor, eventType: 'refund.failed', data: { message, providerRef: out.providerRef ?? '' } })
+      return { id: r.id, status: 'failed', message }
+    })
+    return done.value
+  }
+
 }
 
 /** Ask for a refund of part or all of a payment. Above the practice's limit it waits for an approver; otherwise it is made now. */
@@ -548,6 +566,12 @@ export async function requestRefund(_root: unknown, args: { paymentId: string; i
         const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } })
         if (!inv || inv.clientId !== pay.clientId) throw new DomainError(Codes.NOT_FOUND, 'Invoice not found for this client.')
       }
+      // Nothing goes to the processor for more than is still refundable: paid, less what a deposit already put on an invoice, less refunds already asked for.
+      const { refunded } = await paymentTotals(uow.tx, pay.id)
+      const dep = await uow.tx.deposit.findFirst({ where: { paymentId: pay.id, status: 'applied' }, select: { id: true } })
+      const applied = dep ? -((await uow.tx.clientLedgerEntry.findUnique({ where: { entryKey: `deposit:${dep.id}:apply` }, select: { amountMinor: true } }))?.amountMinor ?? ZERO) : ZERO
+      const refundable = pay.amountMinor - applied - refunded
+      if (amount > refundable) throw new DomainError(Codes.GUARD_FAILED, `Only ${money(refundable > ZERO ? refundable : ZERO)} of this payment can still be refunded${applied > ZERO ? ` (${money(applied)} of it was applied to an invoice)` : ''}.`, { reason: 'over_refund', refundableMinor: (refundable > ZERO ? refundable : ZERO).toString() })
       const settings = await billingSettings(uow)
       const staff = await staffOf(uow, actor).catch(() => null)
       const ref = await nextReference(uow.tx, 'REF', uow.now)
