@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { keystoneClient } from '@/features/dashboard/lib/keystoneClient';
+import { practiceTimeZone } from '@/features/platform/lib/server';
+import { todayIn } from '@/features/platform/lib/clinic';
 import { ageBucket, AGE_LABEL } from '@/features/platform/lib/ageing';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +17,7 @@ const notFound = () => new Response('Not found', { status: 404 });
 /** Reports are downloads, never emailed: the ageing list, a client statement, and a claim packet. Read through the signed-in session, so a role without access gets 404. */
 export async function GET(request: NextRequest) {
   const kind = request.nextUrl.searchParams.get('kind');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIn(await practiceTimeZone());
   if (kind === 'ageing') {
     const res = await keystoneClient<{ invoices: { ref: string; postedOn: string | null; totalMinor: string; balanceMinor: string; client: { displayName: string } | null }[] }>(`{ invoices(where: { status: { in: ["posted", "partially_paid"] } }, orderBy: { postedOn: asc }, take: 400) { ref postedOn totalMinor balanceMinor client { displayName } } }`);
     if (!res.success) return notFound();

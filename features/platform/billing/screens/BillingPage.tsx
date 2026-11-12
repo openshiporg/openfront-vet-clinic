@@ -1,4 +1,5 @@
-import { q } from '../../lib/server';
+import { q, practiceTimeZone } from '../../lib/server';
+import { todayIn } from '../../lib/clinic';
 import { calendarDay, money, label } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Tabs, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
@@ -271,7 +272,7 @@ async function Receivables() {
     invoices(where: { status: { in: ["posted", "partially_paid"] } }, orderBy: { postedOn: asc }, take: 400) { id ref postedOn balanceMinor client { id displayName } }
     arPeriods(orderBy: { startsOn: desc }, take: 18) { id label status version }
   }`);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIn(await practiceTimeZone());
   const totals = new Map<string, bigint>(AGE_BUCKETS.map(b => [b, 0n]));
   const byClient = new Map<string, { name: string; owing: bigint; oldest: string }>();
   for (const i of d.invoices) {
