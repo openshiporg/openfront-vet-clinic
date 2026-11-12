@@ -61,13 +61,13 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
         <label key={f.name} className={cn('flex min-w-0 max-w-full flex-col gap-1 text-xs text-muted-foreground', f.width === 'full' ? 'w-full' : f.width === 'lg' ? 'w-full sm:w-96' : f.options ? (f.width === 'sm' ? 'w-auto min-w-24' : 'w-auto min-w-36') : f.width === 'sm' ? 'w-24' : 'w-36')}>
           {f.label}
           {f.options ? (
-            <select className="h-8 w-full max-w-full rounded-md border bg-background pl-2 pr-7 text-sm text-foreground" value={values[f.name]} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
+            <select className="h-11 w-full max-w-full sm:h-8 rounded-md border bg-background pl-2 pr-7 text-sm text-foreground" value={values[f.name]} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}>
               {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           ) : f.multiline ? (
             <textarea rows={f.multiline} className="w-full rounded-md border bg-background px-2 py-1.5 text-sm leading-relaxed text-foreground" value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
           ) : (
-            <input className="h-8 rounded-md border bg-background px-2 font-mono text-sm text-foreground" value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
+            <input className="h-11 rounded-md sm:h-8 border bg-background px-2 font-mono text-sm text-foreground" value={values[f.name]} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))} />
           )}
           {f.hint ? <span className="text-[11px]">{f.hint}</span> : null}
         </label>

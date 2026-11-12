@@ -38,7 +38,7 @@ export function Tabs({ items, active }: { items: { key: string; label: string; h
     <div className="max-w-full">
       <div className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1">
         {items.map((i) => (
-          <Link key={i.key} href={i.href} className={cn('whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium', i.key === active ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
+          <Link key={i.key} href={i.href} className={cn('inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium sm:min-h-0', i.key === active ? 'bg-background shadow-sm' : 'text-muted-foreground')}>
             {i.label}{i.count !== undefined ? <span className="ml-1.5 font-mono text-xs text-muted-foreground">{i.count}</span> : null}
           </Link>
         ))}

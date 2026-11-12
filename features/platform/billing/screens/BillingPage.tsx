@@ -6,6 +6,9 @@ import { ActionButton } from '../../components/ActionButton';
 import { ageBucket, AGE_BUCKETS, AGE_LABEL } from '../../lib/ageing';
 
 type Opt = { value: string; label: string };
+type PatientPick = { id: string; name: string; ownerships: { client: { displayName: string } | null }[] };
+/** Many animals share a name, so the owner is part of the label. */
+const pet = (p: PatientPick) => ({ value: p.id, label: `${p.name} · ${p.ownerships[0]?.client?.displayName ?? 'no owner on file'}` });
 const PATH = '/dashboard/platform/billing';
 const TAX: Opt[] = [
   { value: 'professional_service', label: 'Service, not taxed' }, { value: 'merchandise', label: 'Merchandise' }, { value: 'rx_animal_drug', label: 'Prescription medicine' },
@@ -55,10 +58,10 @@ export default async function BillingPage({ searchParams }: { searchParams?: Pro
 type Inv = { id: string; ref: string; status: string; version: number; totalMinor: string; balanceMinor: string; currencyCode: string; postedOn: string | null; client: { id: string; displayName: string } | null; lines: { id: string; description: string; qty: string; extendedMinor: string; discountMinor: string; taxMinor: string; reversedAt: string | null }[] };
 
 async function Invoices() {
-  const d = await q<{ invoices: Inv[]; chargeLines: { id: string; description: string; extendedMinor: string; taxMinor: string; client: { id: string; displayName: string } | null; patient: { name: string } | null }[]; patients: { id: string; name: string }[]; feeItems: { id: string; name: string; priceMinor: string }[] }>(`{
+  const d = await q<{ invoices: Inv[]; chargeLines: { id: string; description: string; extendedMinor: string; taxMinor: string; client: { id: string; displayName: string } | null; patient: { name: string } | null }[]; patients: PatientPick[]; feeItems: { id: string; name: string; priceMinor: string }[] }>(`{
     invoices(orderBy: { createdAt: desc }, take: 25) { id ref status version totalMinor balanceMinor currencyCode postedOn client { id displayName } lines(where: { reversedAt: { equals: null } }, orderBy: { capturedAt: asc }, take: 30) { id description qty extendedMinor discountMinor taxMinor reversedAt } }
     chargeLines(where: { invoice: null, reversedAt: { equals: null } }, orderBy: { capturedAt: asc }, take: 100) { id description extendedMinor taxMinor client { id displayName } patient { name } }
-    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
+    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ownerships(where: { effectiveTo: null, role: { equals: "primary" } }, take: 1) { client { displayName } } }
     feeItems(where: { active: { equals: true }, version: { status: { equals: "published" } } }, orderBy: { name: asc }, take: 300) { id name priceMinor }
   }`);
   const byClient = new Map<string, { name: string; lines: typeof d.chargeLines }>();
@@ -83,12 +86,12 @@ async function Invoices() {
       </Section>
       <Section title="Add a charge">
         <CommandForm op="addFeeCharge" build="billing" submit="Add charge" paths={[PATH]} fields={[
-          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(pet)] },
           { name: 'feeItemId', label: 'Service or item', options: [{ value: '', label: 'Choose from the fee schedule' }, ...d.feeItems.map(f => ({ value: f.id, label: `${f.name} · ${money(f.priceMinor)}` }))] },
           { name: 'qty', label: 'Quantity', defaultValue: '1', width: 'sm' },
         ]} />
         <CommandForm className="mt-3" op="addManualCharge" build="billing" submit="Add custom charge" paths={[PATH]} fields={[
-          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(pet)] },
           { name: 'description', label: 'What for' }, { name: 'amount', label: 'Amount (dollars)', width: 'sm' },
           { name: 'taxCategory', label: 'Tax', options: TAX, defaultValue: 'professional_service' }, { name: 'reason', label: 'Why it is not on the fee schedule' },
         ]} />
@@ -129,9 +132,9 @@ async function Invoices() {
 }
 
 async function Estimates() {
-  const d = await q<{ estimates: { id: string; ref: string; title: string; status: string; elective: boolean; patient: { name: string } | null; client: { id: string; displayName: string } | null; versions: { id: string; versionNo: number; status: string; version: number; quoteHash: string; validUntil: string | null; options: { id: string; label: string; lowTotalMinor: string; highTotalMinor: string; recommended: boolean; currencyCode: string; lines: { id: string; description: string; qtyLow: string; qtyHigh: string; lowMinor: string; highMinor: string }[] }[] }[] }[]; patients: { id: string; name: string }[]; locations: { id: string; name: string }[]; feeItems: { id: string; name: string; priceMinor: string }[]; people: { id: string; firstName: string; lastName: string; client: { id: string } | null }[] }>(`{
+  const d = await q<{ estimates: { id: string; ref: string; title: string; status: string; elective: boolean; patient: { name: string } | null; client: { id: string; displayName: string } | null; versions: { id: string; versionNo: number; status: string; version: number; quoteHash: string; validUntil: string | null; options: { id: string; label: string; lowTotalMinor: string; highTotalMinor: string; recommended: boolean; currencyCode: string; lines: { id: string; description: string; qtyLow: string; qtyHigh: string; lowMinor: string; highMinor: string }[] }[] }[] }[]; patients: PatientPick[]; locations: { id: string; name: string }[]; feeItems: { id: string; name: string; priceMinor: string }[]; people: { id: string; firstName: string; lastName: string; client: { id: string } | null }[] }>(`{
     estimates(orderBy: { createdAt: desc }, take: 20) { id ref title status elective patient { name } client { id displayName } versions(orderBy: { versionNo: desc }, take: 1) { id versionNo status version quoteHash validUntil options(orderBy: { createdAt: asc }, take: 4) { id label lowTotalMinor highTotalMinor recommended currencyCode lines(orderBy: { sortOrder: asc }, take: 20) { id description qtyLow qtyHigh lowMinor highMinor } } } }
-    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
+    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ownerships(where: { effectiveTo: null, role: { equals: "primary" } }, take: 1) { client { displayName } } }
     locations(orderBy: { name: asc }, take: 10) { id name }
     feeItems(where: { active: { equals: true }, version: { status: { equals: "published" } } }, orderBy: { name: asc }, take: 300) { id name priceMinor }
     people: clientPeople(where: { canApproveTreatment: { equals: true } }, take: 300) { id firstName lastName client { id } }
@@ -171,7 +174,7 @@ async function Estimates() {
       </Section>
       <Section title="New estimate">
         <CommandForm op="startEstimate" build="estimate" submit="Create estimate" paths={[PATH]} fields={[
-          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(pet)] },
           { name: 'locationId', label: 'Location', options: d.locations.map(l => ({ value: l.id, label: l.name })) },
           { name: 'title', label: 'Title', placeholder: 'Dental cleaning and extractions' }, { name: 'elective', label: 'Planned procedure (asks for a deposit)', options: [{ value: 'false', label: 'No' }, { value: 'true', label: 'Yes' }], width: 'sm' },
           { name: 'fee1', label: 'Line 1', options: fee }, { name: 'low1', label: 'Least', defaultValue: '1', width: 'sm' }, { name: 'high1', label: 'Most', defaultValue: '1', width: 'sm' },
@@ -328,13 +331,13 @@ async function Fees() {
 }
 
 async function Claims() {
-  const d = await q<{ insuranceClaimPackets: { id: string; ref: string; status: string; version: number; submitter: string; approvedMinor: string | null; statusNote: string; patient: { name: string } | null; invoice: { ref: string } | null; policy: { policyNumber: string; insurer: { name: string } | null } | null; documents: { title: string }[] }[]; invoices: { id: string; ref: string; patient: null; client: { displayName: string } | null; encounter: { patient: { id: string } | null } | null }[]; petInsurancePolicies: { id: string; policyNumber: string; insurer: { name: string } | null; patient: { name: string } | null }[]; recordsReleases: { id: string; recipient: string; at: string }[]; thirdPartyPayers: { id: string; name: string }[]; patients: { id: string; name: string }[]; payerAuthorizations: { id: string; ref: string; status: string; version: number; requestedMinor: string; authorisedMinor: string | null; invoice: { ref: string } | null }[] }>(`{
+  const d = await q<{ insuranceClaimPackets: { id: string; ref: string; status: string; version: number; submitter: string; approvedMinor: string | null; statusNote: string; patient: { name: string } | null; invoice: { ref: string } | null; policy: { policyNumber: string; insurer: { name: string } | null } | null; documents: { title: string }[] }[]; invoices: { id: string; ref: string; patient: null; client: { displayName: string } | null; encounter: { patient: { id: string } | null } | null }[]; petInsurancePolicies: { id: string; policyNumber: string; insurer: { name: string } | null; patient: { name: string } | null }[]; recordsReleases: { id: string; recipient: string; at: string }[]; thirdPartyPayers: { id: string; name: string }[]; patients: PatientPick[]; payerAuthorizations: { id: string; ref: string; status: string; version: number; requestedMinor: string; authorisedMinor: string | null; invoice: { ref: string } | null }[] }>(`{
     insuranceClaimPackets(orderBy: { createdAt: desc }, take: 30) { id ref status version submitter approvedMinor statusNote patient { name } invoice { ref } policy { policyNumber insurer { name } } documents }
     invoices(where: { status: { in: ["posted", "partially_paid", "paid"] } }, orderBy: { createdAt: desc }, take: 60) { id ref client { displayName } encounter { patient { id } } }
     petInsurancePolicies(orderBy: { createdAt: desc }, take: 100) { id policyNumber insurer { name } patient { name } }
     recordsReleases(orderBy: { at: desc }, take: 40) { id recipient at }
     thirdPartyPayers(where: { kind: { equals: "insurer" } }, orderBy: { name: asc }, take: 100) { id name }
-    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
+    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ownerships(where: { effectiveTo: null, role: { equals: "primary" } }, take: 1) { client { displayName } } }
     payerAuthorizations(orderBy: { createdAt: desc }, take: 20) { id ref status version requestedMinor authorisedMinor invoice { ref } }
   }`);
   const NEXT: Record<string, { to: string; text: string }[]> = {
@@ -364,7 +367,7 @@ async function Claims() {
       <Section title="Pet insurance on file">
         {d.petInsurancePolicies.length ? d.petInsurancePolicies.map(p => <Row key={p.id}><div className="min-w-0 flex-1"><span className="font-medium">{p.patient?.name}</span><Meta>{p.insurer?.name} · policy {p.policyNumber}</Meta></div></Row>) : <Empty>No pet insurance policies on file yet.</Empty>}
         <CommandForm className="mt-3" op="addInsurancePolicy" build="billing" submit="Add policy" paths={[PATH]} fields={[
-          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(pet)] },
           { name: 'insurerId', label: 'Insurer', options: [{ value: '', label: 'Choose an insurer' }, ...d.thirdPartyPayers.map(p => ({ value: p.id, label: p.name }))] },
           { name: 'policyNumber', label: 'Policy number' }, { name: 'plan', label: 'Plan' },
           { name: 'deductible', label: 'Deductible (dollars)', width: 'sm' }, { name: 'reimbursementRate', label: 'Pays back (0.8 is 80%)', width: 'sm' },

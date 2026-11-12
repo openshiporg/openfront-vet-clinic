@@ -9,7 +9,7 @@ export function PillTrack({ children, className }: { children: React.ReactNode; 
   return <div className={cn('inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1', className)}>{children}</div>;
 }
 
-export const pillClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md bg-background px-3 text-sm font-medium shadow-sm transition disabled:opacity-50';
+export const pillClass = 'inline-flex h-11 items-center justify-center whitespace-nowrap sm:h-8 rounded-md bg-background px-3 text-sm font-medium shadow-sm transition disabled:opacity-50';
 
 const newKey = (op: string) => `${op}:${crypto.randomUUID()}`;
 
