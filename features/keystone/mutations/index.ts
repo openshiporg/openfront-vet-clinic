@@ -169,6 +169,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestWriteOff(invoiceId: ID!, reason: String!, idempotencyKey: String!): JSON
         closeArPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         reopenArPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addInsurancePolicy(patientId: ID!, insurerId: ID!, policyNumber: String!, plan: String, deductibleMinor: String, reimbursementRate: String, effectiveFrom: String, effectiveTo: String, directPayEligible: Boolean, idempotencyKey: String!): JSON
         requestAuthorization(invoiceId: ID!, policyId: ID!, requestedMinor: String!, idempotencyKey: String!): JSON
         recordAuthorizationDecision(authorizationId: ID!, decision: String!, authorisedMinor: String, externalRef: String, validUntil: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         buildClaimPacket(invoiceId: ID!, policyId: ID!, recordsReleaseId: ID, submitter: String!, formFields: JSON, idempotencyKey: String!): JSON
@@ -331,6 +332,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestWriteOff: op(billing.requestWriteOff),
         closeArPeriod: op(billing.closeArPeriod),
         reopenArPeriod: op(billing.reopenArPeriod),
+        addInsurancePolicy: op(insurance.addInsurancePolicy),
         requestAuthorization: op(insurance.requestAuthorization),
         recordAuthorizationDecision: op(insurance.recordAuthorizationDecision),
         buildClaimPacket: op(insurance.buildClaimPacket),

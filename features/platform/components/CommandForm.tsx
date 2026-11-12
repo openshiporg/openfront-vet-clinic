@@ -115,7 +115,7 @@ const required = (v: Record<string, string>, ...names: string[]) => { for (const
 const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unknown>> = {
   // Phase 4: money screens. Dollars typed by a person become whole cents; version numbers become numbers.
   billing: (v) => {
-    const DOLLAR: Record<string, string> = { amount: 'amountMinor', requested: 'requestedMinor', authorised: 'authorisedMinor', newHigh: 'newHighMinor', price: 'priceMinor', minimum: 'minimumChargeMinor', approved: 'approvedMinor' };
+    const DOLLAR: Record<string, string> = { amount: 'amountMinor', requested: 'requestedMinor', authorised: 'authorisedMinor', newHigh: 'newHighMinor', price: 'priceMinor', minimum: 'minimumChargeMinor', approved: 'approvedMinor', deductible: 'deductibleMinor' };
     const out: Record<string, unknown> = {};
     for (const [k, raw] of Object.entries(v)) {
       const t = (raw ?? '').trim();

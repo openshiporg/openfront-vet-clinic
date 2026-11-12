@@ -328,11 +328,13 @@ async function Fees() {
 }
 
 async function Claims() {
-  const d = await q<{ insuranceClaimPackets: { id: string; ref: string; status: string; version: number; submitter: string; approvedMinor: string | null; statusNote: string; patient: { name: string } | null; invoice: { ref: string } | null; policy: { policyNumber: string; insurer: { name: string } | null } | null; documents: { title: string }[] }[]; invoices: { id: string; ref: string; patient: null; client: { displayName: string } | null; encounter: { patient: { id: string } | null } | null }[]; petInsurancePolicies: { id: string; policyNumber: string; insurer: { name: string } | null; patient: { name: string } | null }[]; recordsReleases: { id: string; recipient: string; at: string }[]; payerAuthorizations: { id: string; ref: string; status: string; version: number; requestedMinor: string; authorisedMinor: string | null; invoice: { ref: string } | null }[] }>(`{
+  const d = await q<{ insuranceClaimPackets: { id: string; ref: string; status: string; version: number; submitter: string; approvedMinor: string | null; statusNote: string; patient: { name: string } | null; invoice: { ref: string } | null; policy: { policyNumber: string; insurer: { name: string } | null } | null; documents: { title: string }[] }[]; invoices: { id: string; ref: string; patient: null; client: { displayName: string } | null; encounter: { patient: { id: string } | null } | null }[]; petInsurancePolicies: { id: string; policyNumber: string; insurer: { name: string } | null; patient: { name: string } | null }[]; recordsReleases: { id: string; recipient: string; at: string }[]; thirdPartyPayers: { id: string; name: string }[]; patients: { id: string; name: string }[]; payerAuthorizations: { id: string; ref: string; status: string; version: number; requestedMinor: string; authorisedMinor: string | null; invoice: { ref: string } | null }[] }>(`{
     insuranceClaimPackets(orderBy: { createdAt: desc }, take: 30) { id ref status version submitter approvedMinor statusNote patient { name } invoice { ref } policy { policyNumber insurer { name } } documents }
     invoices(where: { status: { in: ["posted", "partially_paid", "paid"] } }, orderBy: { createdAt: desc }, take: 60) { id ref client { displayName } encounter { patient { id } } }
     petInsurancePolicies(orderBy: { createdAt: desc }, take: 100) { id policyNumber insurer { name } patient { name } }
     recordsReleases(orderBy: { at: desc }, take: 40) { id recipient at }
+    thirdPartyPayers(where: { kind: { equals: "insurer" } }, orderBy: { name: asc }, take: 100) { id name }
+    patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
     payerAuthorizations(orderBy: { createdAt: desc }, take: 20) { id ref status version requestedMinor authorisedMinor invoice { ref } }
   }`);
   const NEXT: Record<string, { to: string; text: string }[]> = {
@@ -358,6 +360,16 @@ async function Claims() {
             </div>
           </div>
         )) : <Empty>No claims yet.</Empty>}
+      </Section>
+      <Section title="Pet insurance on file">
+        {d.petInsurancePolicies.length ? d.petInsurancePolicies.map(p => <Row key={p.id}><div className="min-w-0 flex-1"><span className="font-medium">{p.patient?.name}</span><Meta>{p.insurer?.name} · policy {p.policyNumber}</Meta></div></Row>) : <Empty>No pet insurance policies on file yet.</Empty>}
+        <CommandForm className="mt-3" op="addInsurancePolicy" build="billing" submit="Add policy" paths={[PATH]} fields={[
+          { name: 'patientId', label: 'Patient', options: [{ value: '', label: 'Choose a patient' }, ...d.patients.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'insurerId', label: 'Insurer', options: [{ value: '', label: 'Choose an insurer' }, ...d.thirdPartyPayers.map(p => ({ value: p.id, label: p.name }))] },
+          { name: 'policyNumber', label: 'Policy number' }, { name: 'plan', label: 'Plan' },
+          { name: 'deductible', label: 'Deductible (dollars)', width: 'sm' }, { name: 'reimbursementRate', label: 'Pays back (0.8 is 80%)', width: 'sm' },
+          { name: 'effectiveFrom', label: 'Starts (YYYY-MM-DD)', width: 'sm' },
+        ]} />
       </Section>
       <Section title="Prepare a claim">
         <CommandForm op="buildClaimPacket" build="billing" submit="Prepare claim" paths={[PATH]} fields={[

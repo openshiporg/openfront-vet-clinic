@@ -16,6 +16,36 @@ import { minorText, pick } from './billingInput'
 
 const CLAIMERS = ['canPostInvoices', 'canTakePayments', 'canManagePayments'] as const
 
+/** Record the pet's insurance policy so a claim can be prepared against it. */
+export async function addInsurancePolicy(_root: unknown, args: { patientId: string; insurerId: string; policyNumber: string; plan?: string | null; deductibleMinor?: string | null; reimbursementRate?: string | null; effectiveFrom?: string | null; effectiveTo?: string | null; directPayEligible?: boolean | null; idempotencyKey: string }, context: Ctx) {
+  return gated(context, { permissions: [...CLAIMERS, 'canManagePractice'], tool: 'insurance.policy.add', humanOnly: true }, args, async actor => {
+    const policyNumber = text(args.policyNumber, 'policy number', 60)
+    const day = (v: string | null | undefined, name: string) => {
+      if (!v) return null
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `Enter the ${name} as a date.`, { field: name })
+      return v
+    }
+    const from = day(args.effectiveFrom, 'start date')
+    const to = day(args.effectiveTo, 'end date')
+    if (from && to && to < from) throw new DomainError(Codes.INVALID_INPUT, 'The policy cannot end before it starts.', { field: 'end date' })
+    const rate = args.reimbursementRate ? String(args.reimbursementRate).trim() : null
+    if (rate && !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(rate)) throw new DomainError(Codes.INVALID_INPUT, 'Enter the reimbursement as a share between 0 and 1, such as 0.8.', { field: 'reimbursement' })
+    const deductible = args.deductibleMinor ? minorText(args.deductibleMinor, 'deductible') : null
+    const result = await command(context.prisma, { name: 'insurance.policy.add', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
+      const patient = await uow.tx.patient.findUnique({ where: { id: args.patientId }, select: { id: true } })
+      if (!patient) throw new DomainError(Codes.NOT_FOUND, 'Patient not found.')
+      const payer = await uow.tx.thirdPartyPayer.findUnique({ where: { id: args.insurerId }, select: { id: true } })
+      if (!payer) throw new DomainError(Codes.NOT_FOUND, 'Insurer not found.')
+      const dup = await uow.tx.petInsurancePolicy.findFirst({ where: { patientId: patient.id, insurerId: payer.id, policyNumber }, select: { id: true } })
+      if (dup) throw new DomainError(Codes.GUARD_FAILED, 'This policy is already on file for the patient.')
+      const row = await uow.tx.petInsurancePolicy.create({ data: { patientId: patient.id, insurerId: payer.id, policyNumber, plan: String(args.plan ?? '').slice(0, 120), ...(deductible !== null ? { deductibleMinor: deductible } : {}), ...(rate ? { reimbursementRate: rate } : {}), effectiveFrom: from, effectiveTo: to, directPayEligible: args.directPayEligible === true } })
+      auditCreate(uow, actor, 'PetInsurancePolicy', row.id, 'insurance.policy.added', { patientId: patient.id, insurerId: payer.id, policyNumber })
+      return { id: row.id }
+    })
+    return { replay: result.replay, ...result.value }
+  })
+}
+
 export async function requestAuthorization(_root: unknown, args: { invoiceId: string; policyId: string; requestedMinor: string; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: [...CLAIMERS], tool: 'payer.authorize.request', humanOnly: true }, args, async actor => {
     const requested = minorText(args.requestedMinor, 'amount')

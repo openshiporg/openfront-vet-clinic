@@ -134,6 +134,7 @@ const OPS: Record<string, Record<string, string>> = {
   requestWriteOff: { invoiceId: 'ID!', reason: 'String!' },
   closeArPeriod: { periodId: 'ID!', expectedVersion: 'Int!' },
   reopenArPeriod: { periodId: 'ID!', reason: 'String!', expectedVersion: 'Int!' },
+  addInsurancePolicy: { patientId: 'ID!', insurerId: 'ID!', policyNumber: 'String!', plan: 'String', deductibleMinor: 'String', reimbursementRate: 'String', effectiveFrom: 'String', effectiveTo: 'String', directPayEligible: 'Boolean' },
   requestAuthorization: { invoiceId: 'ID!', policyId: 'ID!', requestedMinor: 'String!' },
   recordAuthorizationDecision: { authorizationId: 'ID!', decision: 'String!', authorisedMinor: 'String', externalRef: 'String', validUntil: 'String', expectedVersion: 'Int!' },
   buildClaimPacket: { invoiceId: 'ID!', policyId: 'ID!', recordsReleaseId: 'ID', submitter: 'String!', formFields: 'JSON' },
