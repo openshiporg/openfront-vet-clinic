@@ -2,6 +2,7 @@ import { graphql, list } from '@keystone-6/core'
 import { calendarDay, checkbox, integer, json, text, timestamp, virtual } from '@keystone-6/core/fields'
 import { relationship } from './guardedRelationship'
 import { ccy, fixedChoice, lifecycle, minor, qty, rate, readOnly, systemText, versionField } from './domainFields'
+import { permissions } from '../access'
 import { governed, immutable } from './listAccess'
 import { trackingFields } from './trackingFields'
 import { balanceOfInvoice, paymentTotals, planSpend } from '../lib/ledger'
@@ -524,7 +525,7 @@ export const InsuranceClaimPacket = list({
     patient: relationship({ ref: 'Patient', ...readOnly }),
     invoice: relationship({ ref: 'Invoice', ...readOnly }),
     recordsRelease: relationship({ ref: 'RecordsRelease', ...readOnly }),
-    formFields: json({ ...readOnly, defaultValue: {} }),
+    formFields: json({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, defaultValue: {} }),
     /** [{documentId, title, sha256}] — exactly what the release listed. */
     documents: json({ ...readOnly, defaultValue: [] }),
     submitter: fixedChoice(['client', 'clinic']),
@@ -532,7 +533,7 @@ export const InsuranceClaimPacket = list({
     approvedMinor: money(),
     paidTo: text({ db: { isNullable: true }, access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: 'hidden' }, itemView: { fieldMode: 'read' } } }),
     statusNote: systemText(),
-    packetBody: text({ ...readOnly, ui: { ...readOnly.ui, displayMode: 'textarea' } }),
+    packetBody: text({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, ui: { ...readOnly.ui, displayMode: 'textarea' } }),
     packetSha256: systemText(),
     version: versionField(),
     ...trackingFields,

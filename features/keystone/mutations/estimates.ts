@@ -222,7 +222,7 @@ export async function recordOverageApproval(_root: unknown, args: { planId: stri
       const plan = await lockRow<{ id: string; clientId: string; acceptedHighMinor: bigint; status: string; version: number }>(uow.tx, 'TreatmentPlan', args.planId)
       if (newHigh <= plan.acceptedHighMinor) throw new DomainError(Codes.INVALID_INPUT, 'The new amount must be more than what the client already agreed to.', { field: 'newHighMinor' })
       if (method === 'emergency_override') {
-        if (staff.kind !== 'veterinarian') throw new DomainError(Codes.NOT_AUTHORIZED, 'Only a veterinarian can override the amount in an emergency.')
+        if (staff.kind !== 'dvm') throw new DomainError(Codes.NOT_AUTHORIZED, 'Only a veterinarian can override the amount in an emergency.')
       } else {
         if (!args.approverId) throw new DomainError(Codes.INVALID_INPUT, 'Choose who in the household agreed.', { field: 'approverId' })
         const person = await uow.tx.clientPerson.findUnique({ where: { id: args.approverId }, select: { clientId: true, canApproveTreatment: true } })

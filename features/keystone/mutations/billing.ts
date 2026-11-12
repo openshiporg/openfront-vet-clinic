@@ -340,6 +340,11 @@ export async function takeCardPayment(_root: unknown, args: { clientId: string; 
     const amount = minorText(args.amountMinor, 'amount')
     if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, 'Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.', { reason: 'no_processor' })
     const started = await command(context.prisma, { name: 'payment.card.start', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
+      // One card payment in flight per invoice or deposit: lock the target, then refuse while an earlier card payment is pending or unknown.
+      if (args.invoiceId) await lockRow(uow.tx, 'Invoice', args.invoiceId)
+      else if (args.depositId) await lockRow(uow.tx, 'Deposit', args.depositId)
+      const open = await uow.tx.payment.findFirst({ where: { method: 'card_on_file', status: { in: ['pending', 'unknown'] }, ...(args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? '' }) }, select: { ref: true } })
+      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: 'card_in_flight' })
       const pay = await newPayment(uow, actor, { clientId: args.clientId, method: 'card_on_file', provider: 'stripe', amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } })
       const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: 'processing', providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } })
       return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode }

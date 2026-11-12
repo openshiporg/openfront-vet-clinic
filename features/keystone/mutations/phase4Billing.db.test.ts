@@ -7,7 +7,7 @@ import { balanceOfClient, balanceOfInvoice } from '../lib/ledger'
 import { systemActor } from '../lib/actor'
 import { stripeAdapter } from '../../integrations/payment'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
-import { acceptEstimate, attachOrderToPlan, createEstimate, presentEstimate } from './estimates'
+import { acceptEstimate, attachOrderToPlan, createEstimate, presentEstimate, recordOverageApproval } from './estimates'
 import { addFeeCharge, applyDeposit, applyPaymentEvent, checkPaymentStatus, closeArPeriod, draftInvoice, postInvoice, recordPayment, requestRefund, takeCardPayment } from './billing'
 import { buildClaimPacket } from './insurance'
 
@@ -106,6 +106,41 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     expect(resolve.mock.calls[0][0].idempotencyKey).toBe(attempt.providerIdempotencyKey)
     expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
     expect(await prisma.clientLedgerEntry.count({ where: { paymentId: res.id } })).toBe(1)
+  })
+
+  it('a second card charge is refused while the first is unknown or pending, with or without a new key, and a double click charges once', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const inv = await postedInvoice(1)
+    const charge = vi.spyOn(stripeAdapter, 'charge').mockResolvedValue({ outcome: 'unknown', providerRef: null, message: 'No answer' })
+    vi.spyOn(stripeAdapter, 'resolve').mockResolvedValue({ outcome: 'succeeded', providerRef: 'pi_b1', message: 'Paid' })
+    const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string; status: string }
+    expect(first.status).toBe('unknown')
+    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: '100', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+    expect(charge).toHaveBeenCalledTimes(1)
+    // The database refuses a second open card payment on the invoice even if the application did not.
+    await expect(prisma.$executeRawUnsafe(`INSERT INTO "Payment" (id, ref, "client", method, provider, "amountMinor", status, "forInvoice", "updatedAt") VALUES ('raw_open_card', 'RAW-OPEN', '${clientId}', 'card_on_file', 'stripe', 100, 'pending', '${inv.id}', now())`)).rejects.toBeTruthy()
+    // Check status settles it; the invoice is paid once.
+    await checkPaymentStatus(null, { paymentId: first.id }, ctx)
+    expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
+    const inv2 = await postedInvoice(1)
+    const both = await Promise.allSettled([1, 2].map(() => takeCardPayment(null, { clientId, invoiceId: inv2.id, amountMinor: String(inv2.total), idempotencyKey: key() }, ctx)))
+    expect(both.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    expect(await prisma.payment.count({ where: { forInvoiceId: inv2.id, method: 'card_on_file' } })).toBe(1)
+    expect(charge).toHaveBeenCalledTimes(2)
+  })
+
+  it('only a veterinarian (staff kind dvm) can record the emergency overage override', async () => {
+    const plan = await acceptedPlan('Emergency override', [{ code: 'EXAM-OUTPATIENT', low: '1', high: '1' }], false)
+    const row = await prisma.treatmentPlan.findUniqueOrThrow({ where: { id: plan.planId } })
+    const high = row.acceptedHighMinor + 5000n
+    const rvt = await prisma.staffMember.findFirstOrThrow({ where: { kind: 'rvt' } })
+    const dvm = await prisma.staffMember.findFirstOrThrow({ where: { kind: 'dvm', userId: { not: null } } })
+    const as = (userId: string) => ({ session: sessionFor(userId, ALL), prisma })
+    const args = (n: bigint) => ({ planId: plan.planId, newHighMinor: String(n), method: 'emergency_override', reason: 'Emergency surgery', expectedVersion: row.version, idempotencyKey: key() })
+    await expect(recordOverageApproval(null, args(high), as(rvt.userId!))).rejects.toThrow(/Only a veterinarian/)
+    const ok = (await recordOverageApproval(null, args(high), as(dvm.userId!))) as { acceptedHighMinor: string }
+    expect(ok.acceptedHighMinor).toBe(String(high))
   })
 
   it('a duplicate webhook is a no-op', async () => {
