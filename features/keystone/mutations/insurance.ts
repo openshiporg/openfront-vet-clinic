@@ -38,7 +38,7 @@ export async function addInsurancePolicy(_root: unknown, args: { patientId: stri
       if (!payer) throw new DomainError(Codes.NOT_FOUND, 'Insurer not found.')
       const dup = await uow.tx.petInsurancePolicy.findFirst({ where: { patientId: patient.id, insurerId: payer.id, policyNumber }, select: { id: true } })
       if (dup) throw new DomainError(Codes.GUARD_FAILED, 'This policy is already on file for the patient.')
-      const row = await uow.tx.petInsurancePolicy.create({ data: { patientId: patient.id, insurerId: payer.id, policyNumber, plan: String(args.plan ?? '').slice(0, 120), ...(deductible !== null ? { deductibleMinor: deductible } : {}), ...(rate ? { reimbursementRate: rate } : {}), effectiveFrom: from, effectiveTo: to, directPayEligible: args.directPayEligible === true } })
+      const row = await uow.tx.petInsurancePolicy.create({ data: { patientId: patient.id, insurerId: payer.id, policyNumber, plan: String(args.plan ?? '').slice(0, 120), ...(deductible !== null ? { deductibleMinor: deductible } : {}), ...(rate ? { reimbursementRate: rate } : {}), effectiveFrom: from ? new Date(`${from}T00:00:00Z`) : null, effectiveTo: to ? new Date(`${to}T00:00:00Z`) : null, directPayEligible: args.directPayEligible === true } })
       auditCreate(uow, actor, 'PetInsurancePolicy', row.id, 'insurance.policy.added', { patientId: patient.id, insurerId: payer.id, policyNumber })
       return { id: row.id }
     })
