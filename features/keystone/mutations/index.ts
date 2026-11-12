@@ -24,6 +24,9 @@ import * as fees from './fees'
 import * as estimates from './estimates'
 import * as billing from './billing'
 import * as insurance from './insurance'
+import * as wellness from './wellness'
+import * as boarding from './boarding'
+import * as endOfLife from './endOfLife'
 import '../lib/practiceControls'
 import { limitNestedLists } from '../security/breadthLimit'
 import { limitSignIn } from '../security/signInLimit'
@@ -63,6 +66,33 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         recordWeight(patientId: ID!, value: String!, unit: String!, method: String, bodyConditionScore: Int, appointmentId: ID, idempotencyKey: String!): JSON
         addPatientAlert(patientId: ID!, kind: String!, severity: String!, text: String!, idempotencyKey: String!): JSON
         recordConsent(contactPointId: ID!, purpose: String!, action: String!, method: String!, callRecordId: ID, keyword: String, idempotencyKey: String!): JSON
+        savePlanVersion(code: String!, name: String!, summary: String, label: String!, monthlyPriceMinor: String!, termMonths: Int!, speciesCodes: [String!], minAgeWeeks: Int, maxAgeMonths: Int, entitlements: JSON!, otherServicesDiscountBps: Int, trueUpNote: String, idempotencyKey: String!): JSON
+        enrolPatient(patientId: ID!, planVersionId: ID!, signerId: ID!, method: String!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        runPlanBilling(periodKey: String, locationId: ID, idempotencyKey: String!): JSON
+        retryPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
+        checkPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
+        replacePlanCard(enrollmentId: ID!, signerId: ID!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        cancelEnrollment(enrollmentId: ID!, reason: String!, waiveTrueUp: Boolean, expectedVersion: Int!, idempotencyKey: String!): JSON
+        useEntitlement(enrollmentId: ID!, code: String!, qty: Int, memo: String, idempotencyKey: String!): JSON
+        returnEntitlement(entryId: ID!, reason: String!, idempotencyKey: String!): JSON
+        saveRunType(runTypeId: ID, code: String!, name: String!, locationId: ID!, speciesCodes: [String!], maxWeightKg: Float, nightlyRateMinor: String!, depositMinor: String, runs: Int!, idempotencyKey: String!): JSON
+        setRunStatus(runId: ID!, status: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reserveBoarding(patientId: ID!, runTypeId: ID!, checkInOn: String!, checkOutOn: String!, notes: String, vaccineOverrideReason: String, idempotencyKey: String!): JSON
+        confirmBoarding(reservationId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelBoarding(reservationId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        checkInBoarding(reservationId: ID!, runId: ID, feeding: String, handling: String, medications: String, emergencyContactName: String!, emergencyContactPhone: String!, medicalLimitMinor: String, belongings: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        moveBoardingRun(stayId: ID!, runId: ID!, idempotencyKey: String!): JSON
+        logBoardingCare(stayId: ID!, kind: String!, note: String, idempotencyKey: String!): JSON
+        returnBelonging(itemId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        checkOutBoarding(stayId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        bookGroom(patientId: ID!, groomerId: ID!, startsAt: String!, service: String!, idempotencyKey: String!): JSON
+        advanceGroom(groomId: ID!, to: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        saveGroomNote(patientId: ID!, blade: String, style: String, behaviour: String, notes: String, photoUrl: String, groomId: ID, idempotencyKey: String!): JSON
+        signEuthanasiaConsent(patientId: ID!, signerId: ID, authority: String!, authorityNote: String, biteAttestation: String!, aftercare: String!, clientPresent: Boolean!, method: String!, signatureText: String!, witnessId: ID, idempotencyKey: String!): JSON
+        revokeEuthanasiaConsent(consentId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordEuthanasia(patientId: ID!, consentId: ID!, diedAt: String, causeNote: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        advanceAftercare(orderId: ID!, step: String!, place: String, crematory: String, manifestRef: String, crematoryRef: String, receivedBy: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addMemorialItem(orderId: ID!, kind: String!, description: String, idempotencyKey: String!): JSON
         recordPatientDeath(patientId: ID!, diedAt: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         bookAppointment(input: JSON!, idempotencyKey: String!): JSON
         cancelAppointment(appointmentId: ID!, reason: String!, expectedVersion: Int!, callRecordId: ID, idempotencyKey: String!): JSON
@@ -361,6 +391,33 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         requestExternalFill: op(register.requestExternalFill),
         decideExternalFill: op(register.decideExternalFill),
         exportWrittenRx: op(register.exportWrittenRx),
+        savePlanVersion: op(wellness.savePlanVersion),
+        enrolPatient: op(wellness.enrolPatient),
+        runPlanBilling: op(wellness.runPlanBilling),
+        retryPlanCharge: op(wellness.retryPlanCharge),
+        checkPlanCharge: op(wellness.checkPlanCharge),
+        replacePlanCard: op(wellness.replacePlanCard),
+        cancelEnrollment: op(wellness.cancelEnrollment),
+        useEntitlement: op(wellness.useEntitlement),
+        returnEntitlement: op(wellness.returnEntitlement),
+        saveRunType: op(boarding.saveRunType),
+        setRunStatus: op(boarding.setRunStatus),
+        reserveBoarding: op(boarding.reserveBoarding),
+        confirmBoarding: op(boarding.confirmBoarding),
+        cancelBoarding: op(boarding.cancelBoarding),
+        checkInBoarding: op(boarding.checkInBoarding),
+        moveBoardingRun: op(boarding.moveBoardingRun),
+        logBoardingCare: op(boarding.logBoardingCare),
+        returnBelonging: op(boarding.returnBelonging),
+        checkOutBoarding: op(boarding.checkOutBoarding),
+        bookGroom: op(boarding.bookGroom),
+        advanceGroom: op(boarding.advanceGroom),
+        saveGroomNote: op(boarding.saveGroomNote),
+        signEuthanasiaConsent: op(endOfLife.signEuthanasiaConsent),
+        revokeEuthanasiaConsent: op(endOfLife.revokeEuthanasiaConsent),
+        recordEuthanasia: op(endOfLife.recordEuthanasia),
+        advanceAftercare: op(endOfLife.advanceAftercare),
+        addMemorialItem: op(endOfLife.addMemorialItem),
       },
     },
   })))

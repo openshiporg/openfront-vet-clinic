@@ -652,6 +652,16 @@ model Location {
   from_Invoice_location               Invoice[]               @relation("Invoice_location")
   from_ChargeLine_location            ChargeLine[]            @relation("ChargeLine_location")
   from_Payment_location               Payment[]               @relation("Payment_location")
+  from_Enrollment_location            Enrollment[]            @relation("Enrollment_location")
+  from_PlanBillingRun_location        PlanBillingRun[]        @relation("PlanBillingRun_location")
+  from_RunType_location               RunType[]               @relation("RunType_location")
+  from_Run_location                   Run[]                   @relation("Run_location")
+  from_NightlyRunInventory_location   NightlyRunInventory[]   @relation("NightlyRunInventory_location")
+  from_BoardingReservation_location   BoardingReservation[]   @relation("BoardingReservation_location")
+  from_BoardingStay_location          BoardingStay[]          @relation("BoardingStay_location")
+  from_GroomAppointment_location      GroomAppointment[]      @relation("GroomAppointment_location")
+  from_DeathRecord_location           DeathRecord[]           @relation("DeathRecord_location")
+  from_AftercareOrder_location        AftercareOrder[]        @relation("AftercareOrder_location")
   from_Encounter_location             Encounter[]             @relation("Encounter_location")
   from_ClinicalOrder_location         ClinicalOrder[]         @relation("ClinicalOrder_location")
   from_InventoryLot_location          InventoryLot[]          @relation("InventoryLot_location")
@@ -787,6 +797,15 @@ model StaffMember {
   from_CreditNote_postedBy                  CreditNote[]            @relation("CreditNote_postedBy")
   from_Payment_receivedBy                   Payment[]               @relation("Payment_receivedBy")
   from_Refund_requestedBy                   Refund[]                @relation("Refund_requestedBy")
+  from_EntitlementEntry_by                  EntitlementEntry[]      @relation("EntitlementEntry_by")
+  from_PlanBillingRun_startedBy             PlanBillingRun[]        @relation("PlanBillingRun_startedBy")
+  from_DailyCareLog_by                      DailyCareLog[]          @relation("DailyCareLog_by")
+  from_GroomAppointment_groomer             GroomAppointment[]      @relation("GroomAppointment_groomer")
+  from_GroomNote_by                         GroomNote[]             @relation("GroomNote_by")
+  from_EuthanasiaConsent_witness            EuthanasiaConsent[]     @relation("EuthanasiaConsent_witness")
+  from_EuthanasiaConsent_verbalConfirmedBy  EuthanasiaConsent[]     @relation("EuthanasiaConsent_verbalConfirmedBy")
+  from_DeathRecord_recordedBy               DeathRecord[]           @relation("DeathRecord_recordedBy")
+  from_CustodyEvent_by                      CustodyEvent[]          @relation("CustodyEvent_by")
   from_Encounter_attendingDvm               Encounter[]             @relation("Encounter_attendingDvm")
   from_Encounter_participants               Encounter[]             @relation("Encounter_participants")
   from_Encounter_signedBy                   Encounter[]             @relation("Encounter_signedBy")
@@ -1075,51 +1094,57 @@ model Breed {
 }
 
 model Client {
-  id                            String              @id @default(cuid())
-  ref                           String              @unique @default("")
-  publicCode                    String?             @unique
-  displayName                   String              @default("")
-  kind                          String
-  status                        String              @default("prospect")
-  primaryLocation               Location?           @relation("Client_primaryLocation", fields: [primaryLocationId], references: [id])
-  primaryLocationId             String?             @map("primaryLocation")
-  addressLine1                  String              @default("")
-  addressLine2                  String              @default("")
-  city                          String              @default("")
-  stateCode                     String              @default("")
-  postalCode                    String              @default("")
-  creditLimitMinor              BigInt              @default(0)
-  accountFlags                  Json?               @default("{}")
-  taxExempt                     Boolean             @default(false)
-  mergedInto                    Client?             @relation("Client_mergedInto", fields: [mergedIntoId], references: [id])
-  mergedIntoId                  String?             @map("mergedInto")
-  people                        ClientPerson[]      @relation("ClientPerson_client")
-  ownerships                    PatientOwnership[]  @relation("PatientOwnership_client")
-  source                        String
-  version                       Int                 @default(0)
-  createdAt                     DateTime            @default(now())
-  updatedAt                     DateTime            @default(now()) @updatedAt
-  from_Client_mergedInto        Client[]            @relation("Client_mergedInto")
-  from_RecordsRequest_client    RecordsRequest[]    @relation("RecordsRequest_client")
-  from_RefillRequest_client     RefillRequest[]     @relation("RefillRequest_client")
-  from_Appointment_client       Appointment[]       @relation("Appointment_client")
-  from_TriageAssessment_client  TriageAssessment[]  @relation("TriageAssessment_client")
-  from_WaitlistEntry_client     WaitlistEntry[]     @relation("WaitlistEntry_client")
-  from_CallRecord_client        CallRecord[]        @relation("CallRecord_client")
-  from_CommsThread_client       CommsThread[]       @relation("CommsThread_client")
-  from_Suppression_client       Suppression[]       @relation("Suppression_client")
-  from_Prescription_client      Prescription[]      @relation("Prescription_client")
-  from_CsLogEntry_client        CsLogEntry[]        @relation("CsLogEntry_client")
-  from_Dispense_client          Dispense[]          @relation("Dispense_client")
-  from_RecallExposure_client    RecallExposure[]    @relation("RecallExposure_client")
-  from_Estimate_client          Estimate[]          @relation("Estimate_client")
-  from_TreatmentPlan_client     TreatmentPlan[]     @relation("TreatmentPlan_client")
-  from_Deposit_client           Deposit[]           @relation("Deposit_client")
-  from_Invoice_client           Invoice[]           @relation("Invoice_client")
-  from_ChargeLine_client        ChargeLine[]        @relation("ChargeLine_client")
-  from_CreditNote_client        CreditNote[]        @relation("CreditNote_client")
-  from_Payment_client           Payment[]           @relation("Payment_client")
-  from_ClientLedgerEntry_client ClientLedgerEntry[] @relation("ClientLedgerEntry_client")
+  id                              String                @id @default(cuid())
+  ref                             String                @unique @default("")
+  publicCode                      String?               @unique
+  displayName                     String                @default("")
+  kind                            String
+  status                          String                @default("prospect")
+  primaryLocation                 Location?             @relation("Client_primaryLocation", fields: [primaryLocationId], references: [id])
+  primaryLocationId               String?               @map("primaryLocation")
+  addressLine1                    String                @default("")
+  addressLine2                    String                @default("")
+  city                            String                @default("")
+  stateCode                       String                @default("")
+  postalCode                      String                @default("")
+  creditLimitMinor                BigInt                @default(0)
+  accountFlags                    Json?                 @default("{}")
+  taxExempt                       Boolean               @default(false)
+  mergedInto                      Client?               @relation("Client_mergedInto", fields: [mergedIntoId], references: [id])
+  mergedIntoId                    String?               @map("mergedInto")
+  people                          ClientPerson[]        @relation("ClientPerson_client")
+  ownerships                      PatientOwnership[]    @relation("PatientOwnership_client")
+  source                          String
+  version                         Int                   @default(0)
+  createdAt                       DateTime              @default(now())
+  updatedAt                       DateTime              @default(now()) @updatedAt
+  from_Client_mergedInto          Client[]              @relation("Client_mergedInto")
+  from_RecordsRequest_client      RecordsRequest[]      @relation("RecordsRequest_client")
+  from_RefillRequest_client       RefillRequest[]       @relation("RefillRequest_client")
+  from_Appointment_client         Appointment[]         @relation("Appointment_client")
+  from_TriageAssessment_client    TriageAssessment[]    @relation("TriageAssessment_client")
+  from_WaitlistEntry_client       WaitlistEntry[]       @relation("WaitlistEntry_client")
+  from_CallRecord_client          CallRecord[]          @relation("CallRecord_client")
+  from_CommsThread_client         CommsThread[]         @relation("CommsThread_client")
+  from_Suppression_client         Suppression[]         @relation("Suppression_client")
+  from_Prescription_client        Prescription[]        @relation("Prescription_client")
+  from_CsLogEntry_client          CsLogEntry[]          @relation("CsLogEntry_client")
+  from_Dispense_client            Dispense[]            @relation("Dispense_client")
+  from_RecallExposure_client      RecallExposure[]      @relation("RecallExposure_client")
+  from_Estimate_client            Estimate[]            @relation("Estimate_client")
+  from_TreatmentPlan_client       TreatmentPlan[]       @relation("TreatmentPlan_client")
+  from_Deposit_client             Deposit[]             @relation("Deposit_client")
+  from_Invoice_client             Invoice[]             @relation("Invoice_client")
+  from_ChargeLine_client          ChargeLine[]          @relation("ChargeLine_client")
+  from_CreditNote_client          CreditNote[]          @relation("CreditNote_client")
+  from_Payment_client             Payment[]             @relation("Payment_client")
+  from_ClientLedgerEntry_client   ClientLedgerEntry[]   @relation("ClientLedgerEntry_client")
+  from_Enrollment_client          Enrollment[]          @relation("Enrollment_client")
+  from_BoardingReservation_client BoardingReservation[] @relation("BoardingReservation_client")
+  from_BoardingStay_client        BoardingStay[]        @relation("BoardingStay_client")
+  from_GroomAppointment_client    GroomAppointment[]    @relation("GroomAppointment_client")
+  from_EuthanasiaConsent_client   EuthanasiaConsent[]   @relation("EuthanasiaConsent_client")
+  from_AftercareOrder_client      AftercareOrder[]      @relation("AftercareOrder_client")
 
   @@index([primaryLocationId])
   @@index([mergedIntoId])
@@ -1153,6 +1178,8 @@ model ClientPerson {
   from_PortalSession_person       PortalSession[]      @relation("PortalSession_person")
   from_EstimateAcceptance_signer  EstimateAcceptance[] @relation("EstimateAcceptance_signer")
   from_OverageApproval_approver   OverageApproval[]    @relation("OverageApproval_approver")
+  from_EnrollmentConsent_signer   EnrollmentConsent[]  @relation("EnrollmentConsent_signer")
+  from_EuthanasiaConsent_signer   EuthanasiaConsent[]  @relation("EuthanasiaConsent_signer")
 
   @@index([clientId])
   @@index([userId])
@@ -1292,6 +1319,14 @@ model Patient {
   from_TreatmentPlan_patient         TreatmentPlan[]         @relation("TreatmentPlan_patient")
   from_ChargeLine_patient            ChargeLine[]            @relation("ChargeLine_patient")
   from_InsuranceClaimPacket_patient  InsuranceClaimPacket[]  @relation("InsuranceClaimPacket_patient")
+  from_Enrollment_patient            Enrollment[]            @relation("Enrollment_patient")
+  from_BoardingReservation_patient   BoardingReservation[]   @relation("BoardingReservation_patient")
+  from_BoardingStay_patient          BoardingStay[]          @relation("BoardingStay_patient")
+  from_GroomAppointment_patient      GroomAppointment[]      @relation("GroomAppointment_patient")
+  from_GroomNote_patient             GroomNote[]             @relation("GroomNote_patient")
+  from_EuthanasiaConsent_patient     EuthanasiaConsent[]     @relation("EuthanasiaConsent_patient")
+  from_DeathRecord_patient           DeathRecord[]           @relation("DeathRecord_patient")
+  from_AftercareOrder_patient        AftercareOrder[]        @relation("AftercareOrder_patient")
   from_Encounter_patient             Encounter[]             @relation("Encounter_patient")
   from_VitalsObservation_patient     VitalsObservation[]     @relation("VitalsObservation_patient")
   from_Problem_patient               Problem[]               @relation("Problem_patient")
@@ -3425,6 +3460,10 @@ model Invoice {
   from_ClientLedgerEntry_invoice    ClientLedgerEntry[]    @relation("ClientLedgerEntry_invoice")
   from_PayerAuthorization_invoice   PayerAuthorization[]   @relation("PayerAuthorization_invoice")
   from_InsuranceClaimPacket_invoice InsuranceClaimPacket[] @relation("InsuranceClaimPacket_invoice")
+  from_Enrollment_trueUpInvoice     Enrollment[]           @relation("Enrollment_trueUpInvoice")
+  from_PlanBillingAttempt_invoice   PlanBillingAttempt[]   @relation("PlanBillingAttempt_invoice")
+  from_BoardingStay_invoice         BoardingStay[]         @relation("BoardingStay_invoice")
+  from_GroomAppointment_invoice     GroomAppointment[]     @relation("GroomAppointment_invoice")
 
   @@index([clientId])
   @@index([locationId])
@@ -3434,38 +3473,41 @@ model Invoice {
 }
 
 model ChargeLine {
-  id             String             @id @default(cuid())
-  invoice        Invoice?           @relation("ChargeLine_invoice", fields: [invoiceId], references: [id])
-  invoiceId      String?            @map("invoice")
-  client         Client?            @relation("ChargeLine_client", fields: [clientId], references: [id])
-  clientId       String?            @map("client")
-  patient        Patient?           @relation("ChargeLine_patient", fields: [patientId], references: [id])
-  patientId      String?            @map("patient")
-  location       Location?          @relation("ChargeLine_location", fields: [locationId], references: [id])
-  locationId     String?            @map("location")
-  encounter      Encounter?         @relation("ChargeLine_encounter", fields: [encounterId], references: [id])
-  encounterId    String?            @map("encounter")
-  feeItem        FeeItem?           @relation("ChargeLine_feeItem", fields: [feeItemId], references: [id])
-  feeItemId      String?            @map("feeItem")
-  description    String             @default("")
-  qty            Decimal            @postgresql.Decimal(18, 6)
-  unitPriceMinor BigInt
-  extendedMinor  BigInt
-  discountMinor  BigInt             @default(0)
-  taxMinor       BigInt             @default(0)
-  taxCategory    String             @default("")
-  sourceType     String
-  sourceId       String             @default("")
-  manualReason   String             @default("")
-  performedBy    StaffMember?       @relation("ChargeLine_performedBy", fields: [performedById], references: [id])
-  performedById  String?            @map("performedBy")
-  planItem       TreatmentPlanItem? @relation("ChargeLine_planItem", fields: [planItemId], references: [id])
-  planItemId     String?            @map("planItem")
-  capturedAt     DateTime
-  reversedAt     DateTime?
-  reversalReason String             @default("")
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @default(now()) @updatedAt
+  id                                 String               @id @default(cuid())
+  invoice                            Invoice?             @relation("ChargeLine_invoice", fields: [invoiceId], references: [id])
+  invoiceId                          String?              @map("invoice")
+  client                             Client?              @relation("ChargeLine_client", fields: [clientId], references: [id])
+  clientId                           String?              @map("client")
+  patient                            Patient?             @relation("ChargeLine_patient", fields: [patientId], references: [id])
+  patientId                          String?              @map("patient")
+  location                           Location?            @relation("ChargeLine_location", fields: [locationId], references: [id])
+  locationId                         String?              @map("location")
+  encounter                          Encounter?           @relation("ChargeLine_encounter", fields: [encounterId], references: [id])
+  encounterId                        String?              @map("encounter")
+  feeItem                            FeeItem?             @relation("ChargeLine_feeItem", fields: [feeItemId], references: [id])
+  feeItemId                          String?              @map("feeItem")
+  description                        String               @default("")
+  qty                                Decimal              @postgresql.Decimal(18, 6)
+  unitPriceMinor                     BigInt
+  extendedMinor                      BigInt
+  discountMinor                      BigInt               @default(0)
+  taxMinor                           BigInt               @default(0)
+  taxCategory                        String               @default("")
+  sourceType                         String
+  sourceId                           String               @default("")
+  manualReason                       String               @default("")
+  performedBy                        StaffMember?         @relation("ChargeLine_performedBy", fields: [performedById], references: [id])
+  performedById                      String?              @map("performedBy")
+  planItem                           TreatmentPlanItem?   @relation("ChargeLine_planItem", fields: [planItemId], references: [id])
+  planItemId                         String?              @map("planItem")
+  capturedAt                         DateTime
+  reversedAt                         DateTime?
+  reversalReason                     String               @default("")
+  createdAt                          DateTime             @default(now())
+  updatedAt                          DateTime             @default(now()) @updatedAt
+  from_EntitlementEntry_chargeLine   EntitlementEntry[]   @relation("EntitlementEntry_chargeLine")
+  from_PlanBillingAttempt_chargeLine PlanBillingAttempt[] @relation("PlanBillingAttempt_chargeLine")
+  from_MemorialItem_chargeLine       MemorialItem[]       @relation("MemorialItem_chargeLine")
 
   @@index([invoiceId])
   @@index([clientId])
@@ -3500,40 +3542,41 @@ model CreditNote {
 }
 
 model Payment {
-  id                             String              @id @default(cuid())
-  ref                            String              @unique @default("")
-  client                         Client?             @relation("Payment_client", fields: [clientId], references: [id])
-  clientId                       String?             @map("client")
-  location                       Location?           @relation("Payment_location", fields: [locationId], references: [id])
-  locationId                     String?             @map("location")
-  method                         String
-  provider                       String              @default("")
-  amountMinor                    BigInt
-  currencyCode                   String              @default("USD")
-  status                         String              @default("pending")
-  reference                      String              @default("")
-  providerRef                    String              @default("")
-  payerAuthorization             PayerAuthorization? @relation("Payment_payerAuthorization", fields: [payerAuthorizationId], references: [id])
-  payerAuthorizationId           String?             @map("payerAuthorization")
-  forInvoice                     Invoice?            @relation("Payment_forInvoice", fields: [forInvoiceId], references: [id])
-  forInvoiceId                   String?             @map("forInvoice")
-  forDeposit                     Deposit?            @relation("Payment_forDeposit", fields: [forDepositId], references: [id])
-  forDepositId                   String?             @map("forDeposit")
-  allowOverpay                   Boolean             @default(false)
-  postedOn                       DateTime?           @postgresql.Date
-  linkUrl                        String              @default("")
-  receivedAt                     DateTime?
-  receivedBy                     StaffMember?        @relation("Payment_receivedBy", fields: [receivedById], references: [id])
-  receivedById                   String?             @map("receivedBy")
-  note                           String              @default("")
-  attempts                       PaymentAttempt[]    @relation("PaymentAttempt_payment")
-  allocations                    PaymentAllocation[] @relation("PaymentAllocation_payment")
-  refunds                        Refund[]            @relation("Refund_payment")
-  version                        Int                 @default(0)
-  createdAt                      DateTime            @default(now())
-  updatedAt                      DateTime            @default(now()) @updatedAt
-  from_Deposit_payment           Deposit[]           @relation("Deposit_payment")
-  from_ClientLedgerEntry_payment ClientLedgerEntry[] @relation("ClientLedgerEntry_payment")
+  id                              String               @id @default(cuid())
+  ref                             String               @unique @default("")
+  client                          Client?              @relation("Payment_client", fields: [clientId], references: [id])
+  clientId                        String?              @map("client")
+  location                        Location?            @relation("Payment_location", fields: [locationId], references: [id])
+  locationId                      String?              @map("location")
+  method                          String
+  provider                        String               @default("")
+  amountMinor                     BigInt
+  currencyCode                    String               @default("USD")
+  status                          String               @default("pending")
+  reference                       String               @default("")
+  providerRef                     String               @default("")
+  payerAuthorization              PayerAuthorization?  @relation("Payment_payerAuthorization", fields: [payerAuthorizationId], references: [id])
+  payerAuthorizationId            String?              @map("payerAuthorization")
+  forInvoice                      Invoice?             @relation("Payment_forInvoice", fields: [forInvoiceId], references: [id])
+  forInvoiceId                    String?              @map("forInvoice")
+  forDeposit                      Deposit?             @relation("Payment_forDeposit", fields: [forDepositId], references: [id])
+  forDepositId                    String?              @map("forDeposit")
+  allowOverpay                    Boolean              @default(false)
+  postedOn                        DateTime?            @postgresql.Date
+  linkUrl                         String               @default("")
+  receivedAt                      DateTime?
+  receivedBy                      StaffMember?         @relation("Payment_receivedBy", fields: [receivedById], references: [id])
+  receivedById                    String?              @map("receivedBy")
+  note                            String               @default("")
+  attempts                        PaymentAttempt[]     @relation("PaymentAttempt_payment")
+  allocations                     PaymentAllocation[]  @relation("PaymentAllocation_payment")
+  refunds                         Refund[]             @relation("Refund_payment")
+  version                         Int                  @default(0)
+  createdAt                       DateTime             @default(now())
+  updatedAt                       DateTime             @default(now()) @updatedAt
+  from_Deposit_payment            Deposit[]            @relation("Deposit_payment")
+  from_ClientLedgerEntry_payment  ClientLedgerEntry[]  @relation("ClientLedgerEntry_payment")
+  from_PlanBillingAttempt_payment PlanBillingAttempt[] @relation("PlanBillingAttempt_payment")
 
   @@index([clientId])
   @@index([locationId])
@@ -3700,6 +3743,592 @@ model InsuranceClaimPacket {
   @@index([patientId])
   @@index([invoiceId])
   @@index([recordsReleaseId])
+}
+
+model WellnessPlan {
+  id                            String                @id @default(cuid())
+  code                          String                @unique @default("")
+  name                          String                @default("")
+  summary                       String                @default("")
+  status                        String                @default("active")
+  version                       Int                   @default(0)
+  createdAt                     DateTime              @default(now())
+  updatedAt                     DateTime              @default(now()) @updatedAt
+  from_WellnessPlanVersion_plan WellnessPlanVersion[] @relation("WellnessPlanVersion_plan")
+  from_Enrollment_plan          Enrollment[]          @relation("Enrollment_plan")
+}
+
+model WellnessPlanVersion {
+  id                          String        @id @default(cuid())
+  plan                        WellnessPlan? @relation("WellnessPlanVersion_plan", fields: [planId], references: [id])
+  planId                      String?       @map("plan")
+  versionNo                   Int
+  label                       String        @default("")
+  status                      String        @default("draft")
+  monthlyPriceMinor           BigInt
+  termMonths                  Int
+  speciesCodes                Json?
+  minAgeWeeks                 Int?          @default(0)
+  maxAgeMonths                Int?
+  entitlements                Json?
+  otherServicesDiscountBps    Int?          @default(0)
+  trueUpNote                  String        @default("")
+  disclosure                  String        @default("")
+  publishedAt                 DateTime?
+  version                     Int           @default(0)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @default(now()) @updatedAt
+  from_Enrollment_planVersion Enrollment[]  @relation("Enrollment_planVersion")
+
+  @@index([planId])
+}
+
+model Enrollment {
+  id                                 String               @id @default(cuid())
+  ref                                String               @unique @default("")
+  patient                            Patient?             @relation("Enrollment_patient", fields: [patientId], references: [id])
+  patientId                          String?              @map("patient")
+  client                             Client?              @relation("Enrollment_client", fields: [clientId], references: [id])
+  clientId                           String?              @map("client")
+  location                           Location?            @relation("Enrollment_location", fields: [locationId], references: [id])
+  locationId                         String?              @map("location")
+  plan                               WellnessPlan?        @relation("Enrollment_plan", fields: [planId], references: [id])
+  planId                             String?              @map("plan")
+  planVersion                        WellnessPlanVersion? @relation("Enrollment_planVersion", fields: [planVersionId], references: [id])
+  planVersionId                      String?              @map("planVersion")
+  status                             String               @default("pending_payment")
+  startedOn                          DateTime             @postgresql.Date
+  termNo                             Int?                 @default(1)
+  termStartsOn                       DateTime             @postgresql.Date
+  termEndsOn                         DateTime             @postgresql.Date
+  autoRenew                          Boolean              @default(true)
+  cardLabel                          String               @default("")
+  customerRef                        String               @default("")
+  paymentMethodRef                   String               @default("")
+  cardVersion                        Int?                 @default(1)
+  consent                            EnrollmentConsent?   @relation("Enrollment_consent", fields: [consentId], references: [id])
+  consentId                          String?              @map("consent")
+  cancelRequestedAt                  DateTime?
+  cancelReason                       String               @default("")
+  trueUpMinor                        BigInt               @default(0)
+  trueUpWaived                       Boolean              @default(false)
+  trueUpInvoice                      Invoice?             @relation("Enrollment_trueUpInvoice", fields: [trueUpInvoiceId], references: [id])
+  trueUpInvoiceId                    String?              @map("trueUpInvoice")
+  endedAt                            DateTime?
+  version                            Int                  @default(0)
+  createdAt                          DateTime             @default(now())
+  updatedAt                          DateTime             @default(now()) @updatedAt
+  from_EnrollmentConsent_enrollment  EnrollmentConsent[]  @relation("EnrollmentConsent_enrollment")
+  from_EntitlementGrant_enrollment   EntitlementGrant[]   @relation("EntitlementGrant_enrollment")
+  from_EntitlementEntry_enrollment   EntitlementEntry[]   @relation("EntitlementEntry_enrollment")
+  from_PlanBillingAttempt_enrollment PlanBillingAttempt[] @relation("PlanBillingAttempt_enrollment")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([planId])
+  @@index([planVersionId])
+  @@index([consentId])
+  @@index([trueUpInvoiceId])
+}
+
+model EnrollmentConsent {
+  id                      String        @id @default(cuid())
+  enrollment              Enrollment?   @relation("EnrollmentConsent_enrollment", fields: [enrollmentId], references: [id])
+  enrollmentId            String?       @map("enrollment")
+  signer                  ClientPerson? @relation("EnrollmentConsent_signer", fields: [signerId], references: [id])
+  signerId                String?       @map("signer")
+  disclosureText          String        @default("")
+  disclosureHash          String        @default("")
+  terms                   Json?
+  method                  String
+  affirmed                Boolean       @default(false)
+  setupIntentRef          String        @default("")
+  consentedAt             DateTime
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @default(now()) @updatedAt
+  from_Enrollment_consent Enrollment[]  @relation("Enrollment_consent")
+
+  @@index([enrollmentId])
+  @@index([signerId])
+}
+
+model EntitlementGrant {
+  id                          String             @id @default(cuid())
+  enrollment                  Enrollment?        @relation("EntitlementGrant_enrollment", fields: [enrollmentId], references: [id])
+  enrollmentId                String?            @map("enrollment")
+  termNo                      Int
+  code                        String             @default("")
+  label                       String             @default("")
+  qtyGranted                  Decimal            @postgresql.Decimal(18, 6)
+  retailValueMinor            BigInt
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @default(now()) @updatedAt
+  from_EntitlementEntry_grant EntitlementEntry[] @relation("EntitlementEntry_grant")
+
+  @@index([enrollmentId])
+}
+
+model EntitlementEntry {
+  id           String            @id @default(cuid())
+  entryKey     String            @unique @default("")
+  grant        EntitlementGrant? @relation("EntitlementEntry_grant", fields: [grantId], references: [id])
+  grantId      String?           @map("grant")
+  enrollment   Enrollment?       @relation("EntitlementEntry_enrollment", fields: [enrollmentId], references: [id])
+  enrollmentId String?           @map("enrollment")
+  kind         String
+  qty          Decimal           @postgresql.Decimal(18, 6)
+  valueMinor   BigInt            @default(0)
+  chargeLine   ChargeLine?       @relation("EntitlementEntry_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId String?           @map("chargeLine")
+  memo         String            @default("")
+  by           StaffMember?      @relation("EntitlementEntry_by", fields: [byId], references: [id])
+  byId         String?           @map("by")
+  at           DateTime
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @default(now()) @updatedAt
+
+  @@index([grantId])
+  @@index([enrollmentId])
+  @@index([chargeLineId])
+  @@index([byId])
+}
+
+model PlanBillingRun {
+  id             String       @id @default(cuid())
+  ref            String       @unique @default("")
+  runKey         String       @unique @default("")
+  location       Location?    @relation("PlanBillingRun_location", fields: [locationId], references: [id])
+  locationId     String?      @map("location")
+  periodKey      String       @default("")
+  status         String
+  attemptCount   Int?         @default(0)
+  succeededCount Int?         @default(0)
+  failedCount    Int?         @default(0)
+  openCount      Int?         @default(0)
+  skippedCount   Int?         @default(0)
+  totalMinor     BigInt       @default(0)
+  summary        Json?
+  startedBy      StaffMember? @relation("PlanBillingRun_startedBy", fields: [startedById], references: [id])
+  startedById    String?      @map("startedBy")
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  @@index([locationId])
+  @@index([periodKey])
+  @@index([startedById])
+}
+
+model PlanBillingAttempt {
+  id           String      @id @default(cuid())
+  enrollment   Enrollment? @relation("PlanBillingAttempt_enrollment", fields: [enrollmentId], references: [id])
+  enrollmentId String?     @map("enrollment")
+  periodKey    String      @default("")
+  generation   Int
+  status       String      @default("processing")
+  amountMinor  BigInt
+  cardVersion  Int?        @default(1)
+  termNo       Int?        @default(1)
+  payment      Payment?    @relation("PlanBillingAttempt_payment", fields: [paymentId], references: [id])
+  paymentId    String?     @map("payment")
+  invoice      Invoice?    @relation("PlanBillingAttempt_invoice", fields: [invoiceId], references: [id])
+  invoiceId    String?     @map("invoice")
+  chargeLine   ChargeLine? @relation("PlanBillingAttempt_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId String?     @map("chargeLine")
+  runKey       String      @default("")
+  message      String      @default("")
+  startedAt    DateTime
+  finishedAt   DateTime?
+  version      Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+
+  @@index([enrollmentId])
+  @@index([periodKey])
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([chargeLineId])
+  @@index([runKey])
+}
+
+model ServiceItem {
+  id          String   @id @default(cuid())
+  code        String   @unique @default("")
+  area        String
+  name        String   @default("")
+  priceMinor  BigInt
+  minutes     Int?     @default(0)
+  taxCategory String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model RunType {
+  id                               String                @id @default(cuid())
+  code                             String                @unique @default("")
+  name                             String                @default("")
+  location                         Location?             @relation("RunType_location", fields: [locationId], references: [id])
+  locationId                       String?               @map("location")
+  speciesCodes                     Json?
+  maxWeightKg                      Int?
+  nightlyRateMinor                 BigInt
+  depositMinor                     BigInt                @default(0)
+  active                           Boolean               @default(true)
+  createdAt                        DateTime              @default(now())
+  updatedAt                        DateTime              @default(now()) @updatedAt
+  from_Run_runType                 Run[]                 @relation("Run_runType")
+  from_NightlyRunInventory_runType NightlyRunInventory[] @relation("NightlyRunInventory_runType")
+  from_BoardingReservation_runType BoardingReservation[] @relation("BoardingReservation_runType")
+
+  @@index([locationId])
+}
+
+model Run {
+  id                     String          @id @default(cuid())
+  label                  String          @default("")
+  runType                RunType?        @relation("Run_runType", fields: [runTypeId], references: [id])
+  runTypeId              String?         @map("runType")
+  location               Location?       @relation("Run_location", fields: [locationId], references: [id])
+  locationId             String?         @map("location")
+  status                 String          @default("available")
+  version                Int             @default(0)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @default(now()) @updatedAt
+  from_BoardingStay_run  BoardingStay[]  @relation("BoardingStay_run")
+  from_RunAssignment_run RunAssignment[] @relation("RunAssignment_run")
+
+  @@index([runTypeId])
+  @@index([locationId])
+}
+
+model NightlyRunInventory {
+  id         String    @id @default(cuid())
+  runType    RunType?  @relation("NightlyRunInventory_runType", fields: [runTypeId], references: [id])
+  runTypeId  String?   @map("runType")
+  location   Location? @relation("NightlyRunInventory_location", fields: [locationId], references: [id])
+  locationId String?   @map("location")
+  night      DateTime  @postgresql.Date
+  capacity   Int
+  sold       Int?      @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@index([runTypeId])
+  @@index([locationId])
+}
+
+model BoardingReservation {
+  id                            String         @id @default(cuid())
+  ref                           String         @unique @default("")
+  patient                       Patient?       @relation("BoardingReservation_patient", fields: [patientId], references: [id])
+  patientId                     String?        @map("patient")
+  client                        Client?        @relation("BoardingReservation_client", fields: [clientId], references: [id])
+  clientId                      String?        @map("client")
+  location                      Location?      @relation("BoardingReservation_location", fields: [locationId], references: [id])
+  locationId                    String?        @map("location")
+  runType                       RunType?       @relation("BoardingReservation_runType", fields: [runTypeId], references: [id])
+  runTypeId                     String?        @map("runType")
+  checkInOn                     DateTime       @postgresql.Date
+  checkOutOn                    DateTime       @postgresql.Date
+  status                        String         @default("requested")
+  holdExpiresAt                 DateTime?
+  depositMinor                  BigInt         @default(0)
+  vaccineOverrideReason         String         @default("")
+  notes                         String         @default("")
+  cancelReason                  String         @default("")
+  version                       Int            @default(0)
+  createdAt                     DateTime       @default(now())
+  updatedAt                     DateTime       @default(now()) @updatedAt
+  from_BoardingStay_reservation BoardingStay[] @relation("BoardingStay_reservation")
+  from_RunCard_reservation      RunCard[]      @relation("RunCard_reservation")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([runTypeId])
+}
+
+model BoardingStay {
+  id                      String               @id @default(cuid())
+  ref                     String               @unique @default("")
+  reservation             BoardingReservation? @relation("BoardingStay_reservation", fields: [reservationId], references: [id])
+  reservationId           String?              @map("reservation")
+  patient                 Patient?             @relation("BoardingStay_patient", fields: [patientId], references: [id])
+  patientId               String?              @map("patient")
+  client                  Client?              @relation("BoardingStay_client", fields: [clientId], references: [id])
+  clientId                String?              @map("client")
+  location                Location?            @relation("BoardingStay_location", fields: [locationId], references: [id])
+  locationId              String?              @map("location")
+  run                     Run?                 @relation("BoardingStay_run", fields: [runId], references: [id])
+  runId                   String?              @map("run")
+  status                  String               @default("in_house")
+  checkedInAt             DateTime
+  checkedOutAt            DateTime?
+  invoice                 Invoice?             @relation("BoardingStay_invoice", fields: [invoiceId], references: [id])
+  invoiceId               String?              @map("invoice")
+  version                 Int                  @default(0)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @default(now()) @updatedAt
+  from_RunAssignment_stay RunAssignment[]      @relation("RunAssignment_stay")
+  from_RunCard_stay       RunCard[]            @relation("RunCard_stay")
+  from_BelongingItem_stay BelongingItem[]      @relation("BelongingItem_stay")
+  from_DailyCareLog_stay  DailyCareLog[]       @relation("DailyCareLog_stay")
+
+  @@index([reservationId])
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([runId])
+  @@index([invoiceId])
+}
+
+model RunAssignment {
+  id        String        @id @default(cuid())
+  stay      BoardingStay? @relation("RunAssignment_stay", fields: [stayId], references: [id])
+  stayId    String?       @map("stay")
+  run       Run?          @relation("RunAssignment_run", fields: [runId], references: [id])
+  runId     String?       @map("run")
+  startsAt  DateTime
+  endsAt    DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now()) @updatedAt
+
+  @@index([stayId])
+  @@index([runId])
+}
+
+model RunCard {
+  id                    String               @id @default(cuid())
+  stay                  BoardingStay?        @relation("RunCard_stay", fields: [stayId], references: [id])
+  stayId                String?              @map("stay")
+  reservation           BoardingReservation? @relation("RunCard_reservation", fields: [reservationId], references: [id])
+  reservationId         String?              @map("reservation")
+  feeding               String               @default("")
+  handling              String               @default("")
+  medications           Json?
+  emergencyContactName  String               @default("")
+  emergencyContactPhone String               @default("")
+  medicalLimitMinor     BigInt               @default(0)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @default(now()) @updatedAt
+
+  @@index([stayId])
+  @@index([reservationId])
+}
+
+model BelongingItem {
+  id          String        @id @default(cuid())
+  stay        BoardingStay? @relation("BelongingItem_stay", fields: [stayId], references: [id])
+  stayId      String?       @map("stay")
+  description String        @default("")
+  returnedAt  DateTime?
+  version     Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@index([stayId])
+}
+
+model DailyCareLog {
+  id        String        @id @default(cuid())
+  stay      BoardingStay? @relation("DailyCareLog_stay", fields: [stayId], references: [id])
+  stayId    String?       @map("stay")
+  kind      String
+  note      String        @default("")
+  by        StaffMember?  @relation("DailyCareLog_by", fields: [byId], references: [id])
+  byId      String?       @map("by")
+  at        DateTime
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now()) @updatedAt
+
+  @@index([stayId])
+  @@index([byId])
+}
+
+model GroomAppointment {
+  id              String       @id @default(cuid())
+  ref             String       @unique @default("")
+  patient         Patient?     @relation("GroomAppointment_patient", fields: [patientId], references: [id])
+  patientId       String?      @map("patient")
+  client          Client?      @relation("GroomAppointment_client", fields: [clientId], references: [id])
+  clientId        String?      @map("client")
+  location        Location?    @relation("GroomAppointment_location", fields: [locationId], references: [id])
+  locationId      String?      @map("location")
+  groomer         StaffMember? @relation("GroomAppointment_groomer", fields: [groomerId], references: [id])
+  groomerId       String?      @map("groomer")
+  startsAt        DateTime
+  durationMinutes Int?         @default(60)
+  service         String       @default("")
+  priceMinor      BigInt
+  status          String       @default("booked")
+  noteVersion     GroomNote?   @relation("GroomAppointment_noteVersion", fields: [noteVersionId], references: [id])
+  noteVersionId   String?      @map("noteVersion")
+  cancelReason    String       @default("")
+  invoice         Invoice?     @relation("GroomAppointment_invoice", fields: [invoiceId], references: [id])
+  invoiceId       String?      @map("invoice")
+  commissionBps   Int?         @default(0)
+  commissionMinor BigInt       @default(0)
+  version         Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @default(now()) @updatedAt
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([groomerId])
+  @@index([noteVersionId])
+  @@index([invoiceId])
+}
+
+model GroomNote {
+  id                                String             @id @default(cuid())
+  patient                           Patient?           @relation("GroomNote_patient", fields: [patientId], references: [id])
+  patientId                         String?            @map("patient")
+  versionNo                         Int
+  blade                             String             @default("")
+  style                             String             @default("")
+  behaviour                         String             @default("")
+  notes                             String             @default("")
+  photoUrl                          String             @default("")
+  by                                StaffMember?       @relation("GroomNote_by", fields: [byId], references: [id])
+  byId                              String?            @map("by")
+  createdAt                         DateTime           @default(now())
+  updatedAt                         DateTime           @default(now()) @updatedAt
+  from_GroomAppointment_noteVersion GroomAppointment[] @relation("GroomAppointment_noteVersion")
+
+  @@index([patientId])
+  @@index([byId])
+}
+
+model EuthanasiaConsent {
+  id                       String        @id @default(cuid())
+  ref                      String        @unique @default("")
+  patient                  Patient?      @relation("EuthanasiaConsent_patient", fields: [patientId], references: [id])
+  patientId                String?       @map("patient")
+  client                   Client?       @relation("EuthanasiaConsent_client", fields: [clientId], references: [id])
+  clientId                 String?       @map("client")
+  signer                   ClientPerson? @relation("EuthanasiaConsent_signer", fields: [signerId], references: [id])
+  signerId                 String?       @map("signer")
+  authority                String
+  authorityNote            String        @default("")
+  status                   String        @default("draft")
+  biteAttestation          String
+  aftercare                String
+  clientPresent            Boolean       @default(false)
+  method                   String
+  witness                  StaffMember?  @relation("EuthanasiaConsent_witness", fields: [witnessId], references: [id])
+  witnessId                String?       @map("witness")
+  verbalConfirmedBy        StaffMember?  @relation("EuthanasiaConsent_verbalConfirmedBy", fields: [verbalConfirmedById], references: [id])
+  verbalConfirmedById      String?       @map("verbalConfirmedBy")
+  verbalConfirmedAt        DateTime?
+  signatureText            String        @default("")
+  signedAt                 DateTime?
+  usedAt                   DateTime?
+  revokedReason            String        @default("")
+  version                  Int           @default(0)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @default(now()) @updatedAt
+  from_DeathRecord_consent DeathRecord[] @relation("DeathRecord_consent")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([signerId])
+  @@index([witnessId])
+  @@index([verbalConfirmedById])
+}
+
+model DeathRecord {
+  id                              String             @id @default(cuid())
+  patient                         Patient?           @relation("DeathRecord_patient", fields: [patientId], references: [id])
+  patientId                       String?            @map("patient")
+  location                        Location?          @relation("DeathRecord_location", fields: [locationId], references: [id])
+  locationId                      String?            @map("location")
+  cause                           String
+  causeNote                       String             @default("")
+  diedAt                          DateTime
+  recordedBy                      StaffMember?       @relation("DeathRecord_recordedBy", fields: [recordedById], references: [id])
+  recordedById                    String?            @map("recordedBy")
+  consent                         EuthanasiaConsent? @relation("DeathRecord_consent", fields: [consentId], references: [id])
+  consentId                       String?            @map("consent")
+  administration                  Administration?    @relation("DeathRecord_administration", fields: [administrationId], references: [id])
+  administrationId                String?            @map("administration")
+  effects                         String             @default("")
+  createdAt                       DateTime           @default(now())
+  updatedAt                       DateTime           @default(now()) @updatedAt
+  from_AftercareOrder_deathRecord AftercareOrder[]   @relation("AftercareOrder_deathRecord")
+
+  @@index([patientId])
+  @@index([locationId])
+  @@index([recordedById])
+  @@index([consentId])
+  @@index([administrationId])
+}
+
+model AftercareOrder {
+  id                      String         @id @default(cuid())
+  ref                     String         @unique @default("")
+  patient                 Patient?       @relation("AftercareOrder_patient", fields: [patientId], references: [id])
+  patientId               String?        @map("patient")
+  client                  Client?        @relation("AftercareOrder_client", fields: [clientId], references: [id])
+  clientId                String?        @map("client")
+  location                Location?      @relation("AftercareOrder_location", fields: [locationId], references: [id])
+  locationId              String?        @map("location")
+  deathRecord             DeathRecord?   @relation("AftercareOrder_deathRecord", fields: [deathRecordId], references: [id])
+  deathRecordId           String?        @map("deathRecord")
+  choice                  String
+  status                  String         @default("ordered")
+  tagNumber               String         @default("")
+  crematory               String         @default("")
+  manifestRef             String         @default("")
+  crematoryRef            String         @default("")
+  heldFrom                String         @default("")
+  version                 Int            @default(0)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @default(now()) @updatedAt
+  from_CustodyEvent_order CustodyEvent[] @relation("CustodyEvent_order")
+  from_MemorialItem_order MemorialItem[] @relation("MemorialItem_order")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([deathRecordId])
+}
+
+model CustodyEvent {
+  id           String          @id @default(cuid())
+  order        AftercareOrder? @relation("CustodyEvent_order", fields: [orderId], references: [id])
+  orderId      String?         @map("order")
+  kind         String
+  tagNumber    String          @default("")
+  place        String          @default("")
+  crematoryRef String          @default("")
+  receivedBy   String          @default("")
+  by           StaffMember?    @relation("CustodyEvent_by", fields: [byId], references: [id])
+  byId         String?         @map("by")
+  at           DateTime
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([byId])
+}
+
+model MemorialItem {
+  id           String          @id @default(cuid())
+  order        AftercareOrder? @relation("MemorialItem_order", fields: [orderId], references: [id])
+  orderId      String?         @map("order")
+  kind         String
+  description  String          @default("")
+  priceMinor   BigInt
+  chargeLine   ChargeLine?     @relation("MemorialItem_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId String?         @map("chargeLine")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([chargeLineId])
 }
 
 model Encounter {
@@ -4271,6 +4900,7 @@ model Administration {
   reversesId                                String?                 @map("reverses")
   reason                                    String                  @default("")
   qtyOverrideReason                         String                  @default("")
+  from_DeathRecord_administration           DeathRecord[]           @relation("DeathRecord_administration")
   from_Administration_reverses              Administration[]        @relation("Administration_reverses")
   from_TreatmentTask_administration         TreatmentTask[]         @relation("TreatmentTask_administration")
   from_VaccineAdministration_administration VaccineAdministration[] @relation("VaccineAdministration_administration")

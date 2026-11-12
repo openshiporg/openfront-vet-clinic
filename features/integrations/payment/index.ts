@@ -13,7 +13,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 /** `requires_action` and `processing` are still open (the payment stays pending); only a decline or a cancel is `failed`. */
 export type Outcome = 'succeeded' | 'failed' | 'requires_action' | 'processing' | 'unknown'
 
-export type ChargeInput = { amountMinor: bigint; currencyCode: string; idempotencyKey: string; description: string; metadata: Record<string, string>; paymentMethod?: string }
+export type ChargeInput = { amountMinor: bigint; currencyCode: string; idempotencyKey: string; description: string; metadata: Record<string, string>; paymentMethod?: string; customer?: string; offSession?: boolean }
 export type ChargeResult = { outcome: Outcome; providerRef: string | null; message: string }
 export type RefundInput = { providerRef: string; amountMinor: bigint; idempotencyKey: string; reason: string }
 export type RefundResult = { outcome: 'succeeded' | 'failed' | 'unknown'; providerRef: string | null; message: string }
@@ -104,6 +104,8 @@ export const stripeAdapter: PaymentAdapter = {
       const { status, json } = await stripeCall('/payment_intents', 'POST', {
         amount: input.amountMinor.toString(), currency: input.currencyCode.toLowerCase(), confirm: 'true',
         payment_method: input.paymentMethod || 'pm_card_visa',
+        ...(input.customer ? { customer: input.customer } : {}),
+        ...(input.offSession ? { off_session: 'true' } : {}),
         'automatic_payment_methods[enabled]': 'true', 'automatic_payment_methods[allow_redirects]': 'never',
         description: input.description,
         ...Object.fromEntries(Object.entries({ ...input.metadata, idempotencyKey: input.idempotencyKey }).map(([k, v]) => [`metadata[${k}]`, v])),
@@ -180,3 +182,30 @@ export const terminalAdapter: PaymentAdapter = {
 const ADAPTERS: Record<string, PaymentAdapter> = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter }
 export const adapterFor = (key: string): PaymentAdapter => ADAPTERS[key] ?? manualAdapter
 export const cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? '')
+
+export type SavedCard = { ok: true; customer: string; paymentMethod: string; setupIntent: string; label: string } | { ok: false; message: string }
+
+/**
+ * Keep a card for later plan payments: a customer and a confirmed SetupIntent (off-session use), so the card is
+ * checked and the cardholder's agreement is held by the processor. Stripe TEST only; card numbers never touch this app.
+ */
+export async function saveCard(input: { idempotencyKey: string; name: string; email?: string; paymentMethod?: string; metadata?: Record<string, string> }): Promise<SavedCard> {
+  try {
+    const meta = Object.fromEntries(Object.entries(input.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]))
+    const cus = await stripeCall('/customers', 'POST', { name: input.name.slice(0, 120), ...(input.email ? { email: input.email } : {}), ...meta }, `${input.idempotencyKey}:customer`)
+    if (cus.status >= 400 || !cus.json.id) return { ok: false, message: 'The card processor could not start saving the card.' }
+    const seti = await stripeCall('/setup_intents', 'POST', {
+      customer: cus.json.id, payment_method: input.paymentMethod || 'pm_card_visa', confirm: 'true', usage: 'off_session',
+      'automatic_payment_methods[enabled]': 'true', 'automatic_payment_methods[allow_redirects]': 'never', ...meta,
+    }, `${input.idempotencyKey}:setup`)
+    if (seti.status >= 400) return { ok: false, message: String(seti.json.error?.message ?? 'The card was not accepted.') }
+    if (seti.json.status !== 'succeeded') return { ok: false, message: 'The bank needs the cardholder to confirm this card. Try another card.' }
+    const pmId = String(seti.json.payment_method ?? '')
+    const pm = await stripeCall(`/payment_methods/${encodeURIComponent(pmId)}`, 'GET', null)
+    const card = pm.json.card as { brand?: string; last4?: string } | undefined
+    const brand = card?.brand ? card.brand.charAt(0).toUpperCase() + card.brand.slice(1) : 'Card'
+    return { ok: true, customer: cus.json.id, paymentMethod: pmId, setupIntent: String(seti.json.id), label: card?.last4 ? `${brand} ending ${card.last4}` : brand }
+  } catch {
+    return { ok: false, message: 'The card processor did not answer. Try again in a moment.' }
+  }
+}

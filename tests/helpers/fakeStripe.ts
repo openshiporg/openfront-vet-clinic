@@ -41,6 +41,13 @@ export function fakeStripe(opts: { status?: (params: Record<string, string>) => 
       return res(200, { object: 'search_result', data: intents.filter(i => wanted.some(([k, v]) => i.metadata[k] === v)) })
     }
     if (method === 'GET' && path.startsWith('/payment_intents?')) return res(200, { object: 'list', data: intents.slice(0, Number(new URL(u).searchParams.get('limit') ?? 10)) })
+    if (method === 'POST' && path === '/customers') return res(200, { id: `cus_fake_${++n}`, object: 'customer' })
+    if (method === 'POST' && path === '/setup_intents') {
+      const bad = (params.payment_method ?? '').includes('Declined') || (params.payment_method ?? '').includes('declined')
+      return res(200, { id: `seti_fake_${++n}`, status: bad ? 'requires_payment_method' : 'succeeded', payment_method: params.payment_method, customer: params.customer })
+    }
+    const pmGet = path.match(/^\/payment_methods\/([^/?]+)$/)
+    if (method === 'GET' && pmGet) return res(200, { id: decodeURIComponent(pmGet[1]), card: { brand: 'visa', last4: '4242' } })
     const one = path.match(/^\/payment_intents\/([^/?]+)$/)
     if (method === 'GET' && one) {
       const i = intents.find(x => x.id === decodeURIComponent(one[1]))

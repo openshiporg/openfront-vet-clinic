@@ -32,13 +32,13 @@ type Inv = { id: string; ref: string; clientId: string; locationId: string; stat
 
 // ── Charges ─────────────────────────────────────────────────────────────────────────────────
 
-async function clientOfPatient(uow: UnitOfWork, patientId: string) {
+export async function clientOfPatient(uow: UnitOfWork, patientId: string) {
   const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: 'primary' }, select: { clientId: true } })
   if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, 'This patient has no client of record to bill.')
   return own.clientId
 }
 
-async function createCharge(uow: UnitOfWork, actor: Actor, c: { patientId: string; clientId: string; locationId: string; encounterId: string | null; feeItemId: string; qty: string; sourceType: string; sourceId: string; description?: string; performedById?: string | null; dispensing?: boolean; injection?: boolean; manualReason?: string }) {
+export async function createCharge(uow: UnitOfWork, actor: Actor, c: { patientId: string; clientId: string; locationId: string; encounterId: string | null; feeItemId: string; qty: string; sourceType: string; sourceId: string; description?: string; performedById?: string | null; dispensing?: boolean; injection?: boolean; manualReason?: string }) {
   const fee = await uow.tx.feeItem.findUniqueOrThrow({ where: { id: c.feeItemId } })
   const { on } = await locationDay(uow, c.locationId, uow.now)
   const client = await uow.tx.client.findUnique({ where: { id: c.clientId }, select: { taxExempt: true } })
@@ -238,7 +238,7 @@ export async function postInvoice(_root: unknown, args: { invoiceId: string; pos
 }
 
 /** Move the invoice status to what its ledger balance says. */
-async function syncInvoiceStatus(uow: UnitOfWork, actor: Actor, invoiceId: string, reason: string) {
+export async function syncInvoiceStatus(uow: UnitOfWork, actor: Actor, invoiceId: string, reason: string) {
   const inv = await uow.tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, select: { status: true, version: true, totalMinor: true } })
   if (inv.status === 'written_off' || inv.status === 'draft') return inv.status
   const balance = await balanceOfInvoice(uow.tx, invoiceId)
@@ -252,7 +252,7 @@ async function syncInvoiceStatus(uow: UnitOfWork, actor: Actor, invoiceId: strin
 type Target = { invoiceId?: string | null; depositId?: string | null }
 
 /** The ledger and allocation for a payment that has gone through. Runs once: the status change that precedes it is a CAS. */
-async function settleSucceeded(uow: UnitOfWork, actor: Actor, paymentId: string, providerRef?: string | null) {
+export async function settleSucceeded(uow: UnitOfWork, actor: Actor, paymentId: string, providerRef?: string | null) {
   const pay = await lockRow<{ id: string; clientId: string; locationId: string | null; amountMinor: bigint; currencyCode: string; status: string; forInvoiceId: string | null; forDepositId: string | null; postedOn: Date | null; ref: string; version: number }>(uow.tx, 'Payment', paymentId)
   if (pay.status === 'succeeded') return { settled: false, paymentId }
   if (!['pending', 'unknown'].includes(pay.status)) throw new DomainError(Codes.GUARD_FAILED, `This payment is ${pay.status} and cannot be marked paid.`)
@@ -282,7 +282,7 @@ async function settleSucceeded(uow: UnitOfWork, actor: Actor, paymentId: string,
   return { settled: true, paymentId, heldOnAccountMinor: left.toString() }
 }
 
-async function newPayment(uow: UnitOfWork, actor: Actor, a: { clientId: string; locationId?: string | null; method: string; provider: string; amountMinor: bigint; target: Target; reference?: string; note?: string; postedOn?: string | null; allowOverpay?: boolean; payerAuthorizationId?: string | null }) {
+export async function newPayment(uow: UnitOfWork, actor: Actor, a: { clientId: string; locationId?: string | null; method: string; provider: string; amountMinor: bigint; target: Target; reference?: string; note?: string; postedOn?: string | null; allowOverpay?: boolean; payerAuthorizationId?: string | null }) {
   const settings = await billingSettings(uow)
   let locationId = a.locationId ?? null
   type InvoiceHead = { id: string; status: string; clientId: string | null; currencyCode: string; locationId: string | null }
@@ -360,7 +360,7 @@ async function settleFromState(context: Ctx, actor: Actor, paymentId: string) {
   return { id: p.id, ref: p.ref, status: p.status }
 }
 
-async function recordOutcome(context: Ctx, actor: Actor, paymentId: string, attemptId: string, outcome: ChargeResult, key: string) {
+export async function recordOutcome(context: Ctx, actor: Actor, paymentId: string, attemptId: string, outcome: ChargeResult, key: string) {
   const done = await command(context.prisma, { name: 'payment.card.result', actor, idempotencyKey: key, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async uow => {
     let pay = await lockRow<{ id: string; ref: string; status: string; version: number; providerRef: string }>(uow.tx, 'Payment', paymentId)
     if (pay.status === 'succeeded') return { id: pay.id, ref: pay.ref, status: 'succeeded', message: 'Paid.' }
@@ -507,7 +507,12 @@ async function runRefund(prisma: any, actor: Actor, refundId: string, key: strin
       const locationId = pay.locationId ?? (await uow.tx.location.findFirstOrThrow({ select: { id: true } })).id
       const { on } = await locationDay(uow, locationId, uow.now)
       await post(uow, { clientId: pay.clientId!, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: 'refund', amountMinor: r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}`, memo: r.ref })
-      if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref)
+      const planMonth = r.invoiceId ? await uow.tx.planBillingAttempt.findFirst({ where: { paymentId: r.paymentId }, select: { id: true } }) : null
+      if (planMonth && r.invoiceId) {
+        // A refunded plan month stays paid: an offsetting credit on the same invoice keeps its balance at zero. Nothing is charged again.
+        await post(uow, { clientId: pay.clientId!, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: 'adjustment', amountMinor: -r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}:plan_settled`, memo: `${r.ref}: refunded plan month` })
+        auditCreate(uow, actor, 'Refund', r.id, 'refund.plan_month_kept_paid', { invoiceId: r.invoiceId })
+      } else if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref)
       await casUpdate(uow, { model: 'Refund', id: r.id, version: r.version, from: [r.status], to: 'succeeded', actor, eventType: 'refund.succeeded', data: { providerRef: out.providerRef ?? '', processedAt: uow.now, message: out.message.slice(0, 200) } })
     } else if (out.outcome === 'failed') {
       await casUpdate(uow, { model: 'Refund', id: r.id, version: r.version, from: [r.status], to: 'failed', actor, eventType: 'refund.failed', data: { message: out.message.slice(0, 200) } })

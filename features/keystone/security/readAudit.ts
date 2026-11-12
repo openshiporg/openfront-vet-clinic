@@ -20,7 +20,7 @@ export const AUDITED_TYPES = new Set<string>([
   // Phase 1: clients, people, contact points, consent, comms, records requests
   'Client', 'ClientPerson', 'ContactPoint', 'ConsentRecord', 'CommsThread', 'CommsMessage', 'CallRecord', 'RecordsRequest', 'RecordsRelease',
   // Patients and the clinical record
-  'Patient', 'PatientWeight', 'PatientAlert', 'PatientAllergy', 'PatientProblem', 'Encounter', 'EncounterSection', 'Addendum', 'VitalsSet',
+  'Patient', 'BoardingReservation', 'BoardingStay', 'PatientWeight', 'PatientAlert', 'PatientAllergy', 'PatientProblem', 'Encounter', 'EncounterSection', 'Addendum', 'VitalsSet',
   'Prescription', 'PrescriptionLine', 'Dispense', 'RefillRequest', 'VaccinationRecord', 'RabiesCertificate', 'LabOrder', 'LabResult',
   'AnaesthesiaRecord', 'SurgeryRecord', 'EuthanasiaConsent', 'TreatmentSheet', 'Treatment', 'Estimate', 'Invoice', 'Payment',
   'Appointment', 'Boarding', 'Hospitalization', 'ClinicalDocument', 'ScribeDraft', 'Referral',

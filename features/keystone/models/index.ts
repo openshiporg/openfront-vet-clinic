@@ -11,6 +11,9 @@ import * as comms from './comms'
 import * as pharmacy from './pharmacy'
 import { INVENTORY_LISTS } from './inventory'
 import { BILLING_LISTS } from './billing'
+import { WELLNESS_LISTS } from './wellness'
+import { BOARDING_LISTS } from './boarding'
+import { END_OF_LIFE_LISTS } from './endOfLife'
 import * as record from './record'
 import * as treatment from './treatment'
 import * as preventive from './preventive'
@@ -52,6 +55,10 @@ export const models = {
   ...INVENTORY_LISTS,
   // Phase 4: estimates, fee schedules, invoices, payments, insurance
   ...BILLING_LISTS,
+  // Phase 5: wellness plans, boarding, grooming and end of life
+  ...WELLNESS_LISTS,
+  ...BOARDING_LISTS,
+  ...END_OF_LIFE_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter: record.Encounter,
   SoapSection: record.SoapSection,

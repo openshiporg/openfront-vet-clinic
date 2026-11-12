@@ -318,7 +318,7 @@ export const Invoice = list({
   },
 })
 
-export const CHARGE_SOURCES = ['administration', 'dispense', 'lab_order', 'imaging_order', 'treatment_task', 'encounter_exam', 'stay_day', 'boarding_night', 'groom', 'product_sale', 'fee', 'manual', 'aftercare', 'memorial'] as const
+export const CHARGE_SOURCES = ['administration', 'dispense', 'lab_order', 'imaging_order', 'treatment_task', 'encounter_exam', 'stay_day', 'boarding_night', 'groom', 'plan_period', 'plan_true_up', 'entitlement', 'product_sale', 'fee', 'manual', 'aftercare', 'memorial'] as const
 
 export const ChargeLine = list({
   access: governed([...SALES]),

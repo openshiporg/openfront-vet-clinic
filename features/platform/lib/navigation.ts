@@ -42,6 +42,10 @@ export const platformNavItems: PlatformNavItem[] = [
   { title: 'Inventory', href: '/platform/inventory', color: 'cyan', description: 'Items, lots, orders and counts.', icon: Warehouse, group: 'medical' },
 
   { title: 'Billing', href: '/platform/billing', color: 'emerald', description: 'Estimates, invoices, payments, insurance.', icon: Receipt, group: 'clients' },
+  { title: 'Wellness plans', href: '/platform/wellness', color: 'emerald', description: 'Monthly plans, members and billing.', icon: HeartPulse, group: 'clients' },
+  { title: 'Boarding', href: '/platform/boarding', color: 'cyan', description: 'Reservations, runs and daily care.', icon: BedDouble, group: 'clients' },
+  { title: 'Grooming', href: '/platform/grooming', color: 'amber', description: 'Grooming bookings and style notes.', icon: PawPrint, group: 'clients' },
+  { title: 'End of life', href: '/platform/end-of-life', color: 'rose', description: 'Consent, record and aftercare custody.', icon: ShieldCheck, group: 'clients' },
 
   { title: 'Calls', href: '/platform/calls', color: 'violet', description: 'Inbound calls: AI receptionist and staff.', icon: Phone, group: 'comms' },
   { title: 'Messages', href: '/platform/messages', color: 'blue', description: 'Client threads, SMS and email.', icon: MessageSquare, group: 'comms' },
@@ -62,7 +66,7 @@ export const SHIPPED_ROUTES = new Set<string>([
   '/platform/today', '/platform/approvals', '/platform/schedule', '/platform/whiteboard', '/platform/waitlist', '/platform/clients',
   '/platform/patients', '/platform/calls', '/platform/messages', '/platform/records-requests', '/platform/agents', '/platform/team', '/platform/policies', '/platform/compliance', '/platform/read-audit', '/platform/audit', '/platform/settings',
   '/platform/encounters', '/platform/hospital', '/platform/vaccines', '/platform/imports',
-  '/platform/prescriptions', '/platform/controlled', '/platform/inventory', '/platform/billing',
+  '/platform/prescriptions', '/platform/controlled', '/platform/inventory', '/platform/billing', '/platform/wellness', '/platform/boarding', '/platform/grooming', '/platform/end-of-life',
 ])
 
 const shipped = platformNavItems.filter(item => SHIPPED_ROUTES.has(item.href))

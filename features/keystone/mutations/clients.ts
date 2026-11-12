@@ -1,4 +1,5 @@
 import { command } from '../lib/command'
+import { deathEffects } from './endOfLife'
 import { auditCreate, transition } from '../lib/cas'
 import { actorAgentId, actorUserId, type Actor } from '../lib/actor'
 import { DomainError, Codes } from '../lib/errors'
@@ -237,6 +238,25 @@ export async function recordConsent(_root: unknown, args: { contactPointId: stri
   })
 }
 
+/** The part of a death every path shares (SM§17): status, suppression, future appointments. The rest is `deathEffects` in endOfLife.ts. */
+export async function deceasePatient(uow: UnitOfWork, actor: Actor, patientId: string, at: Date, expectedVersion: number) {
+  await transition(uow, { model: 'Patient', id: patientId, from: ['active', 'pending', 'inactive'], to: 'deceased', expectedVersion, actor, eventType: 'patient.deceased', data: { deceasedAt: at } })
+  await uow.tx.suppression.create({ data: { patientId, reason: 'deceased', active: true } })
+  const future = await uow.tx.appointmentPatient.findMany({ where: { patientId, appointment: { startsAt: { gt: uow.now }, status: { in: ['requested', 'booked', 'confirmed'] } } }, select: { appointmentId: true } })
+  let cancelled = 0
+  for (const { appointmentId } of future) {
+    const others = await uow.tx.appointmentPatient.count({ where: { appointmentId, patientId: { not: patientId }, status: { notIn: ['cancelled'] } } })
+    if (others === 0 && appointmentId) {
+      await transition(uow, { model: 'Appointment', id: appointmentId, from: ['requested', 'booked', 'confirmed'], to: 'cancelled', actor, eventType: 'appointment.cancelled', reason: 'deceased', data: { cancelReason: 'deceased', cancelledAt: uow.now } })
+      await uow.tx.resourceReservation.updateMany({ where: { appointmentId, status: { not: 'released' } }, data: { status: 'released' } })
+      await uow.tx.providerReservation.updateMany({ where: { appointmentId, status: { not: 'released' } }, data: { status: 'released' } })
+      cancelled += 1
+    }
+  }
+  const effects = await deathEffects(uow, actor, patientId)
+  return { id: patientId, status: 'deceased', appointmentsCancelled: cancelled, ...effects }
+}
+
 /**
  * Record a death (the communications part of SM§2.2; the clinical and billing effects arrive with
  * the end-of-life module): status deceased, a patient suppression so no reminder or marketing message
@@ -247,20 +267,7 @@ export async function recordPatientDeath(_root: unknown, args: { patientId: stri
     const result = await command(context.prisma, { name: 'patient.record_death', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const at = args.diedAt ? new Date(args.diedAt) : uow.now
       if (Number.isNaN(at.getTime()) || at > uow.now) throw new DomainError(Codes.INVALID_INPUT, 'diedAt must be a past time.', { field: 'diedAt' })
-      await transition(uow, { model: 'Patient', id: args.patientId, from: ['active', 'pending', 'inactive'], to: 'deceased', expectedVersion: args.expectedVersion, actor, eventType: 'patient.deceased', data: { deceasedAt: at } })
-      await uow.tx.suppression.create({ data: { patientId: args.patientId, reason: 'deceased', active: true } })
-      const future = await uow.tx.appointmentPatient.findMany({ where: { patientId: args.patientId, appointment: { startsAt: { gt: uow.now }, status: { in: ['requested', 'booked', 'confirmed'] } } }, select: { appointmentId: true } })
-      let cancelled = 0
-      for (const { appointmentId } of future) {
-        const others = await uow.tx.appointmentPatient.count({ where: { appointmentId, patientId: { not: args.patientId }, status: { notIn: ['cancelled'] } } })
-        if (others === 0 && appointmentId) {
-          await transition(uow, { model: 'Appointment', id: appointmentId, from: ['requested', 'booked', 'confirmed'], to: 'cancelled', actor, eventType: 'appointment.cancelled', reason: 'deceased', data: { cancelReason: 'deceased', cancelledAt: uow.now } })
-          await uow.tx.resourceReservation.updateMany({ where: { appointmentId, status: { not: 'released' } }, data: { status: 'released' } })
-          await uow.tx.providerReservation.updateMany({ where: { appointmentId, status: { not: 'released' } }, data: { status: 'released' } })
-          cancelled += 1
-        }
-      }
-      return { id: args.patientId, status: 'deceased', appointmentsCancelled: cancelled }
+      return deceasePatient(uow, actor, args.patientId, at, args.expectedVersion)
     })
     return { replay: result.replay, ...result.value }
   })

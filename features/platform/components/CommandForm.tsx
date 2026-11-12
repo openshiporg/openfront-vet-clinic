@@ -128,6 +128,33 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     }
     return out;
   },
+  // Phase 5: wellness plans, boarding, grooming, end of life. Dollars become cents, counts become numbers, ticks become booleans.
+  phase5: (v) => {
+    const DOLLAR: Record<string, string> = { monthlyPrice: 'monthlyPriceMinor', nightlyRate: 'nightlyRateMinor', deposit: 'depositMinor', spendLimit: 'medicalLimitMinor' };
+    const COUNT = ['expectedVersion', 'qty', 'termMonths', 'runs', 'minAgeWeeks', 'maxAgeMonths', 'otherServicesDiscountBps'];
+    const FLAG = ['affirmed', 'clientPresent', 'waiveTrueUp'];
+    const out: Record<string, unknown> = {};
+    for (const [k, raw] of Object.entries(v)) {
+      const t = (raw ?? '').trim();
+      if (!t) continue;
+      if (DOLLAR[k]) out[DOLLAR[k]] = cents(t, k);
+      else if (COUNT.includes(k)) out[k] = ints(t, k, 0, 100_000);
+      else if (FLAG.includes(k)) out[k] = t === 'true';
+      else if (k === 'speciesCodes') out[k] = t.split(',').map((x) => x.trim()).filter(Boolean);
+      else if (k === 'maxWeightKg') out[k] = Number(t);
+      else if (k === 'startsAt') { const d = new Date(t); if (Number.isNaN(d.getTime())) throw new Error('Choose a start time.'); out[k] = d.toISOString(); }
+      else if (k === 'entitlements') {
+        // One line per item: code | what it is called | how many | retail price in dollars
+        out[k] = t.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+          const [code, name, n, price] = l.split('|').map((x) => x.trim());
+          if (!code || !name || !n || !price) throw new Error('Each included item needs: code | name | how many | retail price.');
+          return { code: code.toUpperCase(), label: name, qty: ints(n, 'how many', 1, 1000), retailValueMinor: cents(price, 'retail price') };
+        });
+      }
+      else out[k] = t;
+    }
+    return out;
+  },
   // A simple estimate: one recommended option with up to three fee lines, each with a low and a high quantity.
   estimate: (v) => {
     required(v, 'patientId', 'locationId', 'title', 'fee1');

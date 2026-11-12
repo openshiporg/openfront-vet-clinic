@@ -38,18 +38,18 @@ function dec(value) {
     if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
     return new Decimal(value);
   }
-  const text18 = String(value).trim();
-  if (!DECIMAL_TEXT.test(text18)) throw new Error(`Not a decimal number: ${JSON.stringify(text18).slice(0, 40)}`);
-  return new Decimal(text18);
+  const text21 = String(value).trim();
+  if (!DECIMAL_TEXT.test(text21)) throw new Error(`Not a decimal number: ${JSON.stringify(text21).slice(0, 40)}`);
+  return new Decimal(text21);
 }
 function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
   const places = typeof scale === "number" ? scale : Scale[scale];
   return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
 }
 function toBpsInt(fraction) {
-  const text18 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
-  const n = Number.parseInt(text18, 10);
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text18}`);
+  const text21 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
+  const n = Number.parseInt(text21, 10);
+  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text21}`);
   return n;
 }
 function toKg(value, unit2) {
@@ -140,8 +140,21 @@ __export(ledger_exports, {
   post: () => post
 });
 async function balanceOfInvoice(db, invoiceId) {
-  const rows = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ${invoiceId}`;
-  return big(rows[0]?.s);
+  const key2 = db;
+  let batch = pending.get(key2);
+  if (!batch) {
+    const ids = /* @__PURE__ */ new Set();
+    const made = { ids, done: Promise.resolve().then(() => new Promise((r) => setTimeout(r, 0))).then(async () => {
+      pending.delete(key2);
+      const list23 = [...ids];
+      const rows = await db.$queryRaw`SELECT "invoice" AS id, COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ANY(${list23}::text[]) GROUP BY "invoice"`;
+      return new Map(rows.map((r) => [r.id, big(r.s)]));
+    }) };
+    pending.set(key2, made);
+    batch = made;
+  }
+  batch.ids.add(invoiceId);
+  return (await batch.done).get(invoiceId) ?? 0n;
 }
 async function balanceOfClient(db, clientId) {
   const rows = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "client" = ${clientId}`;
@@ -191,12 +204,13 @@ async function post(uow, input) {
   });
   return { id: row.id, created: true };
 }
-var big;
+var big, pending;
 var init_ledger = __esm({
   "features/keystone/lib/ledger.ts"() {
     "use strict";
     init_errors();
     big = (v) => BigInt(String(v ?? 0));
+    pending = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -462,18 +476,21 @@ __export(billing_exports, {
   taxOn: () => taxOn,
   withinCeiling: () => withinCeiling
 });
+function wholeMinor(d) {
+  return BigInt(d.toString().split(".")[0] || "0");
+}
 function taxOn(rules2, taxCategory, netMinor) {
   if (rules2.exemptCategories.includes(taxCategory)) return 0n;
   if (!rules2.taxableCategories.includes(taxCategory)) throw new Error(`No sales tax treatment for ${taxCategory}`);
   if (netMinor <= 0n) return 0n;
-  return BigInt(dec(netMinor.toString()).times(dec(rules2.baseRate)).toDecimalPlaces(0, 6).toFixed(0));
+  return wholeMinor(dec(netMinor.toString()).times(dec(rules2.baseRate)).toDecimalPlaces(0, 6));
 }
 function extend(qty2, unitPriceMinor, minimumChargeMinor = null) {
-  const raw = BigInt(dec(qty2).times(dec(unitPriceMinor.toString())).toDecimalPlaces(0, 6).toFixed(0));
+  const raw = wholeMinor(dec(qty2).times(dec(unitPriceMinor.toString())).toDecimalPlaces(0, 6));
   return minimumChargeMinor !== null && raw > 0n && raw < minimumChargeMinor ? minimumChargeMinor : raw;
 }
 function adjustBps(amountMinor, bps) {
-  return BigInt(dec(amountMinor.toString()).times(dec(bps)).div(1e4).toDecimalPlaces(0, 6).toFixed(0));
+  return wholeMinor(dec(amountMinor.toString()).times(dec(bps)).div(1e4).toDecimalPlaces(0, 6));
 }
 function estimateLineRange(line) {
   if (dec(line.qtyLow).lt(0) || dec(line.qtyLow).gt(dec(line.qtyHigh))) throw new Error("The low quantity cannot be more than the high quantity");
@@ -490,7 +507,7 @@ function optionTotals(lines) {
 }
 function depositFor(totals, fraction, basis) {
   const base = basis === "high" ? totals.highTotalMinor : totals.lowTotalMinor;
-  return BigInt(dec(base.toString()).times(dec(fraction)).toDecimalPlaces(0, 6).toFixed(0));
+  return wholeMinor(dec(base.toString()).times(dec(fraction)).toDecimalPlaces(0, 6));
 }
 function ageBucket(postedOn, asOf) {
   const days2 = Math.floor((Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${postedOn}T00:00:00Z`)) / 864e5);
@@ -534,7 +551,7 @@ module.exports = __toCommonJS(keystone_exports);
 
 // features/keystone/index.ts
 var import_auth = require("@keystone-6/auth");
-var import_core22 = require("@keystone-6/core");
+var import_core25 = require("@keystone-6/core");
 var import_config = require("dotenv/config");
 
 // features/keystone/models/User.ts
@@ -546,7 +563,7 @@ var import_fields3 = require("@keystone-6/core/fields");
 var import_fields = require("@keystone-6/core/fields");
 var registry = /* @__PURE__ */ new Map();
 function registerListAccess(lists) {
-  for (const [key2, list20] of Object.entries(lists)) registry.set(key2, list20.access);
+  for (const [key2, list23] of Object.entries(lists)) registry.set(key2, list23.access);
 }
 var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
 async function canReadWholeList(listKey, args) {
@@ -2720,7 +2737,7 @@ function canonicalize(value) {
   throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
 }
 var canonicalJson = (value) => JSON.stringify(canonicalize(value));
-var sha256 = (text18) => (0, import_node_crypto2.createHash)("sha256").update(text18).digest("hex");
+var sha256 = (text21) => (0, import_node_crypto2.createHash)("sha256").update(text21).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
 var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
@@ -3789,7 +3806,7 @@ var Invoice = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var CHARGE_SOURCES = ["administration", "dispense", "lab_order", "imaging_order", "treatment_task", "encounter_exam", "stay_day", "boarding_night", "groom", "product_sale", "fee", "manual", "aftercare", "memorial"];
+var CHARGE_SOURCES = ["administration", "dispense", "lab_order", "imaging_order", "treatment_task", "encounter_exam", "stay_day", "boarding_night", "groom", "plan_period", "plan_true_up", "entitlement", "product_sale", "fee", "manual", "aftercare", "memorial"];
 var ChargeLine = (0, import_core15.list)({
   access: governed([...SALES]),
   ui: { listView: { initialColumns: ["description", "patient", "extendedMinor", "sourceType", "invoice"] } },
@@ -3991,7 +4008,8 @@ var InsuranceClaimPacket = (0, import_core15.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     invoice: relationship({ ref: "Invoice", ...readOnly }),
     recordsRelease: relationship({ ref: "RecordsRelease", ...readOnly }),
-    formFields: (0, import_fields16.json)({ ...readOnly, defaultValue: {} }),
+    // Filter and sort take the same check as read: a where on hidden text is an oracle for it.
+    formFields: (0, import_fields16.json)({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, isFilterable: permissions.canReadClinical, isOrderable: permissions.canReadClinical, defaultValue: {} }),
     /** [{documentId, title, sha256}] — exactly what the release listed. */
     documents: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
     submitter: fixedChoice(["client", "clinic"]),
@@ -3999,7 +4017,7 @@ var InsuranceClaimPacket = (0, import_core15.list)({
     approvedMinor: money(),
     paidTo: (0, import_fields16.text)({ db: { isNullable: true }, access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } } }),
     statusNote: systemText(),
-    packetBody: (0, import_fields16.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    packetBody: (0, import_fields16.text)({ ...readOnly, access: { ...readOnly.access, read: permissions.canReadClinical }, isFilterable: permissions.canReadClinical, isOrderable: permissions.canReadClinical, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     packetSha256: systemText(),
     version: versionField(),
     ...trackingFields
@@ -4033,14 +4051,470 @@ var BILLING_LISTS = {
   InsuranceClaimPacket
 };
 
-// features/keystone/models/record.ts
+// features/keystone/models/wellness.ts
 var import_core16 = require("@keystone-6/core");
 var import_fields17 = require("@keystone-6/core/fields");
+var CATALOG = ["canAccessDashboard"];
+var ENROL = ["canTakePayments", "canPostInvoices", "canViewFinance", "canManagePayments", "canBook", "canCheckIn", "canManagePractice"];
+var MONEY2 = ["canTakePayments", "canPostInvoices", "canViewFinance", "canManagePayments", "canManagePractice"];
+var ENROLLMENT_STATES = ["pending_payment", "active", "cancelling", "cancelled", "suspended", "completed", "ended_by_death"];
+var WellnessPlan = (0, import_core16.list)({
+  access: governed([...CATALOG]),
+  ui: { labelField: "name", listView: { initialColumns: ["code", "name", "status"] } },
+  fields: {
+    code: systemText({ indexed: "unique", required: true }),
+    name: systemText({ required: true }),
+    summary: systemText(),
+    status: lifecycle(["active", "retired"]),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var WellnessPlanVersion = (0, import_core16.list)({
+  access: governed([...CATALOG]),
+  ui: { labelField: "label", listView: { initialColumns: ["plan", "versionNo", "label", "monthlyPriceMinor", "status"] } },
+  fields: {
+    plan: relationship({ ref: "WellnessPlan", ...readOnly }),
+    versionNo: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    label: systemText({ required: true }),
+    status: lifecycle(["draft", "published", "retired"]),
+    monthlyPriceMinor: minor({ required: true }),
+    termMonths: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    speciesCodes: (0, import_fields17.json)({ ...readOnly }),
+    minAgeWeeks: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    maxAgeMonths: (0, import_fields17.integer)({ ...readOnly }),
+    /** [{ code, label, qty, retailMinor }]: what a member gets each term, and what it is worth at the regular fee. */
+    entitlements: (0, import_fields17.json)({ ...readOnly }),
+    otherServicesDiscountBps: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    trueUpNote: systemText(),
+    disclosure: (0, import_fields17.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    publishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var Enrollment = (0, import_core16.list)({
+  access: governed([...ENROL]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "client", "planVersion", "status", "termEndsOn"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    plan: relationship({ ref: "WellnessPlan", ...readOnly }),
+    planVersion: relationship({ ref: "WellnessPlanVersion", ...readOnly }),
+    status: lifecycle(ENROLLMENT_STATES),
+    startedOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    termNo: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1 }),
+    termStartsOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    termEndsOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    autoRenew: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: true }),
+    /** What staff see of the saved card ("Visa ending 4242"). The processor references below are never readable. */
+    cardLabel: systemText(),
+    customerRef: hiddenHash(),
+    paymentMethodRef: hiddenHash(),
+    /** Goes up each time the card is replaced: Retry needs a card newer than the one that was declined. */
+    cardVersion: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1 }),
+    consent: relationship({ ref: "EnrollmentConsent", ...readOnly }),
+    cancelRequestedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    cancelReason: systemText(),
+    trueUpMinor: minor({ defaultValue: 0n }),
+    trueUpWaived: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    trueUpInvoice: relationship({ ref: "Invoice", ...readOnly }),
+    endedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var EnrollmentConsent = (0, import_core16.list)({
+  access: governed([...ENROL]),
+  ui: { listView: { initialColumns: ["enrollment", "signer", "method", "consentedAt"] } },
+  fields: {
+    enrollment: relationship({ ref: "Enrollment", ...readOnly }),
+    signer: relationship({ ref: "ClientPerson", ...readOnly }),
+    disclosureText: (0, import_fields17.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    disclosureHash: systemText({ required: true }),
+    terms: (0, import_fields17.json)({ ...readOnly }),
+    method: fixedChoice(["in_person", "portal", "phone_recorded"]),
+    affirmed: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    setupIntentRef: hiddenHash(),
+    consentedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var EntitlementGrant = (0, import_core16.list)({
+  access: governed([...ENROL]),
+  ui: { listView: { initialColumns: ["enrollment", "termNo", "label", "qtyGranted"] } },
+  fields: {
+    enrollment: relationship({ ref: "Enrollment", ...readOnly }),
+    termNo: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    code: systemText({ required: true }),
+    label: systemText({ required: true }),
+    qtyGranted: qty({ required: true }),
+    retailValueMinor: minor({ required: true }),
+    ...trackingFields
+  }
+});
+var EntitlementEntry = (0, import_core16.list)({
+  access: governed([...ENROL]),
+  ui: { listView: { initialColumns: ["grant", "kind", "qty", "at", "memo"] } },
+  fields: {
+    entryKey: systemText({ indexed: "unique", required: true }),
+    grant: relationship({ ref: "EntitlementGrant", ...readOnly }),
+    enrollment: relationship({ ref: "Enrollment", ...readOnly }),
+    kind: fixedChoice(["debit", "credit"]),
+    qty: qty({ required: true }),
+    valueMinor: minor({ defaultValue: 0n }),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    memo: systemText(),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var PlanBillingRun = (0, import_core16.list)({
+  access: governed([...MONEY2]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "periodKey", "attemptCount", "succeededCount", "failedCount", "totalMinor", "finishedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    runKey: systemText({ indexed: "unique", required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    periodKey: systemText({ indexed: true, required: true }),
+    status: fixedChoice(["completed"]),
+    attemptCount: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    succeededCount: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    failedCount: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    openCount: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    skippedCount: (0, import_fields17.integer)({ ...readOnly, defaultValue: 0 }),
+    totalMinor: minor({ defaultValue: 0n }),
+    summary: (0, import_fields17.json)({ ...readOnly }),
+    startedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    finishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    ...trackingFields
+  }
+});
+var PlanBillingAttempt = (0, import_core16.list)({
+  access: governed([...MONEY2]),
+  ui: { listView: { initialColumns: ["enrollment", "periodKey", "generation", "status", "amountMinor", "startedAt"] } },
+  fields: {
+    enrollment: relationship({ ref: "Enrollment", ...readOnly }),
+    periodKey: systemText({ indexed: true, required: true }),
+    generation: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["processing", "succeeded", "failed", "unknown"]),
+    amountMinor: minor({ required: true }),
+    cardVersion: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1 }),
+    termNo: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1 }),
+    payment: relationship({ ref: "Payment", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    /** The press of "Run billing" that made this attempt; the run row is written when the press finishes. */
+    runKey: systemText({ indexed: true }),
+    message: systemText(),
+    startedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    finishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var WELLNESS_LISTS = { WellnessPlan, WellnessPlanVersion, Enrollment, EnrollmentConsent, EntitlementGrant, EntitlementEntry, PlanBillingRun, PlanBillingAttempt };
+
+// features/keystone/models/boarding.ts
+var import_core17 = require("@keystone-6/core");
+var import_fields18 = require("@keystone-6/core/fields");
+var BOARDING = ["canManageBoarding", "canBook", "canCheckIn", "canReadClinical", "canManagePractice"];
+var KENNEL = ["canManageBoarding", "canReadClinical", "canManagePractice"];
+var GROOM = ["canGroom", "canManageBoarding", "canBook", "canCheckIn", "canManagePractice"];
+var RunType = (0, import_core17.list)({
+  access: governed([...BOARDING]),
+  ui: { labelField: "name", listView: { initialColumns: ["name", "location", "speciesCodes", "nightlyRateMinor"] } },
+  fields: {
+    code: systemText({ indexed: "unique", required: true }),
+    name: systemText({ required: true }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    speciesCodes: (0, import_fields18.json)({ ...readOnly }),
+    maxWeightKg: (0, import_fields18.integer)({ ...readOnly }),
+    nightlyRateMinor: minor({ required: true }),
+    depositMinor: minor({ defaultValue: 0n }),
+    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
+    ...trackingFields
+  }
+});
+var Run = (0, import_core17.list)({
+  access: governed([...BOARDING]),
+  ui: { labelField: "label", listView: { initialColumns: ["label", "runType", "status"] } },
+  fields: {
+    label: systemText({ required: true }),
+    runType: relationship({ ref: "RunType", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    status: lifecycle(["available", "out_of_service"]),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var NightlyRunInventory = (0, import_core17.list)({
+  access: governed([...BOARDING]),
+  ui: { listView: { initialColumns: ["runType", "night", "capacity", "sold"] } },
+  fields: {
+    runType: relationship({ ref: "RunType", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    night: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    capacity: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    sold: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    ...trackingFields
+  }
+});
+var BoardingReservation = (0, import_core17.list)({
+  access: governed([...BOARDING]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "runType", "checkInOn", "checkOutOn", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    runType: relationship({ ref: "RunType", ...readOnly }),
+    checkInOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    /** The morning the pet goes home: nights are check-in through the night before this day. */
+    checkOutOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["requested", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"]),
+    holdExpiresAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    depositMinor: minor({ defaultValue: 0n }),
+    vaccineOverrideReason: systemText(),
+    notes: systemText(),
+    cancelReason: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var BoardingStay = (0, import_core17.list)({
+  access: governed([...BOARDING]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "run", "checkedInAt", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    reservation: relationship({ ref: "BoardingReservation", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    run: relationship({ ref: "Run", ...readOnly }),
+    status: lifecycle(["in_house", "checked_out"]),
+    checkedInAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    checkedOutAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var RunAssignment = (0, import_core17.list)({
+  access: governed([...KENNEL]),
+  ui: { listView: { initialColumns: ["stay", "run", "startsAt", "endsAt"] } },
+  fields: {
+    stay: relationship({ ref: "BoardingStay", ...readOnly }),
+    run: relationship({ ref: "Run", ...readOnly }),
+    startsAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    ...trackingFields
+  }
+});
+var RunCard = (0, import_core17.list)({
+  access: governed([...KENNEL]),
+  ui: { listView: { initialColumns: ["stay", "emergencyContactName", "medicalLimitMinor"] } },
+  fields: {
+    stay: relationship({ ref: "BoardingStay", ...readOnly }),
+    reservation: relationship({ ref: "BoardingReservation", ...readOnly }),
+    feeding: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    handling: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    medications: (0, import_fields18.json)({ ...readOnly }),
+    emergencyContactName: systemText(),
+    emergencyContactPhone: systemText({ secret: true }),
+    /** The most the owner has said the hospital may spend on emergency care without calling first. */
+    medicalLimitMinor: minor({ defaultValue: 0n }),
+    ...trackingFields
+  }
+});
+var BelongingItem = (0, import_core17.list)({
+  access: governed([...KENNEL]),
+  ui: { listView: { initialColumns: ["stay", "description", "returnedAt"] } },
+  fields: {
+    stay: relationship({ ref: "BoardingStay", ...readOnly }),
+    description: systemText({ required: true }),
+    returnedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var DailyCareLog = (0, import_core17.list)({
+  access: governed([...KENNEL]),
+  ui: { listView: { initialColumns: ["stay", "kind", "note", "at"] } },
+  fields: {
+    stay: relationship({ ref: "BoardingStay", ...readOnly }),
+    kind: fixedChoice(["fed", "walked", "medicated", "played", "cleaned", "observation"]),
+    note: systemText(),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var GroomAppointment = (0, import_core17.list)({
+  access: governed([...GROOM]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "groomer", "startsAt", "service", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    groomer: relationship({ ref: "StaffMember", ...readOnly }),
+    startsAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    durationMinutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 60 }),
+    service: systemText({ required: true }),
+    priceMinor: minor({ required: true }),
+    status: lifecycle(["booked", "checked_in", "in_progress", "ready", "completed", "cancelled", "no_show"]),
+    noteVersion: relationship({ ref: "GroomNote", ...readOnly }),
+    cancelReason: systemText(),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    /** Managers only: what the groomer earns on this groom. Not readable, filterable or sortable by anyone else. */
+    commissionBps: (0, import_fields18.integer)({ ...readOnly, access: { ...readOnly.access, read: permissions.canViewFinance }, isFilterable: permissions.canViewFinance, isOrderable: permissions.canViewFinance, defaultValue: 0 }),
+    commissionMinor: minor({ defaultValue: 0n }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var GroomNote = (0, import_core17.list)({
+  access: governed([...GROOM]),
+  ui: { listView: { initialColumns: ["patient", "versionNo", "style", "blade", "behaviour"] } },
+  fields: {
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    versionNo: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    blade: systemText(),
+    style: systemText(),
+    behaviour: systemText(),
+    notes: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    photoUrl: systemText(),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
+    ...trackingFields
+  }
+});
+var ServiceItem = (0, import_core17.list)({
+  access: governed(["canAccessDashboard"]),
+  ui: { labelField: "name", listView: { initialColumns: ["name", "area", "priceMinor", "active"] } },
+  fields: {
+    code: systemText({ indexed: "unique", required: true }),
+    area: fixedChoice(["grooming", "euthanasia", "aftercare"]),
+    name: systemText({ required: true }),
+    priceMinor: minor({ required: true }),
+    minutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    taxCategory: fixedChoice(["professional_service", "grooming", "merchandise", "boarding"]),
+    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
+    ...trackingFields
+  }
+});
+var BOARDING_LISTS = { ServiceItem, RunType, Run, NightlyRunInventory, BoardingReservation, BoardingStay, RunAssignment, RunCard, BelongingItem, DailyCareLog, GroomAppointment, GroomNote };
+
+// features/keystone/models/endOfLife.ts
+var import_core18 = require("@keystone-6/core");
+var import_fields19 = require("@keystone-6/core/fields");
+var EOL = ["canReadClinical", "canAuthoriseEuthanasia", "canManageBoarding", "canManagePractice"];
+var AFTERCARE_CHOICES = ["private_cremation", "communal_cremation", "home_burial", "rabies_testing"];
+var EuthanasiaConsent = (0, import_core18.list)({
+  access: governed(["canReadClinical", "canAuthoriseEuthanasia"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "signer", "aftercare", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    signer: relationship({ ref: "ClientPerson", ...readOnly }),
+    /** Someone other than the owner who may sign: animal control, a court order, a shelter's policy. */
+    authority: fixedChoice(["owner", "animal_control", "court_order", "shelter_policy"]),
+    authorityNote: systemText(),
+    status: lifecycle(["draft", "signed", "used", "revoked"]),
+    biteAttestation: fixedChoice(["no_bite", "bite_in_last_10_days"]),
+    aftercare: fixedChoice(AFTERCARE_CHOICES),
+    clientPresent: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
+    method: fixedChoice(["in_person", "e_signature"]),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    verbalConfirmedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    verbalConfirmedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    signatureText: systemText(),
+    signedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    usedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    revokedReason: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var DeathRecord = (0, import_core18.list)({
+  access: governed(["canReadClinical", "canManagePatients", "canAuthoriseEuthanasia"]),
+  ui: { listView: { initialColumns: ["patient", "cause", "diedAt", "recordedBy"] } },
+  fields: {
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    cause: fixedChoice(["euthanasia", "natural", "dead_on_arrival"]),
+    causeNote: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    diedAt: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    consent: relationship({ ref: "EuthanasiaConsent", ...readOnly }),
+    administration: relationship({ ref: "Administration", ...readOnly }),
+    effects: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    ...trackingFields
+  }
+});
+var AftercareOrder = (0, import_core18.list)({
+  access: governed([...EOL]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "choice", "tagNumber", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    deathRecord: relationship({ ref: "DeathRecord", ...readOnly }),
+    choice: fixedChoice(["private_cremation", "communal_cremation", "home_burial", "rabies_testing"]),
+    status: lifecycle(["ordered", "body_tagged", "stored", "picked_up", "returned", "closed", "released_to_owner", "held_for_testing"]),
+    /** The tag on the animal. Nothing after "ordered" exists without one. */
+    tagNumber: systemText(),
+    crematory: systemText(),
+    manifestRef: systemText(),
+    /** What the crematory wrote on the ashes; it must match the manifest before they come back. */
+    crematoryRef: systemText(),
+    heldFrom: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var CustodyEvent = (0, import_core18.list)({
+  access: governed([...EOL]),
+  ui: { listView: { initialColumns: ["order", "kind", "tagNumber", "by", "at"] } },
+  fields: {
+    order: relationship({ ref: "AftercareOrder", ...readOnly }),
+    kind: fixedChoice(["tagged", "stored", "picked_up", "returned", "released", "closed", "testing_hold", "testing_release"]),
+    tagNumber: systemText({ required: true }),
+    place: systemText(),
+    crematoryRef: systemText(),
+    receivedBy: systemText(),
+    by: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var MemorialItem = (0, import_core18.list)({
+  access: governed([...EOL]),
+  ui: { listView: { initialColumns: ["order", "kind", "description", "priceMinor"] } },
+  fields: {
+    order: relationship({ ref: "AftercareOrder", ...readOnly }),
+    kind: fixedChoice(["paw_print", "clay_impression", "fur_clipping", "urn", "keepsake"]),
+    description: systemText({ required: true }),
+    priceMinor: minor({ required: true }),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    ...trackingFields
+  }
+});
+var END_OF_LIFE_LISTS = { EuthanasiaConsent, DeathRecord, AftercareOrder, CustodyEvent, MemorialItem };
+
+// features/keystone/models/record.ts
+var import_core19 = require("@keystone-6/core");
+var import_fields20 = require("@keystone-6/core/fields");
 var CLINICAL_READ = ["canReadClinical"];
 var ENCOUNTER_KINDS = ["outpatient", "inpatient_day", "surgery", "dental", "emergency", "telehealth", "phone_consult", "records_import", "euthanasia", "tech_visit"];
 var SECTION_KINDS = ["history", "subjective", "objective", "assessment", "plan", "discharge", "surgery_report", "dental_chart", "anaesthesia_summary", "communication"];
 var REPEATABLE_SECTIONS = ["communication"];
-var Encounter = (0, import_core16.list)({
+var Encounter = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "status", "attendingDvm", "startedAt"] } },
   fields: {
@@ -4050,23 +4524,23 @@ var Encounter = (0, import_core16.list)({
     appointment: relationship({ ref: "Appointment", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     kind: fixedChoice(ENCOUNTER_KINDS),
-    vcprQualifying: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    vcprQualifying: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["open", "in_progress", "pending_signature", "signed", "voided"]),
     reason: systemText(),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
     participants: relationship({ ref: "StaffMember", many: true, ...readOnly }),
     weightUsed: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    startedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    submittedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    submittedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    signedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    signedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     contentHash: systemText(),
-    signedContent: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
+    signedContent: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
-    completeness: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
+    completeness: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
     voidReason: systemText(),
     voidApproval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     importedFrom: systemText(),
@@ -4080,55 +4554,55 @@ var Encounter = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var SoapSection = (0, import_core16.list)({
+var SoapSection = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "kind", "ordinal", "version", "lockedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.sections", ...readOnly }),
     kind: fixedChoice(SECTION_KINDS),
-    ordinal: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
+    ordinal: (0, import_fields20.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields17.json)({ ...readOnly }),
+    structured: (0, import_fields20.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     lastAuthor: relationship({ ref: "StaffMember", ...readOnly }),
     revisions: relationship({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
-    lockedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    lockedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var SoapSectionRevision = (0, import_core16.list)({
+var SoapSectionRevision = (0, import_core19.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["section", "source", "author", "at"] } },
   fields: {
     section: relationship({ ref: "SoapSection.revisions", ...readOnly }),
-    revisionNumber: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
+    revisionNumber: (0, import_fields20.integer)({ ...readOnly, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields17.json)({ ...readOnly }),
+    structured: (0, import_fields20.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     template: relationship({ ref: "RecordTemplate", ...readOnly }),
     scribeDraft: relationship({ ref: "ScribeDraft", ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     authorUser: relationship({ ref: "User", ...readOnly }),
-    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     contentHash: systemText({ required: true })
   }
 });
-var Addendum = (0, import_core16.list)({
+var Addendum = (0, import_core19.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "sectionKind", "author", "signedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.addenda", ...readOnly }),
     sectionKind: fixedChoice([...SECTION_KINDS, "general"]),
     author: relationship({ ref: "StaffMember", ...readOnly }),
-    authorIsDvm: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    authorIsDvm: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
     reason: systemText({ required: true }),
     body: systemText({ required: true }),
-    signedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    signedAt: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     hash: systemText({ required: true })
   }
 });
-var VitalsObservation = (0, import_core16.list)({
+var VitalsObservation = (0, import_core19.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "temperature", "heartRate", "respRate", "painScore", "at"] } },
   fields: {
@@ -4136,20 +4610,20 @@ var VitalsObservation = (0, import_core16.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     temperature: qty(),
     temperatureUnit: choice(["F", "C"], "F"),
-    heartRate: (0, import_fields17.integer)({ ...readOnly }),
-    respRate: (0, import_fields17.integer)({ ...readOnly }),
+    heartRate: (0, import_fields20.integer)({ ...readOnly }),
+    respRate: (0, import_fields20.integer)({ ...readOnly }),
     mucousMembranes: choice(["pink", "pale", "white", "cyanotic", "icteric", "injected", "brick_red", "not_assessed"], null),
     crtSeconds: qty(),
-    painScore: (0, import_fields17.integer)({ ...readOnly }),
-    bodyConditionScore: (0, import_fields17.integer)({ ...readOnly }),
+    painScore: (0, import_fields20.integer)({ ...readOnly }),
+    bodyConditionScore: (0, import_fields20.integer)({ ...readOnly }),
     mentation: choice(["bar", "qar", "dull", "obtunded", "stuporous", "comatose"], null),
     hydrationPct: qty(),
-    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var EXAM_SYSTEMS = ["general", "integument", "eyes", "ears", "oral", "cardiovascular", "respiratory", "gi", "urogenital", "musculoskeletal", "neurologic", "lymphatic"];
-var PhysicalExamFinding = (0, import_core16.list)({
+var PhysicalExamFinding = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "system", "status", "text"] } },
   fields: {
@@ -4162,19 +4636,19 @@ var PhysicalExamFinding = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var DiagnosisCode = (0, import_core16.list)({
+var DiagnosisCode = (0, import_core19.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term", listView: { initialColumns: ["codeSystem", "code", "term", "active"] } },
   fields: {
     codeSystem: choice(["practice", "venomcode", "snomed_vet"], "practice"),
-    code: (0, import_fields17.text)({ validation: { isRequired: true } }),
-    term: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields20.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields20.text)({ validation: { isRequired: true } }),
     species: relationship({ ref: "Species", many: true }),
-    active: (0, import_fields17.checkbox)({ defaultValue: true }),
+    active: (0, import_fields20.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Problem = (0, import_core16.list)({
+var Problem = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["patient", "term", "status", "chronic", "onset"] } },
   fields: {
@@ -4183,14 +4657,14 @@ var Problem = (0, import_core16.list)({
     code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     status: lifecycle(["active", "resolved", "inactive"]),
-    chronic: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
-    onset: (0, import_fields17.calendarDay)({ ...readOnly }),
-    resolvedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    chronic: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
+    onset: (0, import_fields20.calendarDay)({ ...readOnly }),
+    resolvedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Diagnosis = (0, import_core16.list)({
+var Diagnosis = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["encounter", "term", "certainty"] } },
   fields: {
@@ -4204,7 +4678,7 @@ var Diagnosis = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var ClinicalAttachment = (0, import_core16.list)({
+var ClinicalAttachment = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "caption" },
   fields: {
@@ -4217,7 +4691,7 @@ var ClinicalAttachment = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var ClinicalDocument = (0, import_core16.list)({
+var ClinicalDocument = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "title", listView: { initialColumns: ["patient", "kind", "title", "status", "createdAt"] } },
   fields: {
@@ -4231,41 +4705,41 @@ var ClinicalDocument = (0, import_core16.list)({
     sourceHash: systemText(),
     document: relationship({ ref: "Document", ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    renderedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    renderedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     // The rendered document (database store, the default; an object-store adapter keeps only the
     // key). Deterministic from the frozen source, so sha256 proves it was not altered.
     mimeType: systemText(),
-    body: (0, import_fields17.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields20.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     sha256: systemText(),
     renderError: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var RecordTemplate = (0, import_core16.list)({
+var RecordTemplate = (0, import_core19.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "sectionKind", "active"] } },
   fields: {
-    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields20.text)({ validation: { isRequired: true } }),
     kind: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "discharge", "phone"], "wellness"),
     sectionKind: choice([...SECTION_KINDS], "objective"),
     species: relationship({ ref: "Species" }),
-    body: (0, import_fields17.text)({ ui: { displayMode: "textarea" } }),
-    templateVersion: (0, import_fields17.integer)({ defaultValue: 1 }),
-    active: (0, import_fields17.checkbox)({ defaultValue: true }),
+    body: (0, import_fields20.text)({ ui: { displayMode: "textarea" } }),
+    templateVersion: (0, import_fields20.integer)({ defaultValue: 1 }),
+    active: (0, import_fields20.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Glossary = (0, import_core16.list)({
+var Glossary = (0, import_core19.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term" },
   fields: {
-    term: (0, import_fields17.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
-    expansion: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields20.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    expansion: (0, import_fields20.text)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var ScribeSession = (0, import_core16.list)({
+var ScribeSession = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "status", "transcriptionProvider", "modelProvider", "createdAt"] } },
   fields: {
@@ -4273,9 +4747,9 @@ var ScribeSession = (0, import_core16.list)({
     startedBy: relationship({ ref: "StaffMember", ...readOnly }),
     startedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     clientConsent: relationship({ ref: "ConsentRecord", ...readOnly }),
-    staffAcknowledged: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    staffAcknowledged: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
     audioDocument: relationship({ ref: "Document", ...readOnly }),
-    audioDeleteAfter: (0, import_fields17.timestamp)({ ...readOnly }),
+    audioDeleteAfter: (0, import_fields20.timestamp)({ ...readOnly }),
     transcriptRef: systemText(),
     transcript: systemText(),
     transcriptionProvider: systemText(),
@@ -4287,23 +4761,23 @@ var ScribeSession = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var ScribeDraft = (0, import_core16.list)({
+var ScribeDraft = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   fields: {
     session: relationship({ ref: "ScribeSession.drafts", ...readOnly }),
-    sections: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
-    suggestedCharges: (0, import_fields17.json)({ ...readOnly }),
+    sections: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
+    suggestedCharges: (0, import_fields20.json)({ ...readOnly }),
     confidence: rate(),
     modelRef: systemText(),
-    acceptedBlocks: (0, import_fields17.json)({ ...readOnly }),
+    acceptedBlocks: (0, import_fields20.json)({ ...readOnly }),
     status: lifecycle(["proposed", "partly_accepted", "accepted", "rejected"]),
     decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    decidedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Referral = (0, import_core16.list)({
+var Referral = (0, import_core19.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["patient", "direction", "hospital", "urgency", "status"] } },
   fields: {
@@ -4323,11 +4797,11 @@ var Referral = (0, import_core16.list)({
 });
 
 // features/keystone/models/treatment.ts
-var import_core17 = require("@keystone-6/core");
-var import_fields18 = require("@keystone-6/core/fields");
+var import_core20 = require("@keystone-6/core");
+var import_fields21 = require("@keystone-6/core/fields");
 var CLINICAL_READ2 = ["canReadClinical"];
 var ROUTES = ["po", "iv", "im", "sc", "topical", "otic", "ophthalmic", "inhaled", "intranasal", "io", "rectal", "transdermal", "other"];
-var ClinicalOrder = (0, import_core17.list)({
+var ClinicalOrder = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "description", "status", "orderedBy"] } },
   fields: {
@@ -4344,28 +4818,28 @@ var ClinicalOrder = (0, import_core17.list)({
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     dose: relationship({ ref: "DoseCalculation", ...readOnly }),
     frequency: systemText(),
-    schedule: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
+    schedule: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
     route: fixedChoice(ROUTES),
     quantity: qty(),
     quantityUnit: unit(),
-    extralabel: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
-    emergencyStabilisation: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    extralabel: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
+    emergencyStabilisation: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
     overrideReason: systemText(),
-    warnings: (0, import_fields18.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
+    warnings: (0, import_fields21.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
     cancelReason: systemText(),
     administrations: relationship({ ref: "Administration.order", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DoseCalculation = (0, import_core17.list)({
+var DoseCalculation = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["product", "weightKg", "doseAmount", "doseUnit", "totalAmount", "roundedQty", "computedUnit"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
     weight: relationship({ ref: "WeightMeasurement", ...readOnly }),
     weightKg: wt({ required: true }),
-    weightAgeHours: (0, import_fields18.integer)({ ...readOnly }),
+    weightAgeHours: (0, import_fields21.integer)({ ...readOnly }),
     doseAmount: qty({ required: true }),
     doseUnit: fixedChoice(["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"]),
     dosePer: fixedChoice(["kg", "m2", "animal"]),
@@ -4378,20 +4852,20 @@ var DoseCalculation = (0, import_core17.list)({
     concentrationUnit: systemText(),
     computedQty: qty(),
     computedUnit: systemText(),
-    roundingRule: (0, import_fields18.json)({ ...readOnly }),
+    roundingRule: (0, import_fields21.json)({ ...readOnly }),
     roundedQty: qty(),
     deliveredAmount: qty(),
-    deviationBps: (0, import_fields18.integer)({ ...readOnly }),
+    deviationBps: (0, import_fields21.integer)({ ...readOnly }),
     manualOverrideQty: qty(),
     overrideReason: systemText(),
-    warnings: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
+    warnings: (0, import_fields21.json)({ ...readOnly, defaultValue: [] }),
     calcVersion: systemText({ required: true }),
     hash: systemText({ required: true }),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var InventoryLot = (0, import_core17.list)({
+var InventoryLot = (0, import_core20.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "lotNumber", listView: { initialColumns: ["lotNumber", "drug", "vaccine", "expiresOn", "status", "location"] } },
   fields: {
@@ -4399,14 +4873,14 @@ var InventoryLot = (0, import_core17.list)({
     vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    expiresOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields21.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["available", "quarantined", "disposed"]),
     quarantineReason: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var Administration = (0, import_core17.list)({
+var Administration = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["order", "patient", "qty", "unit", "route", "givenBy", "givenAt"] } },
   fields: {
@@ -4416,7 +4890,7 @@ var Administration = (0, import_core17.list)({
     treatmentTask: relationship({ ref: "TreatmentTask", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText(),
-    lotExpiresOn: (0, import_fields18.calendarDay)({ ...readOnly }),
+    lotExpiresOn: (0, import_fields21.calendarDay)({ ...readOnly }),
     csContainer: relationship({ ref: "CsContainer", ...readOnly }),
     csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
     qty: qty({ required: true }),
@@ -4428,7 +4902,7 @@ var Administration = (0, import_core17.list)({
     witness: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     wasteLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
-    givenAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    givenAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
     reverses: relationship({ ref: "Administration", ...readOnly }),
     reason: systemText(),
@@ -4436,7 +4910,7 @@ var Administration = (0, import_core17.list)({
     qtyOverrideReason: systemText()
   }
 });
-var Ward = (0, import_core17.list)({
+var Ward = (0, import_core20.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
@@ -4447,19 +4921,19 @@ var Ward = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var Cage = (0, import_core17.list)({
+var Cage = (0, import_core20.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "ward", "size", "active"] } },
   fields: {
     ward: relationship({ ref: "Ward.cages" }),
     code: systemText({ required: true, indexed: "unique" }),
     size: choice(["small", "medium", "large", "run"], "medium"),
-    features: (0, import_fields18.json)({ defaultValue: {} }),
-    active: (0, import_fields18.checkbox)({ defaultValue: true }),
+    features: (0, import_fields21.json)({ defaultValue: {} }),
+    active: (0, import_fields21.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var HospitalStay = (0, import_core17.list)({
+var HospitalStay = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "cage", "admittedAt", "attendingDvm"] } },
   fields: {
@@ -4468,8 +4942,8 @@ var HospitalStay = (0, import_core17.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    admittedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    dischargedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    admittedAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dischargedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     status: lifecycle(["admitted", "in_care", "ready_for_discharge", "discharged", "transferred", "deceased"]),
     codeStatus: fixedChoice(["full", "closed_chest_only", "dnr"]),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
@@ -4480,17 +4954,17 @@ var HospitalStay = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var CageAssignment = (0, import_core17.list)({
+var CageAssignment = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     stay: relationship({ ref: "HospitalStay.assignments", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    fromAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    toAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    fromAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    toAt: (0, import_fields21.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
-var TreatmentSheetOrder = (0, import_core17.list)({
+var TreatmentSheetOrder = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["stay", "order", "frequency", "active", "materialisedThrough"] } },
   fields: {
@@ -4498,37 +4972,37 @@ var TreatmentSheetOrder = (0, import_core17.list)({
     order: relationship({ ref: "ClinicalOrder", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
     frequency: fixedChoice(["q1h", "q2h", "q4h", "q6h", "q8h", "q12h", "sid", "bid", "tid", "qid", "prn", "cri", "once"]),
-    startAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    startAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endAt: (0, import_fields21.timestamp)({ ...readOnly }),
     instructions: systemText(),
-    materialisedThrough: (0, import_fields18.timestamp)({ ...readOnly }),
-    graceMinutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
-    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
+    materialisedThrough: (0, import_fields21.timestamp)({ ...readOnly }),
+    graceMinutes: (0, import_fields21.integer)({ ...readOnly, defaultValue: 30 }),
+    active: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: true }),
     tasks: relationship({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var TreatmentTask = (0, import_core17.list)({
+var TreatmentTask = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["patient", "sheetOrder", "dueAt", "status", "doneBy"] } },
   fields: {
     sheetOrder: relationship({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    dueAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dueAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
     doneBy: relationship({ ref: "StaffMember", ...readOnly }),
-    doneAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    doneAt: (0, import_fields21.timestamp)({ ...readOnly }),
     skipReason: systemText(),
     rescheduledTo: relationship({ ref: "TreatmentTask", ...readOnly }),
     administration: relationship({ ref: "Administration", ...readOnly }),
-    observation: (0, import_fields18.json)({ ...readOnly }),
+    observation: (0, import_fields21.json)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AnaesthesiaRecord = (0, import_core17.list)({
+var AnaesthesiaRecord = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "asaStatus", "status", "anaesthetist", "inductionAt"] } },
   fields: {
@@ -4537,16 +5011,16 @@ var AnaesthesiaRecord = (0, import_core17.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     procedure: systemText({ required: true }),
     asaStatus: fixedChoice(["I", "II", "III", "IV", "V", "IE", "IIE", "IIIE", "IVE", "VE"]),
-    fastingConfirmed: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
-    consentConfirmed: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    fastingConfirmed: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
+    consentConfirmed: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
     preWeight: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    ivCatheter: (0, import_fields18.json)({ ...readOnly }),
-    protocol: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
-    checklist: (0, import_fields18.json)({ ...readOnly }),
-    inductionAt: (0, import_fields18.timestamp)({ ...readOnly }),
-    intubatedAt: (0, import_fields18.timestamp)({ ...readOnly }),
-    extubatedAt: (0, import_fields18.timestamp)({ ...readOnly }),
-    recoveryEndAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    ivCatheter: (0, import_fields21.json)({ ...readOnly }),
+    protocol: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
+    checklist: (0, import_fields21.json)({ ...readOnly }),
+    inductionAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    intubatedAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    extubatedAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    recoveryEndAt: (0, import_fields21.timestamp)({ ...readOnly }),
     anaesthetist: relationship({ ref: "StaffMember", ...readOnly }),
     dvm: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
@@ -4558,19 +5032,19 @@ var AnaesthesiaRecord = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var MonitoringReading = (0, import_core17.list)({
+var MonitoringReading = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["record", "at", "hr", "rr", "spo2", "etco2", "map", "tempC"] } },
   fields: {
     record: relationship({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
-    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    hr: (0, import_fields18.integer)({ ...readOnly }),
-    rr: (0, import_fields18.integer)({ ...readOnly }),
-    spo2: (0, import_fields18.integer)({ ...readOnly }),
-    etco2: (0, import_fields18.integer)({ ...readOnly }),
-    sbp: (0, import_fields18.integer)({ ...readOnly }),
-    dbp: (0, import_fields18.integer)({ ...readOnly }),
-    map: (0, import_fields18.integer)({ ...readOnly }),
+    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    hr: (0, import_fields21.integer)({ ...readOnly }),
+    rr: (0, import_fields21.integer)({ ...readOnly }),
+    spo2: (0, import_fields21.integer)({ ...readOnly }),
+    etco2: (0, import_fields21.integer)({ ...readOnly }),
+    sbp: (0, import_fields21.integer)({ ...readOnly }),
+    dbp: (0, import_fields21.integer)({ ...readOnly }),
+    map: (0, import_fields21.integer)({ ...readOnly }),
     tempC: qty(),
     agentPct: qty(),
     o2FlowLpm: qty(),
@@ -4579,7 +5053,7 @@ var MonitoringReading = (0, import_core17.list)({
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
-var SurgeryReport = (0, import_core17.list)({
+var SurgeryReport = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -4596,17 +5070,17 @@ var SurgeryReport = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var DentalChart = (0, import_core17.list)({
+var DentalChart = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    teeth: (0, import_fields18.json)({ ...readOnly, defaultValue: {} }),
+    teeth: (0, import_fields21.json)({ ...readOnly, defaultValue: {} }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DischargeInstruction = (0, import_core17.list)({
+var DischargeInstruction = (0, import_core20.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -4614,37 +5088,37 @@ var DischargeInstruction = (0, import_core17.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     body: systemText({ required: true }),
     medsSummary: systemText(),
-    recheckOn: (0, import_fields18.calendarDay)({ ...readOnly }),
-    sentAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    recheckOn: (0, import_fields21.calendarDay)({ ...readOnly }),
+    sentAt: (0, import_fields21.timestamp)({ ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/preventive.ts
-var import_core18 = require("@keystone-6/core");
-var import_fields19 = require("@keystone-6/core/fields");
+var import_core21 = require("@keystone-6/core");
+var import_fields22 = require("@keystone-6/core/fields");
 var CLINICAL_READ3 = ["canReadClinical"];
 var REMINDER_READ = ["canReadClinical", "canBook", "canMessageClients"];
-var VaccineProduct = (0, import_core18.list)({
+var VaccineProduct = (0, import_core21.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "manufacturer", "isRabies", "licensedDoiMonths", "minAgeWeeks", "active"] } },
   fields: {
-    name: (0, import_fields19.text)({ validation: { isRequired: true } }),
-    manufacturer: (0, import_fields19.text)({ validation: { isRequired: true } }),
-    antigens: (0, import_fields19.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
+    name: (0, import_fields22.text)({ validation: { isRequired: true } }),
+    manufacturer: (0, import_fields22.text)({ validation: { isRequired: true } }),
+    antigens: (0, import_fields22.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
     species: relationship({ ref: "Species", many: true }),
-    licensedDoiMonths: (0, import_fields19.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
-    minAgeWeeks: (0, import_fields19.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
-    isRabies: (0, import_fields19.checkbox)({ defaultValue: false }),
-    usdaProductCode: (0, import_fields19.text)(),
+    licensedDoiMonths: (0, import_fields22.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
+    minAgeWeeks: (0, import_fields22.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
+    isRabies: (0, import_fields22.checkbox)({ defaultValue: false }),
+    usdaProductCode: (0, import_fields22.text)(),
     defaultRoute: choice(["sc", "im", "intranasal", "po", "transdermal"], "sc"),
     reminderType: relationship({ ref: "ReminderType" }),
-    active: (0, import_fields19.checkbox)({ defaultValue: true }),
+    active: (0, import_fields22.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var VaccineAdministration = (0, import_core18.list)({
+var VaccineAdministration = (0, import_core21.list)({
   access: immutable([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "lotNumber", "administeredOn", "dueNextOn", "vaccinatedBy"] } },
   fields: {
@@ -4654,17 +5128,17 @@ var VaccineAdministration = (0, import_core18.list)({
     product: relationship({ ref: "VaccineProduct", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    doseSeries: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
-    isInitialSeries: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
+    lotExpiresOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    doseSeries: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
+    isInitialSeries: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
     route: fixedChoice(["sc", "im", "intranasal", "po", "transdermal"]),
     site: systemText({ required: true }),
-    administeredOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
-    dueNextOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    administeredOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
+    dueNextOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     vaccinatedBy: relationship({ ref: "StaffMember", ...readOnly }),
     supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
-    policyVersions: (0, import_fields19.json)({ ...readOnly }),
+    policyVersions: (0, import_fields22.json)({ ...readOnly }),
     certificate: relationship({ ref: "RabiesCertificate", ...readOnly }),
     source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
     /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
@@ -4672,45 +5146,45 @@ var VaccineAdministration = (0, import_core18.list)({
     reason: systemText()
   }
 });
-var RabiesCertificate = (0, import_core18.list)({
+var RabiesCertificate = (0, import_core21.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "vaccinatedOn", "nextDueOn", "tagNumber"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    ownerSnapshot: (0, import_fields19.json)({ ...readOnly }),
-    patientSnapshot: (0, import_fields19.json)({ ...readOnly }),
-    vaccineSnapshot: (0, import_fields19.json)({ ...readOnly }),
-    vetSnapshot: (0, import_fields19.json)({ ...readOnly }),
-    vaccinatedOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
-    nextDueOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    ownerSnapshot: (0, import_fields22.json)({ ...readOnly }),
+    patientSnapshot: (0, import_fields22.json)({ ...readOnly }),
+    vaccineSnapshot: (0, import_fields22.json)({ ...readOnly }),
+    vetSnapshot: (0, import_fields22.json)({ ...readOnly }),
+    vaccinatedOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
+    nextDueOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     tagNumber: systemText(),
     tagJurisdiction: systemText(),
-    fields: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
-    missingFields: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
+    fields: (0, import_fields22.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
+    missingFields: (0, import_fields22.json)({ ...readOnly, defaultValue: [] }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     reportedTo: fixedChoice(["none", "county", "city"]),
-    reportedAt: (0, import_fields19.timestamp)({ ...readOnly }),
-    policyVersions: (0, import_fields19.json)({ ...readOnly }),
+    reportedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    policyVersions: (0, import_fields22.json)({ ...readOnly }),
     /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
-    voidedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    voidedAt: (0, import_fields22.timestamp)({ ...readOnly }),
     voidReason: systemText(),
     ...trackingFields
   }
 });
-var ReminderType = (0, import_core18.list)({
+var ReminderType = (0, import_core21.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields19.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
-    name: (0, import_fields19.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields22.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
+    name: (0, import_fields22.text)({ validation: { isRequired: true } }),
     kind: choice(["vaccine", "test", "procedure", "recheck", "preventive_med"], "vaccine"),
-    active: (0, import_fields19.checkbox)({ defaultValue: true }),
+    active: (0, import_fields22.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var ReminderProtocol = (0, import_core18.list)({
+var ReminderProtocol = (0, import_core21.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "name" },
   fields: {
@@ -4721,25 +5195,25 @@ var ReminderProtocol = (0, import_core18.list)({
     ...trackingFields
   }
 });
-var ReminderProtocolVersion = (0, import_core18.list)({
+var ReminderProtocolVersion = (0, import_core21.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "label" },
   fields: {
     protocol: relationship({ ref: "ReminderProtocol.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    versionNumber: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
     rules: relationship({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
-    sourceRefs: (0, import_fields19.json)({ ...readOnly }),
-    verified: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
+    sourceRefs: (0, import_fields22.json)({ ...readOnly }),
+    verified: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields22.json)({ ...readOnly, defaultValue: [] }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    publishedAt: (0, import_fields22.timestamp)({ ...readOnly }),
     contentHash: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderRule = (0, import_core18.list)({
+var ReminderRule = (0, import_core21.list)({
   access: governed("canAccessDashboard"),
   fields: {
     protocolVersion: relationship({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
@@ -4747,14 +5221,14 @@ var ReminderRule = (0, import_core18.list)({
     triggerVaccines: relationship({ ref: "VaccineProduct", many: true, ...readOnly }),
     triggerServiceCode: systemText(),
     satisfies: relationship({ ref: "ReminderType", ...readOnly }),
-    schedule: (0, import_fields19.json)({ ...readOnly }),
-    leadDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 30 }),
-    graceDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 30 }),
-    lapseDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 180 }),
+    schedule: (0, import_fields22.json)({ ...readOnly }),
+    leadDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 30 }),
+    graceDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 30 }),
+    lapseDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 180 }),
     ...trackingFields
   }
 });
-var PatientReminder = (0, import_core18.list)({
+var PatientReminder = (0, import_core21.list)({
   access: governed([...REMINDER_READ]),
   ui: { listView: { initialColumns: ["patient", "type", "dueOn", "status", "source"] } },
   fields: {
@@ -4762,19 +5236,19 @@ var PatientReminder = (0, import_core18.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     type: relationship({ ref: "ReminderType", ...readOnly }),
     rule: relationship({ ref: "ReminderRule", ...readOnly }),
-    dueOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    dueOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "satisfied", "suppressed", "lapsed"]),
     suppressedReason: systemText(),
     protocolVersion: relationship({ ref: "ReminderProtocolVersion", ...readOnly }),
     source: fixedChoice(["protocol", "vaccine", "manual", "import"]),
     sourceKey: systemText({ required: true }),
-    lastNotifiedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    lastNotifiedAt: (0, import_fields22.timestamp)({ ...readOnly }),
     satisfactions: relationship({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderSatisfaction = (0, import_core18.list)({
+var ReminderSatisfaction = (0, import_core21.list)({
   access: immutable([...CLINICAL_READ3]),
   fields: {
     reminder: relationship({ ref: "PatientReminder.satisfactions", ...readOnly }),
@@ -4784,10 +5258,10 @@ var ReminderSatisfaction = (0, import_core18.list)({
     externalEvidence: relationship({ ref: "Document", ...readOnly }),
     note: systemText(),
     recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var AdverseEventReport = (0, import_core18.list)({
+var AdverseEventReport = (0, import_core21.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "severity", "reportedTo", "status"] } },
   fields: {
@@ -4802,7 +5276,7 @@ var AdverseEventReport = (0, import_core18.list)({
     reportedTo: fixedChoice(["manufacturer", "fda_cvm", "usda_cvb"]),
     status: lifecycle(["draft", "submitted", "acknowledged"]),
     reference: systemText(),
-    submittedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    submittedAt: (0, import_fields22.timestamp)({ ...readOnly }),
     createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -4810,9 +5284,9 @@ var AdverseEventReport = (0, import_core18.list)({
 });
 
 // features/keystone/models/imports.ts
-var import_core19 = require("@keystone-6/core");
-var import_fields20 = require("@keystone-6/core/fields");
-var ImportBatch = (0, import_core19.list)({
+var import_core22 = require("@keystone-6/core");
+var import_fields23 = require("@keystone-6/core/fields");
+var ImportBatch = (0, import_core22.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "system", "entity", "status", "rowsTotal", "rowsCreated", "rowsFailed"] } },
   fields: {
@@ -4824,36 +5298,36 @@ var ImportBatch = (0, import_core19.list)({
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(["received", "validated", "applying", "applied", "failed"]),
-    rowsTotal: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsCreated: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsSkipped: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsFailed: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
-    mapping: (0, import_fields20.json)({ ...readOnly }),
+    rowsTotal: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsCreated: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsSkipped: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsFailed: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
+    mapping: (0, import_fields23.json)({ ...readOnly }),
     startedBy: relationship({ ref: "User", ...readOnly }),
-    finishedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    finishedAt: (0, import_fields23.timestamp)({ ...readOnly }),
     rows: relationship({ ref: "ImportRow.batch", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ImportRow = (0, import_core19.list)({
+var ImportRow = (0, import_core22.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { listView: { initialColumns: ["batch", "rowNumber", "externalId", "result", "recordType"] } },
   fields: {
     batch: relationship({ ref: "ImportBatch.rows", ...readOnly }),
-    rowNumber: (0, import_fields20.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rowNumber: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
     externalId: systemText({ required: true }),
     result: fixedChoice(["created", "skipped_existing", "failed"]),
     recordType: systemText(),
     recordId: systemText(),
-    errors: (0, import_fields20.json)({ ...readOnly, defaultValue: [] }),
+    errors: (0, import_fields23.json)({ ...readOnly, defaultValue: [] }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/agents.ts
-var import_core20 = require("@keystone-6/core");
-var import_fields21 = require("@keystone-6/core/fields");
+var import_core23 = require("@keystone-6/core");
+var import_fields24 = require("@keystone-6/core/fields");
 var AGENT_SCOPES = [
   "reception.read",
   "reception.book",
@@ -4883,43 +5357,43 @@ var PROPOSAL_KINDS = [
   "boarding.reserve",
   "reminder.send"
 ];
-var AgentToolGrant = (0, import_core20.list)({
+var AgentToolGrant = (0, import_core23.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "scope", listView: { initialColumns: ["agent", "scope", "status", "createdAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.grants", ...readOnly }),
     scope: fixedChoice(AGENT_SCOPES),
-    constraints: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
+    constraints: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
     status: lifecycle(["requested", "active", "revoked"]),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    revokedAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    revokedAt: (0, import_fields24.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentRun = (0, import_core20.list)({
+var AgentRun = (0, import_core23.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "callRecordId", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.runs", ...readOnly }),
-    startedAt: (0, import_fields21.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    endedAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields24.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    endedAt: (0, import_fields24.timestamp)({ ...readOnly }),
     status: lifecycle(["started", "completed", "failed", "aborted"]),
     promptHash: hiddenHash(),
-    toolCalls: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
-    costMeta: (0, import_fields21.json)({ ...readOnly }),
+    toolCalls: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
+    costMeta: (0, import_fields24.json)({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
     proposals: relationship({ ref: "Proposal.agentRun", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Proposal = (0, import_core20.list)({
+var Proposal = (0, import_core23.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "kind", listView: { initialColumns: ["kind", "status", "proposedByAgent", "proposedByUser", "createdAt"] } },
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
-    payload: (0, import_fields21.json)({ ...readOnly }),
+    payload: (0, import_fields24.json)({ ...readOnly }),
     payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
     agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
@@ -4928,12 +5402,12 @@ var Proposal = (0, import_core20.list)({
     targetList: systemText(),
     targetId: systemText({ indexed: true }),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    validation: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
+    validation: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentAction = (0, import_core20.list)({
+var AgentAction = (0, import_core23.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "tool", listView: { initialColumns: ["tool", "outcome", "agent", "at"] } },
   fields: {
@@ -4944,7 +5418,7 @@ var AgentAction = (0, import_core20.list)({
     outcome: fixedChoice(["ok", "scope_denied", "never_allowed", "guard_failed", "error", "killed"]),
     errorCode: systemText(),
     auditEventId: systemText(),
-    at: (0, import_fields21.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields24.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 
@@ -4983,6 +5457,10 @@ var models = {
   ...INVENTORY_LISTS,
   // Phase 4: estimates, fee schedules, invoices, payments, insurance
   ...BILLING_LISTS,
+  // Phase 5: wellness plans, boarding, grooming and end of life
+  ...WELLNESS_LISTS,
+  ...BOARDING_LISTS,
+  ...END_OF_LIFE_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter,
   SoapSection,
@@ -5033,8 +5511,8 @@ var models = {
   Proposal
 };
 var API_MAX_TAKE = 500;
-for (const list20 of Object.values(models)) {
-  list20.graphql = { ...list20.graphql ?? {}, maxTake: API_MAX_TAKE };
+for (const list23 of Object.values(models)) {
+  list23.graphql = { ...list23.graphql ?? {}, maxTake: API_MAX_TAKE };
 }
 registerListAccess(models);
 
@@ -6754,7 +7232,7 @@ function parseProtocol(input) {
   return parsed.data;
 }
 var protocolHash = (p) => payloadHash(p);
-var normalise = (text18) => ` ${String(text18 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+var normalise = (text21) => ` ${String(text21 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
 var mentions = (complaint, keyword) => complaint.includes(normalise(keyword));
 function scoreTriage(protocol, input) {
   const complaint = normalise(input.complaint);
@@ -6833,8 +7311,8 @@ function findSlots(input) {
   return out;
 }
 function buildSegments(template, start, totalMinutes) {
-  const list20 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
-  return list20.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
+  const list23 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
+  return list23.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
 }
 var SLOT_TTL_MS = 5 * 6e4;
 var DEVELOPMENT_SECRET3 = "this secret should only be used in testing";
@@ -7872,9 +8350,9 @@ function validatePracticeControls(input) {
   if (!keys.length) throw new DomainError(Codes.INVALID_INPUT, "Nothing to change.");
   for (const key2 of keys) if (!CONTROL_KEYS.includes(key2)) throw new DomainError(Codes.INVALID_INPUT, `${key2} is not a practice control.`, { field: key2 });
   if (input.refundApprovalThresholdMinor !== void 0) {
-    const text18 = String(input.refundApprovalThresholdMinor);
-    if (!/^\d{1,12}$/.test(text18)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
-    out.refundApprovalThresholdMinor = text18;
+    const text21 = String(input.refundApprovalThresholdMinor);
+    if (!/^\d{1,12}$/.test(text21)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
+    out.refundApprovalThresholdMinor = text21;
   }
   if (input.discountApprovalThresholdBps !== void 0) {
     intIn(input.discountApprovalThresholdBps, 0, 1e4, "discountApprovalThresholdBps");
@@ -8028,7 +8506,7 @@ async function policyMatrix(_root, _args, context) {
 // features/keystone/mutations/clients.ts
 init_errors();
 init_decimal();
-var text16 = (value, field, max = 200, required = true) => {
+var text19 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -8043,8 +8521,8 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   const row = await uow.tx.clientPerson.create({
     data: {
       clientId,
-      firstName: text16(person.firstName, "firstName", 80),
-      lastName: text16(person.lastName, "lastName", 80),
+      firstName: text19(person.firstName, "firstName", 80),
+      lastName: text19(person.lastName, "lastName", 80),
       relationship: person.relationship ?? "owner",
       isPrimary,
       canBook: true,
@@ -8067,7 +8545,7 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   return row;
 }
 async function createPatient(uow, actor, clientId, input, status) {
-  const species = await uow.tx.species.findUnique({ where: { code: text16(input.speciesCode, "speciesCode", 40) } });
+  const species = await uow.tx.species.findUnique({ where: { code: text19(input.speciesCode, "speciesCode", 40) } });
   if (!species || !species.active) throw new DomainError(Codes.INVALID_INPUT, `Unknown species ${input.speciesCode}.`, { field: "speciesCode" });
   const breed = input.breedName ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: input.breedName.trim(), mode: "insensitive" } } }) : null;
   if (input.dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth)) throw new DomainError(Codes.INVALID_INPUT, "dateOfBirth is YYYY-MM-DD.", { field: "dateOfBirth" });
@@ -8083,7 +8561,7 @@ async function createPatient(uow, actor, clientId, input, status) {
   const patient = await uow.tx.patient.create({
     data: {
       ref,
-      name: text16(input.name, "name", 80),
+      name: text19(input.name, "name", 80),
       kind: "individual",
       speciesId: species.id,
       breedId: breed?.id ?? null,
@@ -8118,7 +8596,7 @@ async function registerClient(_root, args, context) {
         data: {
           ref,
           publicCode: publicCode("CL"),
-          displayName: text16(input.displayName || `${primary.lastName} household`, "displayName", 120),
+          displayName: text19(input.displayName || `${primary.lastName} household`, "displayName", 120),
           kind: input.kind ?? "household",
           status: "active",
           primaryLocationId: location.id,
@@ -8150,7 +8628,7 @@ async function registerPendingClient(_root, args, context) {
       const ref = await nextSerial(uow.tx, "C");
       const source = actor.kind === "agent" ? "ai_voice" : "csr";
       const client = await uow.tx.client.create({
-        data: { ref, publicCode: publicCode("CL"), displayName: `${text16(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
+        data: { ref, publicCode: publicCode("CL"), displayName: `${text19(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
       });
       auditCreate(uow, actor, "Client", client.id, "client.registered_pending", { ref, source, possibleDuplicate: dupes.length > 0 });
       await createPerson(uow, actor, client.id, { firstName: input.firstName, lastName: input.lastName, relationship: "owner", contacts }, true, source);
@@ -8228,7 +8706,7 @@ async function recordWeight(_root, args, context) {
 async function addPatientAlert(_root, args, context) {
   return gated(context, { permissions: ["canManagePatients", "canWriteRecord"], tool: "patient.alert", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "patient.alert.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text16(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
+      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text19(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
       auditCreate(uow, actor, "PatientAlert", row.id, "patient.alert_added", { patientId: args.patientId, kind: args.kind, severity: args.severity });
       return { id: row.id };
     });
@@ -8277,7 +8755,7 @@ async function recordPatientDeath(_root, args, context) {
 // features/keystone/mutations/schedule.ts
 init_errors();
 var STEP_MINUTES = 15;
-var list19 = (v) => Array.isArray(v) ? v.map(String) : [];
+var list22 = (v) => Array.isArray(v) ? v.map(String) : [];
 async function loadAvailability(tx, input) {
   const [location, type] = await Promise.all([
     tx.location.findUnique({ where: { id: input.locationId }, select: { id: true, timeZone: true, active: true } }),
@@ -8285,8 +8763,8 @@ async function loadAvailability(tx, input) {
   ]);
   if (!location?.active) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
   if (!type?.active) throw new DomainError(Codes.NOT_FOUND, "Appointment type not found.");
-  const providerKinds = list19(type.providerKinds);
-  const resourceKinds = list19(type.requiredResourceKinds);
+  const providerKinds = list22(type.providerKinds);
+  const resourceKinds = list22(type.requiredResourceKinds);
   const windowStart = (/* @__PURE__ */ new Date(`${input.from}T00:00:00Z`)).getTime() - 864e5;
   const windowEnd = (/* @__PURE__ */ new Date(`${addDays(input.from, input.days)}T00:00:00Z`)).getTime() + 864e5;
   const range = { startsAt: { lt: new Date(windowEnd) }, endsAt: { gt: new Date(windowStart) }, status: { not: "released" } };
@@ -8321,7 +8799,7 @@ function computeSlots(data, input) {
           localDate: isoDay2(b.localDate),
           startTime: b.startTime,
           endTime: b.endTime,
-          categories: list19(b.appointmentCategories),
+          categories: list22(b.appointmentCategories),
           effectiveFrom: isoDay2(b.effectiveFrom),
           effectiveTo: isoDay2(b.effectiveTo)
         })),
@@ -9299,7 +9777,7 @@ async function renderDischargeDocument(uow, instructionId) {
 
 // features/keystone/mutations/clinical.ts
 init_errors();
-var text17 = (value, field, max = 200, required = true) => {
+var text20 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -9404,7 +9882,7 @@ async function openEncounter(_root, args, context) {
           kind: args.kind,
           vcprQualifying: IN_PERSON.has(args.kind),
           status: "open",
-          reason: text17(args.reason ?? "", "reason", 300, false),
+          reason: text20(args.reason ?? "", "reason", 300, false),
           attendingDvmId: attending?.id ?? null,
           weightUsedId: weight?.id ?? null,
           startedAt: uow.now,
@@ -9419,7 +9897,7 @@ async function openEncounter(_root, args, context) {
 }
 async function writeSection(uow, actor, staff, encounterId, input) {
   if (!SECTION_KINDS.includes(input.kind)) throw new DomainError(Codes.INVALID_INPUT, "Unknown record section.", { field: "kind" });
-  const body = text17(input.body, "body", 2e4, false);
+  const body = text20(input.body, "body", 2e4, false);
   const enc = await chartableEncounter(uow, encounterId);
   const repeatable = REPEATABLE_SECTIONS.includes(input.kind);
   let ordinal = input.ordinal ?? 1;
@@ -9531,7 +10009,7 @@ async function setExamFinding(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       const existing = await uow.tx.physicalExamFinding.findFirst({ where: { encounterId: enc.id, system: args.system }, select: { id: true } });
-      const data = { status: args.status, text: text17(args.text ?? "", "text", 2e3, false), byId: staff.id };
+      const data = { status: args.status, text: text20(args.text ?? "", "text", 2e3, false), byId: staff.id };
       const row = existing ? await uow.tx.physicalExamFinding.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.physicalExamFinding.create({ data: { encounterId: enc.id, system: args.system, ...data } });
       await markInProgress(uow, enc);
       auditCreate(uow, actor, "PhysicalExamFinding", row.id, "record.exam_finding_set", { encounterId: enc.id, system: args.system, status: args.status });
@@ -9548,7 +10026,7 @@ async function addDiagnosis(_root, args, context) {
       const enc = await chartableEncounter(uow, args.encounterId);
       const code = args.codeId ? await uow.tx.diagnosisCode.findUnique({ where: { id: args.codeId }, select: { id: true, term: true, active: true } }) : null;
       if (args.codeId && (!code || !code.active)) throw new DomainError(Codes.NOT_FOUND, "Diagnosis code not found.");
-      const term = code?.term ?? text17(args.term, "term", 200);
+      const term = code?.term ?? text20(args.term, "term", 200);
       let problemId = null;
       if (args.addToProblems && args.certainty !== "ruled_out") {
         const open = await uow.tx.problem.findFirst({ where: { patientId: enc.patientId, term, status: "active" }, select: { id: true } });
@@ -9661,7 +10139,7 @@ async function submitEncounter(_root, args, context) {
 }
 async function returnEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.return", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.return", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "Encounter", id: args.encounterId, from: ["pending_signature"], to: "in_progress", expectedVersion: args.expectedVersion, actor, eventType: "encounter.returned", reason });
       return { id: row.id, status: row.status, version: row.version };
@@ -9730,8 +10208,8 @@ async function signEncounter(_root, args, context) {
 }
 async function addAddendum(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "record.addendum", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
-    const body = text17(args.body, "body", 1e4);
+    const reason = text20(args.reason, "reason", 300);
+    const body = text20(args.body, "body", 1e4);
     if (![...SECTION_KINDS, "general"].includes(args.sectionKind)) throw new DomainError(Codes.INVALID_INPUT, "Choose which part of the record this amends.", { field: "sectionKind" });
     const result = await command(context.prisma, { name: "record.addendum", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -9762,7 +10240,7 @@ async function voidBlockers(uow, encounterId) {
 }
 async function requestVoidEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.void_request", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.void_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, ref: true, status: true, version: true } });
       if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
@@ -9825,8 +10303,8 @@ var DraftSchema = import_zod3.z.object({
   suggestedCharges: import_zod3.z.array(import_zod3.z.object({ description: import_zod3.z.string().max(200), reason: import_zod3.z.string().max(400) })).max(20).default([]),
   confidence: import_zod3.z.string().regex(/^(0(\.\d{1,4})?|1(\.0{1,4})?)$/).default("0")
 });
-function parsePasted(text18) {
-  const lines = text18.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+function parsePasted(text21) {
+  const lines = text21.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return lines.map((line) => {
     const m = /^([A-Za-z][A-Za-z .'-]{0,30}):\s*(.+)$/.exec(line);
     return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: "unknown", text: line };
@@ -9835,9 +10313,9 @@ function parsePasted(text18) {
 var manualTranscription = {
   key: "manual",
   async transcribe(input) {
-    const text18 = (input.pastedText ?? "").trim();
-    if (!text18) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
-    return { text: text18, segments: parsePasted(text18), provider: "manual", ref: `manual:${text18.length}` };
+    const text21 = (input.pastedText ?? "").trim();
+    if (!text21) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
+    return { text: text21, segments: parsePasted(text21), provider: "manual", ref: `manual:${text21.length}` };
   }
 };
 var manualScribeModel = {
@@ -9924,7 +10402,7 @@ async function acceptScribeDraft(_root, args, context) {
         if (!section) throw new DomainError(Codes.INVALID_INPUT, "That draft block does not exist.", { field: "blocks" });
         if (accepted.has(block.index)) continue;
         const existing = await uow.tx.soapSection.findFirst({ where: { encounterId: session.encounterId, kind: section.kind, ordinal: 1 }, select: { version: true, body: true } });
-        const edited = block.body != null ? text17(block.body, "body", 2e4) : section.body;
+        const edited = block.body != null ? text20(block.body, "body", 2e4) : section.body;
         const body = existing?.body?.trim() ? `${existing.body.trim()}
 
 ${edited}` : edited;
@@ -9942,7 +10420,7 @@ ${edited}` : edited;
 }
 async function rejectScribeDraft(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "scribe.reject", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "scribe.reject", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const draft = await lockRow(uow.tx, "ScribeDraft", args.draftId);
@@ -10308,7 +10786,7 @@ async function writeOptions(uow, versionId, feeVersionId, options, currency) {
       prepared.push({ feeItemId: fee?.id ?? null, description: (line.description?.trim() || fee?.name || "").slice(0, 200), category: fee?.category ?? "other", taxable: fee ? !["professional_service", "rx_animal_drug", "vaccine_administered", "boarding", "grooming"].includes(fee.taxCategory) : false, qtyLow, qtyHigh, unitPriceMinor: unit2, ...range, optional: line.optional === true, sortOrder: sort += 1 });
     }
     const totals = optionTotals(prepared);
-    const row = await uow.tx.estimateOption.create({ data: { estimateVersionId: versionId, label: text17(option2.label, "option name", 80), recommended: option2.recommended === true, currencyCode: currency, ...totals } });
+    const row = await uow.tx.estimateOption.create({ data: { estimateVersionId: versionId, label: text20(option2.label, "option name", 80), recommended: option2.recommended === true, currencyCode: currency, ...totals } });
     for (const p of prepared) await uow.tx.estimateLine.create({ data: { optionId: row.id, ...p } });
     n += 1;
   }
@@ -10316,7 +10794,7 @@ async function writeOptions(uow, versionId, feeVersionId, options, currency) {
 }
 async function createEstimate(_root, args, context) {
   return gated(context, { permissions: [...SELLERS], tool: "estimate.create", humanOnly: true }, args, async (actor) => {
-    const title = text17(args.title, "title", 160);
+    const title = text20(args.title, "title", 160);
     const result = await command(context.prisma, { name: "estimate.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor).catch(() => null);
       const clientId = await primaryClient(uow, args.patientId);
@@ -10449,14 +10927,14 @@ async function attachOrderToPlan(uow, input) {
 async function recordOverageApproval(_root, args, context) {
   return gated(context, { permissions: [...SELLERS], tool: "plan.overage", humanOnly: true }, args, async (actor) => {
     const method = pick(args.method, ["in_person", "phone_witnessed", "esign_link", "emergency_override"], "method");
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "plan.overage", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const newHigh = minorText(args.newHighMinor, "new amount");
       const plan = await lockRow(uow.tx, "TreatmentPlan", args.planId);
       if (newHigh <= plan.acceptedHighMinor) throw new DomainError(Codes.INVALID_INPUT, "The new amount must be more than what the client already agreed to.", { field: "newHighMinor" });
       if (method === "emergency_override") {
-        if (staff.kind !== "veterinarian") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can override the amount in an emergency.");
+        if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can override the amount in an emergency.");
       } else {
         if (!args.approverId) throw new DomainError(Codes.INVALID_INPUT, "Choose who in the household agreed.", { field: "approverId" });
         const person = await uow.tx.clientPerson.findUnique({ where: { id: args.approverId }, select: { clientId: true, canApproveTreatment: true } });
@@ -10536,7 +11014,7 @@ async function ensureItem(uow, input) {
 }
 async function addStockLocation(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "stock.add_place", humanOnly: true }, args, async (actor) => {
-    const name = text17(args.name, "name", 80);
+    const name = text20(args.name, "name", 80);
     if (!["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of place.", { field: "kind" });
     const cold = args.kind === "fridge" || args.kind === "freezer";
     if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
@@ -10552,7 +11030,7 @@ async function addStockLocation(_root, args, context) {
 }
 async function receiveStock(_root, args, context) {
   return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive_lot", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const lotNumber = text20(args.lotNumber, "lotNumber", 60);
     const expiresOn = dateOnly2(args.expiresOn, "Expires");
     const quantity = positive(args.quantity, "quantity");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
@@ -10579,7 +11057,7 @@ var day3 = (d) => d.toISOString().slice(0, 10);
 async function adjustStock(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
     const quantity = positive(args.quantity, "quantity");
-    const reason = text17(args.reason, "reason", 200);
+    const reason = text20(args.reason, "reason", 200);
     if (reason.length < 4) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 4 characters).", { field: "reason" });
     if (args.kind !== "dispose" && args.kind !== "use") throw new DomainError(Codes.INVALID_INPUT, "Choose dispose or use.", { field: "kind" });
     const result = await command(context.prisma, { name: "stock.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -10593,7 +11071,7 @@ async function adjustStock(_root, args, context) {
 }
 async function addSupplier(_root, args, context) {
   return gated(context, { permissions: ["canOrderStock", "canManageInventory"], tool: "supplier.create", humanOnly: true }, args, async (actor) => {
-    const name = text17(args.name, "name", 100);
+    const name = text20(args.name, "name", 100);
     const result = await command(context.prisma, { name: "supplier.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       if (await uow.tx.supplier.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `${name} is already a supplier.`);
       const row = await uow.tx.supplier.create({ data: { name, accountNumber: String(args.accountNumber ?? "").trim().slice(0, 60), phone: String(args.phone ?? "").trim().slice(0, 40), email: String(args.email ?? "").trim().slice(0, 120), deaNumber: String(args.deaNumber ?? "").trim().slice(0, 20) } });
@@ -10639,7 +11117,7 @@ async function submitPurchaseOrder(_root, args, context) {
 }
 async function cancelPurchaseOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 200);
+    const reason = text20(args.reason, "reason", 200);
     const result = await command(context.prisma, { name: "po.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft", "submitted"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "po.cancelled", reason });
       return { id: row.id, status: row.status, version: row.version };
@@ -10668,7 +11146,7 @@ async function receivePurchaseOrder(_root, args, context) {
         const expiresOn = dateOnly2(l.expiresOn, "Expires");
         if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
         const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
-        const lotNumber = text17(l.lotNumber, "lotNumber", 60);
+        const lotNumber = text20(l.lotNumber, "lotNumber", 60);
         let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
         if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
         lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
@@ -10730,8 +11208,8 @@ async function countStock(_root, args, context) {
 }
 async function openRecall(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "recall.open", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
-    const title = text17(args.title, "title", 160);
+    const lotNumber = text20(args.lotNumber, "lotNumber", 60);
+    const title = text20(args.title, "title", 160);
     const result = await command(context.prisma, { name: "recall.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const item = await uow.tx.item.findUnique({ where: { id: args.itemId }, select: { id: true, drugId: true, vaccineId: true } });
       if (!item) throw new DomainError(Codes.NOT_FOUND, "Item not found.");
@@ -10771,7 +11249,7 @@ async function markRecallExposure(_root, args, context) {
 }
 async function closeRecall(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "recall.close", humanOnly: true }, args, async (actor) => {
-    const resolution = text17(args.resolution, "resolution", 300);
+    const resolution = text20(args.resolution, "resolution", 300);
     const result = await command(context.prisma, { name: "recall.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const open = await uow.tx.recallExposure.count({ where: { recallId: args.recallId, status: { not: "resolved" } } });
       if (open) throw new DomainError(Codes.GUARD_FAILED, `${open} ${open === 1 ? "patient has" : "patients have"} not been marked resolved.`);
@@ -10816,7 +11294,7 @@ async function logTemperature(_root, args, context) {
 }
 async function resolveExcursion(_root, args, context) {
   return gated(context, { permissions: ["canReleaseQuarantine", "canManageInventory"], tool: "temperature.resolve", humanOnly: true }, args, async (actor) => {
-    const resolution = text17(args.resolution, "resolution", 300);
+    const resolution = text20(args.resolution, "resolution", 300);
     const result = await command(context.prisma, { name: "temperature.resolve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "TemperatureExcursion", id: args.excursionId, from: ["open"], to: "resolved", expectedVersion: args.expectedVersion, actor, eventType: "temperature.resolved", reason: resolution, data: { resolvedAt: uow.now, resolution } });
       return { id: row.id, status: row.status, version: row.version };
@@ -10945,7 +11423,7 @@ async function placeOrder(_root, args, context) {
       const licensedAction = LICENSED_ORDER[args.kind];
       const licence = licensedAction ? await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: licensedAction, at: uow.now }) : null;
       let doseId = null;
-      let description = text17(args.description ?? "", "description", 300, args.kind !== "medication");
+      let description = text20(args.description ?? "", "description", 300, args.kind !== "medication");
       let warnings = [];
       let drug = null;
       if (args.kind === "medication") {
@@ -11006,7 +11484,7 @@ async function placeOrder(_root, args, context) {
 }
 async function cancelOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "order.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "order.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const given = await uow.tx.administration.count({ where: { orderId: args.orderId, reverses: null } });
       if (given) throw new DomainError(Codes.GUARD_FAILED, "Doses were already given on this order; reverse them instead of cancelling.");
@@ -11115,7 +11593,7 @@ async function administer(uow, actor, staff, args) {
       licenseEvaluationId: licenceId,
       givenAt: uow.now,
       wasteQty: args.wasteQty ? toScale(args.wasteQty, "qty") : null,
-      qtyOverrideReason: qtyProblem ? text17(qtyOverrideReason, "qtyOverrideReason", 300) : ""
+      qtyOverrideReason: qtyProblem ? text20(qtyOverrideReason, "qtyOverrideReason", 300) : ""
     }
   });
   if (draw) await takeFromLot(uow, draw, { kind: "use", sourceType: "administration", sourceId: row.id, actorId: staff.id });
@@ -11125,7 +11603,7 @@ async function administer(uow, actor, staff, args) {
 }
 async function reverseAdministration(_root, args, context) {
   return gated(context, { permissions: ["canOrder", "canAdminister"], tool: "order.reverse_administration", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "order.reverse_administration", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -11210,7 +11688,7 @@ async function admitPatient(_root, args, context) {
       const live = await uow.tx.hospitalStay.findFirst({ where: { patientId: enc.patientId, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, select: { ref: true } });
       if (live) throw new DomainError(Codes.GUARD_FAILED, `The patient is already admitted (${live.ref}).`);
       const ref = await nextReference(uow.tx, "STAY", uow.now);
-      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text17(args.reason ?? "", "reason", 300, false) } });
+      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text20(args.reason ?? "", "reason", 300, false) } });
       await uow.tx.cageAssignment.create({ data: { stayId: stay.id, cageId: cage.id, fromAt: uow.now } });
       await uow.tx.encounter.update({ where: { id: enc.id }, data: { stayId: stay.id, version: { increment: 1 } } });
       await uow.tx.patient.update({ where: { id: enc.patientId }, data: { codeStatus: args.codeStatus, version: { increment: 1 } } });
@@ -11244,7 +11722,7 @@ async function moveCage(_root, args, context) {
 }
 async function dischargePatient(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "stay.discharge", humanOnly: true }, args, async (actor) => {
-    const body = text17(args.instructions, "instructions", 1e4);
+    const body = text20(args.instructions, "instructions", 1e4);
     if (args.recheckOn && !/^\d{4}-\d{2}-\d{2}$/.test(args.recheckOn)) throw new DomainError(Codes.INVALID_INPUT, "recheckOn is YYYY-MM-DD.", { field: "recheckOn" });
     const result = await command(context.prisma, { name: "stay.discharge", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -11333,7 +11811,7 @@ async function completeTreatmentTask(_root, args, context) {
       if (sheet.order?.kind === "medication" || sheet.order?.drugId) {
         administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id, qtyOverrideReason: args.qtyOverrideReason })).id;
       }
-      const note = args.observation ? text17(args.observation, "observation", 2e3) : "";
+      const note = args.observation ? text20(args.observation, "observation", 2e3) : "";
       const observation = note || earlyReason ? { ...note ? { note } : {}, ...earlyReason ? { earlyReason, earlyBy: staff.id } : {} } : void 0;
       await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: "done", doneById: staff.id, doneAt: uow.now, administrationId, observation, version: { increment: 1 } } });
       auditCreate(uow, actor, "TreatmentTask", task.id, "treatment.done", { administrationId, early: Boolean(earlyReason) }, { reason: earlyReason || null });
@@ -11344,7 +11822,7 @@ async function completeTreatmentTask(_root, args, context) {
 }
 async function skipTreatmentTask(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "treatment.skip", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "treatment.skip", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "TreatmentTask", id: args.taskId, from: ["scheduled", "due", "overdue"], to: "skipped", expectedVersion: args.expectedVersion, actor, eventType: "treatment.skipped", reason, data: { skipReason: reason, doneById: staff.id, doneAt: uow.now } });
@@ -11390,7 +11868,7 @@ async function openAnaesthesia(_root, args, context) {
           ref,
           encounterId: enc.id,
           patientId: enc.patientId,
-          procedure: text17(args.procedure, "procedure", 200),
+          procedure: text20(args.procedure, "procedure", 200),
           asaStatus: args.asaStatus,
           fastingConfirmed: args.fastingConfirmed,
           consentConfirmed: true,
@@ -11448,7 +11926,7 @@ async function recordMonitoring(_root, args, context) {
         return t;
       };
       const row = await uow.tx.monitoringReading.create({
-        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text17(args.notes ?? "", "notes", 500, false), byId: staff.id }
+        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text20(args.notes ?? "", "notes", 500, false), byId: staff.id }
       });
       auditCreate(uow, actor, "MonitoringReading", row.id, "anaesthesia.reading", { recordId: rec.id });
       return { id: row.id };
@@ -11463,7 +11941,7 @@ async function closeAnaesthesia(_root, args, context) {
       if (staff.kind !== "dvm") throw new DomainError(Codes.LICENSE_INACTIVE, "A veterinarian closes the anaesthesia record.");
       const rec = await uow.tx.anaesthesiaRecord.findUnique({ where: { id: args.recordId }, select: { encounter: { select: { locationId: true } } } });
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rec.encounter.locationId, action: "sign_record", at: uow.now });
-      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text17(args.complications ?? "", "complications", 2e3, false) } });
+      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text20(args.complications ?? "", "complications", 2e3, false) } });
       return { id: row.id, status: row.status };
     });
     return { replay: result.replay, ...result.value };
@@ -11475,7 +11953,7 @@ async function saveSurgeryReport(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: "perform_surgery", at: uow.now });
-      const data = { procedure: text17(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text17(args.technique ?? "", "technique", 5e3, false), findings: text17(args.findings ?? "", "findings", 5e3, false), closure: text17(args.closure ?? "", "closure", 2e3, false), sutures: text17(args.sutures ?? "", "sutures", 500, false), specimens: text17(args.specimens ?? "", "specimens", 500, false) };
+      const data = { procedure: text20(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text20(args.technique ?? "", "technique", 5e3, false), findings: text20(args.findings ?? "", "findings", 5e3, false), closure: text20(args.closure ?? "", "closure", 2e3, false), sutures: text20(args.sutures ?? "", "sutures", 500, false), specimens: text20(args.specimens ?? "", "specimens", 500, false) };
       const existing = await uow.tx.surgeryReport.findFirst({ where: { encounterId: enc.id }, select: { id: true, status: true } });
       if (existing?.status === "signed") throw new DomainError(Codes.GUARD_FAILED, "The surgery report is signed; add an addendum.");
       const row = existing ? await uow.tx.surgeryReport.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.surgeryReport.create({ data: { encounterId: enc.id, status: "draft", ...data } });
@@ -11496,10 +11974,10 @@ async function saveDentalChart(_root, args, context) {
       if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
       for (const key2 of ["findings", "procedures"]) {
-        const list20 = entry[key2];
-        if (list20 === void 0) continue;
-        if (!Array.isArray(list20) || list20.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
-        if (list20.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+        const list23 = entry[key2];
+        if (list23 === void 0) continue;
+        if (!Array.isArray(list23) || list23.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list23.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
       }
     }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -11546,7 +12024,7 @@ var RABIES_BOOSTER_MIN_DAYS = 270;
 var VACCINE_REPEAT_MIN_DAYS = 14;
 async function administerVaccine(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "vaccine.administer", humanOnly: true }, args, async (actor) => {
-    const site = text17(args.site, "site", 100);
+    const site = text20(args.site, "site", 100);
     const result = await command(context.prisma, { name: "vaccine.administer", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
@@ -11683,7 +12161,7 @@ async function issueRabiesCertificate(uow, input) {
 async function recordOutsideVaccine(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "vaccine.outside", humanOnly: true }, args, async (actor) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(args.administeredOn)) throw new DomainError(Codes.INVALID_INPUT, "administeredOn is YYYY-MM-DD.", { field: "administeredOn" });
-    const note = text17(args.evidenceNote, "evidenceNote", 500);
+    const note = text20(args.evidenceNote, "evidenceNote", 500);
     const result = await command(context.prisma, { name: "vaccine.outside", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const patient = await activePatient(uow, args.patientId);
@@ -11709,7 +12187,7 @@ async function recordOutsideVaccine(_root, args, context) {
 }
 async function reverseVaccineAdministration(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord", "canOrder"], tool: "vaccine.reverse", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "vaccine.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -11742,7 +12220,7 @@ async function reverseVaccineAdministration(_root, args, context) {
 }
 async function suppressReminder(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "reminder.suppress", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "reminder.suppress", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "PatientReminder", id: args.reminderId, from: ["scheduled", "due", "overdue", "lapsed"], to: "suppressed", expectedVersion: args.expectedVersion, actor, eventType: "reminder.suppressed", reason, data: { suppressedReason: reason } });
       return { id: row.id, status: row.status };
@@ -11805,12 +12283,12 @@ function parseCsv(input) {
   let row = [];
   let field = "";
   let quoted = false;
-  const text18 = input.replace(/^\uFEFF/, "");
-  for (let i = 0; i < text18.length; i++) {
-    const c = text18[i];
+  const text21 = input.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text21.length; i++) {
+    const c = text21[i];
     if (quoted) {
       if (c === '"') {
-        if (text18[i + 1] === '"') {
+        if (text21[i + 1] === '"') {
           field += '"';
           i++;
         } else quoted = false;
@@ -11822,7 +12300,7 @@ function parseCsv(input) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text18[i + 1] === "\n") i++;
+      if (c === "\r" && text21[i + 1] === "\n") i++;
       row.push(field);
       field = "";
       if (row.some((v) => v.trim() !== "")) rows.push(row);
@@ -12386,7 +12864,7 @@ async function writePrescription(_root, args, context) {
       for (const input of args.lines) {
         const product = byId.get(input.productId);
         if (!product || !product.active) throw new DomainError(Codes.NOT_FOUND, "That drug is not in the formulary.", { field: "productId" });
-        text17(input.directions, "directions", 500);
+        text20(input.directions, "directions", 500);
         positiveQty(input.quantity, "quantity");
         const refills = Number(input.refillsAuthorised ?? 0);
         if (!Number.isInteger(refills) || refills < 0) throw new DomainError(Codes.INVALID_INPUT, "Refills must be a whole number, zero or more.", { field: "refillsAuthorised" });
@@ -12418,7 +12896,7 @@ async function writePrescription(_root, args, context) {
             create: lines.map((l) => ({
               productId: l.product.id,
               csSchedule: l.product.csSchedule,
-              directions: text17(l.input.directions, "directions", 500),
+              directions: text20(l.input.directions, "directions", 500),
               route: String(l.input.route ?? "").slice(0, 60),
               frequency: String(l.input.frequency ?? "").slice(0, 100),
               quantity: toScale(dec(decimalText(l.input.quantity, "quantity")), "qty"),
@@ -12585,7 +13063,7 @@ async function dispenseFill(_root, args, context) {
 }
 async function receiveStockLot(_root, args, context) {
   return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const lotNumber = text20(args.lotNumber, "lotNumber", 60);
     const expiresOn = dateOnly3(args.expiresOn, "Expires");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
     const result = await command(context.prisma, { name: "stock.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -12607,7 +13085,7 @@ async function receiveStockLot(_root, args, context) {
 }
 async function setLotQuarantine(_root, args, context) {
   return gated(context, { permissions: args.quarantine ? ["canManageInventory", "canReceiveStock"] : ["canReleaseQuarantine"], tool: "stock.quarantine", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     if (reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 5 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "stock.quarantine", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, {
@@ -12628,7 +13106,7 @@ async function setLotQuarantine(_root, args, context) {
 }
 async function receiveControlled(_root, args, context) {
   return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const lotNumber = text20(args.lotNumber, "lotNumber", 60);
     const lotExpiresOn = dateOnly3(args.lotExpiresOn, "Expires");
     const labelQty = positiveQty(args.labelQty, "labelQty");
     if (!CS_UNITS.has(args.labelUnit)) throw new DomainError(Codes.INVALID_INPUT, "Choose a unit.", { field: "labelUnit" });
@@ -12666,7 +13144,7 @@ async function openControlled(_root, args, context) {
 async function wasteControlled(_root, args, context) {
   return gated(context, { permissions: ["canAdministerControlled"], tool: "cs.waste", humanOnly: true }, args, async (actor) => {
     const qty2 = positiveQty(args.qty, "qty");
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "cs.waste", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const witness = await witnessFor(uow, args.witnessId, staff.id);
@@ -12745,7 +13223,7 @@ async function reportCsLoss(_root, args, context) {
   return gated(context, { permissions: ["canCountControlled", "canManageControlled"], tool: "cs.report_loss", humanOnly: true }, args, async (actor) => {
     if (args.kind !== "theft" && args.kind !== "loss") throw new DomainError(Codes.INVALID_INPUT, "Choose theft or loss.", { field: "kind" });
     const qty2 = positiveQty(args.qty, "qty");
-    const description = text17(args.description, "description", 500);
+    const description = text20(args.description, "description", 500);
     const result = await command(context.prisma, { name: "cs.report_loss", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const witness = await witnessFor(uow, args.witnessId, staff.id);
@@ -12784,7 +13262,7 @@ async function advanceDiscrepancy(_root, args, context) {
 }
 async function destroyControlled(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled"], tool: "cs.destroy", humanOnly: true }, args, async (actor) => {
-    const method = text17(args.method, "method", 200);
+    const method = text20(args.method, "method", 200);
     const result = await command(context.prisma, { name: "cs.destroy", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       if (args.witnessAId === args.witnessBId) throw new DomainError(Codes.GUARD_FAILED, "Destruction needs two different witnesses.");
@@ -12809,7 +13287,7 @@ async function destroyControlled(_root, args, context) {
 }
 async function submitPdmp(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled", "canCountControlled"], tool: "cs.pdmp_submit", humanOnly: true }, args, async (actor) => {
-    const confirmation = text17(args.confirmation, "confirmation", 100);
+    const confirmation = text20(args.confirmation, "confirmation", 100);
     const result = await command(context.prisma, { name: "cs.pdmp_submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "PdmpReport", id: args.reportId, from: ["pending"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "cs.pdmp_submitted", reason: confirmation, data: { submittedAt: uow.now, submittedById: staff.id, confirmation } });
@@ -12856,7 +13334,7 @@ var ymd2 = (value, field) => {
 var asDate = (v) => /* @__PURE__ */ new Date(`${v}T00:00:00Z`);
 async function issueOrderForm(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled", "canReceiveControlled"], tool: "cs.order_form", humanOnly: true }, args, async (actor) => {
-    const formNumber = text17(args.formNumber, "formNumber", 40);
+    const formNumber = text20(args.formNumber, "formNumber", 40);
     const issuedOn = ymd2(args.issuedOn, "Issued");
     if (!["form_222", "csos"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose Form 222 or CSOS.", { field: "kind" });
     if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 20) throw new DomainError(Codes.INVALID_INPUT, "A form lists between one and twenty drugs.", { field: "lines" });
@@ -12885,7 +13363,7 @@ async function issueOrderForm(_root, args, context) {
 }
 async function receiveOnOrderForm(_root, args, context) {
   return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive_on_form", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const lotNumber = text20(args.lotNumber, "lotNumber", 60);
     const lotExpiresOn = ymd2(args.lotExpiresOn, "Expires");
     const labelQty = decimalText(args.labelQty, "labelQty");
     if (!dec(labelQty).gt(0)) throw new DomainError(Codes.INVALID_INPUT, "Quantity must be more than zero.", { field: "labelQty" });
@@ -13024,7 +13502,7 @@ async function printDispenseLabel(_root, args, context) {
 }
 async function requestExternalFill(_root, args, context) {
   return gated(context, { permissions: ["canFulfilRefill", "canDispense"], tool: "rx.external_request", humanOnly: true }, args, async (actor) => {
-    const pharmacyName = text17(args.pharmacyName, "pharmacyName", 100);
+    const pharmacyName = text20(args.pharmacyName, "pharmacyName", 100);
     const result = await command(context.prisma, { name: "rx.external_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const rx = await uow.tx.prescription.findUnique({ where: { id: args.prescriptionId }, select: { id: true, status: true, patientId: true, lines: { select: { csSchedule: true } } } });
       if (!rx || rx.status === "void") throw new DomainError(Codes.NOT_FOUND, "Prescription not found.");
@@ -13077,7 +13555,7 @@ async function standardSchedule(uow) {
 }
 async function startFeeDraft(_root, args, context) {
   return gated(context, { permissions: ["canManageFees"], tool: "fees.draft", humanOnly: true }, args, async (actor) => {
-    const label = text17(args.label, "label", 80);
+    const label = text20(args.label, "label", 80);
     const result = await command(context.prisma, { name: "fees.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const schedule = await standardSchedule(uow);
       const open = await uow.tx.feeScheduleVersion.findFirst({ where: { scheduleId: schedule.id, status: { in: ["draft", "pending_approval"] } }, select: { id: true } });
@@ -13109,8 +13587,8 @@ async function saveFeeItem(_root, args, context) {
     if (!FEE_CATEGORIES.includes(args.category)) throw new DomainError(Codes.INVALID_INPUT, "Choose a category.", { field: "category" });
     if (!TAX_CATEGORIES.includes(args.taxCategory)) throw new DomainError(Codes.INVALID_INPUT, "Choose how this is taxed.", { field: "taxCategory" });
     const data = {
-      code: text17(args.code, "code", 40),
-      name: text17(args.name, "name", 160),
+      code: text20(args.code, "code", 40),
+      name: text20(args.name, "name", 160),
       category: args.category,
       taxCategory: args.taxCategory,
       priceMinor: minorText(args.priceMinor, "price", true),
@@ -13135,7 +13613,15 @@ async function requestFeePublish(_root, args, context) {
     const result = await command(context.prisma, { name: "fees.publish.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const count = await uow.tx.feeItem.count({ where: { versionId: args.versionId } });
       if (!count) throw new DomainError(Codes.GUARD_FAILED, "This fee schedule has no items yet.");
-      const row = await transition(uow, { model: "FeeScheduleVersion", id: args.versionId, from: ["draft"], to: "pending_approval", expectedVersion: args.expectedVersion, actor, eventType: "fees.publish.requested" });
+      let expectedVersion = args.expectedVersion;
+      const current = await uow.tx.feeScheduleVersion.findUnique({ where: { id: args.versionId }, select: { status: true } });
+      if (current?.status === "pending_approval") {
+        const open = await uow.tx.approvalRequest.count({ where: { targetList: "FeeScheduleVersion", targetId: args.versionId, status: "pending" } });
+        if (open) throw new DomainError(Codes.GUARD_FAILED, "This fee schedule is already waiting for approval.");
+        const back = await transition(uow, { model: "FeeScheduleVersion", id: args.versionId, from: ["pending_approval"], to: "draft", expectedVersion, actor, eventType: "fees.publish.withdrawn" });
+        expectedVersion = back.version;
+      }
+      const row = await transition(uow, { model: "FeeScheduleVersion", id: args.versionId, from: ["draft"], to: "pending_approval", expectedVersion, actor, eventType: "fees.publish.requested" });
       const request = await requestApproval(uow, actor, { action: "fees.publish", targetList: "FeeScheduleVersion", targetId: row.id, payload: { versionId: row.id, effectiveFrom: args.effectiveFrom ?? null }, requiredPermission: "canApproveFees", summary: `Publish fee schedule ${String(row.label)}` });
       return { id: row.id, approvalRequestId: request.id };
     });
@@ -13188,14 +13674,18 @@ async function stripeCall(path, method, body, idempotencyKey) {
     ...body ? { body: form(body) } : {},
     signal: AbortSignal.timeout(2e4)
   });
-  const json17 = await res.json().catch(() => ({}));
-  return { status: res.status, json: json17 };
+  const json19 = await res.json().catch(() => ({}));
+  return { status: res.status, json: json19 };
 }
 function intentResult(status, j) {
-  if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: j.id ?? null, message: "The card processor did not answer. Check the status in a moment." };
+  const ref = j.error?.payment_intent?.id ?? j.id ?? null;
+  if (status >= 500 || status === 429 || status === 409) return { outcome: "unknown", providerRef: ref, message: "The card processor did not answer. Check the status in a moment." };
+  if (j.error?.type === "idempotency_error") return { outcome: "unknown", providerRef: ref, message: 'This payment was already sent to the card processor. Use "Check status".' };
   if (status >= 400) {
-    const declined = j.error?.type === "card_error";
-    return { outcome: declined ? "failed" : "failed", providerRef: j.error?.payment_intent?.id ?? null, message: declined ? String(j.error?.message ?? "The card was declined.") : "The payment could not be started." };
+    const pi = j.error?.payment_intent;
+    if (pi?.status && pi.status !== "requires_payment_method" && pi.status !== "canceled") return intentResult(200, pi);
+    if (j.error?.type === "card_error" || pi) return { outcome: "failed", providerRef: ref, message: String(j.error?.message ?? "The card was declined.") };
+    return { outcome: "failed", providerRef: ref, message: "The payment could not be started." };
   }
   switch (j.status) {
     case "succeeded":
@@ -13204,18 +13694,36 @@ function intentResult(status, j) {
     case "requires_confirmation":
       return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm." };
     case "processing":
-      return { outcome: "unknown", providerRef: j.id, message: "The bank is still processing this payment." };
+    case "requires_capture":
+      return { outcome: "processing", providerRef: j.id, message: "The bank is still processing this payment." };
     case "canceled":
       return { outcome: "failed", providerRef: j.id, message: "The payment was cancelled." };
+    case "requires_payment_method":
+      return { outcome: "failed", providerRef: j.id, message: String(j.last_payment_error?.message ?? "The card was declined.") };
     default:
-      return { outcome: "failed", providerRef: j.id ?? null, message: String(j.last_payment_error?.message ?? "The card was declined.") };
+      return { outcome: "unknown", providerRef: j.id ?? null, message: "The card processor gave an answer this app does not know. Check the Stripe dashboard." };
   }
+}
+async function findIntent(input) {
+  const q = (s) => s.replace(/['\\]/g, "");
+  const ours = (pi) => pi.metadata?.idempotencyKey === input.idempotencyKey || !!input.metadata.payment && pi.metadata?.payment === input.metadata.payment;
+  const clauses = [`metadata['idempotencyKey']:'${q(input.idempotencyKey)}'`, ...input.metadata.payment ? [`metadata['payment']:'${q(input.metadata.payment)}'`] : []];
+  const searched = await stripeCall(`/payment_intents/search?${form({ query: clauses.join(" OR "), limit: "10" })}`, "GET", null);
+  let found = searched.status === 200 && Array.isArray(searched.json.data) ? searched.json.data.filter(ours) : null;
+  if (!found?.length) {
+    const listed = await stripeCall(`/payment_intents?limit=100`, "GET", null);
+    if (listed.status === 200 && Array.isArray(listed.json.data)) found = listed.json.data.filter(ours);
+  }
+  if (!found) return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
+  if (found.length === 0) return { outcome: "unknown", providerRef: null, message: "The card processor has no record of this payment yet. Check again in a minute, or look it up in the Stripe dashboard." };
+  if (found.length > 1) return { outcome: "unknown", providerRef: null, message: "More than one card charge matches this payment. Look it up in the Stripe dashboard." };
+  return intentResult(200, found[0]);
 }
 var stripeAdapter = {
   key: "stripe",
   async charge(input) {
     try {
-      const { status, json: json17 } = await stripeCall("/payment_intents", "POST", {
+      const { status, json: json19 } = await stripeCall("/payment_intents", "POST", {
         amount: input.amountMinor.toString(),
         currency: input.currencyCode.toLowerCase(),
         confirm: "true",
@@ -13223,9 +13731,9 @@ var stripeAdapter = {
         "automatic_payment_methods[enabled]": "true",
         "automatic_payment_methods[allow_redirects]": "never",
         description: input.description,
-        ...Object.fromEntries(Object.entries(input.metadata).map(([k, v]) => [`metadata[${k}]`, v]))
+        ...Object.fromEntries(Object.entries({ ...input.metadata, idempotencyKey: input.idempotencyKey }).map(([k, v]) => [`metadata[${k}]`, v]))
       }, input.idempotencyKey);
-      return intentResult(status, json17);
+      return intentResult(status, json19);
     } catch {
       return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
     }
@@ -13235,24 +13743,25 @@ var stripeAdapter = {
       if (input.providerRef) {
         const got = await stripeCall(`/payment_intents/${encodeURIComponent(input.providerRef)}`, "GET", null);
         if (got.status === 200) return intentResult(got.status, got.json);
+        return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor did not answer. Check the status in a moment." };
       }
-      return await stripeAdapter.charge(input);
+      return await findIntent(input);
     } catch {
       return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor still did not answer." };
     }
   },
   async refund(input) {
     try {
-      const { status, json: json17 } = await stripeCall("/refunds", "POST", {
+      const { status, json: json19 } = await stripeCall("/refunds", "POST", {
         payment_intent: input.providerRef,
         amount: input.amountMinor.toString(),
         "metadata[reason]": input.reason.slice(0, 200)
       }, input.idempotencyKey);
-      if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: json17.id ?? null, message: "The card processor did not answer." };
-      if (status >= 400) return { outcome: "failed", providerRef: null, message: String(json17.error?.message ?? "The refund was refused.") };
-      if (json17.status === "succeeded") return { outcome: "succeeded", providerRef: json17.id, message: "Refunded." };
-      if (json17.status === "pending") return { outcome: "unknown", providerRef: json17.id, message: "The refund is on its way." };
-      return { outcome: "failed", providerRef: json17.id ?? null, message: "The refund did not go through." };
+      if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: json19.id ?? null, message: "The card processor did not answer." };
+      if (status >= 400) return { outcome: "failed", providerRef: null, message: String(json19.error?.message ?? "The refund was refused.") };
+      if (json19.status === "succeeded") return { outcome: "succeeded", providerRef: json19.id, message: "Refunded." };
+      if (json19.status === "pending") return { outcome: "unknown", providerRef: json19.id, message: "The refund is on its way." };
+      return { outcome: "failed", providerRef: json19.id ?? null, message: "The refund did not go through." };
     } catch {
       return { outcome: "unknown", providerRef: null, message: "The card processor did not answer." };
     }
@@ -13404,8 +13913,8 @@ async function addFeeCharge(_root, args, context) {
 }
 async function addManualCharge(_root, args, context) {
   return gated(context, { permissions: ["canAddManualCharge"], tool: "charges.manual", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
-    const description = text17(args.description, "description", 160);
+    const reason = text20(args.reason, "reason", 300);
+    const description = text20(args.description, "description", 160);
     const amount = minorText(args.amountMinor, "amount");
     const result = await command(context.prisma, { name: "charges.manual", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const clientId = await clientOfPatient(uow, args.patientId);
@@ -13430,7 +13939,7 @@ async function addManualCharge(_root, args, context) {
 }
 async function reverseCharge(_root, args, context) {
   return gated(context, { permissions: [...POSTERS], tool: "charges.reverse", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "charges.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const line = await lockRow(uow.tx, "ChargeLine", args.chargeId);
       if (line.reversedAt) throw new DomainError(Codes.GUARD_FAILED, "That charge was already reversed.");
@@ -13464,7 +13973,7 @@ async function draftInvoice(_root, args, context) {
 }
 async function discountInvoice(_root, args, context) {
   return gated(context, { permissions: ["canDiscount", "canApproveDiscount"], tool: "invoice.discount", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const bps = Math.round(Number(args.percent) * 100);
     if (!Number.isFinite(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "Discount is a percentage from 0 to 100.", { field: "percent" });
     const result = await command(context.prisma, { name: "invoice.discount", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -13618,6 +14127,10 @@ async function takeCardPayment(_root, args, context) {
     const amount = minorText(args.amountMinor, "amount");
     if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
     const started = await command(context.prisma, { name: "payment.card.start", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.invoiceId) await lockRow(uow.tx, "Invoice", args.invoiceId);
+      else if (args.depositId) await lockRow(uow.tx, "Deposit", args.depositId);
+      const open = await uow.tx.payment.findFirst({ where: { method: "card_on_file", status: { in: ["pending", "unknown"] }, ...args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? "" } }, select: { ref: true } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: "card_in_flight" });
       const pay = await newPayment(uow, actor, { clientId: args.clientId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } });
       const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
       return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode };
@@ -13633,25 +14146,35 @@ async function settleFromState(context, actor, paymentId) {
 }
 async function recordOutcome(context, actor, paymentId, attemptId, outcome, key2) {
   const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key2, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
-    const pay = await lockRow(uow.tx, "Payment", paymentId);
+    let pay = await lockRow(uow.tx, "Payment", paymentId);
     if (pay.status === "succeeded") return { id: pay.id, ref: pay.ref, status: "succeeded", message: "Paid." };
+    const open = outcome.outcome === "requires_action" || outcome.outcome === "processing";
+    if (pay.status === "failed") {
+      if (pay.providerRef || !outcome.providerRef || !(open || outcome.outcome === "succeeded")) return { id: pay.id, ref: pay.ref, status: "failed", message: outcome.outcome === "failed" ? outcome.message : `Still marked failed. ${outcome.message}` };
+      await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["failed"], to: "pending", actor, eventType: "payment.reopened", reason: "The card processor reports this payment is not final.", data: { providerRef: outcome.providerRef } });
+      pay = await lockRow(uow.tx, "Payment", paymentId);
+    }
     const attempt = await lockRow(uow.tx, "PaymentAttempt", attemptId);
     const attemptStatus = outcome.outcome;
-    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: "PaymentAttempt", id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { providerRef: outcome.providerRef ?? "", message: outcome.message.slice(0, 200), ...attemptStatus === "unknown" || attemptStatus === "requires_action" ? {} : { resolvedAt: uow.now } } });
+    const ref = outcome.providerRef ?? "";
+    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: "PaymentAttempt", id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { ...ref ? { providerRef: ref } : {}, message: outcome.message.slice(0, 200), ...attemptStatus === "unknown" || open ? { resolvedAt: null } : { resolvedAt: uow.now } } });
     if (outcome.outcome === "succeeded") await settleSucceeded(uow, actor, paymentId, outcome.providerRef);
-    else if (outcome.outcome === "failed") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "failed", actor, eventType: "payment.failed", data: { providerRef: outcome.providerRef ?? "" } });
-    else if (outcome.outcome === "unknown" && pay.status === "pending") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["pending"], to: "unknown", actor, eventType: "payment.unknown", data: { providerRef: outcome.providerRef ?? "" } });
-    return { id: pay.id, ref: pay.ref, status: outcome.outcome === "requires_action" ? "pending" : outcome.outcome, message: outcome.message };
+    else if (outcome.outcome === "failed") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "failed", actor, eventType: "payment.failed", data: ref ? { providerRef: ref } : {} });
+    else if (outcome.outcome === "unknown" && pay.status === "pending") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["pending"], to: "unknown", actor, eventType: "payment.unknown", data: ref ? { providerRef: ref } : {} });
+    else if (open && (pay.status !== "pending" || ref && pay.providerRef !== ref)) await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "pending", actor, eventType: "payment.pending", data: ref ? { providerRef: ref } : {} });
+    else if (ref && !pay.providerRef) await uow.tx.payment.update({ where: { id: pay.id }, data: { providerRef: ref } });
+    return { id: pay.id, ref: pay.ref, status: open ? "pending" : outcome.outcome, message: outcome.message };
   });
   return done.value;
 }
 async function resolveUnknownPayment(prisma, actor, paymentId) {
-  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true } } } });
+  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true, providerRef: true } } } });
   if (!pay) throw new DomainError(Codes.NOT_FOUND, "Payment not found.");
-  if (!["unknown", "pending"].includes(pay.status) || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: "Nothing to check." };
+  const checkable = ["unknown", "pending"].includes(pay.status) || pay.status === "failed" && pay.provider === "stripe";
+  if (!checkable || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: "Nothing to check." };
   const attempt = pay.attempts[0];
   if (!cardConfigured()) return { id: pay.id, ref: pay.ref, status: pay.status, message: "The card processor is not reachable from here." };
-  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || null });
+  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || attempt.providerRef || null });
   return recordOutcome({ prisma, session: null }, actor, pay.id, attempt.id, outcome, `resolve:${pay.id}:${outcome.outcome}:${outcome.providerRef ?? ""}`);
 }
 async function checkPaymentStatus(_root, args, context) {
@@ -13681,7 +14204,7 @@ async function applyDeposit(_root, args, context) {
 }
 async function issueCreditNote(_root, args, context) {
   return gated(context, { permissions: [...POSTERS], tool: "credit.note", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const amount = minorText(args.amountMinor, "amount");
     const result = await command(context.prisma, { name: "credit.note", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
@@ -13740,7 +14263,7 @@ async function runRefund(prisma, actor, refundId, key2) {
 }
 async function requestRefund(_root, args, context) {
   return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.request", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const amount = minorText(args.amountMinor, "amount");
     const made = await command(context.prisma, { name: "refund.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const pay = await lockRow(uow.tx, "Payment", args.paymentId);
@@ -13786,7 +14309,7 @@ async function checkRefundStatus(_root, args, context) {
 }
 async function requestWriteOff(_root, args, context) {
   return gated(context, { permissions: [...POSTERS, "canApproveWriteOff"], tool: "invoice.writeoff", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "invoice.writeoff", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
       if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only an invoice that still has a balance can be written off.");
@@ -13814,8 +14337,8 @@ async function closeArPeriod(_root, args, context) {
       const period = await lockRow(uow.tx, "ArPeriod", args.periodId);
       const staff = await staffOf(uow, actor).catch(() => null);
       const drafts = await uow.tx.invoice.count({ where: { status: "draft", createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
-      const pending = await uow.tx.payment.count({ where: { status: { in: ["pending", "unknown"] }, createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
-      if (pending) throw new DomainError(Codes.GUARD_FAILED, `${pending} ${pending === 1 ? "payment is" : "payments are"} still waiting on the card processor. Check ${pending === 1 ? "its" : "their"} status first.`, { reason: "pending_payments" });
+      const pending2 = await uow.tx.payment.count({ where: { status: { in: ["pending", "unknown"] }, createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
+      if (pending2) throw new DomainError(Codes.GUARD_FAILED, `${pending2} ${pending2 === 1 ? "payment is" : "payments are"} still waiting on the card processor. Check ${pending2 === 1 ? "its" : "their"} status first.`, { reason: "pending_payments" });
       const row = await transition(uow, { model: "ArPeriod", id: period.id, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "period.closed", data: { closedAt: uow.now, closedById: staff?.id ?? null }, metadata: { draftInvoices: drafts } });
       return { id: row.id, status: row.status };
     });
@@ -13824,7 +14347,7 @@ async function closeArPeriod(_root, args, context) {
 }
 async function reopenArPeriod(_root, args, context) {
   return gated(context, { permissions: ["canManagePractice"], tool: "period.reopen", humanOnly: true }, args, async (actor) => {
-    const reason = text17(args.reason, "reason", 300);
+    const reason = text20(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "period.reopen", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "ArPeriod", id: args.periodId, from: ["closed"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "period.reopened", reason, data: { closedAt: null, closedById: null } });
       return { id: row.id, status: row.status };
@@ -13857,6 +14380,34 @@ function formatMinor(minor2, currencyCode = "USD") {
 
 // features/keystone/mutations/insurance.ts
 var CLAIMERS = ["canPostInvoices", "canTakePayments", "canManagePayments"];
+async function addInsurancePolicy(_root, args, context) {
+  return gated(context, { permissions: [...CLAIMERS, "canManagePractice"], tool: "insurance.policy.add", humanOnly: true }, args, async (actor) => {
+    const policyNumber = text20(args.policyNumber, "policy number", 60);
+    const day4 = (v, name) => {
+      if (!v) return null;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `Enter the ${name} as a date.`, { field: name });
+      return v;
+    };
+    const from = day4(args.effectiveFrom, "start date");
+    const to = day4(args.effectiveTo, "end date");
+    if (from && to && to < from) throw new DomainError(Codes.INVALID_INPUT, "The policy cannot end before it starts.", { field: "end date" });
+    const rate2 = args.reimbursementRate ? String(args.reimbursementRate).trim() : null;
+    if (rate2 && !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(rate2)) throw new DomainError(Codes.INVALID_INPUT, "Enter the reimbursement as a share between 0 and 1, such as 0.8.", { field: "reimbursement" });
+    const deductible = args.deductibleMinor ? minorText(args.deductibleMinor, "deductible") : null;
+    const result = await command(context.prisma, { name: "insurance.policy.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const patient = await uow.tx.patient.findUnique({ where: { id: args.patientId }, select: { id: true } });
+      if (!patient) throw new DomainError(Codes.NOT_FOUND, "Patient not found.");
+      const payer = await uow.tx.thirdPartyPayer.findUnique({ where: { id: args.insurerId }, select: { id: true } });
+      if (!payer) throw new DomainError(Codes.NOT_FOUND, "Insurer not found.");
+      const dup = await uow.tx.petInsurancePolicy.findFirst({ where: { patientId: patient.id, insurerId: payer.id, policyNumber }, select: { id: true } });
+      if (dup) throw new DomainError(Codes.GUARD_FAILED, "This policy is already on file for the patient.");
+      const row = await uow.tx.petInsurancePolicy.create({ data: { patientId: patient.id, insurerId: payer.id, policyNumber, plan: String(args.plan ?? "").slice(0, 120), ...deductible !== null ? { deductibleMinor: deductible } : {}, ...rate2 ? { reimbursementRate: rate2 } : {}, effectiveFrom: from ? /* @__PURE__ */ new Date(`${from}T00:00:00Z`) : null, effectiveTo: to ? /* @__PURE__ */ new Date(`${to}T00:00:00Z`) : null, directPayEligible: args.directPayEligible === true } });
+      auditCreate(uow, actor, "PetInsurancePolicy", row.id, "insurance.policy.added", { patientId: patient.id, insurerId: payer.id, policyNumber });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
 async function requestAuthorization(_root, args, context) {
   return gated(context, { permissions: [...CLAIMERS], tool: "payer.authorize.request", humanOnly: true }, args, async (actor) => {
     const requested = minorText(args.requestedMinor, "amount");
@@ -13947,7 +14498,7 @@ async function advanceClaim(_root, args, context) {
   return gated(context, { permissions: [...CLAIMERS], tool: "claim.advance", humanOnly: true }, args, async (actor) => {
     const step = NEXT[args.to];
     if (!step) throw new DomainError(Codes.INVALID_INPUT, "Choose a valid next step.", { field: "to" });
-    const note = args.to === "denied" || args.to === "more_info_requested" ? text17(args.note, "note", 300) : String(args.note ?? "").slice(0, 300);
+    const note = args.to === "denied" || args.to === "more_info_requested" ? text20(args.note, "note", 300) : String(args.note ?? "").slice(0, 300);
     const result = await command(context.prisma, { name: "claim.advance", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       await staffOf(uow, actor).catch(() => null);
       const approved = args.to === "approved" ? minorText(args.approvedMinor, "approved amount", true) : null;
@@ -14000,12 +14551,12 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
   if (!loopback || secret2.length < 32) return null;
   const identity = String(headers["x-openfront-client-identity"] || "");
-  const timestamp18 = String(headers["x-openfront-client-timestamp"] || "");
+  const timestamp21 = String(headers["x-openfront-client-timestamp"] || "");
   const signature = String(headers["x-openfront-client-signature"] || "");
-  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp18) || !/^[a-f0-9]{64}$/.test(signature)) return null;
-  const age = Math.abs(now - Number(timestamp18) * 1e3);
+  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp21) || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const age = Math.abs(now - Number(timestamp21) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto11.createHmac)("sha256", secret2).update(`${timestamp18}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto11.createHmac)("sha256", secret2).update(`${timestamp21}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -14283,6 +14834,7 @@ function extendGraphqlSchema(baseSchema) {
         requestWriteOff(invoiceId: ID!, reason: String!, idempotencyKey: String!): JSON
         closeArPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         reopenArPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addInsurancePolicy(patientId: ID!, insurerId: ID!, policyNumber: String!, plan: String, deductibleMinor: String, reimbursementRate: String, effectiveFrom: String, effectiveTo: String, directPayEligible: Boolean, idempotencyKey: String!): JSON
         requestAuthorization(invoiceId: ID!, policyId: ID!, requestedMinor: String!, idempotencyKey: String!): JSON
         recordAuthorizationDecision(authorizationId: ID!, decision: String!, authorisedMinor: String, externalRef: String, validUntil: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         buildClaimPacket(invoiceId: ID!, policyId: ID!, recordsReleaseId: ID, submitter: String!, formFields: JSON, idempotencyKey: String!): JSON
@@ -14445,6 +14997,7 @@ function extendGraphqlSchema(baseSchema) {
         requestWriteOff: op(requestWriteOff),
         closeArPeriod: op(closeArPeriod),
         reopenArPeriod: op(reopenArPeriod),
+        addInsurancePolicy: op(addInsurancePolicy),
         requestAuthorization: op(requestAuthorization),
         recordAuthorizationDecision: op(recordAuthorizationDecision),
         buildClaimPacket: op(buildClaimPacket),
@@ -14696,7 +15249,7 @@ var { withAuth } = (0, import_auth.createAuth)({
   `
 });
 var keystone_default = withAuth(
-  (0, import_core22.config)({
+  (0, import_core25.config)({
     db: {
       provider: "postgresql",
       url: databaseURL,

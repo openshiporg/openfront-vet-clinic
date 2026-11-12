@@ -14490,6 +14490,2320 @@ input RecordsReleaseRelateToOneForCreateInput {
   connect: RecordsReleaseWhereUniqueInput
 }
 
+type WellnessPlan {
+  id: ID!
+  code: String
+  name: String
+  summary: String
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input WellnessPlanWhereInput {
+  AND: [WellnessPlanWhereInput!]
+  OR: [WellnessPlanWhereInput!]
+  NOT: [WellnessPlanWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  summary: StringFilter
+  status: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input WellnessPlanOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  summary: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input WellnessPlanUpdateInput {
+  code: String
+  name: String
+  summary: String
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanUpdateArgs {
+  where: WellnessPlanWhereUniqueInput!
+  data: WellnessPlanUpdateInput!
+}
+
+input WellnessPlanCreateInput {
+  code: String
+  name: String
+  summary: String
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type WellnessPlanVersion {
+  id: ID!
+  plan: WellnessPlan
+  versionNo: Int
+  label: String
+  status: String
+  monthlyPriceMinor: BigInt
+  termMonths: Int
+  speciesCodes: JSON
+  minAgeWeeks: Int
+  maxAgeMonths: Int
+  entitlements: JSON
+  otherServicesDiscountBps: Int
+  trueUpNote: String
+  disclosure: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanVersionWhereUniqueInput {
+  id: ID
+}
+
+input WellnessPlanVersionWhereInput {
+  AND: [WellnessPlanVersionWhereInput!]
+  OR: [WellnessPlanVersionWhereInput!]
+  NOT: [WellnessPlanVersionWhereInput!]
+  id: IDFilter
+  plan: WellnessPlanWhereInput
+  versionNo: IntFilter
+  label: StringFilter
+  status: StringFilter
+  monthlyPriceMinor: BigIntFilter
+  termMonths: IntFilter
+  minAgeWeeks: IntNullableFilter
+  maxAgeMonths: IntNullableFilter
+  otherServicesDiscountBps: IntNullableFilter
+  trueUpNote: StringFilter
+  disclosure: StringFilter
+  publishedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input WellnessPlanVersionOrderByInput {
+  id: OrderDirection
+  versionNo: OrderDirection
+  label: OrderDirection
+  status: OrderDirection
+  monthlyPriceMinor: OrderDirection
+  termMonths: OrderDirection
+  minAgeWeeks: OrderDirection
+  maxAgeMonths: OrderDirection
+  otherServicesDiscountBps: OrderDirection
+  trueUpNote: OrderDirection
+  disclosure: OrderDirection
+  publishedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input WellnessPlanVersionUpdateInput {
+  plan: WellnessPlanRelateToOneForUpdateInput
+  versionNo: Int
+  label: String
+  status: String
+  monthlyPriceMinor: BigInt
+  termMonths: Int
+  speciesCodes: JSON
+  minAgeWeeks: Int
+  maxAgeMonths: Int
+  entitlements: JSON
+  otherServicesDiscountBps: Int
+  trueUpNote: String
+  disclosure: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanRelateToOneForUpdateInput {
+  create: WellnessPlanCreateInput
+  connect: WellnessPlanWhereUniqueInput
+  disconnect: Boolean
+}
+
+input WellnessPlanVersionUpdateArgs {
+  where: WellnessPlanVersionWhereUniqueInput!
+  data: WellnessPlanVersionUpdateInput!
+}
+
+input WellnessPlanVersionCreateInput {
+  plan: WellnessPlanRelateToOneForCreateInput
+  versionNo: Int
+  label: String
+  status: String
+  monthlyPriceMinor: BigInt
+  termMonths: Int
+  speciesCodes: JSON
+  minAgeWeeks: Int
+  maxAgeMonths: Int
+  entitlements: JSON
+  otherServicesDiscountBps: Int
+  trueUpNote: String
+  disclosure: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanRelateToOneForCreateInput {
+  create: WellnessPlanCreateInput
+  connect: WellnessPlanWhereUniqueInput
+}
+
+type Enrollment {
+  id: ID!
+  ref: String
+  patient: Patient
+  client: Client
+  location: Location
+  plan: WellnessPlan
+  planVersion: WellnessPlanVersion
+  status: String
+  startedOn: CalendarDay
+  termNo: Int
+  termStartsOn: CalendarDay
+  termEndsOn: CalendarDay
+  autoRenew: Boolean
+  cardLabel: String
+  cardVersion: Int
+  consent: EnrollmentConsent
+  cancelRequestedAt: DateTime
+  cancelReason: String
+  trueUpMinor: BigInt
+  trueUpWaived: Boolean
+  trueUpInvoice: Invoice
+  endedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EnrollmentWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input EnrollmentWhereInput {
+  AND: [EnrollmentWhereInput!]
+  OR: [EnrollmentWhereInput!]
+  NOT: [EnrollmentWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  plan: WellnessPlanWhereInput
+  planVersion: WellnessPlanVersionWhereInput
+  status: StringFilter
+  startedOn: CalendarDayFilter
+  termNo: IntNullableFilter
+  termStartsOn: CalendarDayFilter
+  termEndsOn: CalendarDayFilter
+  autoRenew: BooleanFilter
+  cardLabel: StringFilter
+  cardVersion: IntNullableFilter
+  consent: EnrollmentConsentWhereInput
+  cancelRequestedAt: DateTimeNullableFilter
+  cancelReason: StringFilter
+  trueUpMinor: BigIntFilter
+  trueUpWaived: BooleanFilter
+  trueUpInvoice: InvoiceWhereInput
+  endedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input EnrollmentOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  status: OrderDirection
+  startedOn: OrderDirection
+  termNo: OrderDirection
+  termStartsOn: OrderDirection
+  termEndsOn: OrderDirection
+  autoRenew: OrderDirection
+  cardLabel: OrderDirection
+  cardVersion: OrderDirection
+  cancelRequestedAt: OrderDirection
+  cancelReason: OrderDirection
+  trueUpMinor: OrderDirection
+  trueUpWaived: OrderDirection
+  endedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input EnrollmentUpdateInput {
+  ref: String
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  plan: WellnessPlanRelateToOneForUpdateInput
+  planVersion: WellnessPlanVersionRelateToOneForUpdateInput
+  status: String
+  startedOn: CalendarDay
+  termNo: Int
+  termStartsOn: CalendarDay
+  termEndsOn: CalendarDay
+  autoRenew: Boolean
+  cardLabel: String
+  cardVersion: Int
+  consent: EnrollmentConsentRelateToOneForUpdateInput
+  cancelRequestedAt: DateTime
+  cancelReason: String
+  trueUpMinor: BigInt
+  trueUpWaived: Boolean
+  trueUpInvoice: InvoiceRelateToOneForUpdateInput
+  endedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanVersionRelateToOneForUpdateInput {
+  create: WellnessPlanVersionCreateInput
+  connect: WellnessPlanVersionWhereUniqueInput
+  disconnect: Boolean
+}
+
+input EnrollmentConsentRelateToOneForUpdateInput {
+  create: EnrollmentConsentCreateInput
+  connect: EnrollmentConsentWhereUniqueInput
+  disconnect: Boolean
+}
+
+input EnrollmentUpdateArgs {
+  where: EnrollmentWhereUniqueInput!
+  data: EnrollmentUpdateInput!
+}
+
+input EnrollmentCreateInput {
+  ref: String
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  plan: WellnessPlanRelateToOneForCreateInput
+  planVersion: WellnessPlanVersionRelateToOneForCreateInput
+  status: String
+  startedOn: CalendarDay
+  termNo: Int
+  termStartsOn: CalendarDay
+  termEndsOn: CalendarDay
+  autoRenew: Boolean
+  cardLabel: String
+  cardVersion: Int
+  consent: EnrollmentConsentRelateToOneForCreateInput
+  cancelRequestedAt: DateTime
+  cancelReason: String
+  trueUpMinor: BigInt
+  trueUpWaived: Boolean
+  trueUpInvoice: InvoiceRelateToOneForCreateInput
+  endedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input WellnessPlanVersionRelateToOneForCreateInput {
+  create: WellnessPlanVersionCreateInput
+  connect: WellnessPlanVersionWhereUniqueInput
+}
+
+input EnrollmentConsentRelateToOneForCreateInput {
+  create: EnrollmentConsentCreateInput
+  connect: EnrollmentConsentWhereUniqueInput
+}
+
+type EnrollmentConsent {
+  id: ID!
+  enrollment: Enrollment
+  signer: ClientPerson
+  disclosureText: String
+  disclosureHash: String
+  terms: JSON
+  method: String
+  affirmed: Boolean
+  consentedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EnrollmentConsentWhereUniqueInput {
+  id: ID
+}
+
+input EnrollmentConsentWhereInput {
+  AND: [EnrollmentConsentWhereInput!]
+  OR: [EnrollmentConsentWhereInput!]
+  NOT: [EnrollmentConsentWhereInput!]
+  id: IDFilter
+  enrollment: EnrollmentWhereInput
+  signer: ClientPersonWhereInput
+  disclosureText: StringFilter
+  disclosureHash: StringFilter
+  method: StringFilter
+  affirmed: BooleanFilter
+  consentedAt: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input EnrollmentConsentOrderByInput {
+  id: OrderDirection
+  disclosureText: OrderDirection
+  disclosureHash: OrderDirection
+  method: OrderDirection
+  affirmed: OrderDirection
+  consentedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input EnrollmentConsentUpdateInput {
+  enrollment: EnrollmentRelateToOneForUpdateInput
+  signer: ClientPersonRelateToOneForUpdateInput
+  disclosureText: String
+  disclosureHash: String
+  terms: JSON
+  method: String
+  affirmed: Boolean
+  consentedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EnrollmentRelateToOneForUpdateInput {
+  create: EnrollmentCreateInput
+  connect: EnrollmentWhereUniqueInput
+  disconnect: Boolean
+}
+
+input EnrollmentConsentUpdateArgs {
+  where: EnrollmentConsentWhereUniqueInput!
+  data: EnrollmentConsentUpdateInput!
+}
+
+input EnrollmentConsentCreateInput {
+  enrollment: EnrollmentRelateToOneForCreateInput
+  signer: ClientPersonRelateToOneForCreateInput
+  disclosureText: String
+  disclosureHash: String
+  terms: JSON
+  method: String
+  affirmed: Boolean
+  consentedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EnrollmentRelateToOneForCreateInput {
+  create: EnrollmentCreateInput
+  connect: EnrollmentWhereUniqueInput
+}
+
+type EntitlementGrant {
+  id: ID!
+  enrollment: Enrollment
+  termNo: Int
+  code: String
+  label: String
+  qtyGranted: Decimal
+  retailValueMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EntitlementGrantWhereUniqueInput {
+  id: ID
+}
+
+input EntitlementGrantWhereInput {
+  AND: [EntitlementGrantWhereInput!]
+  OR: [EntitlementGrantWhereInput!]
+  NOT: [EntitlementGrantWhereInput!]
+  id: IDFilter
+  enrollment: EnrollmentWhereInput
+  termNo: IntFilter
+  code: StringFilter
+  label: StringFilter
+  qtyGranted: DecimalFilter
+  retailValueMinor: BigIntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input EntitlementGrantOrderByInput {
+  id: OrderDirection
+  termNo: OrderDirection
+  code: OrderDirection
+  label: OrderDirection
+  qtyGranted: OrderDirection
+  retailValueMinor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input EntitlementGrantUpdateInput {
+  enrollment: EnrollmentRelateToOneForUpdateInput
+  termNo: Int
+  code: String
+  label: String
+  qtyGranted: Decimal
+  retailValueMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EntitlementGrantUpdateArgs {
+  where: EntitlementGrantWhereUniqueInput!
+  data: EntitlementGrantUpdateInput!
+}
+
+input EntitlementGrantCreateInput {
+  enrollment: EnrollmentRelateToOneForCreateInput
+  termNo: Int
+  code: String
+  label: String
+  qtyGranted: Decimal
+  retailValueMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type EntitlementEntry {
+  id: ID!
+  entryKey: String
+  grant: EntitlementGrant
+  enrollment: Enrollment
+  kind: String
+  qty: Decimal
+  valueMinor: BigInt
+  chargeLine: ChargeLine
+  memo: String
+  by: StaffMember
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EntitlementEntryWhereUniqueInput {
+  id: ID
+  entryKey: String
+}
+
+input EntitlementEntryWhereInput {
+  AND: [EntitlementEntryWhereInput!]
+  OR: [EntitlementEntryWhereInput!]
+  NOT: [EntitlementEntryWhereInput!]
+  id: IDFilter
+  entryKey: StringFilter
+  grant: EntitlementGrantWhereInput
+  enrollment: EnrollmentWhereInput
+  kind: StringFilter
+  qty: DecimalFilter
+  valueMinor: BigIntFilter
+  chargeLine: ChargeLineWhereInput
+  memo: StringFilter
+  by: StaffMemberWhereInput
+  at: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input EntitlementEntryOrderByInput {
+  id: OrderDirection
+  entryKey: OrderDirection
+  kind: OrderDirection
+  qty: OrderDirection
+  valueMinor: OrderDirection
+  memo: OrderDirection
+  at: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input EntitlementEntryUpdateInput {
+  entryKey: String
+  grant: EntitlementGrantRelateToOneForUpdateInput
+  enrollment: EnrollmentRelateToOneForUpdateInput
+  kind: String
+  qty: Decimal
+  valueMinor: BigInt
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  memo: String
+  by: StaffMemberRelateToOneForUpdateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EntitlementGrantRelateToOneForUpdateInput {
+  create: EntitlementGrantCreateInput
+  connect: EntitlementGrantWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ChargeLineRelateToOneForUpdateInput {
+  create: ChargeLineCreateInput
+  connect: ChargeLineWhereUniqueInput
+  disconnect: Boolean
+}
+
+input EntitlementEntryUpdateArgs {
+  where: EntitlementEntryWhereUniqueInput!
+  data: EntitlementEntryUpdateInput!
+}
+
+input EntitlementEntryCreateInput {
+  entryKey: String
+  grant: EntitlementGrantRelateToOneForCreateInput
+  enrollment: EnrollmentRelateToOneForCreateInput
+  kind: String
+  qty: Decimal
+  valueMinor: BigInt
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  memo: String
+  by: StaffMemberRelateToOneForCreateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EntitlementGrantRelateToOneForCreateInput {
+  create: EntitlementGrantCreateInput
+  connect: EntitlementGrantWhereUniqueInput
+}
+
+input ChargeLineRelateToOneForCreateInput {
+  create: ChargeLineCreateInput
+  connect: ChargeLineWhereUniqueInput
+}
+
+type PlanBillingRun {
+  id: ID!
+  ref: String
+  runKey: String
+  location: Location
+  periodKey: String
+  status: String
+  attemptCount: Int
+  succeededCount: Int
+  failedCount: Int
+  openCount: Int
+  skippedCount: Int
+  totalMinor: BigInt
+  summary: JSON
+  startedBy: StaffMember
+  finishedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PlanBillingRunWhereUniqueInput {
+  id: ID
+  ref: String
+  runKey: String
+}
+
+input PlanBillingRunWhereInput {
+  AND: [PlanBillingRunWhereInput!]
+  OR: [PlanBillingRunWhereInput!]
+  NOT: [PlanBillingRunWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  runKey: StringFilter
+  location: LocationWhereInput
+  periodKey: StringFilter
+  status: StringFilter
+  attemptCount: IntNullableFilter
+  succeededCount: IntNullableFilter
+  failedCount: IntNullableFilter
+  openCount: IntNullableFilter
+  skippedCount: IntNullableFilter
+  totalMinor: BigIntFilter
+  startedBy: StaffMemberWhereInput
+  finishedAt: DateTimeNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PlanBillingRunOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  runKey: OrderDirection
+  periodKey: OrderDirection
+  status: OrderDirection
+  attemptCount: OrderDirection
+  succeededCount: OrderDirection
+  failedCount: OrderDirection
+  openCount: OrderDirection
+  skippedCount: OrderDirection
+  totalMinor: OrderDirection
+  finishedAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PlanBillingRunUpdateInput {
+  ref: String
+  runKey: String
+  location: LocationRelateToOneForUpdateInput
+  periodKey: String
+  status: String
+  attemptCount: Int
+  succeededCount: Int
+  failedCount: Int
+  openCount: Int
+  skippedCount: Int
+  totalMinor: BigInt
+  summary: JSON
+  startedBy: StaffMemberRelateToOneForUpdateInput
+  finishedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PlanBillingRunUpdateArgs {
+  where: PlanBillingRunWhereUniqueInput!
+  data: PlanBillingRunUpdateInput!
+}
+
+input PlanBillingRunCreateInput {
+  ref: String
+  runKey: String
+  location: LocationRelateToOneForCreateInput
+  periodKey: String
+  status: String
+  attemptCount: Int
+  succeededCount: Int
+  failedCount: Int
+  openCount: Int
+  skippedCount: Int
+  totalMinor: BigInt
+  summary: JSON
+  startedBy: StaffMemberRelateToOneForCreateInput
+  finishedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type PlanBillingAttempt {
+  id: ID!
+  enrollment: Enrollment
+  periodKey: String
+  generation: Int
+  status: String
+  amountMinor: BigInt
+  cardVersion: Int
+  termNo: Int
+  payment: Payment
+  invoice: Invoice
+  chargeLine: ChargeLine
+  runKey: String
+  message: String
+  startedAt: DateTime
+  finishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PlanBillingAttemptWhereUniqueInput {
+  id: ID
+}
+
+input PlanBillingAttemptWhereInput {
+  AND: [PlanBillingAttemptWhereInput!]
+  OR: [PlanBillingAttemptWhereInput!]
+  NOT: [PlanBillingAttemptWhereInput!]
+  id: IDFilter
+  enrollment: EnrollmentWhereInput
+  periodKey: StringFilter
+  generation: IntFilter
+  status: StringFilter
+  amountMinor: BigIntFilter
+  cardVersion: IntNullableFilter
+  termNo: IntNullableFilter
+  payment: PaymentWhereInput
+  invoice: InvoiceWhereInput
+  chargeLine: ChargeLineWhereInput
+  runKey: StringFilter
+  message: StringFilter
+  startedAt: DateTimeFilter
+  finishedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input PlanBillingAttemptOrderByInput {
+  id: OrderDirection
+  periodKey: OrderDirection
+  generation: OrderDirection
+  status: OrderDirection
+  amountMinor: OrderDirection
+  cardVersion: OrderDirection
+  termNo: OrderDirection
+  runKey: OrderDirection
+  message: OrderDirection
+  startedAt: OrderDirection
+  finishedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PlanBillingAttemptUpdateInput {
+  enrollment: EnrollmentRelateToOneForUpdateInput
+  periodKey: String
+  generation: Int
+  status: String
+  amountMinor: BigInt
+  cardVersion: Int
+  termNo: Int
+  payment: PaymentRelateToOneForUpdateInput
+  invoice: InvoiceRelateToOneForUpdateInput
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  runKey: String
+  message: String
+  startedAt: DateTime
+  finishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PlanBillingAttemptUpdateArgs {
+  where: PlanBillingAttemptWhereUniqueInput!
+  data: PlanBillingAttemptUpdateInput!
+}
+
+input PlanBillingAttemptCreateInput {
+  enrollment: EnrollmentRelateToOneForCreateInput
+  periodKey: String
+  generation: Int
+  status: String
+  amountMinor: BigInt
+  cardVersion: Int
+  termNo: Int
+  payment: PaymentRelateToOneForCreateInput
+  invoice: InvoiceRelateToOneForCreateInput
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  runKey: String
+  message: String
+  startedAt: DateTime
+  finishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ServiceItem {
+  id: ID!
+  code: String
+  area: String
+  name: String
+  priceMinor: BigInt
+  minutes: Int
+  taxCategory: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ServiceItemWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input ServiceItemWhereInput {
+  AND: [ServiceItemWhereInput!]
+  OR: [ServiceItemWhereInput!]
+  NOT: [ServiceItemWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  area: StringFilter
+  name: StringFilter
+  priceMinor: BigIntFilter
+  minutes: IntNullableFilter
+  taxCategory: StringFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ServiceItemOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  area: OrderDirection
+  name: OrderDirection
+  priceMinor: OrderDirection
+  minutes: OrderDirection
+  taxCategory: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ServiceItemUpdateInput {
+  code: String
+  area: String
+  name: String
+  priceMinor: BigInt
+  minutes: Int
+  taxCategory: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ServiceItemUpdateArgs {
+  where: ServiceItemWhereUniqueInput!
+  data: ServiceItemUpdateInput!
+}
+
+input ServiceItemCreateInput {
+  code: String
+  area: String
+  name: String
+  priceMinor: BigInt
+  minutes: Int
+  taxCategory: String
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type RunType {
+  id: ID!
+  code: String
+  name: String
+  location: Location
+  speciesCodes: JSON
+  maxWeightKg: Int
+  nightlyRateMinor: BigInt
+  depositMinor: BigInt
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunTypeWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input RunTypeWhereInput {
+  AND: [RunTypeWhereInput!]
+  OR: [RunTypeWhereInput!]
+  NOT: [RunTypeWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  location: LocationWhereInput
+  maxWeightKg: IntNullableFilter
+  nightlyRateMinor: BigIntFilter
+  depositMinor: BigIntFilter
+  active: BooleanFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RunTypeOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  maxWeightKg: OrderDirection
+  nightlyRateMinor: OrderDirection
+  depositMinor: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RunTypeUpdateInput {
+  code: String
+  name: String
+  location: LocationRelateToOneForUpdateInput
+  speciesCodes: JSON
+  maxWeightKg: Int
+  nightlyRateMinor: BigInt
+  depositMinor: BigInt
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunTypeUpdateArgs {
+  where: RunTypeWhereUniqueInput!
+  data: RunTypeUpdateInput!
+}
+
+input RunTypeCreateInput {
+  code: String
+  name: String
+  location: LocationRelateToOneForCreateInput
+  speciesCodes: JSON
+  maxWeightKg: Int
+  nightlyRateMinor: BigInt
+  depositMinor: BigInt
+  active: Boolean
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Run {
+  id: ID!
+  label: String
+  runType: RunType
+  location: Location
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunWhereUniqueInput {
+  id: ID
+}
+
+input RunWhereInput {
+  AND: [RunWhereInput!]
+  OR: [RunWhereInput!]
+  NOT: [RunWhereInput!]
+  id: IDFilter
+  label: StringFilter
+  runType: RunTypeWhereInput
+  location: LocationWhereInput
+  status: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RunOrderByInput {
+  id: OrderDirection
+  label: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RunUpdateInput {
+  label: String
+  runType: RunTypeRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunTypeRelateToOneForUpdateInput {
+  create: RunTypeCreateInput
+  connect: RunTypeWhereUniqueInput
+  disconnect: Boolean
+}
+
+input RunUpdateArgs {
+  where: RunWhereUniqueInput!
+  data: RunUpdateInput!
+}
+
+input RunCreateInput {
+  label: String
+  runType: RunTypeRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  status: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunTypeRelateToOneForCreateInput {
+  create: RunTypeCreateInput
+  connect: RunTypeWhereUniqueInput
+}
+
+type NightlyRunInventory {
+  id: ID!
+  runType: RunType
+  location: Location
+  night: CalendarDay
+  capacity: Int
+  sold: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NightlyRunInventoryWhereUniqueInput {
+  id: ID
+}
+
+input NightlyRunInventoryWhereInput {
+  AND: [NightlyRunInventoryWhereInput!]
+  OR: [NightlyRunInventoryWhereInput!]
+  NOT: [NightlyRunInventoryWhereInput!]
+  id: IDFilter
+  runType: RunTypeWhereInput
+  location: LocationWhereInput
+  night: CalendarDayFilter
+  capacity: IntFilter
+  sold: IntNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input NightlyRunInventoryOrderByInput {
+  id: OrderDirection
+  night: OrderDirection
+  capacity: OrderDirection
+  sold: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input NightlyRunInventoryUpdateInput {
+  runType: RunTypeRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  night: CalendarDay
+  capacity: Int
+  sold: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input NightlyRunInventoryUpdateArgs {
+  where: NightlyRunInventoryWhereUniqueInput!
+  data: NightlyRunInventoryUpdateInput!
+}
+
+input NightlyRunInventoryCreateInput {
+  runType: RunTypeRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  night: CalendarDay
+  capacity: Int
+  sold: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type BoardingReservation {
+  id: ID!
+  ref: String
+  patient: Patient
+  client: Client
+  location: Location
+  runType: RunType
+  checkInOn: CalendarDay
+  checkOutOn: CalendarDay
+  status: String
+  holdExpiresAt: DateTime
+  depositMinor: BigInt
+  vaccineOverrideReason: String
+  notes: String
+  cancelReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingReservationWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input BoardingReservationWhereInput {
+  AND: [BoardingReservationWhereInput!]
+  OR: [BoardingReservationWhereInput!]
+  NOT: [BoardingReservationWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  runType: RunTypeWhereInput
+  checkInOn: CalendarDayFilter
+  checkOutOn: CalendarDayFilter
+  status: StringFilter
+  holdExpiresAt: DateTimeNullableFilter
+  depositMinor: BigIntFilter
+  vaccineOverrideReason: StringFilter
+  notes: StringFilter
+  cancelReason: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BoardingReservationOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  checkInOn: OrderDirection
+  checkOutOn: OrderDirection
+  status: OrderDirection
+  holdExpiresAt: OrderDirection
+  depositMinor: OrderDirection
+  vaccineOverrideReason: OrderDirection
+  notes: OrderDirection
+  cancelReason: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input BoardingReservationUpdateInput {
+  ref: String
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  runType: RunTypeRelateToOneForUpdateInput
+  checkInOn: CalendarDay
+  checkOutOn: CalendarDay
+  status: String
+  holdExpiresAt: DateTime
+  depositMinor: BigInt
+  vaccineOverrideReason: String
+  notes: String
+  cancelReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingReservationUpdateArgs {
+  where: BoardingReservationWhereUniqueInput!
+  data: BoardingReservationUpdateInput!
+}
+
+input BoardingReservationCreateInput {
+  ref: String
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  runType: RunTypeRelateToOneForCreateInput
+  checkInOn: CalendarDay
+  checkOutOn: CalendarDay
+  status: String
+  holdExpiresAt: DateTime
+  depositMinor: BigInt
+  vaccineOverrideReason: String
+  notes: String
+  cancelReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type BoardingStay {
+  id: ID!
+  ref: String
+  reservation: BoardingReservation
+  patient: Patient
+  client: Client
+  location: Location
+  run: Run
+  status: String
+  checkedInAt: DateTime
+  checkedOutAt: DateTime
+  invoice: Invoice
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingStayWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input BoardingStayWhereInput {
+  AND: [BoardingStayWhereInput!]
+  OR: [BoardingStayWhereInput!]
+  NOT: [BoardingStayWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  reservation: BoardingReservationWhereInput
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  run: RunWhereInput
+  status: StringFilter
+  checkedInAt: DateTimeFilter
+  checkedOutAt: DateTimeNullableFilter
+  invoice: InvoiceWhereInput
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BoardingStayOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  status: OrderDirection
+  checkedInAt: OrderDirection
+  checkedOutAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input BoardingStayUpdateInput {
+  ref: String
+  reservation: BoardingReservationRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  run: RunRelateToOneForUpdateInput
+  status: String
+  checkedInAt: DateTime
+  checkedOutAt: DateTime
+  invoice: InvoiceRelateToOneForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingReservationRelateToOneForUpdateInput {
+  create: BoardingReservationCreateInput
+  connect: BoardingReservationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input RunRelateToOneForUpdateInput {
+  create: RunCreateInput
+  connect: RunWhereUniqueInput
+  disconnect: Boolean
+}
+
+input BoardingStayUpdateArgs {
+  where: BoardingStayWhereUniqueInput!
+  data: BoardingStayUpdateInput!
+}
+
+input BoardingStayCreateInput {
+  ref: String
+  reservation: BoardingReservationRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  run: RunRelateToOneForCreateInput
+  status: String
+  checkedInAt: DateTime
+  checkedOutAt: DateTime
+  invoice: InvoiceRelateToOneForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingReservationRelateToOneForCreateInput {
+  create: BoardingReservationCreateInput
+  connect: BoardingReservationWhereUniqueInput
+}
+
+input RunRelateToOneForCreateInput {
+  create: RunCreateInput
+  connect: RunWhereUniqueInput
+}
+
+type RunAssignment {
+  id: ID!
+  stay: BoardingStay
+  run: Run
+  startsAt: DateTime
+  endsAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunAssignmentWhereUniqueInput {
+  id: ID
+}
+
+input RunAssignmentWhereInput {
+  AND: [RunAssignmentWhereInput!]
+  OR: [RunAssignmentWhereInput!]
+  NOT: [RunAssignmentWhereInput!]
+  id: IDFilter
+  stay: BoardingStayWhereInput
+  run: RunWhereInput
+  startsAt: DateTimeFilter
+  endsAt: DateTimeNullableFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RunAssignmentOrderByInput {
+  id: OrderDirection
+  startsAt: OrderDirection
+  endsAt: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RunAssignmentUpdateInput {
+  stay: BoardingStayRelateToOneForUpdateInput
+  run: RunRelateToOneForUpdateInput
+  startsAt: DateTime
+  endsAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingStayRelateToOneForUpdateInput {
+  create: BoardingStayCreateInput
+  connect: BoardingStayWhereUniqueInput
+  disconnect: Boolean
+}
+
+input RunAssignmentUpdateArgs {
+  where: RunAssignmentWhereUniqueInput!
+  data: RunAssignmentUpdateInput!
+}
+
+input RunAssignmentCreateInput {
+  stay: BoardingStayRelateToOneForCreateInput
+  run: RunRelateToOneForCreateInput
+  startsAt: DateTime
+  endsAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BoardingStayRelateToOneForCreateInput {
+  create: BoardingStayCreateInput
+  connect: BoardingStayWhereUniqueInput
+}
+
+type RunCard {
+  id: ID!
+  stay: BoardingStay
+  reservation: BoardingReservation
+  feeding: String
+  handling: String
+  medications: JSON
+  emergencyContactName: String
+  emergencyContactPhone: String
+  medicalLimitMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunCardWhereUniqueInput {
+  id: ID
+}
+
+input RunCardWhereInput {
+  AND: [RunCardWhereInput!]
+  OR: [RunCardWhereInput!]
+  NOT: [RunCardWhereInput!]
+  id: IDFilter
+  stay: BoardingStayWhereInput
+  reservation: BoardingReservationWhereInput
+  feeding: StringFilter
+  handling: StringFilter
+  emergencyContactName: StringFilter
+  medicalLimitMinor: BigIntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input RunCardOrderByInput {
+  id: OrderDirection
+  feeding: OrderDirection
+  handling: OrderDirection
+  emergencyContactName: OrderDirection
+  medicalLimitMinor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input RunCardUpdateInput {
+  stay: BoardingStayRelateToOneForUpdateInput
+  reservation: BoardingReservationRelateToOneForUpdateInput
+  feeding: String
+  handling: String
+  medications: JSON
+  emergencyContactName: String
+  emergencyContactPhone: String
+  medicalLimitMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input RunCardUpdateArgs {
+  where: RunCardWhereUniqueInput!
+  data: RunCardUpdateInput!
+}
+
+input RunCardCreateInput {
+  stay: BoardingStayRelateToOneForCreateInput
+  reservation: BoardingReservationRelateToOneForCreateInput
+  feeding: String
+  handling: String
+  medications: JSON
+  emergencyContactName: String
+  emergencyContactPhone: String
+  medicalLimitMinor: BigInt
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type BelongingItem {
+  id: ID!
+  stay: BoardingStay
+  description: String
+  returnedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BelongingItemWhereUniqueInput {
+  id: ID
+}
+
+input BelongingItemWhereInput {
+  AND: [BelongingItemWhereInput!]
+  OR: [BelongingItemWhereInput!]
+  NOT: [BelongingItemWhereInput!]
+  id: IDFilter
+  stay: BoardingStayWhereInput
+  description: StringFilter
+  returnedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input BelongingItemOrderByInput {
+  id: OrderDirection
+  description: OrderDirection
+  returnedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input BelongingItemUpdateInput {
+  stay: BoardingStayRelateToOneForUpdateInput
+  description: String
+  returnedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input BelongingItemUpdateArgs {
+  where: BelongingItemWhereUniqueInput!
+  data: BelongingItemUpdateInput!
+}
+
+input BelongingItemCreateInput {
+  stay: BoardingStayRelateToOneForCreateInput
+  description: String
+  returnedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type DailyCareLog {
+  id: ID!
+  stay: BoardingStay
+  kind: String
+  note: String
+  by: StaffMember
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DailyCareLogWhereUniqueInput {
+  id: ID
+}
+
+input DailyCareLogWhereInput {
+  AND: [DailyCareLogWhereInput!]
+  OR: [DailyCareLogWhereInput!]
+  NOT: [DailyCareLogWhereInput!]
+  id: IDFilter
+  stay: BoardingStayWhereInput
+  kind: StringFilter
+  note: StringFilter
+  by: StaffMemberWhereInput
+  at: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DailyCareLogOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  note: OrderDirection
+  at: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DailyCareLogUpdateInput {
+  stay: BoardingStayRelateToOneForUpdateInput
+  kind: String
+  note: String
+  by: StaffMemberRelateToOneForUpdateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DailyCareLogUpdateArgs {
+  where: DailyCareLogWhereUniqueInput!
+  data: DailyCareLogUpdateInput!
+}
+
+input DailyCareLogCreateInput {
+  stay: BoardingStayRelateToOneForCreateInput
+  kind: String
+  note: String
+  by: StaffMemberRelateToOneForCreateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type GroomAppointment {
+  id: ID!
+  ref: String
+  patient: Patient
+  client: Client
+  location: Location
+  groomer: StaffMember
+  startsAt: DateTime
+  durationMinutes: Int
+  service: String
+  priceMinor: BigInt
+  status: String
+  noteVersion: GroomNote
+  cancelReason: String
+  invoice: Invoice
+  commissionBps: Int
+  commissionMinor: BigInt
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GroomAppointmentWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input GroomAppointmentWhereInput {
+  AND: [GroomAppointmentWhereInput!]
+  OR: [GroomAppointmentWhereInput!]
+  NOT: [GroomAppointmentWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  groomer: StaffMemberWhereInput
+  startsAt: DateTimeFilter
+  durationMinutes: IntNullableFilter
+  service: StringFilter
+  priceMinor: BigIntFilter
+  status: StringFilter
+  noteVersion: GroomNoteWhereInput
+  cancelReason: StringFilter
+  invoice: InvoiceWhereInput
+  commissionBps: IntNullableFilter
+  commissionMinor: BigIntFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input GroomAppointmentOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  startsAt: OrderDirection
+  durationMinutes: OrderDirection
+  service: OrderDirection
+  priceMinor: OrderDirection
+  status: OrderDirection
+  cancelReason: OrderDirection
+  commissionBps: OrderDirection
+  commissionMinor: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input GroomAppointmentUpdateInput {
+  ref: String
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  groomer: StaffMemberRelateToOneForUpdateInput
+  startsAt: DateTime
+  durationMinutes: Int
+  service: String
+  priceMinor: BigInt
+  status: String
+  noteVersion: GroomNoteRelateToOneForUpdateInput
+  cancelReason: String
+  invoice: InvoiceRelateToOneForUpdateInput
+  commissionBps: Int
+  commissionMinor: BigInt
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GroomNoteRelateToOneForUpdateInput {
+  create: GroomNoteCreateInput
+  connect: GroomNoteWhereUniqueInput
+  disconnect: Boolean
+}
+
+input GroomAppointmentUpdateArgs {
+  where: GroomAppointmentWhereUniqueInput!
+  data: GroomAppointmentUpdateInput!
+}
+
+input GroomAppointmentCreateInput {
+  ref: String
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  groomer: StaffMemberRelateToOneForCreateInput
+  startsAt: DateTime
+  durationMinutes: Int
+  service: String
+  priceMinor: BigInt
+  status: String
+  noteVersion: GroomNoteRelateToOneForCreateInput
+  cancelReason: String
+  invoice: InvoiceRelateToOneForCreateInput
+  commissionBps: Int
+  commissionMinor: BigInt
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GroomNoteRelateToOneForCreateInput {
+  create: GroomNoteCreateInput
+  connect: GroomNoteWhereUniqueInput
+}
+
+type GroomNote {
+  id: ID!
+  patient: Patient
+  versionNo: Int
+  blade: String
+  style: String
+  behaviour: String
+  notes: String
+  photoUrl: String
+  by: StaffMember
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GroomNoteWhereUniqueInput {
+  id: ID
+}
+
+input GroomNoteWhereInput {
+  AND: [GroomNoteWhereInput!]
+  OR: [GroomNoteWhereInput!]
+  NOT: [GroomNoteWhereInput!]
+  id: IDFilter
+  patient: PatientWhereInput
+  versionNo: IntFilter
+  blade: StringFilter
+  style: StringFilter
+  behaviour: StringFilter
+  notes: StringFilter
+  photoUrl: StringFilter
+  by: StaffMemberWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input GroomNoteOrderByInput {
+  id: OrderDirection
+  versionNo: OrderDirection
+  blade: OrderDirection
+  style: OrderDirection
+  behaviour: OrderDirection
+  notes: OrderDirection
+  photoUrl: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input GroomNoteUpdateInput {
+  patient: PatientRelateToOneForUpdateInput
+  versionNo: Int
+  blade: String
+  style: String
+  behaviour: String
+  notes: String
+  photoUrl: String
+  by: StaffMemberRelateToOneForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input GroomNoteUpdateArgs {
+  where: GroomNoteWhereUniqueInput!
+  data: GroomNoteUpdateInput!
+}
+
+input GroomNoteCreateInput {
+  patient: PatientRelateToOneForCreateInput
+  versionNo: Int
+  blade: String
+  style: String
+  behaviour: String
+  notes: String
+  photoUrl: String
+  by: StaffMemberRelateToOneForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type EuthanasiaConsent {
+  id: ID!
+  ref: String
+  patient: Patient
+  client: Client
+  signer: ClientPerson
+  authority: String
+  authorityNote: String
+  status: String
+  biteAttestation: String
+  aftercare: String
+  clientPresent: Boolean
+  method: String
+  witness: StaffMember
+  verbalConfirmedBy: StaffMember
+  verbalConfirmedAt: DateTime
+  signatureText: String
+  signedAt: DateTime
+  usedAt: DateTime
+  revokedReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EuthanasiaConsentWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input EuthanasiaConsentWhereInput {
+  AND: [EuthanasiaConsentWhereInput!]
+  OR: [EuthanasiaConsentWhereInput!]
+  NOT: [EuthanasiaConsentWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  signer: ClientPersonWhereInput
+  authority: StringFilter
+  authorityNote: StringFilter
+  status: StringFilter
+  biteAttestation: StringFilter
+  aftercare: StringFilter
+  clientPresent: BooleanFilter
+  method: StringFilter
+  witness: StaffMemberWhereInput
+  verbalConfirmedBy: StaffMemberWhereInput
+  verbalConfirmedAt: DateTimeNullableFilter
+  signatureText: StringFilter
+  signedAt: DateTimeNullableFilter
+  usedAt: DateTimeNullableFilter
+  revokedReason: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input EuthanasiaConsentOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  authority: OrderDirection
+  authorityNote: OrderDirection
+  status: OrderDirection
+  biteAttestation: OrderDirection
+  aftercare: OrderDirection
+  clientPresent: OrderDirection
+  method: OrderDirection
+  verbalConfirmedAt: OrderDirection
+  signatureText: OrderDirection
+  signedAt: OrderDirection
+  usedAt: OrderDirection
+  revokedReason: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input EuthanasiaConsentUpdateInput {
+  ref: String
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  signer: ClientPersonRelateToOneForUpdateInput
+  authority: String
+  authorityNote: String
+  status: String
+  biteAttestation: String
+  aftercare: String
+  clientPresent: Boolean
+  method: String
+  witness: StaffMemberRelateToOneForUpdateInput
+  verbalConfirmedBy: StaffMemberRelateToOneForUpdateInput
+  verbalConfirmedAt: DateTime
+  signatureText: String
+  signedAt: DateTime
+  usedAt: DateTime
+  revokedReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EuthanasiaConsentUpdateArgs {
+  where: EuthanasiaConsentWhereUniqueInput!
+  data: EuthanasiaConsentUpdateInput!
+}
+
+input EuthanasiaConsentCreateInput {
+  ref: String
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  signer: ClientPersonRelateToOneForCreateInput
+  authority: String
+  authorityNote: String
+  status: String
+  biteAttestation: String
+  aftercare: String
+  clientPresent: Boolean
+  method: String
+  witness: StaffMemberRelateToOneForCreateInput
+  verbalConfirmedBy: StaffMemberRelateToOneForCreateInput
+  verbalConfirmedAt: DateTime
+  signatureText: String
+  signedAt: DateTime
+  usedAt: DateTime
+  revokedReason: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type DeathRecord {
+  id: ID!
+  patient: Patient
+  location: Location
+  cause: String
+  causeNote: String
+  diedAt: DateTime
+  recordedBy: StaffMember
+  consent: EuthanasiaConsent
+  administration: Administration
+  effects: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeathRecordWhereUniqueInput {
+  id: ID
+}
+
+input DeathRecordWhereInput {
+  AND: [DeathRecordWhereInput!]
+  OR: [DeathRecordWhereInput!]
+  NOT: [DeathRecordWhereInput!]
+  id: IDFilter
+  patient: PatientWhereInput
+  location: LocationWhereInput
+  cause: StringFilter
+  causeNote: StringFilter
+  diedAt: DateTimeFilter
+  recordedBy: StaffMemberWhereInput
+  consent: EuthanasiaConsentWhereInput
+  administration: AdministrationWhereInput
+  effects: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input DeathRecordOrderByInput {
+  id: OrderDirection
+  cause: OrderDirection
+  causeNote: OrderDirection
+  diedAt: OrderDirection
+  effects: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input DeathRecordUpdateInput {
+  patient: PatientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  cause: String
+  causeNote: String
+  diedAt: DateTime
+  recordedBy: StaffMemberRelateToOneForUpdateInput
+  consent: EuthanasiaConsentRelateToOneForUpdateInput
+  administration: AdministrationRelateToOneForUpdateInput
+  effects: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EuthanasiaConsentRelateToOneForUpdateInput {
+  create: EuthanasiaConsentCreateInput
+  connect: EuthanasiaConsentWhereUniqueInput
+  disconnect: Boolean
+}
+
+input AdministrationRelateToOneForUpdateInput {
+  create: AdministrationCreateInput
+  connect: AdministrationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input DeathRecordUpdateArgs {
+  where: DeathRecordWhereUniqueInput!
+  data: DeathRecordUpdateInput!
+}
+
+input DeathRecordCreateInput {
+  patient: PatientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  cause: String
+  causeNote: String
+  diedAt: DateTime
+  recordedBy: StaffMemberRelateToOneForCreateInput
+  consent: EuthanasiaConsentRelateToOneForCreateInput
+  administration: AdministrationRelateToOneForCreateInput
+  effects: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input EuthanasiaConsentRelateToOneForCreateInput {
+  create: EuthanasiaConsentCreateInput
+  connect: EuthanasiaConsentWhereUniqueInput
+}
+
+input AdministrationRelateToOneForCreateInput {
+  create: AdministrationCreateInput
+  connect: AdministrationWhereUniqueInput
+}
+
+type AftercareOrder {
+  id: ID!
+  ref: String
+  patient: Patient
+  client: Client
+  location: Location
+  deathRecord: DeathRecord
+  choice: String
+  status: String
+  tagNumber: String
+  crematory: String
+  manifestRef: String
+  crematoryRef: String
+  heldFrom: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AftercareOrderWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input AftercareOrderWhereInput {
+  AND: [AftercareOrderWhereInput!]
+  OR: [AftercareOrderWhereInput!]
+  NOT: [AftercareOrderWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  patient: PatientWhereInput
+  client: ClientWhereInput
+  location: LocationWhereInput
+  deathRecord: DeathRecordWhereInput
+  choice: StringFilter
+  status: StringFilter
+  tagNumber: StringFilter
+  crematory: StringFilter
+  manifestRef: StringFilter
+  crematoryRef: StringFilter
+  heldFrom: StringFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input AftercareOrderOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  choice: OrderDirection
+  status: OrderDirection
+  tagNumber: OrderDirection
+  crematory: OrderDirection
+  manifestRef: OrderDirection
+  crematoryRef: OrderDirection
+  heldFrom: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input AftercareOrderUpdateInput {
+  ref: String
+  patient: PatientRelateToOneForUpdateInput
+  client: ClientRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  deathRecord: DeathRecordRelateToOneForUpdateInput
+  choice: String
+  status: String
+  tagNumber: String
+  crematory: String
+  manifestRef: String
+  crematoryRef: String
+  heldFrom: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeathRecordRelateToOneForUpdateInput {
+  create: DeathRecordCreateInput
+  connect: DeathRecordWhereUniqueInput
+  disconnect: Boolean
+}
+
+input AftercareOrderUpdateArgs {
+  where: AftercareOrderWhereUniqueInput!
+  data: AftercareOrderUpdateInput!
+}
+
+input AftercareOrderCreateInput {
+  ref: String
+  patient: PatientRelateToOneForCreateInput
+  client: ClientRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  deathRecord: DeathRecordRelateToOneForCreateInput
+  choice: String
+  status: String
+  tagNumber: String
+  crematory: String
+  manifestRef: String
+  crematoryRef: String
+  heldFrom: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input DeathRecordRelateToOneForCreateInput {
+  create: DeathRecordCreateInput
+  connect: DeathRecordWhereUniqueInput
+}
+
+type CustodyEvent {
+  id: ID!
+  order: AftercareOrder
+  kind: String
+  tagNumber: String
+  place: String
+  crematoryRef: String
+  receivedBy: String
+  by: StaffMember
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CustodyEventWhereUniqueInput {
+  id: ID
+}
+
+input CustodyEventWhereInput {
+  AND: [CustodyEventWhereInput!]
+  OR: [CustodyEventWhereInput!]
+  NOT: [CustodyEventWhereInput!]
+  id: IDFilter
+  order: AftercareOrderWhereInput
+  kind: StringFilter
+  tagNumber: StringFilter
+  place: StringFilter
+  crematoryRef: StringFilter
+  receivedBy: StringFilter
+  by: StaffMemberWhereInput
+  at: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CustodyEventOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  tagNumber: OrderDirection
+  place: OrderDirection
+  crematoryRef: OrderDirection
+  receivedBy: OrderDirection
+  at: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CustodyEventUpdateInput {
+  order: AftercareOrderRelateToOneForUpdateInput
+  kind: String
+  tagNumber: String
+  place: String
+  crematoryRef: String
+  receivedBy: String
+  by: StaffMemberRelateToOneForUpdateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AftercareOrderRelateToOneForUpdateInput {
+  create: AftercareOrderCreateInput
+  connect: AftercareOrderWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CustodyEventUpdateArgs {
+  where: CustodyEventWhereUniqueInput!
+  data: CustodyEventUpdateInput!
+}
+
+input CustodyEventCreateInput {
+  order: AftercareOrderRelateToOneForCreateInput
+  kind: String
+  tagNumber: String
+  place: String
+  crematoryRef: String
+  receivedBy: String
+  by: StaffMemberRelateToOneForCreateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AftercareOrderRelateToOneForCreateInput {
+  create: AftercareOrderCreateInput
+  connect: AftercareOrderWhereUniqueInput
+}
+
+type MemorialItem {
+  id: ID!
+  order: AftercareOrder
+  kind: String
+  description: String
+  priceMinor: BigInt
+  chargeLine: ChargeLine
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input MemorialItemWhereUniqueInput {
+  id: ID
+}
+
+input MemorialItemWhereInput {
+  AND: [MemorialItemWhereInput!]
+  OR: [MemorialItemWhereInput!]
+  NOT: [MemorialItemWhereInput!]
+  id: IDFilter
+  order: AftercareOrderWhereInput
+  kind: StringFilter
+  description: StringFilter
+  priceMinor: BigIntFilter
+  chargeLine: ChargeLineWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input MemorialItemOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  description: OrderDirection
+  priceMinor: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input MemorialItemUpdateInput {
+  order: AftercareOrderRelateToOneForUpdateInput
+  kind: String
+  description: String
+  priceMinor: BigInt
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input MemorialItemUpdateArgs {
+  where: MemorialItemWhereUniqueInput!
+  data: MemorialItemUpdateInput!
+}
+
+input MemorialItemCreateInput {
+  order: AftercareOrderRelateToOneForCreateInput
+  kind: String
+  description: String
+  priceMinor: BigInt
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
 type Encounter {
   id: ID!
   ref: String
@@ -16684,12 +18998,6 @@ input TreatmentTaskRelateToOneForUpdateInput {
   disconnect: Boolean
 }
 
-input AdministrationRelateToOneForUpdateInput {
-  create: AdministrationCreateInput
-  connect: AdministrationWhereUniqueInput
-  disconnect: Boolean
-}
-
 input AdministrationUpdateArgs {
   where: AdministrationWhereUniqueInput!
   data: AdministrationUpdateInput!
@@ -16724,11 +19032,6 @@ input AdministrationCreateInput {
 input TreatmentTaskRelateToOneForCreateInput {
   create: TreatmentTaskCreateInput
   connect: TreatmentTaskWhereUniqueInput
-}
-
-input AdministrationRelateToOneForCreateInput {
-  create: AdministrationCreateInput
-  connect: AdministrationWhereUniqueInput
 }
 
 type Ward {
@@ -20254,6 +22557,156 @@ type Mutation {
   updateInsuranceClaimPackets(data: [InsuranceClaimPacketUpdateArgs!]!): [InsuranceClaimPacket]
   deleteInsuranceClaimPacket(where: InsuranceClaimPacketWhereUniqueInput!): InsuranceClaimPacket
   deleteInsuranceClaimPackets(where: [InsuranceClaimPacketWhereUniqueInput!]!): [InsuranceClaimPacket]
+  createWellnessPlan(data: WellnessPlanCreateInput!): WellnessPlan
+  createWellnessPlans(data: [WellnessPlanCreateInput!]!): [WellnessPlan]
+  updateWellnessPlan(where: WellnessPlanWhereUniqueInput!, data: WellnessPlanUpdateInput!): WellnessPlan
+  updateWellnessPlans(data: [WellnessPlanUpdateArgs!]!): [WellnessPlan]
+  deleteWellnessPlan(where: WellnessPlanWhereUniqueInput!): WellnessPlan
+  deleteWellnessPlans(where: [WellnessPlanWhereUniqueInput!]!): [WellnessPlan]
+  createWellnessPlanVersion(data: WellnessPlanVersionCreateInput!): WellnessPlanVersion
+  createWellnessPlanVersions(data: [WellnessPlanVersionCreateInput!]!): [WellnessPlanVersion]
+  updateWellnessPlanVersion(where: WellnessPlanVersionWhereUniqueInput!, data: WellnessPlanVersionUpdateInput!): WellnessPlanVersion
+  updateWellnessPlanVersions(data: [WellnessPlanVersionUpdateArgs!]!): [WellnessPlanVersion]
+  deleteWellnessPlanVersion(where: WellnessPlanVersionWhereUniqueInput!): WellnessPlanVersion
+  deleteWellnessPlanVersions(where: [WellnessPlanVersionWhereUniqueInput!]!): [WellnessPlanVersion]
+  createEnrollment(data: EnrollmentCreateInput!): Enrollment
+  createEnrollments(data: [EnrollmentCreateInput!]!): [Enrollment]
+  updateEnrollment(where: EnrollmentWhereUniqueInput!, data: EnrollmentUpdateInput!): Enrollment
+  updateEnrollments(data: [EnrollmentUpdateArgs!]!): [Enrollment]
+  deleteEnrollment(where: EnrollmentWhereUniqueInput!): Enrollment
+  deleteEnrollments(where: [EnrollmentWhereUniqueInput!]!): [Enrollment]
+  createEnrollmentConsent(data: EnrollmentConsentCreateInput!): EnrollmentConsent
+  createEnrollmentConsents(data: [EnrollmentConsentCreateInput!]!): [EnrollmentConsent]
+  updateEnrollmentConsent(where: EnrollmentConsentWhereUniqueInput!, data: EnrollmentConsentUpdateInput!): EnrollmentConsent
+  updateEnrollmentConsents(data: [EnrollmentConsentUpdateArgs!]!): [EnrollmentConsent]
+  deleteEnrollmentConsent(where: EnrollmentConsentWhereUniqueInput!): EnrollmentConsent
+  deleteEnrollmentConsents(where: [EnrollmentConsentWhereUniqueInput!]!): [EnrollmentConsent]
+  createEntitlementGrant(data: EntitlementGrantCreateInput!): EntitlementGrant
+  createEntitlementGrants(data: [EntitlementGrantCreateInput!]!): [EntitlementGrant]
+  updateEntitlementGrant(where: EntitlementGrantWhereUniqueInput!, data: EntitlementGrantUpdateInput!): EntitlementGrant
+  updateEntitlementGrants(data: [EntitlementGrantUpdateArgs!]!): [EntitlementGrant]
+  deleteEntitlementGrant(where: EntitlementGrantWhereUniqueInput!): EntitlementGrant
+  deleteEntitlementGrants(where: [EntitlementGrantWhereUniqueInput!]!): [EntitlementGrant]
+  createEntitlementEntry(data: EntitlementEntryCreateInput!): EntitlementEntry
+  createEntitlementEntries(data: [EntitlementEntryCreateInput!]!): [EntitlementEntry]
+  updateEntitlementEntry(where: EntitlementEntryWhereUniqueInput!, data: EntitlementEntryUpdateInput!): EntitlementEntry
+  updateEntitlementEntries(data: [EntitlementEntryUpdateArgs!]!): [EntitlementEntry]
+  deleteEntitlementEntry(where: EntitlementEntryWhereUniqueInput!): EntitlementEntry
+  deleteEntitlementEntries(where: [EntitlementEntryWhereUniqueInput!]!): [EntitlementEntry]
+  createPlanBillingRun(data: PlanBillingRunCreateInput!): PlanBillingRun
+  createPlanBillingRuns(data: [PlanBillingRunCreateInput!]!): [PlanBillingRun]
+  updatePlanBillingRun(where: PlanBillingRunWhereUniqueInput!, data: PlanBillingRunUpdateInput!): PlanBillingRun
+  updatePlanBillingRuns(data: [PlanBillingRunUpdateArgs!]!): [PlanBillingRun]
+  deletePlanBillingRun(where: PlanBillingRunWhereUniqueInput!): PlanBillingRun
+  deletePlanBillingRuns(where: [PlanBillingRunWhereUniqueInput!]!): [PlanBillingRun]
+  createPlanBillingAttempt(data: PlanBillingAttemptCreateInput!): PlanBillingAttempt
+  createPlanBillingAttempts(data: [PlanBillingAttemptCreateInput!]!): [PlanBillingAttempt]
+  updatePlanBillingAttempt(where: PlanBillingAttemptWhereUniqueInput!, data: PlanBillingAttemptUpdateInput!): PlanBillingAttempt
+  updatePlanBillingAttempts(data: [PlanBillingAttemptUpdateArgs!]!): [PlanBillingAttempt]
+  deletePlanBillingAttempt(where: PlanBillingAttemptWhereUniqueInput!): PlanBillingAttempt
+  deletePlanBillingAttempts(where: [PlanBillingAttemptWhereUniqueInput!]!): [PlanBillingAttempt]
+  createServiceItem(data: ServiceItemCreateInput!): ServiceItem
+  createServiceItems(data: [ServiceItemCreateInput!]!): [ServiceItem]
+  updateServiceItem(where: ServiceItemWhereUniqueInput!, data: ServiceItemUpdateInput!): ServiceItem
+  updateServiceItems(data: [ServiceItemUpdateArgs!]!): [ServiceItem]
+  deleteServiceItem(where: ServiceItemWhereUniqueInput!): ServiceItem
+  deleteServiceItems(where: [ServiceItemWhereUniqueInput!]!): [ServiceItem]
+  createRunType(data: RunTypeCreateInput!): RunType
+  createRunTypes(data: [RunTypeCreateInput!]!): [RunType]
+  updateRunType(where: RunTypeWhereUniqueInput!, data: RunTypeUpdateInput!): RunType
+  updateRunTypes(data: [RunTypeUpdateArgs!]!): [RunType]
+  deleteRunType(where: RunTypeWhereUniqueInput!): RunType
+  deleteRunTypes(where: [RunTypeWhereUniqueInput!]!): [RunType]
+  createRun(data: RunCreateInput!): Run
+  createRuns(data: [RunCreateInput!]!): [Run]
+  updateRun(where: RunWhereUniqueInput!, data: RunUpdateInput!): Run
+  updateRuns(data: [RunUpdateArgs!]!): [Run]
+  deleteRun(where: RunWhereUniqueInput!): Run
+  deleteRuns(where: [RunWhereUniqueInput!]!): [Run]
+  createNightlyRunInventory(data: NightlyRunInventoryCreateInput!): NightlyRunInventory
+  createNightlyRunInventories(data: [NightlyRunInventoryCreateInput!]!): [NightlyRunInventory]
+  updateNightlyRunInventory(where: NightlyRunInventoryWhereUniqueInput!, data: NightlyRunInventoryUpdateInput!): NightlyRunInventory
+  updateNightlyRunInventories(data: [NightlyRunInventoryUpdateArgs!]!): [NightlyRunInventory]
+  deleteNightlyRunInventory(where: NightlyRunInventoryWhereUniqueInput!): NightlyRunInventory
+  deleteNightlyRunInventories(where: [NightlyRunInventoryWhereUniqueInput!]!): [NightlyRunInventory]
+  createBoardingReservation(data: BoardingReservationCreateInput!): BoardingReservation
+  createBoardingReservations(data: [BoardingReservationCreateInput!]!): [BoardingReservation]
+  updateBoardingReservation(where: BoardingReservationWhereUniqueInput!, data: BoardingReservationUpdateInput!): BoardingReservation
+  updateBoardingReservations(data: [BoardingReservationUpdateArgs!]!): [BoardingReservation]
+  deleteBoardingReservation(where: BoardingReservationWhereUniqueInput!): BoardingReservation
+  deleteBoardingReservations(where: [BoardingReservationWhereUniqueInput!]!): [BoardingReservation]
+  createBoardingStay(data: BoardingStayCreateInput!): BoardingStay
+  createBoardingStays(data: [BoardingStayCreateInput!]!): [BoardingStay]
+  updateBoardingStay(where: BoardingStayWhereUniqueInput!, data: BoardingStayUpdateInput!): BoardingStay
+  updateBoardingStays(data: [BoardingStayUpdateArgs!]!): [BoardingStay]
+  deleteBoardingStay(where: BoardingStayWhereUniqueInput!): BoardingStay
+  deleteBoardingStays(where: [BoardingStayWhereUniqueInput!]!): [BoardingStay]
+  createRunAssignment(data: RunAssignmentCreateInput!): RunAssignment
+  createRunAssignments(data: [RunAssignmentCreateInput!]!): [RunAssignment]
+  updateRunAssignment(where: RunAssignmentWhereUniqueInput!, data: RunAssignmentUpdateInput!): RunAssignment
+  updateRunAssignments(data: [RunAssignmentUpdateArgs!]!): [RunAssignment]
+  deleteRunAssignment(where: RunAssignmentWhereUniqueInput!): RunAssignment
+  deleteRunAssignments(where: [RunAssignmentWhereUniqueInput!]!): [RunAssignment]
+  createRunCard(data: RunCardCreateInput!): RunCard
+  createRunCards(data: [RunCardCreateInput!]!): [RunCard]
+  updateRunCard(where: RunCardWhereUniqueInput!, data: RunCardUpdateInput!): RunCard
+  updateRunCards(data: [RunCardUpdateArgs!]!): [RunCard]
+  deleteRunCard(where: RunCardWhereUniqueInput!): RunCard
+  deleteRunCards(where: [RunCardWhereUniqueInput!]!): [RunCard]
+  createBelongingItem(data: BelongingItemCreateInput!): BelongingItem
+  createBelongingItems(data: [BelongingItemCreateInput!]!): [BelongingItem]
+  updateBelongingItem(where: BelongingItemWhereUniqueInput!, data: BelongingItemUpdateInput!): BelongingItem
+  updateBelongingItems(data: [BelongingItemUpdateArgs!]!): [BelongingItem]
+  deleteBelongingItem(where: BelongingItemWhereUniqueInput!): BelongingItem
+  deleteBelongingItems(where: [BelongingItemWhereUniqueInput!]!): [BelongingItem]
+  createDailyCareLog(data: DailyCareLogCreateInput!): DailyCareLog
+  createDailyCareLogs(data: [DailyCareLogCreateInput!]!): [DailyCareLog]
+  updateDailyCareLog(where: DailyCareLogWhereUniqueInput!, data: DailyCareLogUpdateInput!): DailyCareLog
+  updateDailyCareLogs(data: [DailyCareLogUpdateArgs!]!): [DailyCareLog]
+  deleteDailyCareLog(where: DailyCareLogWhereUniqueInput!): DailyCareLog
+  deleteDailyCareLogs(where: [DailyCareLogWhereUniqueInput!]!): [DailyCareLog]
+  createGroomAppointment(data: GroomAppointmentCreateInput!): GroomAppointment
+  createGroomAppointments(data: [GroomAppointmentCreateInput!]!): [GroomAppointment]
+  updateGroomAppointment(where: GroomAppointmentWhereUniqueInput!, data: GroomAppointmentUpdateInput!): GroomAppointment
+  updateGroomAppointments(data: [GroomAppointmentUpdateArgs!]!): [GroomAppointment]
+  deleteGroomAppointment(where: GroomAppointmentWhereUniqueInput!): GroomAppointment
+  deleteGroomAppointments(where: [GroomAppointmentWhereUniqueInput!]!): [GroomAppointment]
+  createGroomNote(data: GroomNoteCreateInput!): GroomNote
+  createGroomNotes(data: [GroomNoteCreateInput!]!): [GroomNote]
+  updateGroomNote(where: GroomNoteWhereUniqueInput!, data: GroomNoteUpdateInput!): GroomNote
+  updateGroomNotes(data: [GroomNoteUpdateArgs!]!): [GroomNote]
+  deleteGroomNote(where: GroomNoteWhereUniqueInput!): GroomNote
+  deleteGroomNotes(where: [GroomNoteWhereUniqueInput!]!): [GroomNote]
+  createEuthanasiaConsent(data: EuthanasiaConsentCreateInput!): EuthanasiaConsent
+  createEuthanasiaConsents(data: [EuthanasiaConsentCreateInput!]!): [EuthanasiaConsent]
+  updateEuthanasiaConsent(where: EuthanasiaConsentWhereUniqueInput!, data: EuthanasiaConsentUpdateInput!): EuthanasiaConsent
+  updateEuthanasiaConsents(data: [EuthanasiaConsentUpdateArgs!]!): [EuthanasiaConsent]
+  deleteEuthanasiaConsent(where: EuthanasiaConsentWhereUniqueInput!): EuthanasiaConsent
+  deleteEuthanasiaConsents(where: [EuthanasiaConsentWhereUniqueInput!]!): [EuthanasiaConsent]
+  createDeathRecord(data: DeathRecordCreateInput!): DeathRecord
+  createDeathRecords(data: [DeathRecordCreateInput!]!): [DeathRecord]
+  updateDeathRecord(where: DeathRecordWhereUniqueInput!, data: DeathRecordUpdateInput!): DeathRecord
+  updateDeathRecords(data: [DeathRecordUpdateArgs!]!): [DeathRecord]
+  deleteDeathRecord(where: DeathRecordWhereUniqueInput!): DeathRecord
+  deleteDeathRecords(where: [DeathRecordWhereUniqueInput!]!): [DeathRecord]
+  createAftercareOrder(data: AftercareOrderCreateInput!): AftercareOrder
+  createAftercareOrders(data: [AftercareOrderCreateInput!]!): [AftercareOrder]
+  updateAftercareOrder(where: AftercareOrderWhereUniqueInput!, data: AftercareOrderUpdateInput!): AftercareOrder
+  updateAftercareOrders(data: [AftercareOrderUpdateArgs!]!): [AftercareOrder]
+  deleteAftercareOrder(where: AftercareOrderWhereUniqueInput!): AftercareOrder
+  deleteAftercareOrders(where: [AftercareOrderWhereUniqueInput!]!): [AftercareOrder]
+  createCustodyEvent(data: CustodyEventCreateInput!): CustodyEvent
+  createCustodyEvents(data: [CustodyEventCreateInput!]!): [CustodyEvent]
+  updateCustodyEvent(where: CustodyEventWhereUniqueInput!, data: CustodyEventUpdateInput!): CustodyEvent
+  updateCustodyEvents(data: [CustodyEventUpdateArgs!]!): [CustodyEvent]
+  deleteCustodyEvent(where: CustodyEventWhereUniqueInput!): CustodyEvent
+  deleteCustodyEvents(where: [CustodyEventWhereUniqueInput!]!): [CustodyEvent]
+  createMemorialItem(data: MemorialItemCreateInput!): MemorialItem
+  createMemorialItems(data: [MemorialItemCreateInput!]!): [MemorialItem]
+  updateMemorialItem(where: MemorialItemWhereUniqueInput!, data: MemorialItemUpdateInput!): MemorialItem
+  updateMemorialItems(data: [MemorialItemUpdateArgs!]!): [MemorialItem]
+  deleteMemorialItem(where: MemorialItemWhereUniqueInput!): MemorialItem
+  deleteMemorialItems(where: [MemorialItemWhereUniqueInput!]!): [MemorialItem]
   createEncounter(data: EncounterCreateInput!): Encounter
   createEncounters(data: [EncounterCreateInput!]!): [Encounter]
   updateEncounter(where: EncounterWhereUniqueInput!, data: EncounterUpdateInput!): Encounter
@@ -20660,6 +23113,7 @@ type Mutation {
   requestWriteOff(invoiceId: ID!, reason: String!, idempotencyKey: String!): JSON
   closeArPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   reopenArPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  addInsurancePolicy(patientId: ID!, insurerId: ID!, policyNumber: String!, plan: String, deductibleMinor: String, reimbursementRate: String, effectiveFrom: String, effectiveTo: String, directPayEligible: Boolean, idempotencyKey: String!): JSON
   requestAuthorization(invoiceId: ID!, policyId: ID!, requestedMinor: String!, idempotencyKey: String!): JSON
   recordAuthorizationDecision(authorizationId: ID!, decision: String!, authorisedMinor: String, externalRef: String, validUntil: String, expectedVersion: Int!, idempotencyKey: String!): JSON
   buildClaimPacket(invoiceId: ID!, policyId: ID!, recordsReleaseId: ID, submitter: String!, formFields: JSON, idempotencyKey: String!): JSON
@@ -21145,6 +23599,81 @@ type Query {
   insuranceClaimPacket(where: InsuranceClaimPacketWhereUniqueInput!): InsuranceClaimPacket
   insuranceClaimPackets(where: InsuranceClaimPacketWhereInput! = {}, orderBy: [InsuranceClaimPacketOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: InsuranceClaimPacketWhereUniqueInput): [InsuranceClaimPacket!]
   insuranceClaimPacketsCount(where: InsuranceClaimPacketWhereInput! = {}): Int
+  wellnessPlan(where: WellnessPlanWhereUniqueInput!): WellnessPlan
+  wellnessPlans(where: WellnessPlanWhereInput! = {}, orderBy: [WellnessPlanOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WellnessPlanWhereUniqueInput): [WellnessPlan!]
+  wellnessPlansCount(where: WellnessPlanWhereInput! = {}): Int
+  wellnessPlanVersion(where: WellnessPlanVersionWhereUniqueInput!): WellnessPlanVersion
+  wellnessPlanVersions(where: WellnessPlanVersionWhereInput! = {}, orderBy: [WellnessPlanVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: WellnessPlanVersionWhereUniqueInput): [WellnessPlanVersion!]
+  wellnessPlanVersionsCount(where: WellnessPlanVersionWhereInput! = {}): Int
+  enrollment(where: EnrollmentWhereUniqueInput!): Enrollment
+  enrollments(where: EnrollmentWhereInput! = {}, orderBy: [EnrollmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EnrollmentWhereUniqueInput): [Enrollment!]
+  enrollmentsCount(where: EnrollmentWhereInput! = {}): Int
+  enrollmentConsent(where: EnrollmentConsentWhereUniqueInput!): EnrollmentConsent
+  enrollmentConsents(where: EnrollmentConsentWhereInput! = {}, orderBy: [EnrollmentConsentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EnrollmentConsentWhereUniqueInput): [EnrollmentConsent!]
+  enrollmentConsentsCount(where: EnrollmentConsentWhereInput! = {}): Int
+  entitlementGrant(where: EntitlementGrantWhereUniqueInput!): EntitlementGrant
+  entitlementGrants(where: EntitlementGrantWhereInput! = {}, orderBy: [EntitlementGrantOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EntitlementGrantWhereUniqueInput): [EntitlementGrant!]
+  entitlementGrantsCount(where: EntitlementGrantWhereInput! = {}): Int
+  entitlementEntry(where: EntitlementEntryWhereUniqueInput!): EntitlementEntry
+  entitlementEntries(where: EntitlementEntryWhereInput! = {}, orderBy: [EntitlementEntryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EntitlementEntryWhereUniqueInput): [EntitlementEntry!]
+  entitlementEntriesCount(where: EntitlementEntryWhereInput! = {}): Int
+  planBillingRun(where: PlanBillingRunWhereUniqueInput!): PlanBillingRun
+  planBillingRuns(where: PlanBillingRunWhereInput! = {}, orderBy: [PlanBillingRunOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PlanBillingRunWhereUniqueInput): [PlanBillingRun!]
+  planBillingRunsCount(where: PlanBillingRunWhereInput! = {}): Int
+  planBillingAttempt(where: PlanBillingAttemptWhereUniqueInput!): PlanBillingAttempt
+  planBillingAttempts(where: PlanBillingAttemptWhereInput! = {}, orderBy: [PlanBillingAttemptOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PlanBillingAttemptWhereUniqueInput): [PlanBillingAttempt!]
+  planBillingAttemptsCount(where: PlanBillingAttemptWhereInput! = {}): Int
+  serviceItem(where: ServiceItemWhereUniqueInput!): ServiceItem
+  serviceItems(where: ServiceItemWhereInput! = {}, orderBy: [ServiceItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ServiceItemWhereUniqueInput): [ServiceItem!]
+  serviceItemsCount(where: ServiceItemWhereInput! = {}): Int
+  runType(where: RunTypeWhereUniqueInput!): RunType
+  runTypes(where: RunTypeWhereInput! = {}, orderBy: [RunTypeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RunTypeWhereUniqueInput): [RunType!]
+  runTypesCount(where: RunTypeWhereInput! = {}): Int
+  run(where: RunWhereUniqueInput!): Run
+  runs(where: RunWhereInput! = {}, orderBy: [RunOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RunWhereUniqueInput): [Run!]
+  runsCount(where: RunWhereInput! = {}): Int
+  nightlyRunInventory(where: NightlyRunInventoryWhereUniqueInput!): NightlyRunInventory
+  nightlyRunInventories(where: NightlyRunInventoryWhereInput! = {}, orderBy: [NightlyRunInventoryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: NightlyRunInventoryWhereUniqueInput): [NightlyRunInventory!]
+  nightlyRunInventoriesCount(where: NightlyRunInventoryWhereInput! = {}): Int
+  boardingReservation(where: BoardingReservationWhereUniqueInput!): BoardingReservation
+  boardingReservations(where: BoardingReservationWhereInput! = {}, orderBy: [BoardingReservationOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BoardingReservationWhereUniqueInput): [BoardingReservation!]
+  boardingReservationsCount(where: BoardingReservationWhereInput! = {}): Int
+  boardingStay(where: BoardingStayWhereUniqueInput!): BoardingStay
+  boardingStays(where: BoardingStayWhereInput! = {}, orderBy: [BoardingStayOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BoardingStayWhereUniqueInput): [BoardingStay!]
+  boardingStaysCount(where: BoardingStayWhereInput! = {}): Int
+  runAssignment(where: RunAssignmentWhereUniqueInput!): RunAssignment
+  runAssignments(where: RunAssignmentWhereInput! = {}, orderBy: [RunAssignmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RunAssignmentWhereUniqueInput): [RunAssignment!]
+  runAssignmentsCount(where: RunAssignmentWhereInput! = {}): Int
+  runCard(where: RunCardWhereUniqueInput!): RunCard
+  runCards(where: RunCardWhereInput! = {}, orderBy: [RunCardOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: RunCardWhereUniqueInput): [RunCard!]
+  runCardsCount(where: RunCardWhereInput! = {}): Int
+  belongingItem(where: BelongingItemWhereUniqueInput!): BelongingItem
+  belongingItems(where: BelongingItemWhereInput! = {}, orderBy: [BelongingItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: BelongingItemWhereUniqueInput): [BelongingItem!]
+  belongingItemsCount(where: BelongingItemWhereInput! = {}): Int
+  dailyCareLog(where: DailyCareLogWhereUniqueInput!): DailyCareLog
+  dailyCareLogs(where: DailyCareLogWhereInput! = {}, orderBy: [DailyCareLogOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DailyCareLogWhereUniqueInput): [DailyCareLog!]
+  dailyCareLogsCount(where: DailyCareLogWhereInput! = {}): Int
+  groomAppointment(where: GroomAppointmentWhereUniqueInput!): GroomAppointment
+  groomAppointments(where: GroomAppointmentWhereInput! = {}, orderBy: [GroomAppointmentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: GroomAppointmentWhereUniqueInput): [GroomAppointment!]
+  groomAppointmentsCount(where: GroomAppointmentWhereInput! = {}): Int
+  groomNote(where: GroomNoteWhereUniqueInput!): GroomNote
+  groomNotes(where: GroomNoteWhereInput! = {}, orderBy: [GroomNoteOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: GroomNoteWhereUniqueInput): [GroomNote!]
+  groomNotesCount(where: GroomNoteWhereInput! = {}): Int
+  euthanasiaConsent(where: EuthanasiaConsentWhereUniqueInput!): EuthanasiaConsent
+  euthanasiaConsents(where: EuthanasiaConsentWhereInput! = {}, orderBy: [EuthanasiaConsentOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EuthanasiaConsentWhereUniqueInput): [EuthanasiaConsent!]
+  euthanasiaConsentsCount(where: EuthanasiaConsentWhereInput! = {}): Int
+  deathRecord(where: DeathRecordWhereUniqueInput!): DeathRecord
+  deathRecords(where: DeathRecordWhereInput! = {}, orderBy: [DeathRecordOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: DeathRecordWhereUniqueInput): [DeathRecord!]
+  deathRecordsCount(where: DeathRecordWhereInput! = {}): Int
+  aftercareOrder(where: AftercareOrderWhereUniqueInput!): AftercareOrder
+  aftercareOrders(where: AftercareOrderWhereInput! = {}, orderBy: [AftercareOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AftercareOrderWhereUniqueInput): [AftercareOrder!]
+  aftercareOrdersCount(where: AftercareOrderWhereInput! = {}): Int
+  custodyEvent(where: CustodyEventWhereUniqueInput!): CustodyEvent
+  custodyEvents(where: CustodyEventWhereInput! = {}, orderBy: [CustodyEventOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CustodyEventWhereUniqueInput): [CustodyEvent!]
+  custodyEventsCount(where: CustodyEventWhereInput! = {}): Int
+  memorialItem(where: MemorialItemWhereUniqueInput!): MemorialItem
+  memorialItems(where: MemorialItemWhereInput! = {}, orderBy: [MemorialItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: MemorialItemWhereUniqueInput): [MemorialItem!]
+  memorialItemsCount(where: MemorialItemWhereInput! = {}): Int
   encounter(where: EncounterWhereUniqueInput!): Encounter
   encounters(where: EncounterWhereInput! = {}, orderBy: [EncounterOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: EncounterWhereUniqueInput): [Encounter!]
   encountersCount(where: EncounterWhereInput! = {}): Int
