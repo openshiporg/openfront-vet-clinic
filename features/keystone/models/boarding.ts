@@ -1,5 +1,5 @@
 import { list } from '@keystone-6/core'
-import { calendarDay, checkbox, integer, json, text, timestamp } from '@keystone-6/core/fields'
+import { bigInt, calendarDay, checkbox, integer, json, text, timestamp } from '@keystone-6/core/fields'
 import { relationship } from './guardedRelationship'
 import { fixedChoice, lifecycle, minor, readOnly, systemText, versionField } from './domainFields'
 import { governed } from './listAccess'
@@ -17,6 +17,8 @@ import { trackingFields } from './trackingFields'
 const BOARDING = ['canManageBoarding', 'canBook', 'canCheckIn', 'canReadClinical', 'canManagePractice'] as const
 const KENNEL = ['canManageBoarding', 'canReadClinical', 'canManagePractice'] as const
 const GROOM = ['canGroom', 'canManageBoarding', 'canBook', 'canCheckIn', 'canManagePractice'] as const
+/** Pay and commission: read, filter and sort take the same owner-or-manager check (a where on a hidden number is an oracle for it). */
+const PAY_ONLY = { access: { ...readOnly.access, read: permissions.canManagePeople }, isFilterable: permissions.canManagePeople, isOrderable: permissions.canManagePeople, ui: readOnly.ui }
 
 export const RunType = list({
   access: governed([...BOARDING]),
@@ -174,9 +176,9 @@ export const GroomAppointment = list({
     noteVersion: relationship({ ref: 'GroomNote', ...readOnly }),
     cancelReason: systemText(),
     invoice: relationship({ ref: 'Invoice', ...readOnly }),
-    /** Managers only: what the groomer earns on this groom. Not readable, filterable or sortable by anyone else. */
-    commissionBps: integer({ ...readOnly, access: { ...readOnly.access, read: permissions.canViewFinance }, isFilterable: permissions.canViewFinance, isOrderable: permissions.canViewFinance, defaultValue: 0 }),
-    commissionMinor: minor({ defaultValue: 0n }),
+    /** Owner or manager only (canManagePeople): what the groomer earns on this groom. Not readable, filterable or sortable by anyone else. */
+    commissionBps: integer({ ...PAY_ONLY, defaultValue: 0 }),
+    commissionMinor: bigInt({ ...PAY_ONLY, defaultValue: 0n, validation: { isRequired: true } }),
     version: versionField(),
     ...trackingFields,
   },
