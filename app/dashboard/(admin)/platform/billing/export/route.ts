@@ -7,7 +7,8 @@ import { ageBucket, AGE_LABEL } from '@/features/platform/lib/ageing';
 export const dynamic = 'force-dynamic';
 
 const cell = (v: unknown) => {
-  const t = String(v ?? '').replace(/^([=+\-@\t\r])/, "'$1");
+  const raw = String(v ?? '');
+  const t = /^-?\d+(\.\d+)?$/.test(raw) ? raw : raw.replace(/^([=+\-@\t\r])/, "'$1");
   return /[",\n]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t;
 };
 const dollars = (minor: string | bigint) => { const n = BigInt(minor); const neg = n < 0n; const a = neg ? -n : n; return `${neg ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}`; };
