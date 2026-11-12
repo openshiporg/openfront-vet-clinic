@@ -30,6 +30,176 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// features/keystone/lib/decimal.ts
+function dec(value) {
+  if (value instanceof Decimal) return value;
+  if (typeof value === "bigint") return new Decimal(value.toString());
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
+    return new Decimal(value);
+  }
+  const text18 = String(value).trim();
+  if (!DECIMAL_TEXT.test(text18)) throw new Error(`Not a decimal number: ${JSON.stringify(text18).slice(0, 40)}`);
+  return new Decimal(text18);
+}
+function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
+  const places = typeof scale === "number" ? scale : Scale[scale];
+  return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
+}
+function toBpsInt(fraction) {
+  const text18 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
+  const n = Number.parseInt(text18, 10);
+  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text18}`);
+  return n;
+}
+function toKg(value, unit2) {
+  const v = dec(value);
+  if (v.isNegative()) throw new RangeError("A weight cannot be negative");
+  const kg = unit2 === "kg" ? v : unit2 === "lb" ? v.times(KG_PER_LB) : v.div(1e3);
+  return kg.toDecimalPlaces(Scale.wt, Decimal.ROUND_HALF_EVEN);
+}
+var import_decimal, Decimal, Scale, DECIMAL_TEXT, plain, ZERO, ONE, BPS, KG_PER_LB;
+var init_decimal = __esm({
+  "features/keystone/lib/decimal.ts"() {
+    "use strict";
+    import_decimal = __toESM(require("decimal.js"));
+    Decimal = import_decimal.default.clone({
+      precision: 60,
+      rounding: import_decimal.default.ROUND_HALF_EVEN,
+      toExpNeg: -40,
+      toExpPos: 60
+    });
+    Scale = { qty: 6, rate: 6, wt: 4, geo: 6 };
+    DECIMAL_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+    plain = (value) => dec(value).toFixed();
+    ZERO = new Decimal(0);
+    ONE = new Decimal(1);
+    BPS = new Decimal(1e4);
+    KG_PER_LB = new Decimal("0.45359237");
+  }
+});
+
+// features/keystone/lib/errors.ts
+var DomainError, isDomainError, Codes;
+var init_errors = __esm({
+  "features/keystone/lib/errors.ts"() {
+    "use strict";
+    DomainError = class extends Error {
+      constructor(code, message, details = {}) {
+        super(message);
+        this.name = "DomainError";
+        this.code = code;
+        this.details = details;
+      }
+    };
+    isDomainError = (error) => error instanceof DomainError;
+    Codes = {
+      NOT_AUTHORIZED: "NOT_AUTHORIZED",
+      NOT_FOUND: "NOT_FOUND",
+      INVALID_INPUT: "INVALID_INPUT",
+      INVALID_TRANSITION: "INVALID_TRANSITION",
+      STALE_STATE: "STALE_STATE",
+      GUARD_FAILED: "GUARD_FAILED",
+      IDEMPOTENCY_KEY_REQUIRED: "IDEMPOTENCY_KEY_REQUIRED",
+      IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
+      IN_PROGRESS: "IN_PROGRESS",
+      APPROVAL_REQUIRED: "APPROVAL_REQUIRED",
+      SELF_APPROVAL: "SELF_APPROVAL",
+      AGENT_CANNOT_APPROVE: "AGENT_CANNOT_APPROVE",
+      APPROVAL_MISMATCH: "APPROVAL_MISMATCH",
+      LEASE_LOST: "LEASE_LOST",
+      STALE_FENCING_TOKEN: "STALE_FENCING_TOKEN",
+      AUDIT_CHAIN_BROKEN: "AUDIT_CHAIN_BROKEN",
+      // Vet clinic (STATE-MACHINES §0 error codes)
+      POLICY_UNRESOLVED: "POLICY_UNRESOLVED",
+      POLICY_AMBIGUOUS: "POLICY_AMBIGUOUS",
+      LICENSE_INACTIVE: "LICENSE_INACTIVE",
+      DEA_REGISTRATION_INVALID: "DEA_REGISTRATION_INVALID",
+      VCPR_REQUIRED: "VCPR_REQUIRED",
+      SLOT_TAKEN: "SLOT_TAKEN",
+      SLOT_TOKEN_INVALID: "SLOT_TOKEN_INVALID",
+      CONSENT_REQUIRED: "CONSENT_REQUIRED",
+      PATIENT_DECEASED: "PATIENT_DECEASED",
+      SCOPE_DENIED: "SCOPE_DENIED",
+      NEVER_ALLOWED_FOR_AGENTS: "NEVER_ALLOWED_FOR_AGENTS",
+      CALLER_NOT_VERIFIED: "CALLER_NOT_VERIFIED",
+      FEATURE_DISABLED: "FEATURE_DISABLED",
+      DUPLICATE_SUSPECTED: "DUPLICATE_SUSPECTED"
+    };
+  }
+});
+
+// features/keystone/lib/ledger.ts
+var ledger_exports = {};
+__export(ledger_exports, {
+  balanceOfClient: () => balanceOfClient,
+  balanceOfInvoice: () => balanceOfInvoice,
+  paymentTotals: () => paymentTotals,
+  periodFor: () => periodFor,
+  planSpend: () => planSpend,
+  post: () => post
+});
+async function balanceOfInvoice(db, invoiceId) {
+  const rows = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ${invoiceId}`;
+  return big(rows[0]?.s);
+}
+async function balanceOfClient(db, clientId) {
+  const rows = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "client" = ${clientId}`;
+  return big(rows[0]?.s);
+}
+async function paymentTotals(db, paymentId) {
+  const a = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "PaymentAllocation" WHERE "payment" = ${paymentId}`;
+  const r = await db.$queryRaw`SELECT COALESCE(SUM("amountMinor"), 0) AS s FROM "Refund" WHERE "payment" = ${paymentId} AND status IN ('requested', 'approved', 'processing', 'succeeded', 'unknown')`;
+  return { allocated: big(a[0]?.s), refunded: big(r[0]?.s) };
+}
+async function planSpend(db, planId) {
+  const rows = await db.$queryRaw`SELECT COALESCE(SUM(COALESCE("chargedMinor", "projectedMinor")), 0) AS s FROM "TreatmentPlanItem" WHERE "plan" = ${planId} AND status IN ('ordered', 'done')`;
+  return big(rows[0]?.s);
+}
+async function periodFor(tx, day4) {
+  const existing = await tx.arPeriod.findFirst({ where: { startsOn: { lte: /* @__PURE__ */ new Date(`${day4}T00:00:00Z`) }, endsOn: { gte: /* @__PURE__ */ new Date(`${day4}T00:00:00Z`) } }, select: { id: true, status: true, label: true } });
+  if (existing) return existing;
+  const [y, m] = day4.split("-").map(Number);
+  const startsOn = `${y}-${String(m).padStart(2, "0")}-01`;
+  const endsOn = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const label = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(/* @__PURE__ */ new Date(`${startsOn}T00:00:00Z`));
+  return tx.arPeriod.create({ data: { label, startsOn: /* @__PURE__ */ new Date(`${startsOn}T00:00:00Z`), endsOn: /* @__PURE__ */ new Date(`${endsOn}T00:00:00Z`), status: "open" }, select: { id: true, status: true, label: true } });
+}
+async function post(uow, input) {
+  const { tx } = uow;
+  const period = await periodFor(tx, input.postedOn);
+  if (period.status !== "open") {
+    throw new DomainError(Codes.GUARD_FAILED, `${period.label} is closed. Post this on an open day and refer to the original in the note.`, { reason: "period_closed", period: period.label });
+  }
+  const existing = await tx.clientLedgerEntry.findUnique({ where: { entryKey: input.entryKey }, select: { id: true } });
+  if (existing) return { id: existing.id, created: false };
+  const row = await tx.clientLedgerEntry.create({
+    data: {
+      clientId: input.clientId,
+      invoiceId: input.invoiceId ?? null,
+      paymentId: input.paymentId ?? null,
+      kind: input.kind,
+      amountMinor: input.amountMinor,
+      currencyCode: input.currencyCode ?? "USD",
+      postedOn: /* @__PURE__ */ new Date(`${input.postedOn}T00:00:00Z`),
+      periodId: period.id,
+      entryKey: input.entryKey,
+      memo: input.memo ?? "",
+      at: uow.now
+    },
+    select: { id: true }
+  });
+  return { id: row.id, created: true };
+}
+var big;
+var init_ledger = __esm({
+  "features/keystone/lib/ledger.ts"() {
+    "use strict";
+    init_errors();
+    big = (v) => BigInt(String(v ?? 0));
+  }
+});
+
 // features/keystone/security/readAudit.ts
 var readAudit_exports = {};
 __export(readAudit_exports, {
@@ -225,6 +395,24 @@ var init_readAudit = __esm({
       "CsTransfer",
       "PdmpSubmission",
       "CabinetAccessEvent",
+      // Phase 4: estimates, plans, money. Reading what a client owes or paid is recorded like reading their chart.
+      "EstimateVersion",
+      "EstimateOption",
+      "EstimateLine",
+      "EstimateAcceptance",
+      "TreatmentPlan",
+      "TreatmentPlanItem",
+      "PaymentAttempt",
+      "PaymentAllocation",
+      "PaymentWebhookEvent",
+      "ClientLedgerEntry",
+      "ChargeLine",
+      "CreditNote",
+      "Refund",
+      "Deposit",
+      "PayerAuthorization",
+      "InsuranceClaimPacket",
+      "OverageApproval",
       // Phase 2: the medical record, orders and treatment, preventive care
       "SoapSection",
       "SoapSectionRevision",
@@ -258,6 +446,85 @@ var init_readAudit = __esm({
   }
 });
 
+// features/keystone/domain/billing.ts
+var billing_exports = {};
+__export(billing_exports, {
+  AGE_BUCKETS: () => AGE_BUCKETS,
+  DEPOSIT_BASES: () => DEPOSIT_BASES,
+  adjustBps: () => adjustBps,
+  ageBucket: () => ageBucket,
+  allocateOldestFirst: () => allocateOldestFirst,
+  depositFor: () => depositFor,
+  estimateLineRange: () => estimateLineRange,
+  extend: () => extend,
+  optionTotals: () => optionTotals,
+  quantityText: () => quantityText,
+  taxOn: () => taxOn,
+  withinCeiling: () => withinCeiling
+});
+function taxOn(rules2, taxCategory, netMinor) {
+  if (rules2.exemptCategories.includes(taxCategory)) return 0n;
+  if (!rules2.taxableCategories.includes(taxCategory)) throw new Error(`No sales tax treatment for ${taxCategory}`);
+  if (netMinor <= 0n) return 0n;
+  return BigInt(dec(netMinor.toString()).times(dec(rules2.baseRate)).toDecimalPlaces(0, 6).toFixed(0));
+}
+function extend(qty2, unitPriceMinor, minimumChargeMinor = null) {
+  const raw = BigInt(dec(qty2).times(dec(unitPriceMinor.toString())).toDecimalPlaces(0, 6).toFixed(0));
+  return minimumChargeMinor !== null && raw > 0n && raw < minimumChargeMinor ? minimumChargeMinor : raw;
+}
+function adjustBps(amountMinor, bps) {
+  return BigInt(dec(amountMinor.toString()).times(dec(bps)).div(1e4).toDecimalPlaces(0, 6).toFixed(0));
+}
+function estimateLineRange(line) {
+  if (dec(line.qtyLow).lt(0) || dec(line.qtyLow).gt(dec(line.qtyHigh))) throw new Error("The low quantity cannot be more than the high quantity");
+  return { lowMinor: extend(line.qtyLow, line.unitPriceMinor), highMinor: extend(line.qtyHigh, line.unitPriceMinor) };
+}
+function optionTotals(lines) {
+  let low = 0n;
+  let high = 0n;
+  for (const l of lines) {
+    if (!l.optional) low += l.lowMinor;
+    high += l.highMinor;
+  }
+  return { lowTotalMinor: low, highTotalMinor: high };
+}
+function depositFor(totals, fraction, basis) {
+  const base = basis === "high" ? totals.highTotalMinor : totals.lowTotalMinor;
+  return BigInt(dec(base.toString()).times(dec(fraction)).toDecimalPlaces(0, 6).toFixed(0));
+}
+function ageBucket(postedOn, asOf) {
+  const days2 = Math.floor((Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${postedOn}T00:00:00Z`)) / 864e5);
+  if (days2 <= 0) return "current";
+  if (days2 <= 30) return "d1_30";
+  if (days2 <= 60) return "d31_60";
+  if (days2 <= 90) return "d61_90";
+  return "d90_plus";
+}
+function allocateOldestFirst(amountMinor, open) {
+  let left = amountMinor;
+  const out = [];
+  for (const inv of open) {
+    if (left <= 0n) break;
+    const take = inv.balanceMinor < left ? inv.balanceMinor : left;
+    if (take > 0n) {
+      out.push({ id: inv.id, amountMinor: take });
+      left -= take;
+    }
+  }
+  return { allocations: out, remainderMinor: left };
+}
+var DEPOSIT_BASES, withinCeiling, AGE_BUCKETS, quantityText;
+var init_billing = __esm({
+  "features/keystone/domain/billing.ts"() {
+    "use strict";
+    init_decimal();
+    DEPOSIT_BASES = ["low", "high"];
+    withinCeiling = (usedMinor, addMinor, acceptedHighMinor) => usedMinor + addMinor <= acceptedHighMinor;
+    AGE_BUCKETS = ["current", "d1_30", "d31_60", "d61_90", "d90_plus"];
+    quantityText = (v) => toScale(dec(v), "qty");
+  }
+});
+
 // keystone.ts
 var keystone_exports = {};
 __export(keystone_exports, {
@@ -267,7 +534,7 @@ module.exports = __toCommonJS(keystone_exports);
 
 // features/keystone/index.ts
 var import_auth = require("@keystone-6/auth");
-var import_core21 = require("@keystone-6/core");
+var import_core22 = require("@keystone-6/core");
 var import_config = require("dotenv/config");
 
 // features/keystone/models/User.ts
@@ -279,7 +546,7 @@ var import_fields3 = require("@keystone-6/core/fields");
 var import_fields = require("@keystone-6/core/fields");
 var registry = /* @__PURE__ */ new Map();
 function registerListAccess(lists) {
-  for (const [key2, list19] of Object.entries(lists)) registry.set(key2, list19.access);
+  for (const [key2, list20] of Object.entries(lists)) registry.set(key2, list20.access);
 }
 var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
 async function canReadWholeList(listKey, args) {
@@ -883,6 +1150,7 @@ var minor = (options = {}) => (0, import_fields7.bigInt)({
   validation: { isRequired: options.required ?? options.defaultValue !== void 0 },
   ...options.description ? { ui: { description: options.description } } : {}
 });
+var ccy = () => (0, import_fields7.text)({ defaultValue: "USD", validation: { isRequired: true, match: { regex: /^[A-Z]{3}$/, explanation: "ISO 4217 currency code required" } } });
 var exact = (precision, scale) => (options = {}) => (0, import_fields7.decimal)({
   precision,
   scale,
@@ -2431,51 +2699,7 @@ var import_fields14 = require("@keystone-6/core/fields");
 
 // features/keystone/lib/canonical.ts
 var import_node_crypto2 = require("node:crypto");
-
-// features/keystone/lib/decimal.ts
-var import_decimal = __toESM(require("decimal.js"));
-var Decimal = import_decimal.default.clone({
-  precision: 60,
-  rounding: import_decimal.default.ROUND_HALF_EVEN,
-  toExpNeg: -40,
-  toExpPos: 60
-});
-var Scale = { qty: 6, rate: 6, wt: 4, geo: 6 };
-var DECIMAL_TEXT = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
-function dec(value) {
-  if (value instanceof Decimal) return value;
-  if (typeof value === "bigint") return new Decimal(value.toString());
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
-    return new Decimal(value);
-  }
-  const text17 = String(value).trim();
-  if (!DECIMAL_TEXT.test(text17)) throw new Error(`Not a decimal number: ${JSON.stringify(text17).slice(0, 40)}`);
-  return new Decimal(text17);
-}
-function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
-  const places = typeof scale === "number" ? scale : Scale[scale];
-  return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
-}
-var plain = (value) => dec(value).toFixed();
-var ZERO = new Decimal(0);
-var ONE = new Decimal(1);
-var BPS = new Decimal(1e4);
-function toBpsInt(fraction) {
-  const text17 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
-  const n = Number.parseInt(text17, 10);
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text17}`);
-  return n;
-}
-var KG_PER_LB = new Decimal("0.45359237");
-function toKg(value, unit2) {
-  const v = dec(value);
-  if (v.isNegative()) throw new RangeError("A weight cannot be negative");
-  const kg = unit2 === "kg" ? v : unit2 === "lb" ? v.times(KG_PER_LB) : v.div(1e3);
-  return kg.toDecimalPlaces(Scale.wt, Decimal.ROUND_HALF_EVEN);
-}
-
-// features/keystone/lib/canonical.ts
+init_decimal();
 function canonicalize(value) {
   if (value === null || value === void 0) return null;
   if (typeof value === "bigint") return value.toString();
@@ -2496,7 +2720,7 @@ function canonicalize(value) {
   throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
 }
 var canonicalJson = (value) => JSON.stringify(canonicalize(value));
-var sha256 = (text17) => (0, import_node_crypto2.createHash)("sha256").update(text17).digest("hex");
+var sha256 = (text18) => (0, import_node_crypto2.createHash)("sha256").update(text18).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
 var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
@@ -2522,7 +2746,11 @@ function delegateOf(tx, model) {
   if (!delegate) throw new Error(`Unknown model: ${model}`);
   return delegate;
 }
-var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: 6e4 };
+var raised = Number(process.env.VC_TX_TIMEOUT_MS);
+var TRANSACTION_OPTIONS = { maxWait: 15e3, timeout: Number.isFinite(raised) && raised > 6e4 ? raised : 6e4 };
+
+// features/keystone/lib/csRegister.ts
+init_decimal();
 
 // features/keystone/lib/sequence.ts
 var import_node_crypto3 = require("node:crypto");
@@ -3262,14 +3490,557 @@ var INVENTORY_LISTS = {
   TemperatureExcursion
 };
 
-// features/keystone/models/record.ts
+// features/keystone/models/billing.ts
 var import_core15 = require("@keystone-6/core");
 var import_fields16 = require("@keystone-6/core/fields");
+init_ledger();
+var SALES = ["canTakePayments", "canPostInvoices", "canViewFinance", "canManageFees", "canBook", "canCheckIn", "canReadClinical", "canManagePractice"];
+var MONEY = ["canTakePayments", "canPostInvoices", "canViewFinance", "canManagePayments", "canApproveWriteOff", "canIssueRefunds", "canManagePractice"];
+var FEES_READ = ["canAccessDashboard"];
+var money = (o = {}) => minor({ required: o.required ?? false });
+var FeeSchedule = (0, import_core15.list)({
+  access: governed([...FEES_READ]),
+  ui: { labelField: "name" },
+  fields: {
+    name: systemText({ required: true }),
+    code: systemText({ indexed: "unique", required: true }),
+    versions: relationship({ ref: "FeeScheduleVersion.schedule", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var FeeScheduleVersion = (0, import_core15.list)({
+  access: governed([...FEES_READ]),
+  ui: { labelField: "label" },
+  fields: {
+    schedule: relationship({ ref: "FeeSchedule.versions", ...readOnly }),
+    versionNo: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
+    label: systemText(),
+    status: lifecycle(["draft", "pending_approval", "published", "retired"]),
+    effectiveFrom: (0, import_fields16.calendarDay)({ ...readOnly }),
+    publishedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    items: relationship({ ref: "FeeItem.version", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var FEE_CATEGORIES = [
+  "exam",
+  "consultation",
+  "vaccine",
+  "medication",
+  "injection",
+  "laboratory",
+  "imaging",
+  "surgery",
+  "anaesthesia",
+  "dental",
+  "hospitalisation",
+  "treatment",
+  "boarding",
+  "grooming",
+  "diet",
+  "retail_product",
+  "supplies",
+  "fee",
+  "euthanasia",
+  "aftercare",
+  "other"
+];
+var TAX_CATEGORIES = ["professional_service", "rx_animal_drug", "vaccine_administered", "retail_product", "diet", "otc_parasiticide", "supplies", "merchandise", "boarding", "grooming"];
+var FeeItem = (0, import_core15.list)({
+  access: governed([...FEES_READ]),
+  ui: { labelField: "name", listView: { initialColumns: ["code", "name", "category", "priceMinor", "taxCategory"] } },
+  fields: {
+    version: relationship({ ref: "FeeScheduleVersion.items", ...readOnly }),
+    code: systemText({ indexed: true, required: true }),
+    name: systemText({ required: true }),
+    category: fixedChoice(FEE_CATEGORIES),
+    priceMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    unit: systemText(),
+    minimumChargeMinor: money(),
+    dispensingFeeMinor: money(),
+    injectionFeeMinor: money(),
+    markupRate: rate(),
+    taxCategory: fixedChoice(TAX_CATEGORIES),
+    productionCategory: systemText(),
+    /** The kind of clinical order this prices (and the drug, when it prices one drug). */
+    orderKind: systemText({ indexed: true }),
+    drug: relationship({ ref: "DrugProduct", ...readOnly }),
+    vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
+    item: relationship({ ref: "Item", ...readOnly }),
+    active: (0, import_fields16.checkbox)({ defaultValue: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var PriceRule = (0, import_core15.list)({
+  access: governed([...FEES_READ]),
+  fields: {
+    version: relationship({ ref: "FeeScheduleVersion", ...readOnly }),
+    name: systemText({ required: true }),
+    kind: fixedChoice(["client_tier", "species", "after_hours", "emergency", "multi_pet", "rescue"]),
+    adjustmentBps: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
+    conditions: (0, import_fields16.json)({ ...readOnly, defaultValue: {} }),
+    ...trackingFields
+  }
+});
+var Estimate = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "client", "status", "createdAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    title: systemText(),
+    /** Planned, non-urgent work: the practice may take a deposit on acceptance. */
+    elective: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    status: lifecycle(["open", "accepted", "closed"]),
+    acceptedVersion: relationship({ ref: "EstimateVersion", ...readOnly }),
+    acceptedOption: relationship({ ref: "EstimateOption", ...readOnly }),
+    versions: relationship({ ref: "EstimateVersion.estimate", many: true, ...readOnly }),
+    createdBy: relationship({ ref: "StaffMember", ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var EstimateVersion = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "versionNo" },
+  fields: {
+    estimate: relationship({ ref: "Estimate.versions", ...readOnly }),
+    versionNo: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["draft", "presented", "accepted", "declined", "expired", "superseded"]),
+    presentedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    validUntil: (0, import_fields16.timestamp)({ ...readOnly }),
+    feeScheduleVersion: relationship({ ref: "FeeScheduleVersion", ...readOnly }),
+    quoteHash: systemText(),
+    isOverage: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    overageOf: relationship({ ref: "EstimateVersion", ...readOnly }),
+    declineReason: systemText(),
+    options: relationship({ ref: "EstimateOption.estimateVersion", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var EstimateOption = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "label" },
+  fields: {
+    estimateVersion: relationship({ ref: "EstimateVersion.options", ...readOnly }),
+    label: systemText({ required: true }),
+    lowTotalMinor: minor({ required: true }),
+    highTotalMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    recommended: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    lines: relationship({ ref: "EstimateLine.option", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var EstimateLine = (0, import_core15.list)({
+  access: governed([...SALES]),
+  fields: {
+    option: relationship({ ref: "EstimateOption.lines", ...readOnly }),
+    feeItem: relationship({ ref: "FeeItem", ...readOnly }),
+    description: systemText({ required: true }),
+    category: systemText(),
+    qtyLow: qty({ required: true }),
+    qtyHigh: qty({ required: true }),
+    unitPriceMinor: minor({ required: true }),
+    lowMinor: minor({ required: true }),
+    highMinor: minor({ required: true }),
+    taxable: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    optional: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    sortOrder: (0, import_fields16.integer)({ ...readOnly, defaultValue: 0 }),
+    ...trackingFields
+  }
+});
+var EstimateAcceptance = (0, import_core15.list)({
+  access: immutable([...SALES]),
+  fields: {
+    estimateVersion: relationship({ ref: "EstimateVersion", ...readOnly }),
+    option: relationship({ ref: "EstimateOption", ...readOnly }),
+    signer: relationship({ ref: "ClientPerson", ...readOnly }),
+    method: fixedChoice(["in_person_signature", "esign_link", "verbal_witnessed"]),
+    quoteHash: systemText(),
+    signatureText: systemText(),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var TreatmentPlan = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "acceptedHighMinor", "spentMinor"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    estimate: relationship({ ref: "Estimate", ...readOnly }),
+    estimateVersion: relationship({ ref: "EstimateVersion", ...readOnly }),
+    option: relationship({ ref: "EstimateOption", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    status: lifecycle(["active", "completed", "cancelled"]),
+    acceptedLowMinor: minor({ required: true }),
+    acceptedHighMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    /** Planned lines plus anything ordered since, counting the charge once it exists (never stored). */
+    spentMinor: (0, import_fields16.virtual)({ field: import_core15.graphql.field({ type: import_core15.graphql.String, async resolve(item, _a, context) {
+      return (await planSpend(context.prisma, item.id)).toString();
+    } }) }),
+    items: relationship({ ref: "TreatmentPlanItem.plan", many: true, ...readOnly }),
+    overages: relationship({ ref: "OverageApproval.plan", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var TreatmentPlanItem = (0, import_core15.list)({
+  access: governed([...SALES]),
+  fields: {
+    plan: relationship({ ref: "TreatmentPlan.items", ...readOnly }),
+    estimateLine: relationship({ ref: "EstimateLine", ...readOnly }),
+    order: relationship({ ref: "ClinicalOrder", ...readOnly }),
+    description: systemText({ required: true }),
+    status: lifecycle(["planned", "ordered", "done", "cancelled"]),
+    /** What the plan expects this to cost (the planned line's high end, or the fee when ordered). */
+    projectedMinor: minor({ required: true }),
+    /** What was actually charged, once a charge exists. */
+    chargedMinor: money(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var OverageApproval = (0, import_core15.list)({
+  access: immutable([...SALES]),
+  fields: {
+    plan: relationship({ ref: "TreatmentPlan.overages", ...readOnly }),
+    previousHighMinor: minor({ required: true }),
+    newHighMinor: minor({ required: true }),
+    method: fixedChoice(["in_person", "phone_witnessed", "esign_link", "emergency_override"]),
+    approver: relationship({ ref: "ClientPerson", ...readOnly }),
+    witness: relationship({ ref: "StaffMember", ...readOnly }),
+    emergencyOverrideBy: relationship({ ref: "StaffMember", ...readOnly }),
+    recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    reason: systemText({ required: true }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var Deposit = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "client", "requestedMinor", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    estimate: relationship({ ref: "Estimate", ...readOnly }),
+    plan: relationship({ ref: "TreatmentPlan", ...readOnly }),
+    requestedMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    status: lifecycle(["requested", "paid", "applied", "refunded", "forfeited"]),
+    payment: relationship({ ref: "Payment", ...readOnly }),
+    appliedInvoice: relationship({ ref: "Invoice", ...readOnly }),
+    appliedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var ArPeriod = (0, import_core15.list)({
+  access: governed([...MONEY]),
+  ui: { labelField: "label" },
+  fields: {
+    label: systemText({ required: true }),
+    startsOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    endsOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    status: lifecycle(["open", "closing", "closed"]),
+    closedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    closedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var Invoice = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "client", "status", "totalMinor", "balanceMinor", "postedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    status: lifecycle(["draft", "posted", "partially_paid", "paid", "written_off"]),
+    postedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    postedOn: (0, import_fields16.calendarDay)({ ...readOnly }),
+    period: relationship({ ref: "ArPeriod", ...readOnly }),
+    currencyCode: ccy(),
+    subtotalMinor: minor({ defaultValue: 0n }),
+    discountMinor: minor({ defaultValue: 0n }),
+    taxMinor: minor({ defaultValue: 0n }),
+    totalMinor: minor({ defaultValue: 0n }),
+    note: systemText(),
+    /** What the client still owes: Σ the ledger for this invoice, never stored. */
+    balanceMinor: (0, import_fields16.virtual)({ field: import_core15.graphql.field({ type: import_core15.graphql.String, async resolve(item, _a, context) {
+      return (await balanceOfInvoice(context.prisma, item.id)).toString();
+    } }) }),
+    lines: relationship({ ref: "ChargeLine.invoice", many: true, ...readOnly }),
+    allocations: relationship({ ref: "PaymentAllocation.invoice", many: true, ...readOnly }),
+    createdBy: relationship({ ref: "StaffMember", ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var CHARGE_SOURCES = ["administration", "dispense", "lab_order", "imaging_order", "treatment_task", "encounter_exam", "stay_day", "boarding_night", "groom", "product_sale", "fee", "manual", "aftercare", "memorial"];
+var ChargeLine = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { listView: { initialColumns: ["description", "patient", "extendedMinor", "sourceType", "invoice"] } },
+  fields: {
+    invoice: relationship({ ref: "Invoice.lines", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    feeItem: relationship({ ref: "FeeItem", ...readOnly }),
+    description: systemText({ required: true }),
+    qty: qty({ required: true }),
+    unitPriceMinor: minor({ required: true }),
+    extendedMinor: minor({ required: true }),
+    discountMinor: minor({ defaultValue: 0n }),
+    taxMinor: minor({ defaultValue: 0n }),
+    taxCategory: systemText(),
+    sourceType: fixedChoice(CHARGE_SOURCES),
+    sourceId: systemText({ indexed: true }),
+    manualReason: systemText(),
+    performedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    planItem: relationship({ ref: "TreatmentPlanItem", ...readOnly }),
+    capturedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    reversedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    reversalReason: systemText(),
+    ...trackingFields
+  }
+});
+var CreditNote = (0, import_core15.list)({
+  access: immutable([...SALES]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    amountMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    reason: systemText({ required: true }),
+    postedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    postedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var PAYMENT_METHODS = ["card_present", "card_on_file", "payment_link", "cash", "check", "ach", "insurer_direct", "financing", "client_credit"];
+var Payment = (0, import_core15.list)({
+  access: governed([...MONEY, "canBook"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "client", "method", "amountMinor", "status", "receivedAt"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    client: relationship({ ref: "Client", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    method: fixedChoice(PAYMENT_METHODS),
+    /** Which adapter took it: manual (cash, check, ACH), stripe, or a card reader. */
+    provider: systemText(),
+    amountMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    status: lifecycle(["pending", "succeeded", "failed", "unknown", "voided"]),
+    reference: systemText(),
+    providerRef: systemText({ indexed: true, secret: true }),
+    payerAuthorization: relationship({ ref: "PayerAuthorization", ...readOnly }),
+    /** What the payment is for; it is allocated here when it goes through. */
+    forInvoice: relationship({ ref: "Invoice", ...readOnly }),
+    forDeposit: relationship({ ref: "Deposit", ...readOnly }),
+    allowOverpay: (0, import_fields16.checkbox)({ defaultValue: false, ...readOnly }),
+    postedOn: (0, import_fields16.calendarDay)({ ...readOnly }),
+    /** A card payment link the client can open (copyable). */
+    linkUrl: systemText({ secret: true }),
+    receivedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    receivedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    /** What the client was told about this payment, in words (failure, waiting on the bank, …). */
+    note: systemText(),
+    allocatedMinor: (0, import_fields16.virtual)({ field: import_core15.graphql.field({ type: import_core15.graphql.String, async resolve(item, _a, context) {
+      return (await paymentTotals(context.prisma, item.id)).allocated.toString();
+    } }) }),
+    refundedMinor: (0, import_fields16.virtual)({ field: import_core15.graphql.field({ type: import_core15.graphql.String, async resolve(item, _a, context) {
+      return (await paymentTotals(context.prisma, item.id)).refunded.toString();
+    } }) }),
+    attempts: relationship({ ref: "PaymentAttempt.payment", many: true, ...readOnly }),
+    allocations: relationship({ ref: "PaymentAllocation.payment", many: true, ...readOnly }),
+    refunds: relationship({ ref: "Refund.payment", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PaymentAttempt = (0, import_core15.list)({
+  access: governed([...MONEY]),
+  fields: {
+    payment: relationship({ ref: "Payment.attempts", ...readOnly }),
+    status: lifecycle(["created", "processing", "succeeded", "failed", "requires_action", "unknown"]),
+    /** Sent to the processor with the charge; asking again with it can never charge twice. */
+    providerIdempotencyKey: systemText({ indexed: "unique", required: true, secret: true }),
+    providerRef: systemText({ secret: true }),
+    amountMinor: minor({ required: true }),
+    message: systemText(),
+    startedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    resolvedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PaymentAllocation = (0, import_core15.list)({
+  access: immutable([...MONEY]),
+  fields: {
+    payment: relationship({ ref: "Payment.allocations", ...readOnly }),
+    invoice: relationship({ ref: "Invoice.allocations", ...readOnly }),
+    deposit: relationship({ ref: "Deposit", ...readOnly }),
+    amountMinor: minor({ required: true }),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var Refund = (0, import_core15.list)({
+  access: governed([...MONEY]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "payment", "amountMinor", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    payment: relationship({ ref: "Payment.refunds", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    amountMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    reason: systemText({ required: true }),
+    status: lifecycle(["requested", "approved", "processing", "succeeded", "failed", "unknown", "rejected"]),
+    providerIdempotencyKey: systemText({ indexed: "unique", secret: true }),
+    providerRef: systemText({ secret: true }),
+    message: systemText(),
+    requestedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
+    processedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PaymentWebhookEvent = (0, import_core15.list)({
+  access: governed(["canManageIntegrations", "canManagePayments"]),
+  fields: {
+    provider: systemText({ indexed: true, required: true }),
+    eventId: systemText({ required: true, secret: true }),
+    type: systemText({ required: true }),
+    objectRef: systemText({ secret: true }),
+    outcome: systemText(),
+    receivedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    duplicates: (0, import_fields16.integer)({ ...readOnly, defaultValue: 0 })
+  }
+});
+var LEDGER_KINDS = [
+  "invoice",
+  "payment",
+  "payment_unallocated",
+  "deposit_received",
+  "deposit_released",
+  "deposit_applied",
+  "refund",
+  "credit_note",
+  "write_off",
+  "adjustment"
+];
+var ClientLedgerEntry = (0, import_core15.list)({
+  access: immutable([...MONEY]),
+  ui: { listView: { initialColumns: ["postedOn", "client", "kind", "amountMinor", "invoice"] } },
+  fields: {
+    client: relationship({ ref: "Client", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    payment: relationship({ ref: "Payment", ...readOnly }),
+    kind: fixedChoice(LEDGER_KINDS),
+    amountMinor: minor({ required: true }),
+    currencyCode: ccy(),
+    postedOn: (0, import_fields16.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    period: relationship({ ref: "ArPeriod", ...readOnly }),
+    /** Unique per cause, so posting the same thing twice cannot add a second entry. */
+    entryKey: systemText({ indexed: "unique", required: true, secret: true }),
+    memo: systemText(),
+    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var PayerAuthorization = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    payer: relationship({ ref: "ThirdPartyPayer", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    policy: relationship({ ref: "PetInsurancePolicy", ...readOnly }),
+    requestedMinor: minor({ required: true }),
+    authorisedMinor: money(),
+    status: lifecycle(["requested", "authorised", "paid", "expired", "denied"]),
+    externalRef: systemText(),
+    validUntil: (0, import_fields16.timestamp)({ ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var InsuranceClaimPacket = (0, import_core15.list)({
+  access: governed([...SALES]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "policy", "status", "approvedMinor"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    policy: relationship({ ref: "PetInsurancePolicy", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    recordsRelease: relationship({ ref: "RecordsRelease", ...readOnly }),
+    formFields: (0, import_fields16.json)({ ...readOnly, defaultValue: {} }),
+    /** [{documentId, title, sha256}] — exactly what the release listed. */
+    documents: (0, import_fields16.json)({ ...readOnly, defaultValue: [] }),
+    submitter: fixedChoice(["client", "clinic"]),
+    status: lifecycle(["draft", "ready", "submitted", "under_review", "more_info_requested", "approved", "denied"]),
+    approvedMinor: money(),
+    paidTo: (0, import_fields16.text)({ db: { isNullable: true }, access: { create: () => false, update: () => false }, ui: { createView: { fieldMode: "hidden" }, itemView: { fieldMode: "read" } } }),
+    statusNote: systemText(),
+    packetBody: (0, import_fields16.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    packetSha256: systemText(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var BILLING_LISTS = {
+  FeeSchedule,
+  FeeScheduleVersion,
+  FeeItem,
+  PriceRule,
+  Estimate,
+  EstimateVersion,
+  EstimateOption,
+  EstimateLine,
+  EstimateAcceptance,
+  TreatmentPlan,
+  TreatmentPlanItem,
+  OverageApproval,
+  Deposit,
+  ArPeriod,
+  Invoice,
+  ChargeLine,
+  CreditNote,
+  Payment,
+  PaymentAttempt,
+  PaymentAllocation,
+  Refund,
+  PaymentWebhookEvent,
+  ClientLedgerEntry,
+  PayerAuthorization,
+  InsuranceClaimPacket
+};
+
+// features/keystone/models/record.ts
+var import_core16 = require("@keystone-6/core");
+var import_fields17 = require("@keystone-6/core/fields");
 var CLINICAL_READ = ["canReadClinical"];
 var ENCOUNTER_KINDS = ["outpatient", "inpatient_day", "surgery", "dental", "emergency", "telehealth", "phone_consult", "records_import", "euthanasia", "tech_visit"];
 var SECTION_KINDS = ["history", "subjective", "objective", "assessment", "plan", "discharge", "surgery_report", "dental_chart", "anaesthesia_summary", "communication"];
 var REPEATABLE_SECTIONS = ["communication"];
-var Encounter = (0, import_core15.list)({
+var Encounter = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "status", "attendingDvm", "startedAt"] } },
   fields: {
@@ -3279,23 +4050,23 @@ var Encounter = (0, import_core15.list)({
     appointment: relationship({ ref: "Appointment", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     kind: fixedChoice(ENCOUNTER_KINDS),
-    vcprQualifying: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    vcprQualifying: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["open", "in_progress", "pending_signature", "signed", "voided"]),
     reason: systemText(),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
     participants: relationship({ ref: "StaffMember", many: true, ...readOnly }),
     weightUsed: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    startedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    submittedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    submittedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    signedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    signedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     contentHash: systemText(),
-    signedContent: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
+    signedContent: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
-    completeness: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
+    completeness: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
     voidReason: systemText(),
     voidApproval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     importedFrom: systemText(),
@@ -3309,55 +4080,55 @@ var Encounter = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var SoapSection = (0, import_core15.list)({
+var SoapSection = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "kind", "ordinal", "version", "lockedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.sections", ...readOnly }),
     kind: fixedChoice(SECTION_KINDS),
-    ordinal: (0, import_fields16.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
+    ordinal: (0, import_fields17.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields16.json)({ ...readOnly }),
+    structured: (0, import_fields17.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     lastAuthor: relationship({ ref: "StaffMember", ...readOnly }),
     revisions: relationship({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
-    lockedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    lockedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var SoapSectionRevision = (0, import_core15.list)({
+var SoapSectionRevision = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["section", "source", "author", "at"] } },
   fields: {
     section: relationship({ ref: "SoapSection.revisions", ...readOnly }),
-    revisionNumber: (0, import_fields16.integer)({ ...readOnly, validation: { isRequired: true } }),
+    revisionNumber: (0, import_fields17.integer)({ ...readOnly, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields16.json)({ ...readOnly }),
+    structured: (0, import_fields17.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     template: relationship({ ref: "RecordTemplate", ...readOnly }),
     scribeDraft: relationship({ ref: "ScribeDraft", ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     authorUser: relationship({ ref: "User", ...readOnly }),
-    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     contentHash: systemText({ required: true })
   }
 });
-var Addendum = (0, import_core15.list)({
+var Addendum = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "sectionKind", "author", "signedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.addenda", ...readOnly }),
     sectionKind: fixedChoice([...SECTION_KINDS, "general"]),
     author: relationship({ ref: "StaffMember", ...readOnly }),
-    authorIsDvm: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    authorIsDvm: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     reason: systemText({ required: true }),
     body: systemText({ required: true }),
-    signedAt: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    signedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     hash: systemText({ required: true })
   }
 });
-var VitalsObservation = (0, import_core15.list)({
+var VitalsObservation = (0, import_core16.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "temperature", "heartRate", "respRate", "painScore", "at"] } },
   fields: {
@@ -3365,20 +4136,20 @@ var VitalsObservation = (0, import_core15.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     temperature: qty(),
     temperatureUnit: choice(["F", "C"], "F"),
-    heartRate: (0, import_fields16.integer)({ ...readOnly }),
-    respRate: (0, import_fields16.integer)({ ...readOnly }),
+    heartRate: (0, import_fields17.integer)({ ...readOnly }),
+    respRate: (0, import_fields17.integer)({ ...readOnly }),
     mucousMembranes: choice(["pink", "pale", "white", "cyanotic", "icteric", "injected", "brick_red", "not_assessed"], null),
     crtSeconds: qty(),
-    painScore: (0, import_fields16.integer)({ ...readOnly }),
-    bodyConditionScore: (0, import_fields16.integer)({ ...readOnly }),
+    painScore: (0, import_fields17.integer)({ ...readOnly }),
+    bodyConditionScore: (0, import_fields17.integer)({ ...readOnly }),
     mentation: choice(["bar", "qar", "dull", "obtunded", "stuporous", "comatose"], null),
     hydrationPct: qty(),
-    at: (0, import_fields16.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var EXAM_SYSTEMS = ["general", "integument", "eyes", "ears", "oral", "cardiovascular", "respiratory", "gi", "urogenital", "musculoskeletal", "neurologic", "lymphatic"];
-var PhysicalExamFinding = (0, import_core15.list)({
+var PhysicalExamFinding = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "system", "status", "text"] } },
   fields: {
@@ -3391,19 +4162,19 @@ var PhysicalExamFinding = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var DiagnosisCode = (0, import_core15.list)({
+var DiagnosisCode = (0, import_core16.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term", listView: { initialColumns: ["codeSystem", "code", "term", "active"] } },
   fields: {
     codeSystem: choice(["practice", "venomcode", "snomed_vet"], "practice"),
-    code: (0, import_fields16.text)({ validation: { isRequired: true } }),
-    term: (0, import_fields16.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields17.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields17.text)({ validation: { isRequired: true } }),
     species: relationship({ ref: "Species", many: true }),
-    active: (0, import_fields16.checkbox)({ defaultValue: true }),
+    active: (0, import_fields17.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Problem = (0, import_core15.list)({
+var Problem = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["patient", "term", "status", "chronic", "onset"] } },
   fields: {
@@ -3412,14 +4183,14 @@ var Problem = (0, import_core15.list)({
     code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     status: lifecycle(["active", "resolved", "inactive"]),
-    chronic: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
-    onset: (0, import_fields16.calendarDay)({ ...readOnly }),
-    resolvedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    chronic: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    onset: (0, import_fields17.calendarDay)({ ...readOnly }),
+    resolvedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Diagnosis = (0, import_core15.list)({
+var Diagnosis = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["encounter", "term", "certainty"] } },
   fields: {
@@ -3433,7 +4204,7 @@ var Diagnosis = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var ClinicalAttachment = (0, import_core15.list)({
+var ClinicalAttachment = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "caption" },
   fields: {
@@ -3446,7 +4217,7 @@ var ClinicalAttachment = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var ClinicalDocument = (0, import_core15.list)({
+var ClinicalDocument = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "title", listView: { initialColumns: ["patient", "kind", "title", "status", "createdAt"] } },
   fields: {
@@ -3460,41 +4231,41 @@ var ClinicalDocument = (0, import_core15.list)({
     sourceHash: systemText(),
     document: relationship({ ref: "Document", ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    renderedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    renderedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     // The rendered document (database store, the default; an object-store adapter keeps only the
     // key). Deterministic from the frozen source, so sha256 proves it was not altered.
     mimeType: systemText(),
-    body: (0, import_fields16.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields17.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     sha256: systemText(),
     renderError: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var RecordTemplate = (0, import_core15.list)({
+var RecordTemplate = (0, import_core16.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "sectionKind", "active"] } },
   fields: {
-    name: (0, import_fields16.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields17.text)({ validation: { isRequired: true } }),
     kind: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "discharge", "phone"], "wellness"),
     sectionKind: choice([...SECTION_KINDS], "objective"),
     species: relationship({ ref: "Species" }),
-    body: (0, import_fields16.text)({ ui: { displayMode: "textarea" } }),
-    templateVersion: (0, import_fields16.integer)({ defaultValue: 1 }),
-    active: (0, import_fields16.checkbox)({ defaultValue: true }),
+    body: (0, import_fields17.text)({ ui: { displayMode: "textarea" } }),
+    templateVersion: (0, import_fields17.integer)({ defaultValue: 1 }),
+    active: (0, import_fields17.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Glossary = (0, import_core15.list)({
+var Glossary = (0, import_core16.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term" },
   fields: {
-    term: (0, import_fields16.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
-    expansion: (0, import_fields16.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields17.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    expansion: (0, import_fields17.text)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var ScribeSession = (0, import_core15.list)({
+var ScribeSession = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "status", "transcriptionProvider", "modelProvider", "createdAt"] } },
   fields: {
@@ -3502,9 +4273,9 @@ var ScribeSession = (0, import_core15.list)({
     startedBy: relationship({ ref: "StaffMember", ...readOnly }),
     startedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     clientConsent: relationship({ ref: "ConsentRecord", ...readOnly }),
-    staffAcknowledged: (0, import_fields16.checkbox)({ ...readOnly, defaultValue: false }),
+    staffAcknowledged: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
     audioDocument: relationship({ ref: "Document", ...readOnly }),
-    audioDeleteAfter: (0, import_fields16.timestamp)({ ...readOnly }),
+    audioDeleteAfter: (0, import_fields17.timestamp)({ ...readOnly }),
     transcriptRef: systemText(),
     transcript: systemText(),
     transcriptionProvider: systemText(),
@@ -3516,23 +4287,23 @@ var ScribeSession = (0, import_core15.list)({
     ...trackingFields
   }
 });
-var ScribeDraft = (0, import_core15.list)({
+var ScribeDraft = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   fields: {
     session: relationship({ ref: "ScribeSession.drafts", ...readOnly }),
-    sections: (0, import_fields16.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
-    suggestedCharges: (0, import_fields16.json)({ ...readOnly }),
+    sections: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
+    suggestedCharges: (0, import_fields17.json)({ ...readOnly }),
     confidence: rate(),
     modelRef: systemText(),
-    acceptedBlocks: (0, import_fields16.json)({ ...readOnly }),
+    acceptedBlocks: (0, import_fields17.json)({ ...readOnly }),
     status: lifecycle(["proposed", "partly_accepted", "accepted", "rejected"]),
     decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields16.timestamp)({ ...readOnly }),
+    decidedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Referral = (0, import_core15.list)({
+var Referral = (0, import_core16.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["patient", "direction", "hospital", "urgency", "status"] } },
   fields: {
@@ -3552,11 +4323,11 @@ var Referral = (0, import_core15.list)({
 });
 
 // features/keystone/models/treatment.ts
-var import_core16 = require("@keystone-6/core");
-var import_fields17 = require("@keystone-6/core/fields");
+var import_core17 = require("@keystone-6/core");
+var import_fields18 = require("@keystone-6/core/fields");
 var CLINICAL_READ2 = ["canReadClinical"];
 var ROUTES = ["po", "iv", "im", "sc", "topical", "otic", "ophthalmic", "inhaled", "intranasal", "io", "rectal", "transdermal", "other"];
-var ClinicalOrder = (0, import_core16.list)({
+var ClinicalOrder = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "description", "status", "orderedBy"] } },
   fields: {
@@ -3573,28 +4344,28 @@ var ClinicalOrder = (0, import_core16.list)({
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     dose: relationship({ ref: "DoseCalculation", ...readOnly }),
     frequency: systemText(),
-    schedule: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
+    schedule: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
     route: fixedChoice(ROUTES),
     quantity: qty(),
     quantityUnit: unit(),
-    extralabel: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
-    emergencyStabilisation: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    extralabel: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    emergencyStabilisation: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
     overrideReason: systemText(),
-    warnings: (0, import_fields17.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
+    warnings: (0, import_fields18.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
     cancelReason: systemText(),
     administrations: relationship({ ref: "Administration.order", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DoseCalculation = (0, import_core16.list)({
+var DoseCalculation = (0, import_core17.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["product", "weightKg", "doseAmount", "doseUnit", "totalAmount", "roundedQty", "computedUnit"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
     weight: relationship({ ref: "WeightMeasurement", ...readOnly }),
     weightKg: wt({ required: true }),
-    weightAgeHours: (0, import_fields17.integer)({ ...readOnly }),
+    weightAgeHours: (0, import_fields18.integer)({ ...readOnly }),
     doseAmount: qty({ required: true }),
     doseUnit: fixedChoice(["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"]),
     dosePer: fixedChoice(["kg", "m2", "animal"]),
@@ -3607,20 +4378,20 @@ var DoseCalculation = (0, import_core16.list)({
     concentrationUnit: systemText(),
     computedQty: qty(),
     computedUnit: systemText(),
-    roundingRule: (0, import_fields17.json)({ ...readOnly }),
+    roundingRule: (0, import_fields18.json)({ ...readOnly }),
     roundedQty: qty(),
     deliveredAmount: qty(),
-    deviationBps: (0, import_fields17.integer)({ ...readOnly }),
+    deviationBps: (0, import_fields18.integer)({ ...readOnly }),
     manualOverrideQty: qty(),
     overrideReason: systemText(),
-    warnings: (0, import_fields17.json)({ ...readOnly, defaultValue: [] }),
+    warnings: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
     calcVersion: systemText({ required: true }),
     hash: systemText({ required: true }),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var InventoryLot = (0, import_core16.list)({
+var InventoryLot = (0, import_core17.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "lotNumber", listView: { initialColumns: ["lotNumber", "drug", "vaccine", "expiresOn", "status", "location"] } },
   fields: {
@@ -3628,14 +4399,14 @@ var InventoryLot = (0, import_core16.list)({
     vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    expiresOn: (0, import_fields17.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["available", "quarantined", "disposed"]),
     quarantineReason: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var Administration = (0, import_core16.list)({
+var Administration = (0, import_core17.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["order", "patient", "qty", "unit", "route", "givenBy", "givenAt"] } },
   fields: {
@@ -3645,7 +4416,7 @@ var Administration = (0, import_core16.list)({
     treatmentTask: relationship({ ref: "TreatmentTask", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText(),
-    lotExpiresOn: (0, import_fields17.calendarDay)({ ...readOnly }),
+    lotExpiresOn: (0, import_fields18.calendarDay)({ ...readOnly }),
     csContainer: relationship({ ref: "CsContainer", ...readOnly }),
     csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
     qty: qty({ required: true }),
@@ -3657,7 +4428,7 @@ var Administration = (0, import_core16.list)({
     witness: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     wasteLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
-    givenAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    givenAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
     reverses: relationship({ ref: "Administration", ...readOnly }),
     reason: systemText(),
@@ -3665,7 +4436,7 @@ var Administration = (0, import_core16.list)({
     qtyOverrideReason: systemText()
   }
 });
-var Ward = (0, import_core16.list)({
+var Ward = (0, import_core17.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
@@ -3676,19 +4447,19 @@ var Ward = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var Cage = (0, import_core16.list)({
+var Cage = (0, import_core17.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "ward", "size", "active"] } },
   fields: {
     ward: relationship({ ref: "Ward.cages" }),
     code: systemText({ required: true, indexed: "unique" }),
     size: choice(["small", "medium", "large", "run"], "medium"),
-    features: (0, import_fields17.json)({ defaultValue: {} }),
-    active: (0, import_fields17.checkbox)({ defaultValue: true }),
+    features: (0, import_fields18.json)({ defaultValue: {} }),
+    active: (0, import_fields18.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var HospitalStay = (0, import_core16.list)({
+var HospitalStay = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "cage", "admittedAt", "attendingDvm"] } },
   fields: {
@@ -3697,8 +4468,8 @@ var HospitalStay = (0, import_core16.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    admittedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    dischargedAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    admittedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dischargedAt: (0, import_fields18.timestamp)({ ...readOnly }),
     status: lifecycle(["admitted", "in_care", "ready_for_discharge", "discharged", "transferred", "deceased"]),
     codeStatus: fixedChoice(["full", "closed_chest_only", "dnr"]),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
@@ -3709,17 +4480,17 @@ var HospitalStay = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var CageAssignment = (0, import_core16.list)({
+var CageAssignment = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     stay: relationship({ ref: "HospitalStay.assignments", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    fromAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    toAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    fromAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    toAt: (0, import_fields18.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
-var TreatmentSheetOrder = (0, import_core16.list)({
+var TreatmentSheetOrder = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["stay", "order", "frequency", "active", "materialisedThrough"] } },
   fields: {
@@ -3727,37 +4498,37 @@ var TreatmentSheetOrder = (0, import_core16.list)({
     order: relationship({ ref: "ClinicalOrder", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
     frequency: fixedChoice(["q1h", "q2h", "q4h", "q6h", "q8h", "q12h", "sid", "bid", "tid", "qid", "prn", "cri", "once"]),
-    startAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    startAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endAt: (0, import_fields18.timestamp)({ ...readOnly }),
     instructions: systemText(),
-    materialisedThrough: (0, import_fields17.timestamp)({ ...readOnly }),
-    graceMinutes: (0, import_fields17.integer)({ ...readOnly, defaultValue: 30 }),
-    active: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: true }),
+    materialisedThrough: (0, import_fields18.timestamp)({ ...readOnly }),
+    graceMinutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
+    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
     tasks: relationship({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var TreatmentTask = (0, import_core16.list)({
+var TreatmentTask = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["patient", "sheetOrder", "dueAt", "status", "doneBy"] } },
   fields: {
     sheetOrder: relationship({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    dueAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dueAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
     doneBy: relationship({ ref: "StaffMember", ...readOnly }),
-    doneAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    doneAt: (0, import_fields18.timestamp)({ ...readOnly }),
     skipReason: systemText(),
     rescheduledTo: relationship({ ref: "TreatmentTask", ...readOnly }),
     administration: relationship({ ref: "Administration", ...readOnly }),
-    observation: (0, import_fields17.json)({ ...readOnly }),
+    observation: (0, import_fields18.json)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AnaesthesiaRecord = (0, import_core16.list)({
+var AnaesthesiaRecord = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "asaStatus", "status", "anaesthetist", "inductionAt"] } },
   fields: {
@@ -3766,16 +4537,16 @@ var AnaesthesiaRecord = (0, import_core16.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     procedure: systemText({ required: true }),
     asaStatus: fixedChoice(["I", "II", "III", "IV", "V", "IE", "IIE", "IIIE", "IVE", "VE"]),
-    fastingConfirmed: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
-    consentConfirmed: (0, import_fields17.checkbox)({ ...readOnly, defaultValue: false }),
+    fastingConfirmed: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    consentConfirmed: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
     preWeight: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    ivCatheter: (0, import_fields17.json)({ ...readOnly }),
-    protocol: (0, import_fields17.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
-    checklist: (0, import_fields17.json)({ ...readOnly }),
-    inductionAt: (0, import_fields17.timestamp)({ ...readOnly }),
-    intubatedAt: (0, import_fields17.timestamp)({ ...readOnly }),
-    extubatedAt: (0, import_fields17.timestamp)({ ...readOnly }),
-    recoveryEndAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    ivCatheter: (0, import_fields18.json)({ ...readOnly }),
+    protocol: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
+    checklist: (0, import_fields18.json)({ ...readOnly }),
+    inductionAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    intubatedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    extubatedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    recoveryEndAt: (0, import_fields18.timestamp)({ ...readOnly }),
     anaesthetist: relationship({ ref: "StaffMember", ...readOnly }),
     dvm: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
@@ -3787,19 +4558,19 @@ var AnaesthesiaRecord = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var MonitoringReading = (0, import_core16.list)({
+var MonitoringReading = (0, import_core17.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["record", "at", "hr", "rr", "spo2", "etco2", "map", "tempC"] } },
   fields: {
     record: relationship({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
-    at: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    hr: (0, import_fields17.integer)({ ...readOnly }),
-    rr: (0, import_fields17.integer)({ ...readOnly }),
-    spo2: (0, import_fields17.integer)({ ...readOnly }),
-    etco2: (0, import_fields17.integer)({ ...readOnly }),
-    sbp: (0, import_fields17.integer)({ ...readOnly }),
-    dbp: (0, import_fields17.integer)({ ...readOnly }),
-    map: (0, import_fields17.integer)({ ...readOnly }),
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    hr: (0, import_fields18.integer)({ ...readOnly }),
+    rr: (0, import_fields18.integer)({ ...readOnly }),
+    spo2: (0, import_fields18.integer)({ ...readOnly }),
+    etco2: (0, import_fields18.integer)({ ...readOnly }),
+    sbp: (0, import_fields18.integer)({ ...readOnly }),
+    dbp: (0, import_fields18.integer)({ ...readOnly }),
+    map: (0, import_fields18.integer)({ ...readOnly }),
     tempC: qty(),
     agentPct: qty(),
     o2FlowLpm: qty(),
@@ -3808,7 +4579,7 @@ var MonitoringReading = (0, import_core16.list)({
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
-var SurgeryReport = (0, import_core16.list)({
+var SurgeryReport = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -3825,17 +4596,17 @@ var SurgeryReport = (0, import_core16.list)({
     ...trackingFields
   }
 });
-var DentalChart = (0, import_core16.list)({
+var DentalChart = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    teeth: (0, import_fields17.json)({ ...readOnly, defaultValue: {} }),
+    teeth: (0, import_fields18.json)({ ...readOnly, defaultValue: {} }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DischargeInstruction = (0, import_core16.list)({
+var DischargeInstruction = (0, import_core17.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -3843,37 +4614,37 @@ var DischargeInstruction = (0, import_core16.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     body: systemText({ required: true }),
     medsSummary: systemText(),
-    recheckOn: (0, import_fields17.calendarDay)({ ...readOnly }),
-    sentAt: (0, import_fields17.timestamp)({ ...readOnly }),
+    recheckOn: (0, import_fields18.calendarDay)({ ...readOnly }),
+    sentAt: (0, import_fields18.timestamp)({ ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/preventive.ts
-var import_core17 = require("@keystone-6/core");
-var import_fields18 = require("@keystone-6/core/fields");
+var import_core18 = require("@keystone-6/core");
+var import_fields19 = require("@keystone-6/core/fields");
 var CLINICAL_READ3 = ["canReadClinical"];
 var REMINDER_READ = ["canReadClinical", "canBook", "canMessageClients"];
-var VaccineProduct = (0, import_core17.list)({
+var VaccineProduct = (0, import_core18.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "manufacturer", "isRabies", "licensedDoiMonths", "minAgeWeeks", "active"] } },
   fields: {
-    name: (0, import_fields18.text)({ validation: { isRequired: true } }),
-    manufacturer: (0, import_fields18.text)({ validation: { isRequired: true } }),
-    antigens: (0, import_fields18.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
+    name: (0, import_fields19.text)({ validation: { isRequired: true } }),
+    manufacturer: (0, import_fields19.text)({ validation: { isRequired: true } }),
+    antigens: (0, import_fields19.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
     species: relationship({ ref: "Species", many: true }),
-    licensedDoiMonths: (0, import_fields18.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
-    minAgeWeeks: (0, import_fields18.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
-    isRabies: (0, import_fields18.checkbox)({ defaultValue: false }),
-    usdaProductCode: (0, import_fields18.text)(),
+    licensedDoiMonths: (0, import_fields19.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
+    minAgeWeeks: (0, import_fields19.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
+    isRabies: (0, import_fields19.checkbox)({ defaultValue: false }),
+    usdaProductCode: (0, import_fields19.text)(),
     defaultRoute: choice(["sc", "im", "intranasal", "po", "transdermal"], "sc"),
     reminderType: relationship({ ref: "ReminderType" }),
-    active: (0, import_fields18.checkbox)({ defaultValue: true }),
+    active: (0, import_fields19.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var VaccineAdministration = (0, import_core17.list)({
+var VaccineAdministration = (0, import_core18.list)({
   access: immutable([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "lotNumber", "administeredOn", "dueNextOn", "vaccinatedBy"] } },
   fields: {
@@ -3883,17 +4654,17 @@ var VaccineAdministration = (0, import_core17.list)({
     product: relationship({ ref: "VaccineProduct", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    doseSeries: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
-    isInitialSeries: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
+    lotExpiresOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    doseSeries: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    isInitialSeries: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
     route: fixedChoice(["sc", "im", "intranasal", "po", "transdermal"]),
     site: systemText({ required: true }),
-    administeredOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
-    dueNextOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    administeredOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    dueNextOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     vaccinatedBy: relationship({ ref: "StaffMember", ...readOnly }),
     supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
-    policyVersions: (0, import_fields18.json)({ ...readOnly }),
+    policyVersions: (0, import_fields19.json)({ ...readOnly }),
     certificate: relationship({ ref: "RabiesCertificate", ...readOnly }),
     source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
     /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
@@ -3901,45 +4672,45 @@ var VaccineAdministration = (0, import_core17.list)({
     reason: systemText()
   }
 });
-var RabiesCertificate = (0, import_core17.list)({
+var RabiesCertificate = (0, import_core18.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "vaccinatedOn", "nextDueOn", "tagNumber"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    ownerSnapshot: (0, import_fields18.json)({ ...readOnly }),
-    patientSnapshot: (0, import_fields18.json)({ ...readOnly }),
-    vaccineSnapshot: (0, import_fields18.json)({ ...readOnly }),
-    vetSnapshot: (0, import_fields18.json)({ ...readOnly }),
-    vaccinatedOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
-    nextDueOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    ownerSnapshot: (0, import_fields19.json)({ ...readOnly }),
+    patientSnapshot: (0, import_fields19.json)({ ...readOnly }),
+    vaccineSnapshot: (0, import_fields19.json)({ ...readOnly }),
+    vetSnapshot: (0, import_fields19.json)({ ...readOnly }),
+    vaccinatedOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    nextDueOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     tagNumber: systemText(),
     tagJurisdiction: systemText(),
-    fields: (0, import_fields18.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
-    missingFields: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
+    fields: (0, import_fields19.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
+    missingFields: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     reportedTo: fixedChoice(["none", "county", "city"]),
-    reportedAt: (0, import_fields18.timestamp)({ ...readOnly }),
-    policyVersions: (0, import_fields18.json)({ ...readOnly }),
+    reportedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    policyVersions: (0, import_fields19.json)({ ...readOnly }),
     /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
-    voidedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    voidedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     voidReason: systemText(),
     ...trackingFields
   }
 });
-var ReminderType = (0, import_core17.list)({
+var ReminderType = (0, import_core18.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields18.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
-    name: (0, import_fields18.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields19.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
+    name: (0, import_fields19.text)({ validation: { isRequired: true } }),
     kind: choice(["vaccine", "test", "procedure", "recheck", "preventive_med"], "vaccine"),
-    active: (0, import_fields18.checkbox)({ defaultValue: true }),
+    active: (0, import_fields19.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var ReminderProtocol = (0, import_core17.list)({
+var ReminderProtocol = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "name" },
   fields: {
@@ -3950,25 +4721,25 @@ var ReminderProtocol = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var ReminderProtocolVersion = (0, import_core17.list)({
+var ReminderProtocolVersion = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "label" },
   fields: {
     protocol: relationship({ ref: "ReminderProtocol.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    versionNumber: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
     rules: relationship({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
-    sourceRefs: (0, import_fields18.json)({ ...readOnly }),
-    verified: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields18.json)({ ...readOnly, defaultValue: [] }),
+    sourceRefs: (0, import_fields19.json)({ ...readOnly }),
+    verified: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    publishedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     contentHash: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderRule = (0, import_core17.list)({
+var ReminderRule = (0, import_core18.list)({
   access: governed("canAccessDashboard"),
   fields: {
     protocolVersion: relationship({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
@@ -3976,14 +4747,14 @@ var ReminderRule = (0, import_core17.list)({
     triggerVaccines: relationship({ ref: "VaccineProduct", many: true, ...readOnly }),
     triggerServiceCode: systemText(),
     satisfies: relationship({ ref: "ReminderType", ...readOnly }),
-    schedule: (0, import_fields18.json)({ ...readOnly }),
-    leadDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
-    graceDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 30 }),
-    lapseDays: (0, import_fields18.integer)({ ...readOnly, defaultValue: 180 }),
+    schedule: (0, import_fields19.json)({ ...readOnly }),
+    leadDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 30 }),
+    graceDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 30 }),
+    lapseDays: (0, import_fields19.integer)({ ...readOnly, defaultValue: 180 }),
     ...trackingFields
   }
 });
-var PatientReminder = (0, import_core17.list)({
+var PatientReminder = (0, import_core18.list)({
   access: governed([...REMINDER_READ]),
   ui: { listView: { initialColumns: ["patient", "type", "dueOn", "status", "source"] } },
   fields: {
@@ -3991,19 +4762,19 @@ var PatientReminder = (0, import_core17.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     type: relationship({ ref: "ReminderType", ...readOnly }),
     rule: relationship({ ref: "ReminderRule", ...readOnly }),
-    dueOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    dueOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "satisfied", "suppressed", "lapsed"]),
     suppressedReason: systemText(),
     protocolVersion: relationship({ ref: "ReminderProtocolVersion", ...readOnly }),
     source: fixedChoice(["protocol", "vaccine", "manual", "import"]),
     sourceKey: systemText({ required: true }),
-    lastNotifiedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    lastNotifiedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     satisfactions: relationship({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderSatisfaction = (0, import_core17.list)({
+var ReminderSatisfaction = (0, import_core18.list)({
   access: immutable([...CLINICAL_READ3]),
   fields: {
     reminder: relationship({ ref: "PatientReminder.satisfactions", ...readOnly }),
@@ -4013,10 +4784,10 @@ var ReminderSatisfaction = (0, import_core17.list)({
     externalEvidence: relationship({ ref: "Document", ...readOnly }),
     note: systemText(),
     recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var AdverseEventReport = (0, import_core17.list)({
+var AdverseEventReport = (0, import_core18.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "severity", "reportedTo", "status"] } },
   fields: {
@@ -4031,7 +4802,7 @@ var AdverseEventReport = (0, import_core17.list)({
     reportedTo: fixedChoice(["manufacturer", "fda_cvm", "usda_cvb"]),
     status: lifecycle(["draft", "submitted", "acknowledged"]),
     reference: systemText(),
-    submittedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    submittedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -4039,9 +4810,9 @@ var AdverseEventReport = (0, import_core17.list)({
 });
 
 // features/keystone/models/imports.ts
-var import_core18 = require("@keystone-6/core");
-var import_fields19 = require("@keystone-6/core/fields");
-var ImportBatch = (0, import_core18.list)({
+var import_core19 = require("@keystone-6/core");
+var import_fields20 = require("@keystone-6/core/fields");
+var ImportBatch = (0, import_core19.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "system", "entity", "status", "rowsTotal", "rowsCreated", "rowsFailed"] } },
   fields: {
@@ -4053,36 +4824,36 @@ var ImportBatch = (0, import_core18.list)({
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(["received", "validated", "applying", "applied", "failed"]),
-    rowsTotal: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsCreated: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsSkipped: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsFailed: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
-    mapping: (0, import_fields19.json)({ ...readOnly }),
+    rowsTotal: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsCreated: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsSkipped: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsFailed: (0, import_fields20.integer)({ ...readOnly, defaultValue: 0 }),
+    mapping: (0, import_fields20.json)({ ...readOnly }),
     startedBy: relationship({ ref: "User", ...readOnly }),
-    finishedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    finishedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     rows: relationship({ ref: "ImportRow.batch", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ImportRow = (0, import_core18.list)({
+var ImportRow = (0, import_core19.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { listView: { initialColumns: ["batch", "rowNumber", "externalId", "result", "recordType"] } },
   fields: {
     batch: relationship({ ref: "ImportBatch.rows", ...readOnly }),
-    rowNumber: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rowNumber: (0, import_fields20.integer)({ ...readOnly, validation: { isRequired: true } }),
     externalId: systemText({ required: true }),
     result: fixedChoice(["created", "skipped_existing", "failed"]),
     recordType: systemText(),
     recordId: systemText(),
-    errors: (0, import_fields19.json)({ ...readOnly, defaultValue: [] }),
+    errors: (0, import_fields20.json)({ ...readOnly, defaultValue: [] }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/agents.ts
-var import_core19 = require("@keystone-6/core");
-var import_fields20 = require("@keystone-6/core/fields");
+var import_core20 = require("@keystone-6/core");
+var import_fields21 = require("@keystone-6/core/fields");
 var AGENT_SCOPES = [
   "reception.read",
   "reception.book",
@@ -4112,43 +4883,43 @@ var PROPOSAL_KINDS = [
   "boarding.reserve",
   "reminder.send"
 ];
-var AgentToolGrant = (0, import_core19.list)({
+var AgentToolGrant = (0, import_core20.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "scope", listView: { initialColumns: ["agent", "scope", "status", "createdAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.grants", ...readOnly }),
     scope: fixedChoice(AGENT_SCOPES),
-    constraints: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
+    constraints: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
     status: lifecycle(["requested", "active", "revoked"]),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    revokedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    revokedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentRun = (0, import_core19.list)({
+var AgentRun = (0, import_core20.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "callRecordId", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.runs", ...readOnly }),
-    startedAt: (0, import_fields20.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    endedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields21.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    endedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     status: lifecycle(["started", "completed", "failed", "aborted"]),
     promptHash: hiddenHash(),
-    toolCalls: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
-    costMeta: (0, import_fields20.json)({ ...readOnly }),
+    toolCalls: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
+    costMeta: (0, import_fields21.json)({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
     proposals: relationship({ ref: "Proposal.agentRun", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Proposal = (0, import_core19.list)({
+var Proposal = (0, import_core20.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "kind", listView: { initialColumns: ["kind", "status", "proposedByAgent", "proposedByUser", "createdAt"] } },
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
-    payload: (0, import_fields20.json)({ ...readOnly }),
+    payload: (0, import_fields21.json)({ ...readOnly }),
     payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
     agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
@@ -4157,12 +4928,12 @@ var Proposal = (0, import_core19.list)({
     targetList: systemText(),
     targetId: systemText({ indexed: true }),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    validation: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
+    validation: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentAction = (0, import_core19.list)({
+var AgentAction = (0, import_core20.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "tool", listView: { initialColumns: ["tool", "outcome", "agent", "at"] } },
   fields: {
@@ -4173,7 +4944,7 @@ var AgentAction = (0, import_core19.list)({
     outcome: fixedChoice(["ok", "scope_denied", "never_allowed", "guard_failed", "error", "killed"]),
     errorCode: systemText(),
     auditEventId: systemText(),
-    at: (0, import_fields20.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields21.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 
@@ -4210,6 +4981,8 @@ var models = {
   ExternalDispense,
   WrittenRxExport,
   ...INVENTORY_LISTS,
+  // Phase 4: estimates, fee schedules, invoices, payments, insurance
+  ...BILLING_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter,
   SoapSection,
@@ -4260,8 +5033,8 @@ var models = {
   Proposal
 };
 var API_MAX_TAKE = 500;
-for (const list19 of Object.values(models)) {
-  list19.graphql = { ...list19.graphql ?? {}, maxTake: API_MAX_TAKE };
+for (const list20 of Object.values(models)) {
+  list20.graphql = { ...list20.graphql ?? {}, maxTake: API_MAX_TAKE };
 }
 registerListAccess(models);
 
@@ -4293,52 +5066,10 @@ var updateActiveUser_default = updateActiveUser;
 
 // features/keystone/mutations/op.ts
 var import_graphql = require("graphql");
-
-// features/keystone/lib/errors.ts
-var DomainError = class extends Error {
-  constructor(code, message, details = {}) {
-    super(message);
-    this.name = "DomainError";
-    this.code = code;
-    this.details = details;
-  }
-};
-var isDomainError = (error) => error instanceof DomainError;
-var Codes = {
-  NOT_AUTHORIZED: "NOT_AUTHORIZED",
-  NOT_FOUND: "NOT_FOUND",
-  INVALID_INPUT: "INVALID_INPUT",
-  INVALID_TRANSITION: "INVALID_TRANSITION",
-  STALE_STATE: "STALE_STATE",
-  GUARD_FAILED: "GUARD_FAILED",
-  IDEMPOTENCY_KEY_REQUIRED: "IDEMPOTENCY_KEY_REQUIRED",
-  IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
-  IN_PROGRESS: "IN_PROGRESS",
-  APPROVAL_REQUIRED: "APPROVAL_REQUIRED",
-  SELF_APPROVAL: "SELF_APPROVAL",
-  AGENT_CANNOT_APPROVE: "AGENT_CANNOT_APPROVE",
-  APPROVAL_MISMATCH: "APPROVAL_MISMATCH",
-  LEASE_LOST: "LEASE_LOST",
-  STALE_FENCING_TOKEN: "STALE_FENCING_TOKEN",
-  AUDIT_CHAIN_BROKEN: "AUDIT_CHAIN_BROKEN",
-  // Vet clinic (STATE-MACHINES §0 error codes)
-  POLICY_UNRESOLVED: "POLICY_UNRESOLVED",
-  POLICY_AMBIGUOUS: "POLICY_AMBIGUOUS",
-  LICENSE_INACTIVE: "LICENSE_INACTIVE",
-  DEA_REGISTRATION_INVALID: "DEA_REGISTRATION_INVALID",
-  VCPR_REQUIRED: "VCPR_REQUIRED",
-  SLOT_TAKEN: "SLOT_TAKEN",
-  SLOT_TOKEN_INVALID: "SLOT_TOKEN_INVALID",
-  CONSENT_REQUIRED: "CONSENT_REQUIRED",
-  PATIENT_DECEASED: "PATIENT_DECEASED",
-  SCOPE_DENIED: "SCOPE_DENIED",
-  NEVER_ALLOWED_FOR_AGENTS: "NEVER_ALLOWED_FOR_AGENTS",
-  CALLER_NOT_VERIFIED: "CALLER_NOT_VERIFIED",
-  FEATURE_DISABLED: "FEATURE_DISABLED",
-  DUPLICATE_SUSPECTED: "DUPLICATE_SUSPECTED"
-};
+init_errors();
 
 // features/keystone/lib/actor.ts
+init_errors();
 function actorFromSession(session) {
   if (!session || !isSignedIn({ session })) throw new DomainError(Codes.NOT_AUTHORIZED, "Sign in to continue.");
   const role = session.data.role;
@@ -4360,6 +5091,7 @@ var actorUserId = (actor) => actor.kind === "user" ? actor.userId : null;
 var actorAgentId = (actor) => actor.kind === "agent" ? actor.agentId : null;
 
 // features/keystone/lib/idempotency.ts
+init_errors();
 var IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/;
 function assertIdempotencyKey(key2) {
   if (typeof key2 !== "string" || !key2.trim()) throw new DomainError(Codes.IDEMPOTENCY_KEY_REQUIRED, "An idempotency key is required.");
@@ -4517,13 +5249,14 @@ async function runInTransaction(db, work, options = {}) {
 }
 
 // features/keystone/lib/command.ts
+init_errors();
 function invariantError(error) {
   if (isDomainError(error)) return null;
   const message = error instanceof Error ? error.message : String(error);
   const constraint = /constraint "([A-Za-z0-9_]+)"/.exec(message)?.[1] ?? "";
   if (/23P01|exclusion constraint|_no_overlap/.test(message)) return new DomainError(Codes.SLOT_TAKEN, "That time was just taken. Pick another slot.", { reason: constraint || "overlap" });
-  const raised = /(?:ERROR|Message): ?`?([^`\n]*(?:cannot|can't|never|must|needs|frozen|append-only)[^`\n]*)/i.exec(message)?.[1];
-  if (raised) return new DomainError(Codes.GUARD_FAILED, raised.trim().slice(0, 240), { reason: "database_guard" });
+  const raised2 = /(?:ERROR|Message): ?`?([^`\n]*(?:cannot|can't|never|must|needs|frozen|append-only)[^`\n]*)/i.exec(message)?.[1];
+  if (raised2) return new DomainError(Codes.GUARD_FAILED, raised2.trim().slice(0, 240), { reason: "database_guard" });
   if (/23514|check constraint/.test(message)) return new DomainError(Codes.GUARD_FAILED, `A database rule refused this change (${constraint || "check"}).`, { reason: constraint || "check" });
   return null;
 }
@@ -4712,6 +5445,7 @@ function zonedInstant(timeZone, date, hhmm2) {
 }
 
 // features/keystone/lib/cas.ts
+init_errors();
 var COLUMN = /^[a-z][A-Za-z0-9]*$/;
 async function lockRow(tx, model, id2) {
   const rows = await tx.$queryRawUnsafe(`SELECT id FROM ${tableName(model)} WHERE id = $1 FOR UPDATE`, id2);
@@ -4754,6 +5488,28 @@ async function transition(uow, spec) {
   });
   return await delegateOf(uow.tx, spec.model).findUnique({ where: { id: spec.id } });
 }
+async function casUpdate(uow, spec) {
+  const statusField = spec.statusField ?? "status";
+  if (!COLUMN.test(statusField)) throw new Error("Invalid status field");
+  const result = await delegateOf(uow.tx, spec.model).updateMany({
+    where: { id: spec.id, version: spec.version, [statusField]: { in: [...spec.from] } },
+    data: { ...spec.data ?? {}, [statusField]: spec.to, version: { increment: 1 } }
+  });
+  if (result.count !== 1) throw new DomainError(Codes.STALE_STATE, `${spec.model} changed since you loaded it. Reload and try again.`, { currentVersion: spec.version, to: spec.to });
+  uow.audit({
+    eventType: spec.eventType,
+    entityType: spec.model,
+    entityId: spec.id,
+    actorUserId: actorUserId(spec.actor),
+    actorAgentId: actorAgentId(spec.actor),
+    approverId: spec.approverId ?? null,
+    reason: spec.reason ?? null,
+    before: { [statusField]: spec.from.length === 1 ? spec.from[0] : spec.from, version: spec.version },
+    after: { [statusField]: spec.to, version: spec.version + 1, ...spec.audit ?? spec.data ?? {} },
+    metadata: { ...spec.metadata ?? {}, ...spec.actor.kind === "system" ? { system: spec.actor.name } : {} }
+  });
+  return spec.version + 1;
+}
 function auditCreate(uow, actor, model, id2, eventType, after, extra = {}) {
   uow.audit({
     eventType,
@@ -4769,6 +5525,7 @@ function auditCreate(uow, actor, model, id2, eventType, after, extra = {}) {
 
 // features/keystone/domain/policy.ts
 var import_zod = require("zod");
+init_errors();
 var hhmm = import_zod.z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 var days = import_zod.z.number().int().min(0).max(36500);
 var CS_SCHEDULE = import_zod.z.enum(["CI", "CII", "CIIN", "CIII", "CIIIN", "CIV", "CV"]);
@@ -5738,6 +6495,15 @@ async function loadDays(uow, actor, calendarId, days2) {
   return fresh.length;
 }
 
+// features/keystone/mutations/agents.ts
+init_errors();
+
+// features/keystone/mutations/agentGuard.ts
+init_errors();
+
+// features/keystone/mutations/actorFor.ts
+init_errors();
+
 // features/keystone/mcp-oauth/agentSession.ts
 var AGENT_ROLE_ID = "seed_role_ai_agent";
 var agentUserId = (agentId) => `agent_user_${agentId}`;
@@ -5926,8 +6692,12 @@ async function unbindAgentApp(_root, args, context) {
   });
 }
 
+// features/keystone/seed/clinic.ts
+init_decimal();
+
 // features/keystone/domain/contact.ts
 var import_node_crypto5 = require("node:crypto");
+init_errors();
 function normalisePhone(raw) {
   const digits = String(raw ?? "").replace(/[^\d+]/g, "");
   const plain2 = digits.replace(/\+/g, "");
@@ -5953,6 +6723,7 @@ function microchipStandard(number) {
 
 // features/keystone/domain/triage.ts
 var import_zod2 = require("zod");
+init_errors();
 var TRIAGE_LEVELS = ["routine", "soon", "urgent_today", "emergency_now"];
 var rank = (level) => TRIAGE_LEVELS.indexOf(level);
 var id = import_zod2.z.string().regex(/^[a-z][a-z0-9_]{1,60}$/);
@@ -5983,7 +6754,7 @@ function parseProtocol(input) {
   return parsed.data;
 }
 var protocolHash = (p) => payloadHash(p);
-var normalise = (text17) => ` ${String(text17 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+var normalise = (text18) => ` ${String(text18 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
 var mentions = (complaint, keyword) => complaint.includes(normalise(keyword));
 function scoreTriage(protocol, input) {
   const complaint = normalise(input.complaint);
@@ -6012,6 +6783,7 @@ var outcomeAllowed = (level, outcome) => level === "emergency_now" ? outcome ===
 
 // features/keystone/domain/scheduling.ts
 var import_node_crypto6 = require("node:crypto");
+init_errors();
 var overlaps = (a, b) => a.start < b.end && b.start < a.end;
 function subtract(free, busy) {
   let out = free.slice();
@@ -6061,8 +6833,8 @@ function findSlots(input) {
   return out;
 }
 function buildSegments(template, start, totalMinutes) {
-  const list19 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
-  return list19.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
+  const list20 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
+  return list20.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
 }
 var SLOT_TTL_MS = 5 * 6e4;
 var DEVELOPMENT_SECRET3 = "this secret should only be used in testing";
@@ -6384,7 +7156,93 @@ async function seedInventory(uow, actor, count) {
   count("purchaseOrders", 1);
 }
 
+// features/keystone/seed/billing.ts
+var FEES = [
+  { code: "EXAM-OUTPATIENT", name: "Wellness or sick exam", category: "exam", price: 7800, tax: "professional_service" },
+  { code: "EXAM-EMERGENCY", name: "Emergency exam", category: "exam", price: 15500, tax: "professional_service" },
+  { code: "EXAM-INPATIENT_DAY", name: "Day hospital exam", category: "exam", price: 6500, tax: "professional_service" },
+  { code: "EXAM-TECH_VISIT", name: "Technician visit", category: "exam", price: 3500, tax: "professional_service" },
+  { code: "EXAM-TELEHEALTH", name: "Telehealth consultation", category: "consultation", price: 4500, tax: "professional_service" },
+  { code: "EXAM-SURGERY", name: "Surgical consultation", category: "consultation", price: 6500, tax: "professional_service" },
+  { code: "EXAM-DENTAL", name: "Dental assessment", category: "dental", price: 6500, tax: "professional_service" },
+  { code: "VAX-RABIES3", name: "Rabies vaccine, 3-year", category: "vaccine", price: 2800, tax: "vaccine_administered", vaccine: "seed_vx_rabies3_k9" },
+  { code: "VAX-RABIES1-FEL", name: "Rabies vaccine, 1-year cat", category: "vaccine", price: 2600, tax: "vaccine_administered", vaccine: "seed_vx_rabies1_fel" },
+  { code: "VAX-DAPP", name: "DAPP vaccine", category: "vaccine", price: 3400, tax: "vaccine_administered", vaccine: "seed_vx_dapp" },
+  { code: "VAX-LEPTO", name: "Leptospirosis vaccine", category: "vaccine", price: 3200, tax: "vaccine_administered", vaccine: "seed_vx_lepto4" },
+  { code: "VAX-BORD", name: "Bordetella vaccine", category: "vaccine", price: 2800, tax: "vaccine_administered", vaccine: "seed_vx_bord_in" },
+  { code: "VAX-CIV", name: "Canine influenza vaccine", category: "vaccine", price: 3600, tax: "vaccine_administered", vaccine: "seed_vx_civ" },
+  { code: "VAX-FVRCP", name: "FVRCP vaccine", category: "vaccine", price: 3e3, tax: "vaccine_administered", vaccine: "seed_vx_fvrcp" },
+  { code: "VAX-FELV", name: "FeLV vaccine", category: "vaccine", price: 3400, tax: "vaccine_administered", vaccine: "seed_vx_felv" },
+  // Dispensed and injected medicines: the price is per unit given; dispensing adds a fee, an injection adds its own.
+  { code: "RX-CARPROFEN", name: "Carprofen tablets", category: "medication", price: 140, tax: "rx_animal_drug", unit: "tablet", drug: "seed_drug_carprofen", dispensing: 500 },
+  { code: "RX-GABAPENTIN", name: "Gabapentin capsules", category: "medication", price: 90, tax: "rx_animal_drug", unit: "capsule", drug: "seed_drug_gabapentin", dispensing: 500 },
+  { code: "RX-MELOXICAM-INJ", name: "Meloxicam injection", category: "injection", price: 1800, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_meloxicam" },
+  { code: "RX-CEFOVECIN", name: "Cefovecin long-acting antibiotic injection", category: "injection", price: 6800, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_cefovecin" },
+  { code: "RX-MAROPITANT", name: "Maropitant anti-nausea injection", category: "injection", price: 2600, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_maropitant" },
+  { code: "RX-LRS", name: "IV fluids, lactated Ringer\u2019s (1 L)", category: "treatment", price: 3200, tax: "rx_animal_drug", unit: "each", drug: "seed_drug_lrs" },
+  { code: "RX-BUTORPHANOL", name: "Butorphanol injection", category: "injection", price: 2200, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_butorphanol" },
+  { code: "RX-BUPRENORPHINE", name: "Buprenorphine injection", category: "injection", price: 2400, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_buprenorphine" },
+  { code: "RX-HYDROMORPHONE", name: "Hydromorphone injection", category: "injection", price: 2800, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_hydromorphone" },
+  { code: "RX-KETAMINE", name: "Ketamine anaesthetic", category: "anaesthesia", price: 2400, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_ketamine" },
+  { code: "RX-MIDAZOLAM", name: "Midazolam sedation", category: "anaesthesia", price: 1800, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_midazolam" },
+  // Services ordered in the chart.
+  { code: "LAB-CBC-CHEM", name: "Blood panel: complete blood count and chemistry", category: "laboratory", price: 14500, tax: "professional_service", orderKind: "lab" },
+  { code: "IMG-RADIOGRAPH", name: "Radiographs, two views", category: "imaging", price: 21e3, tax: "professional_service", orderKind: "imaging" },
+  { code: "PROC-PROCEDURE", name: "In-clinic procedure", category: "surgery", price: 18500, tax: "professional_service", orderKind: "procedure" },
+  { code: "TRT-TREATMENT", name: "Treatment and nursing care", category: "treatment", price: 4500, tax: "professional_service", orderKind: "treatment" },
+  { code: "TRT-NURSING", name: "Nursing care", category: "treatment", price: 2500, tax: "professional_service", orderKind: "nursing" },
+  { code: "TRT-FLUIDS", name: "IV fluid therapy", category: "treatment", price: 6500, tax: "professional_service", orderKind: "fluid" },
+  { code: "DIET-PRESCRIPTION", name: "Therapeutic diet, per can", category: "diet", price: 380, tax: "diet", orderKind: "diet", unit: "can" },
+  { code: "DENT-CLEANING", name: "Dental cleaning with polish (under anaesthesia)", category: "dental", price: 42500, tax: "professional_service" },
+  { code: "DENT-EXTRACTION", name: "Tooth extraction, per tooth", category: "dental", price: 8500, tax: "professional_service" },
+  { code: "SURG-SPAY-K9", name: "Spay, dog", category: "surgery", price: 62e3, tax: "professional_service" },
+  { code: "SURG-NEUTER-FEL", name: "Neuter, cat", category: "surgery", price: 24500, tax: "professional_service" },
+  { code: "ANES-MONITOR", name: "Anaesthesia and monitoring", category: "anaesthesia", price: 18e3, tax: "professional_service" },
+  { code: "HOSP-DAY", name: "Hospitalisation, per day", category: "hospitalisation", price: 11e3, tax: "professional_service" },
+  { code: "EUTH-CREMATION", name: "Euthanasia with private cremation", category: "euthanasia", price: 38500, tax: "professional_service" },
+  { code: "CARE-MEMORIAL", name: "Paw print memorial", category: "aftercare", price: 4500, tax: "merchandise" },
+  { code: "FEE-RECORDS", name: "Records copy", category: "fee", price: 1500, tax: "professional_service" }
+];
+async function seedBilling(uow, actor, count) {
+  const { tx, now } = uow;
+  if (await tx.feeSchedule.findFirst({ where: { code: "standard" }, select: { id: true } })) return;
+  const schedule = await tx.feeSchedule.create({ data: { id: "seed_fee_standard", name: "Standard fees", code: "standard" } });
+  const version = await tx.feeScheduleVersion.create({ data: { id: "seed_fee_standard_v1", scheduleId: schedule.id, versionNo: 1, label: "Fees from January", status: "draft" } });
+  const drugs = new Set((await tx.drugProduct.findMany({ select: { id: true } })).map((d) => d.id));
+  const vaccines = new Set((await tx.vaccineProduct.findMany({ select: { id: true } })).map((v) => v.id));
+  const items = await tx.item.findMany({ select: { id: true, drugId: true, vaccineId: true } });
+  const itemFor = new Map(items.map((i) => [i.drugId ?? i.vaccineId ?? "", i.id]));
+  let made = 0;
+  for (const f of FEES) {
+    if (f.drug && !drugs.has(f.drug)) continue;
+    if (f.vaccine && !vaccines.has(f.vaccine)) continue;
+    await tx.feeItem.create({
+      data: {
+        versionId: version.id,
+        code: f.code,
+        name: f.name,
+        category: f.category,
+        priceMinor: BigInt(f.price),
+        unit: f.unit ?? "each",
+        taxCategory: f.tax,
+        orderKind: f.orderKind ?? "",
+        drugId: f.drug ?? null,
+        vaccineId: f.vaccine ?? null,
+        itemId: itemFor.get(f.drug ?? f.vaccine ?? "") ?? null,
+        dispensingFeeMinor: f.dispensing ? BigInt(f.dispensing) : null,
+        minimumChargeMinor: f.drug && f.category === "injection" ? 1500n : null
+      }
+    });
+    made += 1;
+  }
+  await tx.priceRule.create({ data: { versionId: version.id, name: "Emergency visit surcharge", kind: "emergency", adjustmentBps: 2500, conditions: {} } });
+  await tx.feeScheduleVersion.update({ where: { id: version.id }, data: { status: "published", publishedAt: now, effectiveFrom: /* @__PURE__ */ new Date("2026-01-01T00:00:00Z") } });
+  auditCreate(uow, actor, "FeeScheduleVersion", version.id, "fees.published", { items: made, seeded: true });
+  count("feeItems", made);
+}
+
 // features/keystone/seed/clinicData.ts
+init_decimal();
 var SPECIES = [
   { id: "seed_sp_canine", code: "canine", name: "Dog", module: "companion", defaultWeightUnit: "lb", breeds: ["Labrador Retriever", "Golden Retriever", "German Shepherd", "French Bulldog", "Border Collie", "Rough Collie", "Australian Shepherd", "Dachshund", "Beagle", "Boxer", "Chihuahua", "Pit Bull Terrier", "Siberian Husky", "Poodle (Standard)", "Poodle (Miniature)", "Shih Tzu", "Yorkshire Terrier", "Cavalier King Charles Spaniel", "Great Dane", "Mixed Breed"] },
   { id: "seed_sp_feline", code: "feline", name: "Cat", module: "companion", defaultWeightUnit: "lb", breeds: ["Domestic Shorthair", "Domestic Longhair", "Maine Coon", "Siamese", "Ragdoll", "Bengal", "Persian", "British Shorthair", "Sphynx"] },
@@ -6595,7 +7453,7 @@ function rng(seed) {
 var HOUSEHOLD_COUNT = 400;
 function households() {
   const r = rng(20261107);
-  const pick = (items) => items[Math.floor(r() * items.length)];
+  const pick2 = (items) => items[Math.floor(r() * items.length)];
   const out = [];
   const dogBreeds = SPECIES[0].breeds;
   const catBreeds = SPECIES[1].breeds;
@@ -6611,9 +7469,9 @@ function households() {
     const pets = [];
     for (let p = 0; p < petCount; p++) {
       const roll = r();
-      const species = roll < 0.58 ? "canine" : roll < 0.93 ? "feline" : pick(["rabbit", "ferret", "bearded_dragon", "cockatiel"]);
-      const name = species === "canine" ? DOGS[(i + p * 5) % DOGS.length] : species === "feline" ? CATS[(i + p * 3) % CATS.length] : pick(["Clover", "Bandit", "Spike", "Kiwi"]);
-      const breed = species === "canine" ? pick(dogBreeds) : species === "feline" ? pick(catBreeds) : SPECIES.find((s) => s.code === species).breeds[0];
+      const species = roll < 0.58 ? "canine" : roll < 0.93 ? "feline" : pick2(["rabbit", "ferret", "bearded_dragon", "cockatiel"]);
+      const name = species === "canine" ? DOGS[(i + p * 5) % DOGS.length] : species === "feline" ? CATS[(i + p * 3) % CATS.length] : pick2(["Clover", "Bandit", "Spike", "Kiwi"]);
+      const breed = species === "canine" ? pick2(dogBreeds) : species === "feline" ? pick2(catBreeds) : SPECIES.find((s) => s.code === species).breeds[0];
       const year = 2012 + Math.floor(r() * 14);
       const [lo, hi] = BREED_KG[breed] ?? (species === "canine" ? [8, 30] : [3, 6]);
       const base = species === "canine" || species === "feline" ? lo + r() * (hi - lo) : species === "rabbit" ? 1.2 + r() : species === "ferret" ? 0.7 + r() * 0.6 : species === "bearded_dragon" ? 0.35 + r() * 0.15 : 0.08 + r() * 0.02;
@@ -6636,7 +7494,7 @@ function households() {
         microchip: species === "canine" || species === "feline" ? `985112${String(4e6 + i * 37 + p).padStart(9, "0")}` : null
       });
     }
-    out.push({ id: `seed_cl_${n}`, displayName: `${last} household`, kind: "household", locationId: eg ? "seed_loc_elkgrove" : "seed_loc_main", city: eg ? "Elk Grove" : "Sacramento", postalCode: eg ? "95758" : "95823", addressLine1: `${100 + i * 13} ${pick(["Oak", "Willow", "Riverside", "Laguna", "Florin", "Freeport", "Elm"])} ${pick(["St", "Ave", "Way", "Ct"])}`, people, pets });
+    out.push({ id: `seed_cl_${n}`, displayName: `${last} household`, kind: "household", locationId: eg ? "seed_loc_elkgrove" : "seed_loc_main", city: eg ? "Elk Grove" : "Sacramento", postalCode: eg ? "95758" : "95823", addressLine1: `${100 + i * 13} ${pick2(["Oak", "Willow", "Riverside", "Laguna", "Florin", "Freeport", "Elm"])} ${pick2(["St", "Ave", "Way", "Ct"])}`, people, pets });
   }
   const collie = out[4].pets[0];
   Object.assign(collie, { name: "Laddie", species: "canine", breed: "Rough Collie", alerts: [{ kind: "genetic", severity: "warn", text: "MDR1 (ABCB1) mutant/mutant: avoid ivermectin at high doses, loperamide, acepromazine at full dose; check every drug." }] });
@@ -6878,6 +7736,7 @@ async function seedClinic(uow, actor) {
   }
   await seedClinical(uow, actor, count);
   await seedInventory(uow, actor, count);
+  await seedBilling(uow, actor, count);
   return created;
 }
 
@@ -6902,7 +7761,11 @@ async function verifyAuditChain2(_root, _args, context) {
   return verifyAuditChain(context.prisma);
 }
 
+// features/keystone/lib/approval.ts
+init_errors();
+
 // features/keystone/lib/separationOfDuties.ts
+init_errors();
 var SELF_APPROVAL_MESSAGE = "You can't approve your own request.";
 var AGENT_APPROVAL_MESSAGE = "An agent can propose but never approve.";
 function assertCanDecide(actor, requesterUserId, requesterAgentOwnerId, strictAgentOwner = true) {
@@ -6988,7 +7851,12 @@ function applierFor(action) {
   return appliers.get(action) ?? null;
 }
 
+// features/keystone/mutations/approvals.ts
+init_errors();
+
 // features/keystone/lib/practiceControls.ts
+init_errors();
+init_decimal();
 var FEATURE_KEYS = ["boarding", "grooming", "wellnessPlans", "insurance", "aiVoice", "scribe", "multiLocation", "pdmp", "csos", "drugCabinet"];
 var CONTROL_KEYS = ["refundApprovalThresholdMinor", "discountApprovalThresholdBps", "writeOffRequiresApproval", "electiveDepositPct", "estimateValidityDays", "noShowGraceMinutes", "strictAgentOwnerSoD", "features"];
 var intIn = (value, min, max, name) => {
@@ -7004,9 +7872,9 @@ function validatePracticeControls(input) {
   if (!keys.length) throw new DomainError(Codes.INVALID_INPUT, "Nothing to change.");
   for (const key2 of keys) if (!CONTROL_KEYS.includes(key2)) throw new DomainError(Codes.INVALID_INPUT, `${key2} is not a practice control.`, { field: key2 });
   if (input.refundApprovalThresholdMinor !== void 0) {
-    const text17 = String(input.refundApprovalThresholdMinor);
-    if (!/^\d{1,12}$/.test(text17)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
-    out.refundApprovalThresholdMinor = text17;
+    const text18 = String(input.refundApprovalThresholdMinor);
+    if (!/^\d{1,12}$/.test(text18)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
+    out.refundApprovalThresholdMinor = text18;
   }
   if (input.discountApprovalThresholdBps !== void 0) {
     intIn(input.discountApprovalThresholdBps, 0, 1e4, "discountApprovalThresholdBps");
@@ -7062,13 +7930,13 @@ registerApplier("practice.controls", async (uow, actor, request) => {
   if (changes.features) data.features = { ...before.features ?? {}, ...changes.features };
   const updated = await uow.tx.practiceSettings.updateMany({ where: { id: 1, version: baseVersion }, data });
   if (updated.count !== 1) throw new DomainError(Codes.STALE_STATE, "Practice settings changed while applying.");
-  const pick = (k) => before[k];
+  const pick2 = (k) => before[k];
   uow.audit({
     eventType: "practice.controls_changed",
     entityType: "PracticeSettings",
     entityId: "1",
     actorUserId: actor.kind === "user" ? actor.userId : null,
-    before: Object.fromEntries(Object.keys(changes).map((k) => [k, typeof pick(k) === "bigint" ? String(pick(k)) : pick(k)])),
+    before: Object.fromEntries(Object.keys(changes).map((k) => [k, typeof pick2(k) === "bigint" ? String(pick2(k)) : pick2(k)])),
     after: changes
   });
   return { applied: Object.keys(changes) };
@@ -7127,6 +7995,7 @@ async function requestPracticeControls(_root, args, context) {
 }
 
 // features/keystone/mutations/practice.ts
+init_errors();
 async function policyInForce(_root, args, context) {
   const actor = actorFromSession(context.session);
   requirePermission(actor, "canAccessDashboard");
@@ -7157,7 +8026,9 @@ async function policyMatrix(_root, _args, context) {
 }
 
 // features/keystone/mutations/clients.ts
-var text15 = (value, field, max = 200, required = true) => {
+init_errors();
+init_decimal();
+var text16 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -7172,8 +8043,8 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   const row = await uow.tx.clientPerson.create({
     data: {
       clientId,
-      firstName: text15(person.firstName, "firstName", 80),
-      lastName: text15(person.lastName, "lastName", 80),
+      firstName: text16(person.firstName, "firstName", 80),
+      lastName: text16(person.lastName, "lastName", 80),
       relationship: person.relationship ?? "owner",
       isPrimary,
       canBook: true,
@@ -7196,7 +8067,7 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   return row;
 }
 async function createPatient(uow, actor, clientId, input, status) {
-  const species = await uow.tx.species.findUnique({ where: { code: text15(input.speciesCode, "speciesCode", 40) } });
+  const species = await uow.tx.species.findUnique({ where: { code: text16(input.speciesCode, "speciesCode", 40) } });
   if (!species || !species.active) throw new DomainError(Codes.INVALID_INPUT, `Unknown species ${input.speciesCode}.`, { field: "speciesCode" });
   const breed = input.breedName ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: input.breedName.trim(), mode: "insensitive" } } }) : null;
   if (input.dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth)) throw new DomainError(Codes.INVALID_INPUT, "dateOfBirth is YYYY-MM-DD.", { field: "dateOfBirth" });
@@ -7212,7 +8083,7 @@ async function createPatient(uow, actor, clientId, input, status) {
   const patient = await uow.tx.patient.create({
     data: {
       ref,
-      name: text15(input.name, "name", 80),
+      name: text16(input.name, "name", 80),
       kind: "individual",
       speciesId: species.id,
       breedId: breed?.id ?? null,
@@ -7247,7 +8118,7 @@ async function registerClient(_root, args, context) {
         data: {
           ref,
           publicCode: publicCode("CL"),
-          displayName: text15(input.displayName || `${primary.lastName} household`, "displayName", 120),
+          displayName: text16(input.displayName || `${primary.lastName} household`, "displayName", 120),
           kind: input.kind ?? "household",
           status: "active",
           primaryLocationId: location.id,
@@ -7279,7 +8150,7 @@ async function registerPendingClient(_root, args, context) {
       const ref = await nextSerial(uow.tx, "C");
       const source = actor.kind === "agent" ? "ai_voice" : "csr";
       const client = await uow.tx.client.create({
-        data: { ref, publicCode: publicCode("CL"), displayName: `${text15(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
+        data: { ref, publicCode: publicCode("CL"), displayName: `${text16(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
       });
       auditCreate(uow, actor, "Client", client.id, "client.registered_pending", { ref, source, possibleDuplicate: dupes.length > 0 });
       await createPerson(uow, actor, client.id, { firstName: input.firstName, lastName: input.lastName, relationship: "owner", contacts }, true, source);
@@ -7357,7 +8228,7 @@ async function recordWeight(_root, args, context) {
 async function addPatientAlert(_root, args, context) {
   return gated(context, { permissions: ["canManagePatients", "canWriteRecord"], tool: "patient.alert", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "patient.alert.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text15(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
+      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text16(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
       auditCreate(uow, actor, "PatientAlert", row.id, "patient.alert_added", { patientId: args.patientId, kind: args.kind, severity: args.severity });
       return { id: row.id };
     });
@@ -7404,8 +8275,9 @@ async function recordPatientDeath(_root, args, context) {
 }
 
 // features/keystone/mutations/schedule.ts
+init_errors();
 var STEP_MINUTES = 15;
-var list18 = (v) => Array.isArray(v) ? v.map(String) : [];
+var list19 = (v) => Array.isArray(v) ? v.map(String) : [];
 async function loadAvailability(tx, input) {
   const [location, type] = await Promise.all([
     tx.location.findUnique({ where: { id: input.locationId }, select: { id: true, timeZone: true, active: true } }),
@@ -7413,8 +8285,8 @@ async function loadAvailability(tx, input) {
   ]);
   if (!location?.active) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
   if (!type?.active) throw new DomainError(Codes.NOT_FOUND, "Appointment type not found.");
-  const providerKinds = list18(type.providerKinds);
-  const resourceKinds = list18(type.requiredResourceKinds);
+  const providerKinds = list19(type.providerKinds);
+  const resourceKinds = list19(type.requiredResourceKinds);
   const windowStart = (/* @__PURE__ */ new Date(`${input.from}T00:00:00Z`)).getTime() - 864e5;
   const windowEnd = (/* @__PURE__ */ new Date(`${addDays(input.from, input.days)}T00:00:00Z`)).getTime() + 864e5;
   const range = { startsAt: { lt: new Date(windowEnd) }, endsAt: { gt: new Date(windowStart) }, status: { not: "released" } };
@@ -7449,7 +8321,7 @@ function computeSlots(data, input) {
           localDate: isoDay2(b.localDate),
           startTime: b.startTime,
           endTime: b.endTime,
-          categories: list18(b.appointmentCategories),
+          categories: list19(b.appointmentCategories),
           effectiveFrom: isoDay2(b.effectiveFrom),
           effectiveTo: isoDay2(b.effectiveTo)
         })),
@@ -7769,6 +8641,7 @@ async function addToWaitlist(_root, args, context) {
 }
 
 // features/keystone/mutations/reception.ts
+init_errors();
 async function locationDay(uow, locationId) {
   const location = await uow.tx.location.findUnique({ where: { id: locationId }, select: { timeZone: true } });
   if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
@@ -8124,7 +8997,11 @@ async function receptionContext(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/record.ts
+init_errors();
+
 // features/keystone/domain/licensure.ts
+init_errors();
 var DEA_SCHEDULE_CODE = { CI: "1", CII: "2", CIIN: "2N", CIII: "3", CIIIN: "3N", CIV: "4", CV: "5" };
 var day = (d) => d == null ? null : typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
 async function locationOf(tx, locationId) {
@@ -8421,7 +9298,8 @@ async function renderDischargeDocument(uow, instructionId) {
 }
 
 // features/keystone/mutations/clinical.ts
-var text16 = (value, field, max = 200, required = true) => {
+init_errors();
+var text17 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -8526,7 +9404,7 @@ async function openEncounter(_root, args, context) {
           kind: args.kind,
           vcprQualifying: IN_PERSON.has(args.kind),
           status: "open",
-          reason: text16(args.reason ?? "", "reason", 300, false),
+          reason: text17(args.reason ?? "", "reason", 300, false),
           attendingDvmId: attending?.id ?? null,
           weightUsedId: weight?.id ?? null,
           startedAt: uow.now,
@@ -8541,7 +9419,7 @@ async function openEncounter(_root, args, context) {
 }
 async function writeSection(uow, actor, staff, encounterId, input) {
   if (!SECTION_KINDS.includes(input.kind)) throw new DomainError(Codes.INVALID_INPUT, "Unknown record section.", { field: "kind" });
-  const body = text16(input.body, "body", 2e4, false);
+  const body = text17(input.body, "body", 2e4, false);
   const enc = await chartableEncounter(uow, encounterId);
   const repeatable = REPEATABLE_SECTIONS.includes(input.kind);
   let ordinal = input.ordinal ?? 1;
@@ -8653,7 +9531,7 @@ async function setExamFinding(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       const existing = await uow.tx.physicalExamFinding.findFirst({ where: { encounterId: enc.id, system: args.system }, select: { id: true } });
-      const data = { status: args.status, text: text16(args.text ?? "", "text", 2e3, false), byId: staff.id };
+      const data = { status: args.status, text: text17(args.text ?? "", "text", 2e3, false), byId: staff.id };
       const row = existing ? await uow.tx.physicalExamFinding.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.physicalExamFinding.create({ data: { encounterId: enc.id, system: args.system, ...data } });
       await markInProgress(uow, enc);
       auditCreate(uow, actor, "PhysicalExamFinding", row.id, "record.exam_finding_set", { encounterId: enc.id, system: args.system, status: args.status });
@@ -8670,7 +9548,7 @@ async function addDiagnosis(_root, args, context) {
       const enc = await chartableEncounter(uow, args.encounterId);
       const code = args.codeId ? await uow.tx.diagnosisCode.findUnique({ where: { id: args.codeId }, select: { id: true, term: true, active: true } }) : null;
       if (args.codeId && (!code || !code.active)) throw new DomainError(Codes.NOT_FOUND, "Diagnosis code not found.");
-      const term = code?.term ?? text16(args.term, "term", 200);
+      const term = code?.term ?? text17(args.term, "term", 200);
       let problemId = null;
       if (args.addToProblems && args.certainty !== "ruled_out") {
         const open = await uow.tx.problem.findFirst({ where: { patientId: enc.patientId, term, status: "active" }, select: { id: true } });
@@ -8783,7 +9661,7 @@ async function submitEncounter(_root, args, context) {
 }
 async function returnEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.return", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.return", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "Encounter", id: args.encounterId, from: ["pending_signature"], to: "in_progress", expectedVersion: args.expectedVersion, actor, eventType: "encounter.returned", reason });
       return { id: row.id, status: row.status, version: row.version };
@@ -8852,8 +9730,8 @@ async function signEncounter(_root, args, context) {
 }
 async function addAddendum(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "record.addendum", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
-    const body = text16(args.body, "body", 1e4);
+    const reason = text17(args.reason, "reason", 300);
+    const body = text17(args.body, "body", 1e4);
     if (![...SECTION_KINDS, "general"].includes(args.sectionKind)) throw new DomainError(Codes.INVALID_INPUT, "Choose which part of the record this amends.", { field: "sectionKind" });
     const result = await command(context.prisma, { name: "record.addendum", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -8884,7 +9762,7 @@ async function voidBlockers(uow, encounterId) {
 }
 async function requestVoidEncounter(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "encounter.void_request", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "encounter.void_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, ref: true, status: true, version: true } });
       if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
@@ -8914,7 +9792,7 @@ async function runUnsignedRecordClock(uow) {
     select: { id: true, ref: true, startedAt: true, locationId: true, attendingDvmId: true, patient: { select: { name: true } } },
     take: 500
   });
-  let raised = 0;
+  let raised2 = 0;
   let escalated = 0;
   for (const enc of due) {
     const ageHours = Math.floor((uow.now.getTime() - enc.startedAt.getTime()) / 36e5);
@@ -8922,15 +9800,18 @@ async function runUnsignedRecordClock(uow) {
     if (!task) {
       const row = await uow.tx.task.create({ data: { kind: "record_unsigned", title: `Sign ${enc.ref} (${enc.patient?.name ?? "patient"})`, detail: `Unsigned for ${ageHours} hours.`, subjectType: "Encounter", subjectId: enc.id, locationId: enc.locationId, assigneeId: enc.attendingDvmId, roleName: "dvm", priority: ageHours >= escalateHours ? "urgent" : "high", status: "open", dueAt: uow.now } });
       uow.audit({ eventType: "task.raised", entityType: "Task", entityId: row.id, after: { kind: "record_unsigned", encounterId: enc.id, ageHours }, metadata: { system: "record-clock" } });
-      raised++;
+      raised2++;
     } else if (ageHours >= escalateHours && task.priority !== "urgent" && ["open", "in_progress"].includes(task.status)) {
       await uow.tx.task.update({ where: { id: task.id }, data: { priority: "urgent", assigneeId: settings?.medicalDirectorId ?? enc.attendingDvmId, detail: `Unsigned for ${ageHours} hours; escalated to the medical director.`, version: { increment: 1 } } });
       uow.audit({ eventType: "task.escalated", entityType: "Task", entityId: task.id, after: { encounterId: enc.id, ageHours, to: settings?.medicalDirectorId ?? null }, metadata: { system: "record-clock" } });
       escalated++;
     }
   }
-  return { checked: due.length, raised, escalated, through: addDays(uow.now.toISOString().slice(0, 10), 0) };
+  return { checked: due.length, raised: raised2, escalated, through: addDays(uow.now.toISOString().slice(0, 10), 0) };
 }
+
+// features/keystone/mutations/scribe.ts
+init_errors();
 
 // features/integrations/scribe/index.ts
 var import_zod3 = require("zod");
@@ -8944,8 +9825,8 @@ var DraftSchema = import_zod3.z.object({
   suggestedCharges: import_zod3.z.array(import_zod3.z.object({ description: import_zod3.z.string().max(200), reason: import_zod3.z.string().max(400) })).max(20).default([]),
   confidence: import_zod3.z.string().regex(/^(0(\.\d{1,4})?|1(\.0{1,4})?)$/).default("0")
 });
-function parsePasted(text17) {
-  const lines = text17.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+function parsePasted(text18) {
+  const lines = text18.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return lines.map((line) => {
     const m = /^([A-Za-z][A-Za-z .'-]{0,30}):\s*(.+)$/.exec(line);
     return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: "unknown", text: line };
@@ -8954,9 +9835,9 @@ function parsePasted(text17) {
 var manualTranscription = {
   key: "manual",
   async transcribe(input) {
-    const text17 = (input.pastedText ?? "").trim();
-    if (!text17) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
-    return { text: text17, segments: parsePasted(text17), provider: "manual", ref: `manual:${text17.length}` };
+    const text18 = (input.pastedText ?? "").trim();
+    if (!text18) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
+    return { text: text18, segments: parsePasted(text18), provider: "manual", ref: `manual:${text18.length}` };
   }
 };
 var manualScribeModel = {
@@ -9043,7 +9924,7 @@ async function acceptScribeDraft(_root, args, context) {
         if (!section) throw new DomainError(Codes.INVALID_INPUT, "That draft block does not exist.", { field: "blocks" });
         if (accepted.has(block.index)) continue;
         const existing = await uow.tx.soapSection.findFirst({ where: { encounterId: session.encounterId, kind: section.kind, ordinal: 1 }, select: { version: true, body: true } });
-        const edited = block.body != null ? text16(block.body, "body", 2e4) : section.body;
+        const edited = block.body != null ? text17(block.body, "body", 2e4) : section.body;
         const body = existing?.body?.trim() ? `${existing.body.trim()}
 
 ${edited}` : edited;
@@ -9061,7 +9942,7 @@ ${edited}` : edited;
 }
 async function rejectScribeDraft(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "scribe.reject", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "scribe.reject", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const draft = await lockRow(uow.tx, "ScribeDraft", args.draftId);
@@ -9075,7 +9956,12 @@ async function rejectScribeDraft(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/treatment.ts
+init_errors();
+init_decimal();
+
 // features/keystone/domain/dose.ts
+init_decimal();
 var DOSE_CALC_VERSION = "dose-2026.11-3";
 var HARD_BLOCKS = ["above_range", "below_range", "override_out_of_range", "range_unconvertible_override"];
 var DOSE_PERS = ["kg", "m2", "animal"];
@@ -9095,9 +9981,9 @@ function convertAmount(amount, from, to) {
   if (MASS_TO_MG[from] && MASS_TO_MG[to]) return amount.times(MASS_TO_MG[from]).div(MASS_TO_MG[to]);
   throw new RangeError(`Cannot convert ${from} to ${to}.`);
 }
-function defaultIncrement(form, volumeOrQty) {
-  if (form === "tablet" || form === "chewable") return "0.25";
-  if (form === "capsule") return "1";
+function defaultIncrement(form2, volumeOrQty) {
+  if (form2 === "tablet" || form2 === "chewable") return "0.25";
+  if (form2 === "capsule") return "1";
   if (volumeOrQty.lt("1")) return "0.01";
   if (volumeOrQty.lt("10")) return "0.1";
   return "0.2";
@@ -9325,8 +10211,280 @@ function taskWindowProblem(input) {
   return null;
 }
 
-// features/keystone/mutations/inventory.ts
+// features/keystone/mutations/estimates.ts
+init_errors();
+init_ledger();
+init_decimal();
+
+// features/keystone/lib/pricing.ts
+init_errors();
+init_billing();
+var STANDARD_SCHEDULE = "standard";
+async function activeFeeVersion(tx) {
+  const version = await tx.feeScheduleVersion.findFirst({ where: { status: "published", schedule: { code: STANDARD_SCHEDULE } }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
+  if (!version) throw new DomainError(Codes.GUARD_FAILED, "No fee schedule is published yet. Publish one before pricing work.", { reason: "no_fee_schedule" });
+  return version;
+}
+async function feeItemFor(tx, versionId, match) {
+  const where2 = match.drugId ? { drugId: match.drugId } : match.vaccineId ? { vaccineId: match.vaccineId } : match.code ? { code: match.code } : match.orderKind ? { orderKind: match.orderKind } : match.category ? { category: match.category } : null;
+  if (!where2) return null;
+  return tx.feeItem.findFirst({ where: { versionId, active: true, ...where2 }, orderBy: { code: "asc" } });
+}
+async function taxRulesFor(tx, locationId, on) {
+  const policy = await resolvePolicy(tx, "sales_tax", { locationId, on });
+  return policy.rules;
+}
+function priceCharge(fee, qty2, opts) {
+  let extended = extend(qty2, fee.priceMinor, fee.minimumChargeMinor);
+  if (opts.dispensing && fee.dispensingFeeMinor) extended += fee.dispensingFeeMinor;
+  if (opts.injection && fee.injectionFeeMinor) extended += fee.injectionFeeMinor;
+  if (opts.surchargeBps) extended += adjustBps(extended, opts.surchargeBps);
+  const discount = opts.discountBps ? -adjustBps(extended, -opts.discountBps) : 0n;
+  const tax = taxOn(opts.taxRules, fee.taxCategory, extended - discount);
+  return { extendedMinor: extended, discountMinor: discount, taxMinor: tax };
+}
+
+// features/keystone/mutations/estimates.ts
+init_billing();
+
+// features/keystone/mutations/billingInput.ts
+init_errors();
 var dateOnly = (value, field) => {
+  const t = String(value ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || Number.isNaN(Date.parse(`${t}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return t;
+};
+function minorText(value, field, allowZero = false) {
+  const t = String(value ?? "").trim();
+  if (!/^\d{1,12}$/.test(t)) throw new DomainError(Codes.INVALID_INPUT, `${field} is a whole number of cents.`, { field });
+  const n = BigInt(t);
+  if (n === 0n && !allowZero) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
+  return n;
+}
+var pick = (value, allowed, field) => {
+  if (!allowed.includes(String(value))) throw new DomainError(Codes.INVALID_INPUT, `Choose a valid ${field}.`, { field });
+  return value;
+};
+async function billingSettings(uow) {
+  const p = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { currencyCode: true, estimateValidityDays: true, electiveDepositPct: true, depositBasis: true, refundApprovalThresholdMinor: true, discountApprovalThresholdBps: true, writeOffRequiresApproval: true } });
+  return {
+    currencyCode: p?.currencyCode || "USD",
+    estimateValidityDays: p?.estimateValidityDays ?? 30,
+    electiveDepositPct: p?.electiveDepositPct ? p.electiveDepositPct.toString() : null,
+    depositBasis: p?.depositBasis ?? "low",
+    refundApprovalThresholdMinor: p?.refundApprovalThresholdMinor ?? 25000n,
+    discountApprovalThresholdBps: p?.discountApprovalThresholdBps ?? 1e3,
+    writeOffRequiresApproval: p?.writeOffRequiresApproval !== false
+  };
+}
+
+// features/keystone/mutations/estimates.ts
+var SELLERS = ["canPostInvoices", "canTakePayments", "canOrder", "canManagePractice"];
+async function primaryClient(uow, patientId) {
+  const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } });
+  if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, "This patient has no client of record to bill.");
+  return own.clientId;
+}
+async function writeOptions(uow, versionId, feeVersionId, options, currency) {
+  if (!options.length || options.length > 4) throw new DomainError(Codes.INVALID_INPUT, "An estimate has one to four options.", { field: "options" });
+  let n = 0;
+  for (const option2 of options) {
+    if (!option2.lines?.length) throw new DomainError(Codes.INVALID_INPUT, `${option2.label || "Each option"} needs at least one line.`, { field: "lines" });
+    const prepared = [];
+    let sort = 0;
+    for (const line of option2.lines) {
+      const fee = line.feeItemId ? await uow.tx.feeItem.findFirst({ where: { id: line.feeItemId, versionId: feeVersionId } }) : null;
+      if (line.feeItemId && !fee) throw new DomainError(Codes.NOT_FOUND, "That fee is not in the published fee schedule.", { field: "feeItemId" });
+      if (!fee && !line.description?.trim()) throw new DomainError(Codes.INVALID_INPUT, "Each line needs a fee or a description.", { field: "description" });
+      const qtyLow = decimalText(line.qtyLow, "low quantity");
+      const qtyHigh = decimalText(line.qtyHigh ?? line.qtyLow, "high quantity");
+      const unit2 = fee?.priceMinor ?? 0n;
+      let range;
+      try {
+        range = estimateLineRange({ qtyLow, qtyHigh, unitPriceMinor: unit2 });
+      } catch (e) {
+        throw new DomainError(Codes.INVALID_INPUT, e.message, { field: "quantity" });
+      }
+      prepared.push({ feeItemId: fee?.id ?? null, description: (line.description?.trim() || fee?.name || "").slice(0, 200), category: fee?.category ?? "other", taxable: fee ? !["professional_service", "rx_animal_drug", "vaccine_administered", "boarding", "grooming"].includes(fee.taxCategory) : false, qtyLow, qtyHigh, unitPriceMinor: unit2, ...range, optional: line.optional === true, sortOrder: sort += 1 });
+    }
+    const totals = optionTotals(prepared);
+    const row = await uow.tx.estimateOption.create({ data: { estimateVersionId: versionId, label: text17(option2.label, "option name", 80), recommended: option2.recommended === true, currencyCode: currency, ...totals } });
+    for (const p of prepared) await uow.tx.estimateLine.create({ data: { optionId: row.id, ...p } });
+    n += 1;
+  }
+  return n;
+}
+async function createEstimate(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.create", humanOnly: true }, args, async (actor) => {
+    const title = text17(args.title, "title", 160);
+    const result = await command(context.prisma, { name: "estimate.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const clientId = await primaryClient(uow, args.patientId);
+      const fee = await activeFeeVersion(uow.tx);
+      const practice = await billingSettings(uow);
+      const ref = await nextReference(uow.tx, "EST", uow.now);
+      const estimate = await uow.tx.estimate.create({ data: { ref, patientId: args.patientId, clientId, locationId: args.locationId, encounterId: args.encounterId ?? null, title, elective: args.elective === true, status: "open", createdById: staff?.id ?? null } });
+      const version = await uow.tx.estimateVersion.create({ data: { estimateId: estimate.id, versionNo: 1, status: "draft", feeScheduleVersionId: fee.id } });
+      const options = await writeOptions(uow, version.id, fee.id, args.options, practice.currencyCode);
+      auditCreate(uow, actor, "Estimate", estimate.id, "estimate.created", { ref, options, feeSchedule: fee.versionNo });
+      return { id: estimate.id, ref, versionId: version.id, version: version.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function presentEstimate(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.present", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "estimate.present", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const practice = await billingSettings(uow);
+      const options = await uow.tx.estimateOption.findMany({ where: { estimateVersionId: args.versionId }, include: { lines: { orderBy: { sortOrder: "asc" } } }, orderBy: { createdAt: "asc" } });
+      if (!options.length) throw new DomainError(Codes.GUARD_FAILED, "Add an option before presenting the estimate.");
+      const days2 = practice.estimateValidityDays;
+      const validUntil = new Date(uow.now.getTime() + days2 * 864e5);
+      const quoteHash = payloadHash({ versionId: args.versionId, options: options.map((o) => ({ label: o.label, low: o.lowTotalMinor, high: o.highTotalMinor, lines: o.lines.map((l) => [l.description, l.qtyLow.toString(), l.qtyHigh.toString(), l.unitPriceMinor, l.lowMinor, l.highMinor, l.optional]) })), validUntil: validUntil.toISOString() });
+      const row = await transition(uow, { model: "EstimateVersion", id: args.versionId, from: ["draft"], to: "presented", expectedVersion: args.expectedVersion, actor, eventType: "estimate.presented", data: { presentedAt: uow.now, validUntil, quoteHash } });
+      return { id: row.id, status: row.status, quoteHash, validUntil: validUntil.toISOString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reviseEstimate(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.revise", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "estimate.revise", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const estimate = await lockRow(uow.tx, "Estimate", args.estimateId);
+      if (estimate.status !== "open") throw new DomainError(Codes.GUARD_FAILED, "This estimate was already accepted or closed.");
+      const last = await uow.tx.estimateVersion.findFirst({ where: { estimateId: estimate.id }, orderBy: { versionNo: "desc" }, include: { options: { include: { lines: true } } } });
+      if (!last) throw new DomainError(Codes.NOT_FOUND, "Estimate has no version.");
+      if (last.status === "draft") throw new DomainError(Codes.GUARD_FAILED, "The latest version is still a draft. Edit or present it.");
+      const fee = await activeFeeVersion(uow.tx);
+      if (last.status === "presented") await transition(uow, { model: "EstimateVersion", id: last.id, from: ["presented"], to: "superseded", actor, eventType: "estimate.superseded" });
+      const next = await uow.tx.estimateVersion.create({ data: { estimateId: estimate.id, versionNo: last.versionNo + 1, status: "draft", feeScheduleVersionId: fee.id } });
+      const codeOf = new Map((await uow.tx.feeItem.findMany({ where: { id: { in: last.options.flatMap((o) => o.lines.map((l) => l.feeItemId)).filter((x) => !!x) } }, select: { id: true, code: true } })).map((f) => [f.id, f.code]));
+      const nowItems = new Map((await uow.tx.feeItem.findMany({ where: { versionId: fee.id }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
+      await writeOptions(uow, next.id, fee.id, last.options.map((o) => ({ label: o.label, recommended: o.recommended, lines: o.lines.map((l) => ({ feeItemId: l.feeItemId && nowItems.get(codeOf.get(l.feeItemId) ?? "") || null, description: l.description, qtyLow: l.qtyLow.toString(), qtyHigh: l.qtyHigh.toString(), optional: l.optional })) })), last.options[0].currencyCode);
+      auditCreate(uow, actor, "EstimateVersion", next.id, "estimate.revised", { versionNo: next.versionNo });
+      return { id: next.id, versionNo: next.versionNo };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function declineEstimate(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.decline", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "estimate.decline", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "EstimateVersion", id: args.versionId, from: ["presented"], to: "declined", expectedVersion: args.expectedVersion, actor, eventType: "estimate.declined", reason: args.reason ?? null, data: { declineReason: String(args.reason ?? "").slice(0, 300) } });
+      await uow.tx.estimate.updateMany({ where: { id: row.estimateId, status: "open" }, data: { status: "closed", version: { increment: 1 } } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function refreshEstimates(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.refresh", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "estimate.refresh", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const lapsed = await uow.tx.estimateVersion.findMany({ where: { status: "presented", validUntil: { lt: uow.now } }, select: { id: true } });
+      for (const l of lapsed) await transition(uow, { model: "EstimateVersion", id: l.id, from: ["presented"], to: "expired", actor, eventType: "estimate.expired" });
+      return { expired: lapsed.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function acceptEstimate(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "estimate.accept", humanOnly: true }, args, async (actor) => {
+    const method = pick(args.method, ["in_person_signature", "esign_link", "verbal_witnessed"], "method");
+    const result = await command(context.prisma, { name: "estimate.accept", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const version = await lockRow(uow.tx, "EstimateVersion", args.versionId);
+      if (version.status !== "presented") throw new DomainError(Codes.GUARD_FAILED, version.status === "accepted" ? "This estimate was already accepted." : `This estimate is ${version.status.replaceAll("_", " ")}; it cannot be accepted.`, { reason: "not_presented" });
+      if (version.validUntil && version.validUntil <= uow.now) throw new DomainError(Codes.GUARD_FAILED, "This estimate has expired. Make a new version and present it again.", { reason: "expired" });
+      if (args.quoteHash !== version.quoteHash) throw new DomainError(Codes.GUARD_FAILED, "The estimate changed since it was shown. Show the client the current version.", { reason: "quote_changed" });
+      if (method === "verbal_witnessed" && !args.witnessId) throw new DomainError(Codes.INVALID_INPUT, "A verbal acceptance needs a staff witness.", { field: "witnessId" });
+      if (method !== "esign_link" && !String(args.signatureText ?? "").trim()) throw new DomainError(Codes.INVALID_INPUT, "Record the name the client signed or gave.", { field: "signatureText" });
+      const estimate = await lockRow(uow.tx, "Estimate", version.estimateId);
+      if (estimate.status !== "open") throw new DomainError(Codes.GUARD_FAILED, "This estimate is already closed.");
+      const signer = await uow.tx.clientPerson.findUnique({ where: { id: args.signerId }, select: { clientId: true, canApproveTreatment: true, firstName: true, lastName: true } });
+      if (!signer || signer.clientId !== estimate.clientId) throw new DomainError(Codes.NOT_FOUND, "The signer is not part of this household.", { field: "signerId" });
+      if (!signer.canApproveTreatment) throw new DomainError(Codes.NOT_AUTHORIZED, `${signer.firstName} ${signer.lastName} cannot approve treatment for this household.`);
+      const option2 = await uow.tx.estimateOption.findFirst({ where: { id: args.optionId, estimateVersionId: version.id } });
+      if (!option2) throw new DomainError(Codes.NOT_FOUND, "That option is not on this estimate.", { field: "optionId" });
+      const lines = await uow.tx.estimateLine.findMany({ where: { optionId: option2.id }, orderBy: { sortOrder: "asc" } });
+      await uow.tx.estimateAcceptance.create({ data: { estimateVersionId: version.id, optionId: option2.id, signerId: args.signerId, method, quoteHash: version.quoteHash, signatureText: String(args.signatureText ?? "").slice(0, 160), witnessId: args.witnessId ?? null, recordedById: staff.id, at: uow.now } });
+      await transition(uow, { model: "EstimateVersion", id: version.id, from: ["presented"], to: "accepted", expectedVersion: args.expectedVersion, actor, eventType: "estimate.accepted", metadata: { optionId: option2.id, method } });
+      await transition(uow, { model: "Estimate", id: estimate.id, from: ["open"], to: "accepted", actor, eventType: "estimate.closed.accepted", data: { acceptedVersionId: version.id, acceptedOptionId: option2.id } });
+      const ref = await nextReference(uow.tx, "TPL", uow.now);
+      const plan = await uow.tx.treatmentPlan.create({ data: { ref, estimateId: estimate.id, estimateVersionId: version.id, optionId: option2.id, patientId: estimate.patientId, clientId: estimate.clientId, locationId: estimate.locationId, status: "active", acceptedLowMinor: option2.lowTotalMinor, acceptedHighMinor: option2.highTotalMinor, currencyCode: option2.currencyCode } });
+      for (const l of lines) await uow.tx.treatmentPlanItem.create({ data: { planId: plan.id, estimateLineId: l.id, description: l.description, status: "planned", projectedMinor: l.highMinor } });
+      let deposit = null;
+      const practice = await billingSettings(uow);
+      if (estimate.elective && practice.electiveDepositPct && dec(practice.electiveDepositPct).gt(0)) {
+        const amount = depositFor({ lowTotalMinor: option2.lowTotalMinor, highTotalMinor: option2.highTotalMinor }, practice.electiveDepositPct, practice.depositBasis);
+        if (amount > 0n) {
+          const d = await uow.tx.deposit.create({ data: { ref: await nextReference(uow.tx, "DEP", uow.now), clientId: estimate.clientId, estimateId: estimate.id, planId: plan.id, requestedMinor: amount, currencyCode: option2.currencyCode, status: "requested" } });
+          deposit = { id: d.id, ref: d.ref, amountMinor: amount.toString() };
+        }
+      }
+      auditCreate(uow, actor, "TreatmentPlan", plan.id, "plan.opened", { ref, lowMinor: option2.lowTotalMinor.toString(), highMinor: option2.highTotalMinor.toString(), items: lines.length, deposit: deposit?.amountMinor ?? null });
+      return { planId: plan.id, planRef: ref, depositId: deposit?.id ?? null, depositMinor: deposit?.amountMinor ?? null };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function attachOrderToPlan(uow, input) {
+  const plan = await uow.tx.treatmentPlan.findFirst({ where: { patientId: input.patientId, status: "active" }, select: { id: true } });
+  if (!plan) return null;
+  const fee = await uow.tx.feeScheduleVersion.findFirst({ where: { status: "published", schedule: { code: "standard" } }, select: { id: true } });
+  const item = fee ? await feeItemFor(uow.tx, fee.id, { drugId: input.drugId ?? null, orderKind: input.drugId ? null : input.orderKind }) : null;
+  const qty2 = input.quantity && /^\d{1,9}(\.\d{1,6})?$/.test(input.quantity) && dec(input.quantity).gt(0) ? input.quantity : "1";
+  const cost = item ? extend(qty2, item.priceMinor, item.minimumChargeMinor) : 0n;
+  if (cost === 0n) return null;
+  const locked = await lockRow(uow.tx, "TreatmentPlan", plan.id);
+  const used = await planSpend(uow.tx, locked.id);
+  const planned = await uow.tx.treatmentPlanItem.findFirst({ where: { planId: locked.id, status: "planned", estimateLine: { feeItemId: item.id } }, orderBy: { createdAt: "asc" } });
+  const projected = planned ? planned.projectedMinor : cost;
+  if (!withinCeiling(used, projected, locked.acceptedHighMinor)) {
+    throw new DomainError(Codes.GUARD_FAILED, "This would go past the amount the client agreed to. Ask the client to approve a higher amount first.", { reason: "overage", field: "acceptedHighMinor" });
+  }
+  if (planned) await uow.tx.treatmentPlanItem.update({ where: { id: planned.id }, data: { status: "ordered", orderId: input.orderId, version: { increment: 1 } } });
+  else await uow.tx.treatmentPlanItem.create({ data: { planId: locked.id, orderId: input.orderId, description: input.description.slice(0, 200), status: "ordered", projectedMinor: cost } });
+  return { planId: locked.id, usedMinor: (used + projected).toString() };
+}
+async function recordOverageApproval(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "plan.overage", humanOnly: true }, args, async (actor) => {
+    const method = pick(args.method, ["in_person", "phone_witnessed", "esign_link", "emergency_override"], "method");
+    const reason = text17(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "plan.overage", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const newHigh = minorText(args.newHighMinor, "new amount");
+      const plan = await lockRow(uow.tx, "TreatmentPlan", args.planId);
+      if (newHigh <= plan.acceptedHighMinor) throw new DomainError(Codes.INVALID_INPUT, "The new amount must be more than what the client already agreed to.", { field: "newHighMinor" });
+      if (method === "emergency_override") {
+        if (staff.kind !== "veterinarian") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can override the amount in an emergency.");
+      } else {
+        if (!args.approverId) throw new DomainError(Codes.INVALID_INPUT, "Choose who in the household agreed.", { field: "approverId" });
+        const person = await uow.tx.clientPerson.findUnique({ where: { id: args.approverId }, select: { clientId: true, canApproveTreatment: true } });
+        if (!person || person.clientId !== plan.clientId || !person.canApproveTreatment) throw new DomainError(Codes.NOT_AUTHORIZED, "That person cannot approve treatment costs for this household.");
+        if (method === "phone_witnessed" && !args.witnessId) throw new DomainError(Codes.INVALID_INPUT, "A phone approval needs a staff witness.", { field: "witnessId" });
+      }
+      await uow.tx.overageApproval.create({ data: { planId: plan.id, previousHighMinor: plan.acceptedHighMinor, newHighMinor: newHigh, method, approverId: method === "emergency_override" ? null : args.approverId, witnessId: args.witnessId ?? null, emergencyOverrideById: method === "emergency_override" ? staff.id : null, recordedById: staff.id, reason, at: uow.now } });
+      await transition(uow, { model: "TreatmentPlan", id: plan.id, from: ["active"], to: "active", expectedVersion: args.expectedVersion, actor, eventType: "plan.ceiling.raised", reason, data: { acceptedHighMinor: newHigh }, metadata: { from: plan.acceptedHighMinor.toString(), to: newHigh.toString(), method } });
+      return { planId: plan.id, acceptedHighMinor: newHigh.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function closePlan(_root, args, context) {
+  return gated(context, { permissions: [...SELLERS], tool: "plan.close", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "plan.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "TreatmentPlan", id: args.planId, from: ["active"], to: args.cancel ? "cancelled" : "completed", expectedVersion: args.expectedVersion, actor, eventType: args.cancel ? "plan.cancelled" : "plan.completed", reason: args.reason ?? null });
+      await uow.tx.treatmentPlanItem.updateMany({ where: { planId: args.planId, status: "planned" }, data: { status: "cancelled", version: { increment: 1 } } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/inventory.ts
+init_errors();
+init_decimal();
+var dateOnly2 = (value, field) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
   return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
 };
@@ -9350,12 +10508,12 @@ async function lotToDraw(uow, d) {
   }
   const need = dec(d.qty);
   const sorted = levels.filter((l) => l.lot && l.itemId && l.stockLocationId).sort((a, b) => a.lot.expiresOn.getTime() - b.lot.expiresOn.getTime());
-  const pick = sorted.find((l) => dec(l.onHand.toString()).gte(need));
-  if (!pick) {
+  const pick2 = sorted.find((l) => dec(l.onHand.toString()).gte(need));
+  if (!pick2) {
     const best = sorted.reduce((m, l) => dec(l.onHand.toString()).gt(dec(m.onHand.toString())) ? l : m);
     throw new DomainError(Codes.GUARD_FAILED, `Lot ${best.lot.lotNumber} has ${plain(dec(best.onHand.toString()))} on hand; ${plain(need)} is more than that.`, { field: "quantity", reason: "not_enough_stock" });
   }
-  return { lotId: pick.lot.id, lotNumber: pick.lot.lotNumber, expiresOn: pick.lot.expiresOn, itemId: pick.itemId, stockLocationId: pick.stockLocationId, unit: pick.unit, qty: plain(need) };
+  return { lotId: pick2.lot.id, lotNumber: pick2.lot.lotNumber, expiresOn: pick2.lot.expiresOn, itemId: pick2.itemId, stockLocationId: pick2.stockLocationId, unit: pick2.unit, qty: plain(need) };
 }
 async function takeFromLot(uow, lot, m) {
   return moveStock(uow, { itemId: lot.itemId, lotId: lot.lotId, stockLocationId: lot.stockLocationId, kind: m.kind, qtySigned: `-${lot.qty}`, unit: lot.unit, sourceType: m.sourceType, sourceId: m.sourceId, actorId: m.actorId });
@@ -9378,7 +10536,7 @@ async function ensureItem(uow, input) {
 }
 async function addStockLocation(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "stock.add_place", humanOnly: true }, args, async (actor) => {
-    const name = text16(args.name, "name", 80);
+    const name = text17(args.name, "name", 80);
     if (!["shelf", "fridge", "freezer", "cabinet", "controlled_cabinet", "vehicle"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose the kind of place.", { field: "kind" });
     const cold = args.kind === "fridge" || args.kind === "freezer";
     if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
@@ -9394,8 +10552,8 @@ async function addStockLocation(_root, args, context) {
 }
 async function receiveStock(_root, args, context) {
   return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive_lot", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const expiresOn = dateOnly(args.expiresOn, "Expires");
+    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const expiresOn = dateOnly2(args.expiresOn, "Expires");
     const quantity = positive(args.quantity, "quantity");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
     const result = await command(context.prisma, { name: "stock.receive_lot", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -9421,7 +10579,7 @@ var day3 = (d) => d.toISOString().slice(0, 10);
 async function adjustStock(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
     const quantity = positive(args.quantity, "quantity");
-    const reason = text16(args.reason, "reason", 200);
+    const reason = text17(args.reason, "reason", 200);
     if (reason.length < 4) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 4 characters).", { field: "reason" });
     if (args.kind !== "dispose" && args.kind !== "use") throw new DomainError(Codes.INVALID_INPUT, "Choose dispose or use.", { field: "kind" });
     const result = await command(context.prisma, { name: "stock.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -9435,7 +10593,7 @@ async function adjustStock(_root, args, context) {
 }
 async function addSupplier(_root, args, context) {
   return gated(context, { permissions: ["canOrderStock", "canManageInventory"], tool: "supplier.create", humanOnly: true }, args, async (actor) => {
-    const name = text16(args.name, "name", 100);
+    const name = text17(args.name, "name", 100);
     const result = await command(context.prisma, { name: "supplier.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       if (await uow.tx.supplier.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `${name} is already a supplier.`);
       const row = await uow.tx.supplier.create({ data: { name, accountNumber: String(args.accountNumber ?? "").trim().slice(0, 60), phone: String(args.phone ?? "").trim().slice(0, 40), email: String(args.email ?? "").trim().slice(0, 120), deaNumber: String(args.deaNumber ?? "").trim().slice(0, 20) } });
@@ -9481,7 +10639,7 @@ async function submitPurchaseOrder(_root, args, context) {
 }
 async function cancelPurchaseOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrderStock", "canApprovePurchase"], tool: "po.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 200);
+    const reason = text17(args.reason, "reason", 200);
     const result = await command(context.prisma, { name: "po.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "PurchaseOrder", id: args.orderId, from: ["draft", "submitted"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "po.cancelled", reason });
       return { id: row.id, status: row.status, version: row.version };
@@ -9507,10 +10665,10 @@ async function receivePurchaseOrder(_root, args, context) {
         if (line.purchaseOrderId !== po.id) throw new DomainError(Codes.GUARD_FAILED, "A line does not belong to this order.");
         const remaining = dec(String(line.qtyOrdered)).minus(dec(String(line.qtyReceived)));
         if (dec(qty2).gt(remaining)) throw new DomainError(Codes.GUARD_FAILED, `Only ${plain(remaining)} more of that line is expected.`);
-        const expiresOn = dateOnly(l.expiresOn, "Expires");
+        const expiresOn = dateOnly2(l.expiresOn, "Expires");
         if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
         const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
-        const lotNumber = text16(l.lotNumber, "lotNumber", 60);
+        const lotNumber = text17(l.lotNumber, "lotNumber", 60);
         let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
         if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
         lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
@@ -9572,8 +10730,8 @@ async function countStock(_root, args, context) {
 }
 async function openRecall(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "recall.open", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const title = text16(args.title, "title", 160);
+    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const title = text17(args.title, "title", 160);
     const result = await command(context.prisma, { name: "recall.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const item = await uow.tx.item.findUnique({ where: { id: args.itemId }, select: { id: true, drugId: true, vaccineId: true } });
       if (!item) throw new DomainError(Codes.NOT_FOUND, "Item not found.");
@@ -9613,7 +10771,7 @@ async function markRecallExposure(_root, args, context) {
 }
 async function closeRecall(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory"], tool: "recall.close", humanOnly: true }, args, async (actor) => {
-    const resolution = text16(args.resolution, "resolution", 300);
+    const resolution = text17(args.resolution, "resolution", 300);
     const result = await command(context.prisma, { name: "recall.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const open = await uow.tx.recallExposure.count({ where: { recallId: args.recallId, status: { not: "resolved" } } });
       if (open) throw new DomainError(Codes.GUARD_FAILED, `${open} ${open === 1 ? "patient has" : "patients have"} not been marked resolved.`);
@@ -9658,7 +10816,7 @@ async function logTemperature(_root, args, context) {
 }
 async function resolveExcursion(_root, args, context) {
   return gated(context, { permissions: ["canReleaseQuarantine", "canManageInventory"], tool: "temperature.resolve", humanOnly: true }, args, async (actor) => {
-    const resolution = text16(args.resolution, "resolution", 300);
+    const resolution = text17(args.resolution, "resolution", 300);
     const result = await command(context.prisma, { name: "temperature.resolve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "TemperatureExcursion", id: args.excursionId, from: ["open"], to: "resolved", expectedVersion: args.expectedVersion, actor, eventType: "temperature.resolved", reason: resolution, data: { resolvedAt: uow.now, resolution } });
       return { id: row.id, status: row.status, version: row.version };
@@ -9787,7 +10945,7 @@ async function placeOrder(_root, args, context) {
       const licensedAction = LICENSED_ORDER[args.kind];
       const licence = licensedAction ? await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: licensedAction, at: uow.now }) : null;
       let doseId = null;
-      let description = text16(args.description ?? "", "description", 300, args.kind !== "medication");
+      let description = text17(args.description ?? "", "description", 300, args.kind !== "medication");
       let warnings = [];
       let drug = null;
       if (args.kind === "medication") {
@@ -9832,6 +10990,7 @@ async function placeOrder(_root, args, context) {
         }
       });
       await markInProgress(uow, enc);
+      await attachOrderToPlan(uow, { patientId: enc.patientId, orderId: order.id, description, drugId: drug?.id ?? null, orderKind: args.kind, quantity: args.quantity ?? null });
       auditCreate(uow, actor, "ClinicalOrder", order.id, "order.placed", { ref, kind: args.kind, encounterId: enc.id, drugId: drug?.id ?? null, doseId, csSchedule: drug?.csSchedule ?? null, warnings: warnings.map((w) => w.code) });
       let sheetOrderId = null;
       let tasks = 0;
@@ -9847,7 +11006,7 @@ async function placeOrder(_root, args, context) {
 }
 async function cancelOrder(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "order.cancel", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "order.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const given = await uow.tx.administration.count({ where: { orderId: args.orderId, reverses: null } });
       if (given) throw new DomainError(Codes.GUARD_FAILED, "Doses were already given on this order; reverse them instead of cancelling.");
@@ -9956,7 +11115,7 @@ async function administer(uow, actor, staff, args) {
       licenseEvaluationId: licenceId,
       givenAt: uow.now,
       wasteQty: args.wasteQty ? toScale(args.wasteQty, "qty") : null,
-      qtyOverrideReason: qtyProblem ? text16(qtyOverrideReason, "qtyOverrideReason", 300) : ""
+      qtyOverrideReason: qtyProblem ? text17(qtyOverrideReason, "qtyOverrideReason", 300) : ""
     }
   });
   if (draw) await takeFromLot(uow, draw, { kind: "use", sourceType: "administration", sourceId: row.id, actorId: staff.id });
@@ -9966,7 +11125,7 @@ async function administer(uow, actor, staff, args) {
 }
 async function reverseAdministration(_root, args, context) {
   return gated(context, { permissions: ["canOrder", "canAdminister"], tool: "order.reverse_administration", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "order.reverse_administration", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -10051,7 +11210,7 @@ async function admitPatient(_root, args, context) {
       const live = await uow.tx.hospitalStay.findFirst({ where: { patientId: enc.patientId, status: { in: ["admitted", "in_care", "ready_for_discharge"] } }, select: { ref: true } });
       if (live) throw new DomainError(Codes.GUARD_FAILED, `The patient is already admitted (${live.ref}).`);
       const ref = await nextReference(uow.tx, "STAY", uow.now);
-      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text16(args.reason ?? "", "reason", 300, false) } });
+      const stay = await uow.tx.hospitalStay.create({ data: { ref, patientId: enc.patientId, locationId: enc.locationId, encounterId: enc.id, cageId: cage.id, admittedAt: uow.now, status: "admitted", codeStatus: args.codeStatus, attendingDvmId: enc.attendingDvmId ?? (staff.kind === "dvm" ? staff.id : null), reason: text17(args.reason ?? "", "reason", 300, false) } });
       await uow.tx.cageAssignment.create({ data: { stayId: stay.id, cageId: cage.id, fromAt: uow.now } });
       await uow.tx.encounter.update({ where: { id: enc.id }, data: { stayId: stay.id, version: { increment: 1 } } });
       await uow.tx.patient.update({ where: { id: enc.patientId }, data: { codeStatus: args.codeStatus, version: { increment: 1 } } });
@@ -10085,7 +11244,7 @@ async function moveCage(_root, args, context) {
 }
 async function dischargePatient(_root, args, context) {
   return gated(context, { permissions: ["canOrder"], tool: "stay.discharge", humanOnly: true }, args, async (actor) => {
-    const body = text16(args.instructions, "instructions", 1e4);
+    const body = text17(args.instructions, "instructions", 1e4);
     if (args.recheckOn && !/^\d{4}-\d{2}-\d{2}$/.test(args.recheckOn)) throw new DomainError(Codes.INVALID_INPUT, "recheckOn is YYYY-MM-DD.", { field: "recheckOn" });
     const result = await command(context.prisma, { name: "stay.discharge", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -10174,7 +11333,7 @@ async function completeTreatmentTask(_root, args, context) {
       if (sheet.order?.kind === "medication" || sheet.order?.drugId) {
         administrationId = (await administer(uow, actor, staff, { orderId: sheet.order.id, qty: args.qty, lotId: args.lotId, csContainerId: args.csContainerId, witnessId: args.witnessId, wasteQty: args.wasteQty, treatmentTaskId: task.id, qtyOverrideReason: args.qtyOverrideReason })).id;
       }
-      const note = args.observation ? text16(args.observation, "observation", 2e3) : "";
+      const note = args.observation ? text17(args.observation, "observation", 2e3) : "";
       const observation = note || earlyReason ? { ...note ? { note } : {}, ...earlyReason ? { earlyReason, earlyBy: staff.id } : {} } : void 0;
       await uow.tx.treatmentTask.update({ where: { id: task.id }, data: { status: "done", doneById: staff.id, doneAt: uow.now, administrationId, observation, version: { increment: 1 } } });
       auditCreate(uow, actor, "TreatmentTask", task.id, "treatment.done", { administrationId, early: Boolean(earlyReason) }, { reason: earlyReason || null });
@@ -10185,7 +11344,7 @@ async function completeTreatmentTask(_root, args, context) {
 }
 async function skipTreatmentTask(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "treatment.skip", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "treatment.skip", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "TreatmentTask", id: args.taskId, from: ["scheduled", "due", "overdue"], to: "skipped", expectedVersion: args.expectedVersion, actor, eventType: "treatment.skipped", reason, data: { skipReason: reason, doneById: staff.id, doneAt: uow.now } });
@@ -10231,7 +11390,7 @@ async function openAnaesthesia(_root, args, context) {
           ref,
           encounterId: enc.id,
           patientId: enc.patientId,
-          procedure: text16(args.procedure, "procedure", 200),
+          procedure: text17(args.procedure, "procedure", 200),
           asaStatus: args.asaStatus,
           fastingConfirmed: args.fastingConfirmed,
           consentConfirmed: true,
@@ -10289,7 +11448,7 @@ async function recordMonitoring(_root, args, context) {
         return t;
       };
       const row = await uow.tx.monitoringReading.create({
-        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text16(args.notes ?? "", "notes", 500, false), byId: staff.id }
+        data: { recordId: rec.id, at: uow.now, hr: int(args.hr, "hr", 500), rr: int(args.rr, "rr", 300), spo2: int(args.spo2, "spo2", 100), etco2: int(args.etco2, "etco2", 150), sbp: int(args.sbp, "sbp", 400), dbp: int(args.dbp, "dbp", 300), map: int(args.map, "map", 300), tempC: tempC(args.tempC), agentPct: d(args.agentPct, "agentPct"), o2FlowLpm: d(args.o2FlowLpm, "o2FlowLpm"), fluidsRateMlHr: d(args.fluidsRateMlHr, "fluidsRateMlHr"), notes: text17(args.notes ?? "", "notes", 500, false), byId: staff.id }
       });
       auditCreate(uow, actor, "MonitoringReading", row.id, "anaesthesia.reading", { recordId: rec.id });
       return { id: row.id };
@@ -10304,7 +11463,7 @@ async function closeAnaesthesia(_root, args, context) {
       if (staff.kind !== "dvm") throw new DomainError(Codes.LICENSE_INACTIVE, "A veterinarian closes the anaesthesia record.");
       const rec = await uow.tx.anaesthesiaRecord.findUnique({ where: { id: args.recordId }, select: { encounter: { select: { locationId: true } } } });
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: rec.encounter.locationId, action: "sign_record", at: uow.now });
-      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text16(args.complications ?? "", "complications", 2e3, false) } });
+      const row = await transition(uow, { model: "AnaesthesiaRecord", id: args.recordId, from: ["recovery"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "anaesthesia.closed", data: { recoveryEndAt: uow.now, closedById: staff.id, complications: text17(args.complications ?? "", "complications", 2e3, false) } });
       return { id: row.id, status: row.status };
     });
     return { replay: result.replay, ...result.value };
@@ -10316,7 +11475,7 @@ async function saveSurgeryReport(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: enc.locationId, action: "perform_surgery", at: uow.now });
-      const data = { procedure: text16(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text16(args.technique ?? "", "technique", 5e3, false), findings: text16(args.findings ?? "", "findings", 5e3, false), closure: text16(args.closure ?? "", "closure", 2e3, false), sutures: text16(args.sutures ?? "", "sutures", 500, false), specimens: text16(args.specimens ?? "", "specimens", 500, false) };
+      const data = { procedure: text17(args.procedure, "procedure", 200), surgeonId: staff.id, assistantId: args.assistantId ?? null, technique: text17(args.technique ?? "", "technique", 5e3, false), findings: text17(args.findings ?? "", "findings", 5e3, false), closure: text17(args.closure ?? "", "closure", 2e3, false), sutures: text17(args.sutures ?? "", "sutures", 500, false), specimens: text17(args.specimens ?? "", "specimens", 500, false) };
       const existing = await uow.tx.surgeryReport.findFirst({ where: { encounterId: enc.id }, select: { id: true, status: true } });
       if (existing?.status === "signed") throw new DomainError(Codes.GUARD_FAILED, "The surgery report is signed; add an addendum.");
       const row = existing ? await uow.tx.surgeryReport.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } }) : await uow.tx.surgeryReport.create({ data: { encounterId: enc.id, status: "draft", ...data } });
@@ -10337,10 +11496,10 @@ async function saveDentalChart(_root, args, context) {
       if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
       for (const key2 of ["findings", "procedures"]) {
-        const list19 = entry[key2];
-        if (list19 === void 0) continue;
-        if (!Array.isArray(list19) || list19.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
-        if (list19.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+        const list20 = entry[key2];
+        if (list20 === void 0) continue;
+        if (!Array.isArray(list20) || list20.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list20.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
       }
     }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -10357,6 +11516,7 @@ async function saveDentalChart(_root, args, context) {
 }
 
 // features/keystone/mutations/vaccines.ts
+init_errors();
 async function activeRulesFor(uow, productId, speciesId) {
   return uow.tx.reminderRule.findMany({
     where: { triggerVaccines: { some: { id: productId } }, protocolVersion: { status: "published", protocol: speciesId ? { OR: [{ speciesId }, { speciesId: null }] } : {} } },
@@ -10386,7 +11546,7 @@ var RABIES_BOOSTER_MIN_DAYS = 270;
 var VACCINE_REPEAT_MIN_DAYS = 14;
 async function administerVaccine(_root, args, context) {
   return gated(context, { permissions: ["canAdminister"], tool: "vaccine.administer", humanOnly: true }, args, async (actor) => {
-    const site = text16(args.site, "site", 100);
+    const site = text17(args.site, "site", 100);
     const result = await command(context.prisma, { name: "vaccine.administer", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
@@ -10523,7 +11683,7 @@ async function issueRabiesCertificate(uow, input) {
 async function recordOutsideVaccine(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "vaccine.outside", humanOnly: true }, args, async (actor) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(args.administeredOn)) throw new DomainError(Codes.INVALID_INPUT, "administeredOn is YYYY-MM-DD.", { field: "administeredOn" });
-    const note = text16(args.evidenceNote, "evidenceNote", 500);
+    const note = text17(args.evidenceNote, "evidenceNote", 500);
     const result = await command(context.prisma, { name: "vaccine.outside", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const patient = await activePatient(uow, args.patientId);
@@ -10549,7 +11709,7 @@ async function recordOutsideVaccine(_root, args, context) {
 }
 async function reverseVaccineAdministration(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord", "canOrder"], tool: "vaccine.reverse", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     if (reason.length < 8) throw new DomainError(Codes.INVALID_INPUT, "Give the reason for the reversal (at least 8 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "vaccine.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
@@ -10582,7 +11742,7 @@ async function reverseVaccineAdministration(_root, args, context) {
 }
 async function suppressReminder(_root, args, context) {
   return gated(context, { permissions: ["canWriteRecord"], tool: "reminder.suppress", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "reminder.suppress", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "PatientReminder", id: args.reminderId, from: ["scheduled", "due", "overdue", "lapsed"], to: "suppressed", expectedVersion: args.expectedVersion, actor, eventType: "reminder.suppressed", reason, data: { suppressedReason: reason } });
       return { id: row.id, status: row.status };
@@ -10636,6 +11796,8 @@ async function runReminderJob(uow, locationId) {
 
 // features/keystone/mutations/imports.ts
 var import_node_crypto8 = require("node:crypto");
+init_errors();
+init_decimal();
 
 // features/integrations/pims/index.ts
 function parseCsv(input) {
@@ -10643,12 +11805,12 @@ function parseCsv(input) {
   let row = [];
   let field = "";
   let quoted = false;
-  const text17 = input.replace(/^\uFEFF/, "");
-  for (let i = 0; i < text17.length; i++) {
-    const c = text17[i];
+  const text18 = input.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text18.length; i++) {
+    const c = text18[i];
     if (quoted) {
       if (c === '"') {
-        if (text17[i + 1] === '"') {
+        if (text18[i + 1] === '"') {
           field += '"';
           i++;
         } else quoted = false;
@@ -10660,7 +11822,7 @@ function parseCsv(input) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text17[i + 1] === "\n") i++;
+      if (c === "\r" && text18[i + 1] === "\n") i++;
       row.push(field);
       field = "";
       if (row.some((v) => v.trim() !== "")) rows.push(row);
@@ -11171,6 +12333,8 @@ async function refreshClinicalClocks(_root, args, context) {
 }
 
 // features/keystone/mutations/pharmacy.ts
+init_errors();
+init_decimal();
 var CS_UNITS = /* @__PURE__ */ new Set(["mg", "mcg", "g", "mL", "L", "tablet", "capsule", "unit", "each"]);
 var isCs = (s) => !!s && s !== "none";
 var addMonthsTo = (d, months) => {
@@ -11178,7 +12342,7 @@ var addMonthsTo = (d, months) => {
   out.setUTCMonth(out.getUTCMonth() + months);
   return out;
 };
-var dateOnly2 = (value, field) => {
+var dateOnly3 = (value, field) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
   return /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
 };
@@ -11222,7 +12386,7 @@ async function writePrescription(_root, args, context) {
       for (const input of args.lines) {
         const product = byId.get(input.productId);
         if (!product || !product.active) throw new DomainError(Codes.NOT_FOUND, "That drug is not in the formulary.", { field: "productId" });
-        text16(input.directions, "directions", 500);
+        text17(input.directions, "directions", 500);
         positiveQty(input.quantity, "quantity");
         const refills = Number(input.refillsAuthorised ?? 0);
         if (!Number.isInteger(refills) || refills < 0) throw new DomainError(Codes.INVALID_INPUT, "Refills must be a whole number, zero or more.", { field: "refillsAuthorised" });
@@ -11254,7 +12418,7 @@ async function writePrescription(_root, args, context) {
             create: lines.map((l) => ({
               productId: l.product.id,
               csSchedule: l.product.csSchedule,
-              directions: text16(l.input.directions, "directions", 500),
+              directions: text17(l.input.directions, "directions", 500),
               route: String(l.input.route ?? "").slice(0, 60),
               frequency: String(l.input.frequency ?? "").slice(0, 100),
               quantity: toScale(dec(decimalText(l.input.quantity, "quantity")), "qty"),
@@ -11407,7 +12571,7 @@ async function dispenseFill(_root, args, context) {
         const cs = await resolvePolicy(uow.tx, "controlled_substances", { locationId: rx.location.id, on });
         if (cs.rules.pdmp.required && cs.rules.pdmp.schedules.includes(line.csSchedule)) {
           const prefix = await nextReference(uow.tx, "PDM", uow.now);
-          await uow.tx.pdmpReport.create({ data: { ref: prefix, locationId: rx.location.id, dispenseId: row.id, program: cs.rules.pdmp.program, format: cs.rules.pdmp.format, dueOn: dateOnly2(addDays(on, cs.rules.pdmp.maxDays), "dueOn"), status: "pending" } });
+          await uow.tx.pdmpReport.create({ data: { ref: prefix, locationId: rx.location.id, dispenseId: row.id, program: cs.rules.pdmp.program, format: cs.rules.pdmp.format, dueOn: dateOnly3(addDays(on, cs.rules.pdmp.maxDays), "dueOn"), status: "pending" } });
         }
       }
       const filled = fills + 1;
@@ -11421,8 +12585,8 @@ async function dispenseFill(_root, args, context) {
 }
 async function receiveStockLot(_root, args, context) {
   return gated(context, { permissions: ["canReceiveStock", "canManageInventory"], tool: "stock.receive", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const expiresOn = dateOnly2(args.expiresOn, "Expires");
+    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const expiresOn = dateOnly3(args.expiresOn, "Expires");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
     const result = await command(context.prisma, { name: "stock.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const { on } = await locationDay2(uow, args.locationId, uow.now);
@@ -11443,7 +12607,7 @@ async function receiveStockLot(_root, args, context) {
 }
 async function setLotQuarantine(_root, args, context) {
   return gated(context, { permissions: args.quarantine ? ["canManageInventory", "canReceiveStock"] : ["canReleaseQuarantine"], tool: "stock.quarantine", humanOnly: true }, args, async (actor) => {
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     if (reason.length < 5) throw new DomainError(Codes.INVALID_INPUT, "Say why (at least 5 characters).", { field: "reason" });
     const result = await command(context.prisma, { name: "stock.quarantine", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, {
@@ -11464,8 +12628,8 @@ async function setLotQuarantine(_root, args, context) {
 }
 async function receiveControlled(_root, args, context) {
   return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
-    const lotExpiresOn = dateOnly2(args.lotExpiresOn, "Expires");
+    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
+    const lotExpiresOn = dateOnly3(args.lotExpiresOn, "Expires");
     const labelQty = positiveQty(args.labelQty, "labelQty");
     if (!CS_UNITS.has(args.labelUnit)) throw new DomainError(Codes.INVALID_INPUT, "Choose a unit.", { field: "labelUnit" });
     const result = await command(context.prisma, { name: "cs.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -11476,12 +12640,12 @@ async function receiveControlled(_root, args, context) {
       if (day2(lotExpiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That bottle is already expired.");
       const reg = await requireDeaRegistration(uow.tx, { locationId: args.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
       const scheduleII = product.csSchedule === "CII" || product.csSchedule === "CIIN";
-      const form = String(args.orderFormReference ?? "").trim().slice(0, 40);
-      if (scheduleII && !form) throw new DomainError(Codes.INVALID_INPUT, "A Schedule II drug is received against a DEA Form 222 or CSOS order: enter its number.", { field: "orderFormReference" });
+      const form2 = String(args.orderFormReference ?? "").trim().slice(0, 40);
+      if (scheduleII && !form2) throw new DomainError(Codes.INVALID_INPUT, "A Schedule II drug is received against a DEA Form 222 or CSOS order: enter its number.", { field: "orderFormReference" });
       const ref = `CSC-${(await uow.tx.location.findUniqueOrThrow({ where: { id: args.locationId }, select: { code: true } })).code.toUpperCase()}-${(await nextReference(uow.tx, "CSB", uow.now)).slice(-6)}`;
       const container = await uow.tx.csContainer.create({ data: { ref, productId: product.id, locationId: args.locationId, deaRegistrationId: reg.deaRegistrationId, lotNumber, lotExpiresOn, status: "sealed", labelQty, labelUnit: args.labelUnit } });
-      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: form ? `Received on order ${form}` : "Received" }, uow.now);
-      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, product: product.displayName, qty: labelQty, unit: args.labelUnit, orderForm: form || null, entry: entry.ref });
+      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: form2 ? `Received on order ${form2}` : "Received" }, uow.now);
+      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, product: product.displayName, qty: labelQty, unit: args.labelUnit, orderForm: form2 || null, entry: entry.ref });
       return { id: container.id, ref, status: "sealed" };
     });
     return { replay: result.replay, ...result.value };
@@ -11502,7 +12666,7 @@ async function openControlled(_root, args, context) {
 async function wasteControlled(_root, args, context) {
   return gated(context, { permissions: ["canAdministerControlled"], tool: "cs.waste", humanOnly: true }, args, async (actor) => {
     const qty2 = positiveQty(args.qty, "qty");
-    const reason = text16(args.reason, "reason", 300);
+    const reason = text17(args.reason, "reason", 300);
     const result = await command(context.prisma, { name: "cs.waste", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const witness = await witnessFor(uow, args.witnessId, staff.id);
@@ -11534,8 +12698,8 @@ async function openCase(uow, input) {
       discoveredById: input.staffId,
       description: input.description.slice(0, 500),
       status: "open",
-      noticeDueOn: dateOnly2(addBusinessDays(calendar, on, policy.rules.theftLossNoticeBusinessDays), "noticeDueOn"),
-      form106DueOn: dateOnly2(addDays(on, policy.rules.form106Days), "form106DueOn")
+      noticeDueOn: dateOnly3(addBusinessDays(calendar, on, policy.rules.theftLossNoticeBusinessDays), "noticeDueOn"),
+      form106DueOn: dateOnly3(addDays(on, policy.rules.form106Days), "form106DueOn")
     }
   });
 }
@@ -11581,7 +12745,7 @@ async function reportCsLoss(_root, args, context) {
   return gated(context, { permissions: ["canCountControlled", "canManageControlled"], tool: "cs.report_loss", humanOnly: true }, args, async (actor) => {
     if (args.kind !== "theft" && args.kind !== "loss") throw new DomainError(Codes.INVALID_INPUT, "Choose theft or loss.", { field: "kind" });
     const qty2 = positiveQty(args.qty, "qty");
-    const description = text16(args.description, "description", 500);
+    const description = text17(args.description, "description", 500);
     const result = await command(context.prisma, { name: "cs.report_loss", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const witness = await witnessFor(uow, args.witnessId, staff.id);
@@ -11620,7 +12784,7 @@ async function advanceDiscrepancy(_root, args, context) {
 }
 async function destroyControlled(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled"], tool: "cs.destroy", humanOnly: true }, args, async (actor) => {
-    const method = text16(args.method, "method", 200);
+    const method = text17(args.method, "method", 200);
     const result = await command(context.prisma, { name: "cs.destroy", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       if (args.witnessAId === args.witnessBId) throw new DomainError(Codes.GUARD_FAILED, "Destruction needs two different witnesses.");
@@ -11645,7 +12809,7 @@ async function destroyControlled(_root, args, context) {
 }
 async function submitPdmp(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled", "canCountControlled"], tool: "cs.pdmp_submit", humanOnly: true }, args, async (actor) => {
-    const confirmation = text16(args.confirmation, "confirmation", 100);
+    const confirmation = text17(args.confirmation, "confirmation", 100);
     const result = await command(context.prisma, { name: "cs.pdmp_submit", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const row = await transition(uow, { model: "PdmpReport", id: args.reportId, from: ["pending"], to: "submitted", expectedVersion: args.expectedVersion, actor, eventType: "cs.pdmp_submitted", reason: confirmation, data: { submittedAt: uow.now, submittedById: staff.id, confirmation } });
@@ -11654,6 +12818,10 @@ async function submitPdmp(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
+
+// features/keystone/mutations/register.ts
+init_errors();
+init_decimal();
 
 // features/keystone/lib/asap.ts
 var SPECIES2 = { canine: "02", feline: "03", equine: "04", other: "99" };
@@ -11688,7 +12856,7 @@ var ymd2 = (value, field) => {
 var asDate = (v) => /* @__PURE__ */ new Date(`${v}T00:00:00Z`);
 async function issueOrderForm(_root, args, context) {
   return gated(context, { permissions: ["canManageControlled", "canReceiveControlled"], tool: "cs.order_form", humanOnly: true }, args, async (actor) => {
-    const formNumber = text16(args.formNumber, "formNumber", 40);
+    const formNumber = text17(args.formNumber, "formNumber", 40);
     const issuedOn = ymd2(args.issuedOn, "Issued");
     if (!["form_222", "csos"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose Form 222 or CSOS.", { field: "kind" });
     if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 20) throw new DomainError(Codes.INVALID_INPUT, "A form lists between one and twenty drugs.", { field: "lines" });
@@ -11717,29 +12885,29 @@ async function issueOrderForm(_root, args, context) {
 }
 async function receiveOnOrderForm(_root, args, context) {
   return gated(context, { permissions: ["canReceiveControlled"], tool: "cs.receive_on_form", humanOnly: true }, args, async (actor) => {
-    const lotNumber = text16(args.lotNumber, "lotNumber", 60);
+    const lotNumber = text17(args.lotNumber, "lotNumber", 60);
     const lotExpiresOn = ymd2(args.lotExpiresOn, "Expires");
     const labelQty = decimalText(args.labelQty, "labelQty");
     if (!dec(labelQty).gt(0)) throw new DomainError(Codes.INVALID_INPUT, "Quantity must be more than zero.", { field: "labelQty" });
     const result = await command(context.prisma, { name: "cs.receive_on_form", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const line = await lockRow(uow.tx, "CsOrderFormLine", args.lineId);
-      const form = await uow.tx.csOrderForm.findUnique({ where: { id: line.orderFormId }, select: { id: true, ref: true, formNumber: true, status: true, locationId: true, expiresOn: true, version: true } });
-      if (!form || !["open", "partially_filled"].includes(form.status)) throw new DomainError(Codes.GUARD_FAILED, `That order form is ${form?.status.replaceAll("_", " ") ?? "missing"}.`);
-      const { on } = await locationDay2(uow, form.locationId, uow.now);
-      if (form.expiresOn.toISOString().slice(0, 10) < on) throw new DomainError(Codes.GUARD_FAILED, `Form ${form.formNumber} expired on ${form.expiresOn.toISOString().slice(0, 10)}; it is valid for 60 days.`);
+      const form2 = await uow.tx.csOrderForm.findUnique({ where: { id: line.orderFormId }, select: { id: true, ref: true, formNumber: true, status: true, locationId: true, expiresOn: true, version: true } });
+      if (!form2 || !["open", "partially_filled"].includes(form2.status)) throw new DomainError(Codes.GUARD_FAILED, `That order form is ${form2?.status.replaceAll("_", " ") ?? "missing"}.`);
+      const { on } = await locationDay2(uow, form2.locationId, uow.now);
+      if (form2.expiresOn.toISOString().slice(0, 10) < on) throw new DomainError(Codes.GUARD_FAILED, `Form ${form2.formNumber} expired on ${form2.expiresOn.toISOString().slice(0, 10)}; it is valid for 60 days.`);
       if (line.packagesReceived >= line.packages) throw new DomainError(Codes.GUARD_FAILED, "Every package on that line has arrived.");
       const product = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: line.productId }, select: { id: true, csSchedule: true } });
-      const reg = await requireDeaRegistration(uow.tx, { locationId: form.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
-      const loc = await uow.tx.location.findUniqueOrThrow({ where: { id: form.locationId }, select: { code: true } });
+      const reg = await requireDeaRegistration(uow.tx, { locationId: form2.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
+      const loc = await uow.tx.location.findUniqueOrThrow({ where: { id: form2.locationId }, select: { code: true } });
       const ref = `CSC-${loc.code.toUpperCase()}-${(await nextReference(uow.tx, "CSB", uow.now)).slice(-6)}`;
-      const container = await uow.tx.csContainer.create({ data: { ref, productId: product.id, locationId: form.locationId, deaRegistrationId: reg.deaRegistrationId, lotNumber, lotExpiresOn: asDate(lotExpiresOn), status: "sealed", labelQty: toScale(dec(labelQty), "qty"), labelUnit: args.labelUnit } });
-      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: `Received on order ${form.formNumber}` }, uow.now);
+      const container = await uow.tx.csContainer.create({ data: { ref, productId: product.id, locationId: form2.locationId, deaRegistrationId: reg.deaRegistrationId, lotNumber, lotExpiresOn: asDate(lotExpiresOn), status: "sealed", labelQty: toScale(dec(labelQty), "qty"), labelUnit: args.labelUnit } });
+      const entry = await appendCsEntry(uow.tx, { containerId: container.id, type: "receive", qtySigned: labelQty, unit: args.labelUnit, occurredAt: uow.now, actorId: staff.id, reason: `Received on order ${form2.formNumber}` }, uow.now);
       await uow.tx.csOrderFormLine.update({ where: { id: line.id }, data: { packagesReceived: { increment: 1 } } });
-      const lines = await uow.tx.csOrderFormLine.findMany({ where: { orderFormId: form.id }, select: { packages: true, packagesReceived: true } });
+      const lines = await uow.tx.csOrderFormLine.findMany({ where: { orderFormId: form2.id }, select: { packages: true, packagesReceived: true } });
       const done = lines.every((l) => l.packagesReceived >= l.packages);
-      await transition(uow, { model: "CsOrderForm", id: form.id, from: ["open", "partially_filled"], to: done ? "filled" : "partially_filled", actor, eventType: "cs.order_form_received" });
-      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, form: form.formNumber, entry: entry.ref });
+      await transition(uow, { model: "CsOrderForm", id: form2.id, from: ["open", "partially_filled"], to: done ? "filled" : "partially_filled", actor, eventType: "cs.order_form_received" });
+      auditCreate(uow, actor, "CsContainer", container.id, "cs.received", { ref, form: form2.formNumber, entry: entry.ref });
       return { id: container.id, ref, status: done ? "filled" : "partially_filled" };
     });
     return { replay: result.replay, ...result.value };
@@ -11856,7 +13024,7 @@ async function printDispenseLabel(_root, args, context) {
 }
 async function requestExternalFill(_root, args, context) {
   return gated(context, { permissions: ["canFulfilRefill", "canDispense"], tool: "rx.external_request", humanOnly: true }, args, async (actor) => {
-    const pharmacyName = text16(args.pharmacyName, "pharmacyName", 100);
+    const pharmacyName = text17(args.pharmacyName, "pharmacyName", 100);
     const result = await command(context.prisma, { name: "rx.external_request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const rx = await uow.tx.prescription.findUnique({ where: { id: args.prescriptionId }, select: { id: true, status: true, patientId: true, lines: { select: { csSchedule: true } } } });
       if (!rx || rx.status === "void") throw new DomainError(Codes.NOT_FOUND, "Prescription not found.");
@@ -11900,6 +13068,896 @@ async function exportWrittenRx(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/fees.ts
+init_errors();
+async function standardSchedule(uow) {
+  const found = await uow.tx.feeSchedule.findFirst({ where: { code: STANDARD_SCHEDULE }, select: { id: true } });
+  if (found) return found;
+  return uow.tx.feeSchedule.create({ data: { name: "Standard fees", code: STANDARD_SCHEDULE }, select: { id: true } });
+}
+async function startFeeDraft(_root, args, context) {
+  return gated(context, { permissions: ["canManageFees"], tool: "fees.draft", humanOnly: true }, args, async (actor) => {
+    const label = text17(args.label, "label", 80);
+    const result = await command(context.prisma, { name: "fees.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const schedule = await standardSchedule(uow);
+      const open = await uow.tx.feeScheduleVersion.findFirst({ where: { scheduleId: schedule.id, status: { in: ["draft", "pending_approval"] } }, select: { id: true } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, "There is already a draft fee schedule. Finish or discard it first.", { reason: "draft_exists" });
+      const last = await uow.tx.feeScheduleVersion.findFirst({ where: { scheduleId: schedule.id }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+      const current = await uow.tx.feeScheduleVersion.findFirst({ where: { scheduleId: schedule.id, status: "published" }, select: { id: true } });
+      const row = await uow.tx.feeScheduleVersion.create({ data: { scheduleId: schedule.id, versionNo: (last?.versionNo ?? 0) + 1, label, status: "draft" } });
+      let copied = 0;
+      if (current) {
+        const items = await uow.tx.feeItem.findMany({ where: { versionId: current.id } });
+        for (const i of items) {
+          const { id: _id, createdAt: _c, updatedAt: _u, versionId: _v, ...rest } = i;
+          await uow.tx.feeItem.create({ data: { ...rest, versionId: row.id } });
+          copied += 1;
+        }
+        for (const r of await uow.tx.priceRule.findMany({ where: { versionId: current.id } })) {
+          const { id: _id, createdAt: _c, updatedAt: _u, versionId: _v, ...rest } = r;
+          await uow.tx.priceRule.create({ data: { ...rest, versionId: row.id } });
+        }
+      }
+      auditCreate(uow, actor, "FeeScheduleVersion", row.id, "fees.drafted", { versionNo: row.versionNo, copied });
+      return { id: row.id, versionNo: row.versionNo, copied, version: row.version };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function saveFeeItem(_root, args, context) {
+  return gated(context, { permissions: ["canManageFees"], tool: "fees.item", humanOnly: true }, args, async (actor) => {
+    if (!FEE_CATEGORIES.includes(args.category)) throw new DomainError(Codes.INVALID_INPUT, "Choose a category.", { field: "category" });
+    if (!TAX_CATEGORIES.includes(args.taxCategory)) throw new DomainError(Codes.INVALID_INPUT, "Choose how this is taxed.", { field: "taxCategory" });
+    const data = {
+      code: text17(args.code, "code", 40),
+      name: text17(args.name, "name", 160),
+      category: args.category,
+      taxCategory: args.taxCategory,
+      priceMinor: minorText(args.priceMinor, "price", true),
+      unit: args.unit ?? "each",
+      minimumChargeMinor: args.minimumChargeMinor ? minorText(args.minimumChargeMinor, "minimum charge", true) : null,
+      drugId: args.drugId ?? null,
+      vaccineId: args.vaccineId ?? null,
+      orderKind: args.orderKind ?? ""
+    };
+    const result = await command(context.prisma, { name: "fees.item", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const version = await lockRow(uow.tx, "FeeScheduleVersion", args.versionId);
+      if (version.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "Only a draft fee schedule can be edited. A published one is frozen; start a new draft.");
+      const row = args.itemId ? await uow.tx.feeItem.update({ where: { id: args.itemId }, data }) : await uow.tx.feeItem.create({ data: { ...data, versionId: version.id } });
+      auditCreate(uow, actor, "FeeItem", row.id, args.itemId ? "fees.item.changed" : "fees.item.added", { code: data.code, priceMinor: data.priceMinor.toString() });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function requestFeePublish(_root, args, context) {
+  return gated(context, { permissions: ["canManageFees"], tool: "fees.publish.request", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "fees.publish.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const count = await uow.tx.feeItem.count({ where: { versionId: args.versionId } });
+      if (!count) throw new DomainError(Codes.GUARD_FAILED, "This fee schedule has no items yet.");
+      const row = await transition(uow, { model: "FeeScheduleVersion", id: args.versionId, from: ["draft"], to: "pending_approval", expectedVersion: args.expectedVersion, actor, eventType: "fees.publish.requested" });
+      const request = await requestApproval(uow, actor, { action: "fees.publish", targetList: "FeeScheduleVersion", targetId: row.id, payload: { versionId: row.id, effectiveFrom: args.effectiveFrom ?? null }, requiredPermission: "canApproveFees", summary: `Publish fee schedule ${String(row.label)}` });
+      return { id: row.id, approvalRequestId: request.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+registerApplier("fees.publish", async (uow, actor, request) => {
+  const { versionId, effectiveFrom } = request.payload;
+  const target = await lockRow(uow.tx, "FeeScheduleVersion", versionId);
+  const previous = await uow.tx.feeScheduleVersion.findMany({ where: { scheduleId: target.scheduleId, status: "published" }, select: { id: true } });
+  for (const p of previous) await transition(uow, { model: "FeeScheduleVersion", id: p.id, from: ["published"], to: "retired", actor, eventType: "fees.retired" });
+  const row = await transition(uow, { model: "FeeScheduleVersion", id: versionId, from: ["pending_approval"], to: "published", actor, eventType: "fees.published", data: { publishedAt: uow.now, effectiveFrom: /* @__PURE__ */ new Date(`${effectiveFrom ?? uow.now.toISOString().slice(0, 10)}T00:00:00Z`) } });
+  return { id: row.id, status: row.status };
+});
+async function discardFeeDraft(_root, args, context) {
+  return gated(context, { permissions: ["canManageFees"], tool: "fees.discard", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "fees.discard", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await staffOf(uow, actor).catch(() => null);
+      const row = await transition(uow, { model: "FeeScheduleVersion", id: args.versionId, from: ["draft", "pending_approval"], to: "retired", expectedVersion: args.expectedVersion, actor, eventType: "fees.discarded" });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/billing.ts
+var import_node_crypto10 = require("node:crypto");
+init_errors();
+init_ledger();
+init_billing();
+
+// features/integrations/payment/index.ts
+var import_node_crypto9 = require("node:crypto");
+var STRIPE = "https://api.stripe.com/v1";
+function stripeKey() {
+  const key2 = process.env.STRIPE_SECRET_KEY ?? "";
+  if (!key2) throw new Error("Card payments are not set up on this server yet.");
+  if (!key2.startsWith("sk_test_") && !key2.startsWith("rk_test_")) throw new Error("Only Stripe test keys are accepted here.");
+  return key2;
+}
+var form = (data) => new URLSearchParams(data).toString();
+async function stripeCall(path, method, body, idempotencyKey) {
+  const res = await fetch(`${STRIPE}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${stripeKey()}`,
+      ...body ? { "content-type": "application/x-www-form-urlencoded" } : {},
+      ...idempotencyKey ? { "idempotency-key": idempotencyKey } : {}
+    },
+    ...body ? { body: form(body) } : {},
+    signal: AbortSignal.timeout(2e4)
+  });
+  const json17 = await res.json().catch(() => ({}));
+  return { status: res.status, json: json17 };
+}
+function intentResult(status, j) {
+  if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: j.id ?? null, message: "The card processor did not answer. Check the status in a moment." };
+  if (status >= 400) {
+    const declined = j.error?.type === "card_error";
+    return { outcome: declined ? "failed" : "failed", providerRef: j.error?.payment_intent?.id ?? null, message: declined ? String(j.error?.message ?? "The card was declined.") : "The payment could not be started." };
+  }
+  switch (j.status) {
+    case "succeeded":
+      return { outcome: "succeeded", providerRef: j.id, message: "Paid." };
+    case "requires_action":
+    case "requires_confirmation":
+      return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm." };
+    case "processing":
+      return { outcome: "unknown", providerRef: j.id, message: "The bank is still processing this payment." };
+    case "canceled":
+      return { outcome: "failed", providerRef: j.id, message: "The payment was cancelled." };
+    default:
+      return { outcome: "failed", providerRef: j.id ?? null, message: String(j.last_payment_error?.message ?? "The card was declined.") };
+  }
+}
+var stripeAdapter = {
+  key: "stripe",
+  async charge(input) {
+    try {
+      const { status, json: json17 } = await stripeCall("/payment_intents", "POST", {
+        amount: input.amountMinor.toString(),
+        currency: input.currencyCode.toLowerCase(),
+        confirm: "true",
+        payment_method: input.paymentMethod || "pm_card_visa",
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+        description: input.description,
+        ...Object.fromEntries(Object.entries(input.metadata).map(([k, v]) => [`metadata[${k}]`, v]))
+      }, input.idempotencyKey);
+      return intentResult(status, json17);
+    } catch {
+      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
+    }
+  },
+  async resolve(input) {
+    try {
+      if (input.providerRef) {
+        const got = await stripeCall(`/payment_intents/${encodeURIComponent(input.providerRef)}`, "GET", null);
+        if (got.status === 200) return intentResult(got.status, got.json);
+      }
+      return await stripeAdapter.charge(input);
+    } catch {
+      return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor still did not answer." };
+    }
+  },
+  async refund(input) {
+    try {
+      const { status, json: json17 } = await stripeCall("/refunds", "POST", {
+        payment_intent: input.providerRef,
+        amount: input.amountMinor.toString(),
+        "metadata[reason]": input.reason.slice(0, 200)
+      }, input.idempotencyKey);
+      if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: json17.id ?? null, message: "The card processor did not answer." };
+      if (status >= 400) return { outcome: "failed", providerRef: null, message: String(json17.error?.message ?? "The refund was refused.") };
+      if (json17.status === "succeeded") return { outcome: "succeeded", providerRef: json17.id, message: "Refunded." };
+      if (json17.status === "pending") return { outcome: "unknown", providerRef: json17.id, message: "The refund is on its way." };
+      return { outcome: "failed", providerRef: json17.id ?? null, message: "The refund did not go through." };
+    } catch {
+      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer." };
+    }
+  },
+  readEvent(rawBody, headers) {
+    const secret2 = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+    if (!secret2) throw new Error("Card events are not set up on this server.");
+    const header = headers["stripe-signature"] ?? "";
+    const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+    const t = parts.t;
+    const v1 = header.split(",").filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
+    if (!t || !v1.length) throw new Error("The event signature is missing.");
+    if (Math.abs(Date.now() / 1e3 - Number(t)) > 600) throw new Error("The event is too old.");
+    const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${t}.${rawBody}`).digest();
+    const ok = v1.some((sig) => {
+      const b = Buffer.from(sig, "hex");
+      return b.length === expected.length && (0, import_node_crypto9.timingSafeEqual)(b, expected);
+    });
+    if (!ok) throw new Error("The event signature does not match.");
+    const event = JSON.parse(rawBody);
+    const o = event.data.object;
+    const outcome = event.type === "payment_intent.succeeded" ? "succeeded" : event.type === "payment_intent.payment_failed" ? "failed" : event.type === "charge.refunded" ? "refunded" : "ignored";
+    return { id: event.id, type: event.type, objectRef: event.type.startsWith("charge.") ? o.payment_intent ?? o.id : o.id, outcome };
+  }
+};
+var manualAdapter = {
+  key: "manual",
+  async charge() {
+    return { outcome: "failed", providerRef: null, message: "This tender is recorded by hand, not charged." };
+  },
+  async resolve() {
+    return { outcome: "failed", providerRef: null, message: "Nothing to check for a hand-recorded payment." };
+  },
+  async refund(input) {
+    return { outcome: "succeeded", providerRef: `manual-${input.idempotencyKey.slice(-12)}`, message: "Refund recorded; hand the money back." };
+  },
+  readEvent() {
+    throw new Error("A hand-recorded tender has no events.");
+  }
+};
+var terminalAdapter = {
+  key: "terminal",
+  async charge() {
+    return { outcome: "failed", providerRef: null, message: "No card reader is attached. Record the card payment by hand or use the card form." };
+  },
+  resolve: async () => ({ outcome: "failed", providerRef: null, message: "No card reader is attached." }),
+  refund: (input) => stripeAdapter.refund(input),
+  readEvent: (raw, headers) => stripeAdapter.readEvent(raw, headers)
+};
+var ADAPTERS = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter };
+var adapterFor = (key2) => ADAPTERS[key2] ?? manualAdapter;
+var cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? "");
+
+// features/keystone/mutations/billing.ts
+var TAKERS = ["canTakePayments", "canManagePayments"];
+var POSTERS = ["canPostInvoices", "canManagePayments"];
+var ZERO2 = 0n;
+async function clientOfPatient(uow, patientId) {
+  const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } });
+  if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, "This patient has no client of record to bill.");
+  return own.clientId;
+}
+async function createCharge(uow, actor, c) {
+  const fee = await uow.tx.feeItem.findUniqueOrThrow({ where: { id: c.feeItemId } });
+  const { on } = await locationDay2(uow, c.locationId, uow.now);
+  const client = await uow.tx.client.findUnique({ where: { id: c.clientId }, select: { taxExempt: true } });
+  const taxRules = await taxRulesFor(uow.tx, c.locationId, on);
+  const priced = priceCharge(fee, c.qty, { dispensing: c.dispensing, injection: c.injection, taxRules });
+  const tax = client?.taxExempt ? ZERO2 : priced.taxMinor;
+  const row = await uow.tx.chargeLine.create({
+    data: {
+      clientId: c.clientId,
+      patientId: c.patientId,
+      locationId: c.locationId,
+      encounterId: c.encounterId,
+      feeItemId: fee.id,
+      description: (c.description || fee.name).slice(0, 200),
+      qty: c.qty,
+      unitPriceMinor: fee.priceMinor,
+      extendedMinor: priced.extendedMinor,
+      discountMinor: ZERO2,
+      taxMinor: tax,
+      taxCategory: fee.taxCategory,
+      sourceType: c.sourceType,
+      sourceId: c.sourceId,
+      manualReason: c.manualReason ?? "",
+      performedById: c.performedById ?? null,
+      capturedAt: uow.now
+    }
+  });
+  auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: c.sourceType, extendedMinor: priced.extendedMinor.toString(), taxMinor: tax.toString() });
+  return row;
+}
+async function captureVisitCharges(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.capture", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "charges.capture", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, kind: true, patientId: true, locationId: true, attendingDvmId: true } });
+      if (!enc?.patientId || !enc.locationId) throw new DomainError(Codes.NOT_FOUND, "Visit not found.");
+      const clientId = await clientOfPatient(uow, enc.patientId);
+      const fees = await activeFeeVersion(uow.tx);
+      const base = { patientId: enc.patientId, clientId, locationId: enc.locationId, encounterId: enc.id };
+      const existing = new Set((await uow.tx.chargeLine.findMany({ where: { reversedAt: null, encounterId: enc.id }, select: { sourceType: true, sourceId: true } })).map((c) => `${c.sourceType}:${c.sourceId}`));
+      let made = 0;
+      let unpriced = 0;
+      const add = async (sourceType, sourceId, match, qty2, extra = {}) => {
+        if (existing.has(`${sourceType}:${sourceId}`)) return;
+        const fee = await feeItemFor(uow.tx, fees.id, match);
+        if (!fee) {
+          unpriced += 1;
+          return;
+        }
+        await createCharge(uow, actor, { ...base, feeItemId: fee.id, qty: qty2, sourceType, sourceId, ...extra });
+        made += 1;
+      };
+      await add("encounter_exam", enc.id, { code: `EXAM-${enc.kind.toUpperCase()}` }, "1", { performedById: enc.attendingDvmId });
+      const given = await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: null }, select: { id: true, qty: true, givenById: true, order: { select: { drugId: true, vaccineId: true, kind: true } } } });
+      const undone = new Set((await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: { not: null } }, select: { reversesId: true } })).map((r) => r.reversesId));
+      for (const a of given) {
+        if (undone.has(a.id)) continue;
+        const o = a.order;
+        if (!o) continue;
+        if (o.vaccineId) await add("administration", a.id, { vaccineId: o.vaccineId }, "1", { performedById: a.givenById });
+        else if (o.drugId) await add("administration", a.id, { drugId: o.drugId }, a.qty.toString(), { performedById: a.givenById, injection: false });
+      }
+      const dispenses = await uow.tx.dispense.findMany({ where: { prescription: { patientId: enc.patientId }, dispensedAt: { gte: new Date(uow.now.getTime() - 864e5) } }, select: { id: true, quantity: true, productId: true, dispensedById: true } });
+      for (const d of dispenses) if (d.productId) await add("dispense", d.id, { drugId: d.productId }, d.quantity.toString(), { performedById: d.dispensedById, dispensing: true });
+      return { made, unpriced };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addFeeCharge(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.add", humanOnly: true }, args, async (actor) => {
+    const qty2 = decimalText(args.qty, "quantity");
+    const result = await command(context.prisma, { name: "charges.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const clientId = await clientOfPatient(uow, args.patientId);
+      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
+      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
+      const fees = await activeFeeVersion(uow.tx);
+      const fee = await uow.tx.feeItem.findFirst({ where: { id: args.feeItemId, versionId: fees.id } });
+      if (!fee) throw new DomainError(Codes.NOT_FOUND, "That fee is not in the published schedule.", { field: "feeItemId" });
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const row = await createCharge(uow, actor, { patientId: args.patientId, clientId, locationId, encounterId: args.encounterId ?? null, feeItemId: fee.id, qty: qty2, sourceType: "fee", sourceId: (0, import_node_crypto10.randomUUID)(), performedById: staff?.id ?? null });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addManualCharge(_root, args, context) {
+  return gated(context, { permissions: ["canAddManualCharge"], tool: "charges.manual", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const description = text17(args.description, "description", 160);
+    const amount = minorText(args.amountMinor, "amount");
+    const result = await command(context.prisma, { name: "charges.manual", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const clientId = await clientOfPatient(uow, args.patientId);
+      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
+      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
+      const { on } = await locationDay2(uow, locationId, uow.now);
+      const taxRules = await taxRulesFor(uow.tx, locationId, on);
+      let tax = ZERO2;
+      try {
+        tax = priceCharge({ priceMinor: amount, minimumChargeMinor: null, dispensingFeeMinor: null, injectionFeeMinor: null, taxCategory: args.taxCategory }, "1", { taxRules }).taxMinor;
+      } catch {
+        throw new DomainError(Codes.INVALID_INPUT, "Choose how this charge is taxed.", { field: "taxCategory" });
+      }
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const row = await uow.tx.chargeLine.create({ data: { clientId, patientId: args.patientId, locationId, encounterId: args.encounterId ?? null, description, qty: "1", unitPriceMinor: amount, extendedMinor: amount, discountMinor: ZERO2, taxMinor: tax, taxCategory: args.taxCategory, sourceType: "manual", sourceId: "", manualReason: reason, performedById: staff?.id ?? null, capturedAt: uow.now } });
+      auditCreate(uow, actor, "ChargeLine", row.id, "charge.manual", { amountMinor: amount.toString() }, { reason });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reverseCharge(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "charges.reverse", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "charges.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const line = await lockRow(uow.tx, "ChargeLine", args.chargeId);
+      if (line.reversedAt) throw new DomainError(Codes.GUARD_FAILED, "That charge was already reversed.");
+      if (line.invoiceId) {
+        const inv = await uow.tx.invoice.findUnique({ where: { id: line.invoiceId }, select: { status: true } });
+        if (inv?.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "This charge is on a posted invoice. Issue a credit note instead.");
+      }
+      await uow.tx.chargeLine.update({ where: { id: line.id }, data: { reversedAt: uow.now, reversalReason: reason, invoiceId: null } });
+      auditCreate(uow, actor, "ChargeLine", line.id, "charge.reversed", {}, { reason });
+      return { id: line.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function draftInvoice(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "invoice.draft", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "invoice.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const lines = await uow.tx.chargeLine.findMany({ where: { clientId: args.clientId, invoiceId: null, reversedAt: null, ...args.encounterId ? { encounterId: args.encounterId } : {} }, orderBy: { capturedAt: "asc" } });
+      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "There are no open charges to invoice.");
+      const locationId = lines[0].locationId;
+      const settings = await billingSettings(uow);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = `DRAFT-${(0, import_node_crypto10.randomUUID)().slice(0, 8).toUpperCase()}`;
+      const inv = await uow.tx.invoice.create({ data: { ref, clientId: args.clientId, locationId, encounterId: args.encounterId ?? lines[0].encounterId, status: "draft", currencyCode: settings.currencyCode, note: "", createdById: staff?.id ?? null } });
+      await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: inv.id } });
+      auditCreate(uow, actor, "Invoice", inv.id, "invoice.drafted", { lines: lines.length });
+      return { id: inv.id, lines: lines.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function discountInvoice(_root, args, context) {
+  return gated(context, { permissions: ["canDiscount", "canApproveDiscount"], tool: "invoice.discount", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const bps = Math.round(Number(args.percent) * 100);
+    if (!Number.isFinite(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "Discount is a percentage from 0 to 100.", { field: "percent" });
+    const result = await command(context.prisma, { name: "invoice.discount", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const settings = await billingSettings(uow);
+      if (bps > settings.discountApprovalThresholdBps && !can(actor, "canApproveDiscount")) throw new DomainError(Codes.APPROVAL_REQUIRED, `Discounts over ${settings.discountApprovalThresholdBps / 100}% need someone who can approve discounts.`);
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (inv.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "Only a draft invoice can be discounted.");
+      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id } });
+      const { on } = await locationDay2(uow, inv.locationId, uow.now);
+      const taxRules = await taxRulesFor(uow.tx, inv.locationId, on);
+      const client = await uow.tx.client.findUnique({ where: { id: inv.clientId }, select: { taxExempt: true } });
+      let total = ZERO2;
+      for (const l of lines) {
+        const discount = -adjustBps(l.extendedMinor, -bps);
+        const net = l.extendedMinor - discount;
+        const { taxOn: taxOn2 } = await Promise.resolve().then(() => (init_billing(), billing_exports));
+        const tax = client?.taxExempt ? ZERO2 : taxOn2(taxRules, l.taxCategory, net);
+        await uow.tx.chargeLine.update({ where: { id: l.id }, data: { discountMinor: discount, taxMinor: tax } });
+        total += discount;
+      }
+      auditCreate(uow, actor, "Invoice", inv.id, "invoice.discounted", { bps, discountMinor: total.toString() }, { reason });
+      return { id: inv.id, discountMinor: total.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function postInvoice(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "invoice.post", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "invoice.post", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null } });
+      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "An invoice needs at least one charge.");
+      const { on } = await locationDay2(uow, inv.locationId, uow.now);
+      const postedOn = args.postedOn ? dateOnly(args.postedOn, "posting day") : on;
+      if (postedOn > on) throw new DomainError(Codes.INVALID_INPUT, "An invoice cannot be posted for a future day.", { field: "postedOn" });
+      const subtotal = lines.reduce((n, l) => n + l.extendedMinor, ZERO2);
+      const discount = lines.reduce((n, l) => n + l.discountMinor, ZERO2);
+      const tax = lines.reduce((n, l) => n + l.taxMinor, ZERO2);
+      const total = subtotal - discount + tax;
+      const { periodFor: periodFor2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
+      const period = await periodFor2(uow.tx, postedOn);
+      const ref = await nextReference(uow.tx, "INV", uow.now);
+      const row = await transition(uow, { model: "Invoice", id: inv.id, from: ["draft"], to: "posted", expectedVersion: args.expectedVersion, actor, eventType: "invoice.posted", data: { ref, postedAt: uow.now, postedOn: /* @__PURE__ */ new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } });
+      if (total > ZERO2) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "invoice", amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref });
+      else await transition(uow, { model: "Invoice", id: inv.id, from: ["posted"], to: "paid", actor, eventType: "invoice.paid" });
+      return { id: inv.id, ref, status: row.status, totalMinor: total.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function syncInvoiceStatus(uow, actor, invoiceId, reason) {
+  const inv = await uow.tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, select: { status: true, version: true, totalMinor: true } });
+  if (inv.status === "written_off" || inv.status === "draft") return inv.status;
+  const balance = await balanceOfInvoice(uow.tx, invoiceId);
+  const next = balance <= ZERO2 ? "paid" : balance < inv.totalMinor ? "partially_paid" : "posted";
+  if (next !== inv.status) await casUpdate(uow, { model: "Invoice", id: invoiceId, version: inv.version, from: [inv.status], to: next, actor, eventType: `invoice.${next}`, reason });
+  return next;
+}
+async function settleSucceeded(uow, actor, paymentId, providerRef) {
+  const pay = await lockRow(uow.tx, "Payment", paymentId);
+  if (pay.status === "succeeded") return { settled: false, paymentId };
+  if (!["pending", "unknown"].includes(pay.status)) throw new DomainError(Codes.GUARD_FAILED, `This payment is ${pay.status} and cannot be marked paid.`);
+  const locationId = pay.locationId ?? (await uow.tx.location.findFirst({ select: { id: true } })).id;
+  const day4 = pay.postedOn ? pay.postedOn.toISOString().slice(0, 10) : (await locationDay2(uow, locationId, uow.now)).on;
+  await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "succeeded", actor, eventType: "payment.succeeded", data: { receivedAt: uow.now, ...providerRef ? { providerRef } : {} } });
+  let left = pay.amountMinor;
+  if (pay.forDepositId) {
+    const dep = await lockRow(uow.tx, "Deposit", pay.forDepositId);
+    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
+    await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, depositId: dep.id, amountMinor: pay.amountMinor, at: uow.now } });
+    await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["requested"], to: "paid", actor, eventType: "deposit.paid", data: { paymentId: pay.id } });
+    await post(uow, { clientId: pay.clientId, kind: "deposit_received", amountMinor: -pay.amountMinor, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:deposit`, paymentId: pay.id, memo: pay.ref });
+    left = ZERO2;
+  } else if (pay.forInvoiceId) {
+    await lockRow(uow.tx, "Invoice", pay.forInvoiceId);
+    const balance = await balanceOfInvoice(uow.tx, pay.forInvoiceId);
+    const apply = balance < left ? balance > ZERO2 ? balance : ZERO2 : left;
+    if (apply > ZERO2) {
+      await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, invoiceId: pay.forInvoiceId, amountMinor: apply, at: uow.now } });
+      await post(uow, { clientId: pay.clientId, invoiceId: pay.forInvoiceId, paymentId: pay.id, kind: "payment", amountMinor: -apply, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:invoice`, memo: pay.ref });
+      left -= apply;
+    }
+  }
+  if (left > ZERO2) await post(uow, { clientId: pay.clientId, paymentId: pay.id, kind: "payment_unallocated", amountMinor: -left, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:account`, memo: `${pay.ref} held on account` });
+  if (pay.forInvoiceId) await syncInvoiceStatus(uow, actor, pay.forInvoiceId, pay.ref);
+  return { settled: true, paymentId, heldOnAccountMinor: left.toString() };
+}
+async function newPayment(uow, actor, a) {
+  const settings = await billingSettings(uow);
+  let locationId = a.locationId ?? null;
+  let invoice = null;
+  if (a.target.invoiceId) {
+    invoice = await uow.tx.invoice.findUnique({ where: { id: a.target.invoiceId }, select: { id: true, status: true, clientId: true, currencyCode: true, locationId: true } });
+    if (!invoice || invoice.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
+    if (!["posted", "partially_paid"].includes(invoice.status)) throw new DomainError(Codes.GUARD_FAILED, invoice.status === "paid" ? "That invoice is already paid." : "That invoice cannot take a payment.");
+    locationId = invoice.locationId;
+    const balance = await balanceOfInvoice(uow.tx, invoice.id);
+    if (a.amountMinor > balance && !a.allowOverpay) throw new DomainError(Codes.GUARD_FAILED, "That is more than the invoice balance. Take the balance, or choose to hold the extra on account.", { reason: "overpay" });
+  }
+  if (a.target.depositId) {
+    const dep = await uow.tx.deposit.findUnique({ where: { id: a.target.depositId }, select: { clientId: true, status: true, requestedMinor: true } });
+    if (!dep || dep.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Deposit not found for this client.");
+    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
+    if (dep.requestedMinor !== a.amountMinor) throw new DomainError(Codes.GUARD_FAILED, "A deposit is paid in full, at the amount that was asked for.", { reason: "deposit_amount" });
+  }
+  const staff = await staffOf(uow, actor).catch(() => null);
+  const ref = await nextReference(uow.tx, "PAY", uow.now);
+  return uow.tx.payment.create({
+    data: {
+      ref,
+      clientId: a.clientId,
+      locationId,
+      method: a.method,
+      provider: a.provider,
+      amountMinor: a.amountMinor,
+      currencyCode: invoice?.currencyCode ?? settings.currencyCode,
+      status: "pending",
+      reference: (a.reference ?? "").slice(0, 120),
+      note: (a.note ?? "").slice(0, 300),
+      forInvoiceId: a.target.invoiceId ?? null,
+      forDepositId: a.target.depositId ?? null,
+      allowOverpay: a.allowOverpay === true,
+      payerAuthorizationId: a.payerAuthorizationId ?? null,
+      receivedById: staff?.id ?? null,
+      postedOn: a.postedOn ? /* @__PURE__ */ new Date(`${dateOnly(a.postedOn, "posting day")}T00:00:00Z`) : null
+    }
+  });
+}
+async function recordPayment(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.record", humanOnly: true }, args, async (actor) => {
+    const method = pick(args.method, PAYMENT_METHODS.filter((m) => !["payment_link", "client_credit"].includes(m)), "payment method");
+    const amount = minorText(args.amountMinor, "amount");
+    if (method === "insurer_direct" && !args.payerAuthorizationId) throw new DomainError(Codes.INVALID_INPUT, "An insurer payment needs the authorisation it was paid against.", { field: "payerAuthorizationId" });
+    if (["check", "ach"].includes(method) && !String(args.reference ?? "").trim()) throw new DomainError(Codes.INVALID_INPUT, "Enter the check or reference number.", { field: "reference" });
+    const result = await command(context.prisma, { name: "payment.record", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.payerAuthorizationId) {
+        const auth = await uow.tx.payerAuthorization.findUnique({ where: { id: args.payerAuthorizationId }, select: { status: true, invoiceId: true } });
+        if (!auth || !["authorised", "paid"].includes(auth.status)) throw new DomainError(Codes.GUARD_FAILED, "That authorisation has not been approved by the insurer.");
+        if (auth.invoiceId && auth.invoiceId !== args.invoiceId) throw new DomainError(Codes.GUARD_FAILED, "That authorisation is for a different invoice.");
+      }
+      const pay = await newPayment(uow, actor, { clientId: args.clientId, method, provider: "manual", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId }, reference: args.reference ?? "", note: args.note ?? "", postedOn: args.postedOn, allowOverpay: args.allowOverpay === true, payerAuthorizationId: args.payerAuthorizationId });
+      const settled = await settleSucceeded(uow, actor, pay.id);
+      auditCreate(uow, actor, "Payment", pay.id, "payment.recorded", { method, amountMinor: amount.toString() });
+      return { id: pay.id, ref: pay.ref, status: "succeeded", heldOnAccountMinor: settled.heldOnAccountMinor ?? "0" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function takeCardPayment(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.card", humanOnly: true }, args, async (actor) => {
+    const amount = minorText(args.amountMinor, "amount");
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
+    const started = await command(context.prisma, { name: "payment.card.start", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const pay = await newPayment(uow, actor, { clientId: args.clientId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } });
+      const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
+      return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode };
+    });
+    if (started.replay) return { replay: true, ...await settleFromState(context, actor, started.value.paymentId) };
+    const outcome = await adapterFor("stripe").charge({ amountMinor: amount, currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod: args.paymentMethodId ?? void 0 });
+    return { replay: false, ...await recordOutcome(context, actor, started.value.paymentId, started.value.attemptId, outcome, `${args.idempotencyKey}:result`) };
+  });
+}
+async function settleFromState(context, actor, paymentId) {
+  const p = await context.prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, ref: true, status: true } });
+  return { id: p.id, ref: p.ref, status: p.status };
+}
+async function recordOutcome(context, actor, paymentId, attemptId, outcome, key2) {
+  const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key2, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
+    const pay = await lockRow(uow.tx, "Payment", paymentId);
+    if (pay.status === "succeeded") return { id: pay.id, ref: pay.ref, status: "succeeded", message: "Paid." };
+    const attempt = await lockRow(uow.tx, "PaymentAttempt", attemptId);
+    const attemptStatus = outcome.outcome;
+    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: "PaymentAttempt", id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { providerRef: outcome.providerRef ?? "", message: outcome.message.slice(0, 200), ...attemptStatus === "unknown" || attemptStatus === "requires_action" ? {} : { resolvedAt: uow.now } } });
+    if (outcome.outcome === "succeeded") await settleSucceeded(uow, actor, paymentId, outcome.providerRef);
+    else if (outcome.outcome === "failed") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "failed", actor, eventType: "payment.failed", data: { providerRef: outcome.providerRef ?? "" } });
+    else if (outcome.outcome === "unknown" && pay.status === "pending") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["pending"], to: "unknown", actor, eventType: "payment.unknown", data: { providerRef: outcome.providerRef ?? "" } });
+    return { id: pay.id, ref: pay.ref, status: outcome.outcome === "requires_action" ? "pending" : outcome.outcome, message: outcome.message };
+  });
+  return done.value;
+}
+async function resolveUnknownPayment(prisma, actor, paymentId) {
+  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true } } } });
+  if (!pay) throw new DomainError(Codes.NOT_FOUND, "Payment not found.");
+  if (!["unknown", "pending"].includes(pay.status) || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: "Nothing to check." };
+  const attempt = pay.attempts[0];
+  if (!cardConfigured()) return { id: pay.id, ref: pay.ref, status: pay.status, message: "The card processor is not reachable from here." };
+  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || null });
+  return recordOutcome({ prisma, session: null }, actor, pay.id, attempt.id, outcome, `resolve:${pay.id}:${outcome.outcome}:${outcome.providerRef ?? ""}`);
+}
+async function checkPaymentStatus(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.check", humanOnly: true }, args, async (actor) => resolveUnknownPayment(context.prisma, actor, args.paymentId));
+}
+async function applyDeposit(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS, ...POSTERS], tool: "deposit.apply", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "deposit.apply", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const dep = await lockRow(uow.tx, "Deposit", args.depositId);
+      if (dep.status === "applied") throw new DomainError(Codes.GUARD_FAILED, "This deposit was already applied.", { reason: "already_applied" });
+      if (dep.status !== "paid") throw new DomainError(Codes.GUARD_FAILED, "This deposit has not been paid yet.");
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, "A deposit can only go against the same client\u2019s invoice.");
+      if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "That invoice cannot take a deposit.");
+      const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId }, select: { amountMinor: true } });
+      const balance = await balanceOfInvoice(uow.tx, inv.id);
+      const apply = pay.amountMinor < balance ? pay.amountMinor : balance;
+      const { on } = await locationDay2(uow, inv.locationId, uow.now);
+      await post(uow, { clientId: dep.clientId, kind: "deposit_released", amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: "Deposit applied" });
+      await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: "deposit_applied", amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: "Deposit applied" });
+      await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["paid"], to: "applied", actor, eventType: "deposit.applied", data: { appliedInvoiceId: inv.id, appliedAt: uow.now } });
+      const status = await syncInvoiceStatus(uow, actor, inv.id, "Deposit applied");
+      return { depositId: dep.id, invoiceId: inv.id, appliedMinor: apply.toString(), invoiceStatus: status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function issueCreditNote(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "credit.note", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const amount = minorText(args.amountMinor, "amount");
+    const result = await command(context.prisma, { name: "credit.note", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (!["posted", "partially_paid", "paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only a posted invoice can be credited.");
+      if (amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "A credit note cannot be more than the invoice total.");
+      const credited = (await uow.tx.creditNote.aggregate({ where: { invoiceId: inv.id }, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO2;
+      if (credited + amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "Credit notes cannot add up to more than the invoice total.");
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = await nextReference(uow.tx, "CRN", uow.now);
+      const note = await uow.tx.creditNote.create({ data: { ref, invoiceId: inv.id, clientId: inv.clientId, amountMinor: amount, currencyCode: inv.currencyCode, reason, postedById: staff?.id ?? null, postedAt: uow.now } });
+      const { on } = await locationDay2(uow, inv.locationId, uow.now);
+      const balance = await balanceOfInvoice(uow.tx, inv.id);
+      await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "credit_note", amountMinor: -amount, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}`, memo: ref });
+      const excess = amount > balance ? amount - (balance > ZERO2 ? balance : ZERO2) : ZERO2;
+      if (excess > ZERO2) {
+        await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "adjustment", amountMinor: excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:invoice`, memo: `${ref}: already paid` });
+        await post(uow, { clientId: inv.clientId, kind: "adjustment", amountMinor: -excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:account`, memo: `${ref}: credit held on account` });
+      }
+      await syncInvoiceStatus(uow, actor, inv.id, ref);
+      auditCreate(uow, actor, "CreditNote", note.id, "credit.issued", { ref, amountMinor: amount.toString(), heldOnAccountMinor: excess.toString() }, { reason });
+      return { id: note.id, ref, heldOnAccountMinor: excess.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function runRefund(prisma, actor, refundId, key2) {
+  const start = await command(prisma, { name: "refund.start", actor, idempotencyKey: `${key2}:start`, params: { refundId } }, async (uow) => {
+    const r = await lockRow(uow.tx, "Refund", refundId);
+    if (r.status === "succeeded") return { skip: true, status: r.status };
+    if (!["requested", "approved", "processing", "unknown"].includes(r.status)) throw new DomainError(Codes.GUARD_FAILED, `This refund is ${r.status}.`);
+    if (r.status === "requested" || r.status === "approved") await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "processing", actor, eventType: "refund.processing" });
+    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { provider: true, providerRef: true } });
+    return { skip: false, id: r.id, amountMinor: r.amountMinor, reason: r.reason, key: r.providerIdempotencyKey, provider: pay.provider, providerRef: pay.providerRef };
+  });
+  if (start.value.skip) return { id: refundId, status: start.value.status, message: "Already refunded." };
+  const s = start.value;
+  const out = await adapterFor(s.provider).refund({ providerRef: s.providerRef, amountMinor: s.amountMinor, idempotencyKey: s.key, reason: s.reason });
+  const done = await command(prisma, { name: "refund.settle", actor, idempotencyKey: `${key2}:settle:${out.outcome}:${out.providerRef ?? ""}`, params: { refundId, outcome: out.outcome } }, async (uow) => {
+    const r = await lockRow(uow.tx, "Refund", refundId);
+    if (r.status === "succeeded") return { id: r.id, status: "succeeded" };
+    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { clientId: true, currencyCode: true, locationId: true } });
+    if (out.outcome === "succeeded") {
+      const locationId = pay.locationId ?? (await uow.tx.location.findFirstOrThrow({ select: { id: true } })).id;
+      const { on } = await locationDay2(uow, locationId, uow.now);
+      await post(uow, { clientId: pay.clientId, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: "refund", amountMinor: r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}`, memo: r.ref });
+      if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref);
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "succeeded", actor, eventType: "refund.succeeded", data: { providerRef: out.providerRef ?? "", processedAt: uow.now, message: out.message.slice(0, 200) } });
+    } else if (out.outcome === "failed") {
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "failed", actor, eventType: "refund.failed", data: { message: out.message.slice(0, 200) } });
+    } else if (r.status !== "unknown") {
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "unknown", actor, eventType: "refund.unknown", data: { message: out.message.slice(0, 200), providerRef: out.providerRef ?? "" } });
+    }
+    return { id: r.id, status: out.outcome, message: out.message };
+  });
+  return done.value;
+}
+async function requestRefund(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.request", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const amount = minorText(args.amountMinor, "amount");
+    const made = await command(context.prisma, { name: "refund.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const pay = await lockRow(uow.tx, "Payment", args.paymentId);
+      if (pay.status !== "succeeded") throw new DomainError(Codes.GUARD_FAILED, "Only a payment that went through can be refunded.");
+      if (args.invoiceId) {
+        const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } });
+        if (!inv || inv.clientId !== pay.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
+      }
+      const settings = await billingSettings(uow);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = await nextReference(uow.tx, "REF", uow.now);
+      const needsApproval = amount > settings.refundApprovalThresholdMinor;
+      const refund = await uow.tx.refund.create({ data: { ref, paymentId: pay.id, invoiceId: args.invoiceId ?? null, amountMinor: amount, currencyCode: "USD", reason, status: "requested", providerIdempotencyKey: `vet-refund-${(0, import_node_crypto10.randomUUID)()}`, requestedById: staff?.id ?? null } });
+      let approvalId = null;
+      if (needsApproval) {
+        const req = await requestApproval(uow, actor, { action: "refund.issue", targetList: "Refund", targetId: refund.id, payload: { refundId: refund.id, amountMinor: amount.toString() }, requiredPermission: "canIssueRefunds", summary: `Refund ${ref}` });
+        approvalId = req.id;
+        await uow.tx.refund.update({ where: { id: refund.id }, data: { approvalId } });
+      }
+      auditCreate(uow, actor, "Refund", refund.id, "refund.requested", { ref, amountMinor: amount.toString(), needsApproval }, { reason });
+      return { id: refund.id, ref, needsApproval, approvalRequestId: approvalId };
+    });
+    if (made.replay || made.value.needsApproval) return { replay: made.replay, ...made.value, status: "requested" };
+    const out = await runRefund(context.prisma, actor, made.value.id, args.idempotencyKey);
+    return { replay: false, ...made.value, ...out };
+  });
+}
+async function issueApprovedRefund(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.issue", humanOnly: true }, args, async (actor) => {
+    await command(context.prisma, { name: "refund.approve.use", actor, idempotencyKey: `${args.idempotencyKey}:use`, params: args }, async (uow) => {
+      const r = await lockRow(uow.tx, "Refund", args.refundId);
+      if (r.status !== "requested") return { skipped: true };
+      if (!r.approvalId) return { skipped: true };
+      const used = await consumeApproval(uow, { requestId: r.approvalId, action: "refund.issue", targetList: "Refund", targetId: r.id, payload: { refundId: r.id, amountMinor: r.amountMinor.toString() } });
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: ["requested"], to: "approved", actor, eventType: "refund.approved", approverId: used.approverId });
+      return { skipped: false };
+    });
+    return runRefund(context.prisma, actor, args.refundId, args.idempotencyKey);
+  });
+}
+async function checkRefundStatus(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.check", humanOnly: true }, args, async (actor) => runRefund(context.prisma, actor, args.refundId, args.idempotencyKey));
+}
+async function requestWriteOff(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canApproveWriteOff"], tool: "invoice.writeoff", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "invoice.writeoff", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only an invoice that still has a balance can be written off.");
+      const settings = await billingSettings(uow);
+      if (!settings.writeOffRequiresApproval && can(actor, "canApproveWriteOff")) return writeOff(uow, actor, inv.id, reason);
+      const req = await requestApproval(uow, actor, { action: "invoice.writeoff", targetList: "Invoice", targetId: inv.id, payload: { invoiceId: inv.id, reason }, requiredPermission: "canApproveWriteOff", summary: `Write off ${inv.ref}` });
+      return { id: inv.id, status: "pending_approval", approvalRequestId: req.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function writeOff(uow, actor, invoiceId, reason) {
+  const inv = await lockRow(uow.tx, "Invoice", invoiceId);
+  const balance = await balanceOfInvoice(uow.tx, inv.id);
+  if (balance <= ZERO2) throw new DomainError(Codes.GUARD_FAILED, "This invoice has no balance to write off.");
+  const { on } = await locationDay2(uow, inv.locationId, uow.now);
+  await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "write_off", amountMinor: -balance, currencyCode: inv.currencyCode, postedOn: on, entryKey: `writeoff:${inv.id}`, memo: reason });
+  await transition(uow, { model: "Invoice", id: inv.id, from: ["posted", "partially_paid"], to: "written_off", actor, eventType: "invoice.written_off", reason, metadata: { writtenOffMinor: balance.toString() } });
+  return { id: inv.id, status: "written_off", writtenOffMinor: balance.toString() };
+}
+registerApplier("invoice.writeoff", async (uow, actor, request) => writeOff(uow, actor, request.payload.invoiceId, request.payload.reason));
+async function closeArPeriod(_root, args, context) {
+  return gated(context, { permissions: ["canManagePayments", "canViewFinance"], tool: "period.close", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "period.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const period = await lockRow(uow.tx, "ArPeriod", args.periodId);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const drafts = await uow.tx.invoice.count({ where: { status: "draft", createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
+      const pending = await uow.tx.payment.count({ where: { status: { in: ["pending", "unknown"] }, createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
+      if (pending) throw new DomainError(Codes.GUARD_FAILED, `${pending} ${pending === 1 ? "payment is" : "payments are"} still waiting on the card processor. Check ${pending === 1 ? "its" : "their"} status first.`, { reason: "pending_payments" });
+      const row = await transition(uow, { model: "ArPeriod", id: period.id, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "period.closed", data: { closedAt: uow.now, closedById: staff?.id ?? null }, metadata: { draftInvoices: drafts } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reopenArPeriod(_root, args, context) {
+  return gated(context, { permissions: ["canManagePractice"], tool: "period.reopen", humanOnly: true }, args, async (actor) => {
+    const reason = text17(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "period.reopen", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "ArPeriod", id: args.periodId, from: ["closed"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "period.reopened", reason, data: { closedAt: null, closedById: null } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/insurance.ts
+init_errors();
+
+// features/keystone/lib/money.ts
+init_decimal();
+var MINOR_DIGITS = { USD: 2, EUR: 2, GBP: 2, CHF: 2, CAD: 2, AUD: 2, SEK: 2, JPY: 0, KRW: 0, BHD: 3, KWD: 3 };
+var isCurrencyCode = (code) => typeof code === "string" && /^[A-Z]{3}$/.test(code);
+function minorDigits(currencyCode) {
+  if (!isCurrencyCode(currencyCode)) throw new Error(`Invalid currency code: ${String(currencyCode).slice(0, 8)}`);
+  return MINOR_DIGITS[currencyCode] ?? 2;
+}
+function formatMinor(minor2, currencyCode = "USD") {
+  const digits = minorDigits(currencyCode);
+  const negative = minor2 < 0n;
+  const abs = negative ? -minor2 : minor2;
+  const base = 10n ** BigInt(digits);
+  const whole = (abs / base).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const fraction = digits ? "." + (abs % base).toString().padStart(digits, "0") : "";
+  const symbol = currencyCode === "USD" ? "$" : `${currencyCode} `;
+  return `${negative ? "\u2212" : ""}${symbol}${whole}${fraction}`;
+}
+
+// features/keystone/mutations/insurance.ts
+var CLAIMERS = ["canPostInvoices", "canTakePayments", "canManagePayments"];
+async function requestAuthorization(_root, args, context) {
+  return gated(context, { permissions: [...CLAIMERS], tool: "payer.authorize.request", humanOnly: true }, args, async (actor) => {
+    const requested = minorText(args.requestedMinor, "amount");
+    const result = await command(context.prisma, { name: "payer.authorize.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { id: true, status: true, totalMinor: true } });
+      if (!inv || !["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Post the invoice before asking the insurer to pay it.");
+      if (requested > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "The request is more than the invoice total.");
+      const policy = await uow.tx.petInsurancePolicy.findUnique({ where: { id: args.policyId }, select: { insurerId: true, directPayEligible: true, effectiveTo: true } });
+      if (!policy) throw new DomainError(Codes.NOT_FOUND, "Policy not found.");
+      if (!policy.directPayEligible) throw new DomainError(Codes.GUARD_FAILED, "This policy does not pay the clinic directly. Prepare a claim for the client instead.");
+      if (policy.effectiveTo && policy.effectiveTo < uow.now) throw new DomainError(Codes.GUARD_FAILED, "This policy has ended.");
+      const ref = await nextReference(uow.tx, "PAU", uow.now);
+      const row = await uow.tx.payerAuthorization.create({ data: { ref, payerId: policy.insurerId, invoiceId: inv.id, policyId: args.policyId, requestedMinor: requested, status: "requested" } });
+      auditCreate(uow, actor, "PayerAuthorization", row.id, "payer.authorization.requested", { ref, requestedMinor: requested.toString() });
+      return { id: row.id, ref };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function recordAuthorizationDecision(_root, args, context) {
+  return gated(context, { permissions: [...CLAIMERS], tool: "payer.authorize.decide", humanOnly: true }, args, async (actor) => {
+    const decision = pick(args.decision, ["authorised", "denied"], "decision");
+    const result = await command(context.prisma, { name: "payer.authorize.decide", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const authorised = decision === "authorised" ? minorText(args.authorisedMinor, "authorised amount") : null;
+      const row = await transition(uow, {
+        model: "PayerAuthorization",
+        id: args.authorizationId,
+        from: ["requested"],
+        to: decision,
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: `payer.authorization.${decision}`,
+        guard: (r) => {
+          if (authorised !== null && authorised > r.requestedMinor) throw new DomainError(Codes.INVALID_INPUT, "The insurer cannot authorise more than was asked.", { field: "authorisedMinor" });
+        },
+        data: { authorisedMinor: authorised, externalRef: String(args.externalRef ?? "").slice(0, 80), validUntil: args.validUntil ? /* @__PURE__ */ new Date(`${args.validUntil}T23:59:59Z`) : null }
+      });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var esc2 = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+async function buildClaimPacket(_root, args, context) {
+  return gated(context, { permissions: [...CLAIMERS], tool: "claim.build", humanOnly: true }, args, async (actor) => {
+    const submitter = pick(args.submitter, ["client", "clinic"], "submitter");
+    const result = await command(context.prisma, { name: "claim.build", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, include: { lines: { where: { reversedAt: null }, orderBy: { capturedAt: "asc" } }, client: { select: { displayName: true, ref: true } } } });
+      if (!inv || inv.status === "draft") throw new DomainError(Codes.GUARD_FAILED, "Post the invoice before preparing a claim.");
+      const policy = await uow.tx.petInsurancePolicy.findUnique({ where: { id: args.policyId }, include: { insurer: { select: { name: true } }, patient: { select: { id: true, name: true, ref: true } } } });
+      if (!policy?.patient) throw new DomainError(Codes.NOT_FOUND, "Policy not found.");
+      let documents = [];
+      if (args.recordsReleaseId) {
+        const rel = await uow.tx.recordsRelease.findUnique({ where: { id: args.recordsReleaseId }, include: { request: { select: { patientId: true } } } });
+        if (!rel) throw new DomainError(Codes.NOT_FOUND, "Records release not found.", { field: "recordsReleaseId" });
+        if (rel.request?.patientId !== policy.patient.id) throw new DomainError(Codes.GUARD_FAILED, "That release is for a different patient.");
+        documents = (rel.documents ?? []).map((d) => ({ documentId: d.documentId, title: d.title ?? "Document", sha256: d.sha256 }));
+      }
+      const fields = Object.fromEntries(Object.entries(args.formFields ?? {}).slice(0, 20).map(([k, v]) => [k.slice(0, 60), String(v).slice(0, 300)]));
+      const ref = await nextReference(uow.tx, "CLM", uow.now);
+      const money2 = (m) => formatMinor(m, inv.currencyCode);
+      const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Claim ${esc2(ref)}</title><style>body{font:14px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#111}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid #ddd;text-align:left}td.n,th.n{text-align:right}h1,h2{margin:16px 0 6px}</style></head><body>
+<h1>Insurance claim ${esc2(ref)}</h1>
+<p>${esc2(policy.insurer?.name ?? "")} \xB7 Policy ${esc2(policy.policyNumber)}</p>
+<h2>Pet and owner</h2><p>${esc2(policy.patient.name)} (${esc2(policy.patient.ref)}) \xB7 ${esc2(inv.client?.displayName ?? "")}</p>
+<h2>Invoice ${esc2(inv.ref)}</h2>
+<table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${inv.lines.map((l) => `<tr><td>${esc2(l.description)}</td><td class="n">${esc2(l.qty.toString().replace(/\.?0+$/, ""))}</td><td class="n">${esc2(money2(l.extendedMinor - l.discountMinor))}</td></tr>`).join("")}</tbody></table>
+<p>Subtotal ${esc2(money2(inv.subtotalMinor - inv.discountMinor))} \xB7 Tax ${esc2(money2(inv.taxMinor))} \xB7 <strong>Total ${esc2(money2(inv.totalMinor))}</strong></p>
+${Object.keys(fields).length ? `<h2>Claim details</h2><table><tbody>${Object.entries(fields).map(([k, v]) => `<tr><th>${esc2(k)}</th><td>${esc2(v)}</td></tr>`).join("")}</tbody></table>` : ""}
+<h2>Attached records</h2>${documents.length ? `<ul>${documents.map((d) => `<li>${esc2(d.title)}</li>`).join("")}</ul>` : "<p>No records attached.</p>"}
+</body></html>`;
+      const row = await uow.tx.insuranceClaimPacket.create({ data: { ref, policyId: policy.id, patientId: policy.patient.id, invoiceId: inv.id, recordsReleaseId: args.recordsReleaseId ?? null, formFields: fields, documents, submitter, status: "draft", packetBody: body, packetSha256: sha256(body) } });
+      auditCreate(uow, actor, "InsuranceClaimPacket", row.id, "claim.built", { ref, documents: documents.length });
+      return { id: row.id, ref, documents: documents.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var NEXT = {
+  ready: { from: ["draft"], to: "ready" },
+  submitted: { from: ["ready"], to: "submitted" },
+  under_review: { from: ["submitted", "more_info_requested"], to: "under_review" },
+  more_info_requested: { from: ["under_review"], to: "more_info_requested" },
+  approved: { from: ["under_review", "submitted"], to: "approved" },
+  denied: { from: ["under_review", "submitted"], to: "denied" }
+};
+async function advanceClaim(_root, args, context) {
+  return gated(context, { permissions: [...CLAIMERS], tool: "claim.advance", humanOnly: true }, args, async (actor) => {
+    const step = NEXT[args.to];
+    if (!step) throw new DomainError(Codes.INVALID_INPUT, "Choose a valid next step.", { field: "to" });
+    const note = args.to === "denied" || args.to === "more_info_requested" ? text17(args.note, "note", 300) : String(args.note ?? "").slice(0, 300);
+    const result = await command(context.prisma, { name: "claim.advance", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await staffOf(uow, actor).catch(() => null);
+      const approved = args.to === "approved" ? minorText(args.approvedMinor, "approved amount", true) : null;
+      const row = await transition(uow, { model: "InsuranceClaimPacket", id: args.claimId, from: step.from, to: step.to, expectedVersion: args.expectedVersion, actor, eventType: `claim.${step.to}`, reason: note || null, data: { statusNote: note, ...approved !== null ? { approvedMinor: approved } : {} } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/security/breadthLimit.ts
 var import_graphql3 = require("graphql");
 var API_NESTED_DEFAULT = 50;
@@ -11928,26 +13986,26 @@ function limitNestedLists(schema) {
 }
 
 // features/keystone/security/signInLimit.ts
-var import_node_crypto10 = require("node:crypto");
+var import_node_crypto12 = require("node:crypto");
 
 // features/keystone/security/internalIdentity.ts
-var import_node_crypto9 = require("node:crypto");
+var import_node_crypto11 = require("node:crypto");
 var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto9.timingSafeEqual)(leftBuffer, rightBuffer);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto11.timingSafeEqual)(leftBuffer, rightBuffer);
 }
 function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
   if (!loopback || secret2.length < 32) return null;
   const identity = String(headers["x-openfront-client-identity"] || "");
-  const timestamp17 = String(headers["x-openfront-client-timestamp"] || "");
+  const timestamp18 = String(headers["x-openfront-client-timestamp"] || "");
   const signature = String(headers["x-openfront-client-signature"] || "");
-  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp17) || !/^[a-f0-9]{64}$/.test(signature)) return null;
-  const age = Math.abs(now - Number(timestamp17) * 1e3);
+  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp18) || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const age = Math.abs(now - Number(timestamp18) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${timestamp17}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto11.createHmac)("sha256", secret2).update(`${timestamp18}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -11974,7 +14032,7 @@ var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
 var SIGN_IN_KNOWN_DAYS = 90;
 var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
-var hash = (value) => (0, import_node_crypto10.createHash)("sha256").update(value).digest("hex");
+var hash = (value) => (0, import_node_crypto12.createHash)("sha256").update(value).digest("hex");
 var normalEmail = (email) => email.trim().toLowerCase();
 var UNKNOWN_ADDRESS = "unknown-address";
 var where = (address) => hash(address);
@@ -11995,7 +14053,7 @@ function clientAddress(req) {
 }
 async function countAttempt(prisma, key2) {
   const rows = await prisma.$queryRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto10.randomUUID)()}, ${key2}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto12.randomUUID)()}, ${key2}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
       "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
@@ -12037,7 +14095,7 @@ async function signInAttempt(prisma, email, address, sessionUserId = null) {
 async function rememberAddress(prisma, userId, address) {
   if (address === UNKNOWN_ADDRESS) return;
   await prisma.$executeRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto10.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto12.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
 }
 async function signInSucceeded(prisma, userId, address) {
@@ -12087,11 +14145,11 @@ function limitSignIn(schema, field = "authenticateUserWithPassword", identityArg
 }
 
 // features/keystone/mutations/index.ts
-var graphql2 = String.raw;
+var graphql3 = String.raw;
 function extendGraphqlSchema(baseSchema) {
   return limitSignIn(limitNestedLists((0, import_schema.mergeSchemas)({
     schemas: [baseSchema],
-    typeDefs: graphql2`
+    typeDefs: graphql3`
       scalar JSON
       type Query {
         redirectToInit: Boolean
@@ -12195,6 +14253,40 @@ function extendGraphqlSchema(baseSchema) {
         destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
         submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
+        startFeeDraft(label: String!, idempotencyKey: String!): JSON
+        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, idempotencyKey: String!): JSON
+        requestFeePublish(versionId: ID!, effectiveFrom: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        discardFeeDraft(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        startEstimate(patientId: ID!, locationId: ID!, encounterId: ID, title: String!, elective: Boolean, options: JSON!, idempotencyKey: String!): JSON
+        presentEstimate(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reviseEstimate(estimateId: ID!, idempotencyKey: String!): JSON
+        declineEstimate(versionId: ID!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        refreshEstimates(idempotencyKey: String!): JSON
+        acceptEstimate(versionId: ID!, optionId: ID!, signerId: ID!, method: String!, signatureText: String, witnessId: ID, quoteHash: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordOverageApproval(planId: ID!, newHighMinor: String!, method: String!, approverId: ID, witnessId: ID, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        closePlan(planId: ID!, expectedVersion: Int!, cancel: Boolean, reason: String, idempotencyKey: String!): JSON
+        captureVisitCharges(encounterId: ID!, idempotencyKey: String!): JSON
+        addFeeCharge(patientId: ID!, encounterId: ID, feeItemId: ID!, qty: String!, idempotencyKey: String!): JSON
+        addManualCharge(patientId: ID!, encounterId: ID, description: String!, amountMinor: String!, taxCategory: String!, reason: String!, idempotencyKey: String!): JSON
+        reverseCharge(chargeId: ID!, reason: String!, idempotencyKey: String!): JSON
+        draftInvoice(clientId: ID!, encounterId: ID, idempotencyKey: String!): JSON
+        discountInvoice(invoiceId: ID!, percent: Float!, reason: String!, idempotencyKey: String!): JSON
+        postInvoice(invoiceId: ID!, postedOn: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordPayment(clientId: ID!, invoiceId: ID, depositId: ID, method: String!, amountMinor: String!, reference: String, note: String, postedOn: String, allowOverpay: Boolean, payerAuthorizationId: ID, idempotencyKey: String!): JSON
+        takeCardPayment(clientId: ID!, invoiceId: ID, depositId: ID, amountMinor: String!, paymentMethodId: String, idempotencyKey: String!): JSON
+        checkPaymentStatus(paymentId: ID!, idempotencyKey: String): JSON
+        applyDeposit(depositId: ID!, invoiceId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        issueCreditNote(invoiceId: ID!, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        requestRefund(paymentId: ID!, invoiceId: ID, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        issueApprovedRefund(refundId: ID!, idempotencyKey: String!): JSON
+        checkRefundStatus(refundId: ID!, idempotencyKey: String!): JSON
+        requestWriteOff(invoiceId: ID!, reason: String!, idempotencyKey: String!): JSON
+        closeArPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reopenArPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        requestAuthorization(invoiceId: ID!, policyId: ID!, requestedMinor: String!, idempotencyKey: String!): JSON
+        recordAuthorizationDecision(authorizationId: ID!, decision: String!, authorisedMinor: String, externalRef: String, validUntil: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        buildClaimPacket(invoiceId: ID!, policyId: ID!, recordsReleaseId: ID, submitter: String!, formFields: JSON, idempotencyKey: String!): JSON
+        advanceClaim(claimId: ID!, to: String!, note: String, approvedMinor: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         receiveStock(drugId: ID, vaccineId: ID, stockLocationId: ID!, lotNumber: String!, expiresOn: String!, quantity: String!, unit: String, idempotencyKey: String!): JSON
         adjustStock(itemId: ID!, lotId: ID, stockLocationId: ID!, kind: String!, quantity: String!, reason: String!, idempotencyKey: String!): JSON
         addSupplier(name: String!, accountNumber: String, phone: String, email: String, deaNumber: String, idempotencyKey: String!): JSON
@@ -12323,6 +14415,40 @@ function extendGraphqlSchema(baseSchema) {
         destroyControlled: op(destroyControlled),
         submitPdmp: op(submitPdmp),
         addStockLocation: op(addStockLocation),
+        startFeeDraft: op(startFeeDraft),
+        saveFeeItem: op(saveFeeItem),
+        requestFeePublish: op(requestFeePublish),
+        discardFeeDraft: op(discardFeeDraft),
+        startEstimate: op(createEstimate),
+        presentEstimate: op(presentEstimate),
+        reviseEstimate: op(reviseEstimate),
+        declineEstimate: op(declineEstimate),
+        refreshEstimates: op(refreshEstimates),
+        acceptEstimate: op(acceptEstimate),
+        recordOverageApproval: op(recordOverageApproval),
+        closePlan: op(closePlan),
+        captureVisitCharges: op(captureVisitCharges),
+        addFeeCharge: op(addFeeCharge),
+        addManualCharge: op(addManualCharge),
+        reverseCharge: op(reverseCharge),
+        draftInvoice: op(draftInvoice),
+        discountInvoice: op(discountInvoice),
+        postInvoice: op(postInvoice),
+        recordPayment: op(recordPayment),
+        takeCardPayment: op(takeCardPayment),
+        checkPaymentStatus: op(checkPaymentStatus),
+        applyDeposit: op(applyDeposit),
+        issueCreditNote: op(issueCreditNote),
+        requestRefund: op(requestRefund),
+        issueApprovedRefund: op(issueApprovedRefund),
+        checkRefundStatus: op(checkRefundStatus),
+        requestWriteOff: op(requestWriteOff),
+        closeArPeriod: op(closeArPeriod),
+        reopenArPeriod: op(reopenArPeriod),
+        requestAuthorization: op(requestAuthorization),
+        recordAuthorizationDecision: op(recordAuthorizationDecision),
+        buildClaimPacket: op(buildClaimPacket),
+        advanceClaim: op(advanceClaim),
         receiveStock: op(receiveStock),
         adjustStock: op(adjustStock),
         addSupplier: op(addSupplier),
@@ -12570,7 +14696,7 @@ var { withAuth } = (0, import_auth.createAuth)({
   `
 });
 var keystone_default = withAuth(
-  (0, import_core21.config)({
+  (0, import_core22.config)({
     db: {
       provider: "postgresql",
       url: databaseURL,

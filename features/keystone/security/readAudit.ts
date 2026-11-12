@@ -28,6 +28,9 @@ export const AUDITED_TYPES = new Set<string>([
   'PatientOwnership', 'WeightMeasurement', 'AlertAcknowledgement', 'Microchip', 'VcprRecord', 'PetInsurancePolicy',
   'AppointmentPatient', 'AppointmentSegment', 'WaitlistEntry', 'TriageAssessment', 'WhiteboardEntry', 'Suppression',
   'CsContainer', 'CsLogEntry', 'CsCount', 'CsCountLine', 'CsDiscrepancyCase', 'CsDestructionRecord', 'PdmpReport', 'DispenseLabel', 'ExternalDispense', 'WrittenRxExport', 'RecallExposure', 'CsWitness', 'CsOrderForm', 'CsOrderFormLine', 'CsTransfer', 'PdmpSubmission', 'CabinetAccessEvent',
+  // Phase 4: estimates, plans, money. Reading what a client owes or paid is recorded like reading their chart.
+  'EstimateVersion', 'EstimateOption', 'EstimateLine', 'EstimateAcceptance', 'TreatmentPlan', 'TreatmentPlanItem', 'PaymentAttempt', 'PaymentAllocation',
+  'PaymentWebhookEvent', 'ClientLedgerEntry', 'ChargeLine', 'CreditNote', 'Refund', 'Deposit', 'PayerAuthorization', 'InsuranceClaimPacket', 'OverageApproval',
   // Phase 2: the medical record, orders and treatment, preventive care
   'SoapSection', 'SoapSectionRevision', 'VitalsObservation', 'PhysicalExamFinding', 'Problem', 'Diagnosis', 'ClinicalAttachment', 'ScribeSession',
   'ClinicalOrder', 'DoseCalculation', 'Administration', 'HospitalStay', 'CageAssignment', 'TreatmentSheetOrder', 'TreatmentTask', 'MonitoringReading',

@@ -266,6 +266,7 @@ model ApprovalRequest {
   updatedAt                           DateTime                @default(now()) @updatedAt
   from_PolicyVersion_approval         PolicyVersion[]         @relation("PolicyVersion_approval")
   from_TriageProtocolVersion_approval TriageProtocolVersion[] @relation("TriageProtocolVersion_approval")
+  from_Refund_approval                Refund[]                @relation("Refund_approval")
   from_Encounter_voidApproval         Encounter[]             @relation("Encounter_voidApproval")
   from_AgentToolGrant_approval        AgentToolGrant[]        @relation("AgentToolGrant_approval")
   from_Proposal_approval              Proposal[]              @relation("Proposal_approval")
@@ -646,6 +647,11 @@ model Location {
   from_GoodsReceipt_location          GoodsReceipt[]          @relation("GoodsReceipt_location")
   from_ReorderRule_location           ReorderRule[]           @relation("ReorderRule_location")
   from_StockCount_location            StockCount[]            @relation("StockCount_location")
+  from_Estimate_location              Estimate[]              @relation("Estimate_location")
+  from_TreatmentPlan_location         TreatmentPlan[]         @relation("TreatmentPlan_location")
+  from_Invoice_location               Invoice[]               @relation("Invoice_location")
+  from_ChargeLine_location            ChargeLine[]            @relation("ChargeLine_location")
+  from_Payment_location               Payment[]               @relation("Payment_location")
   from_Encounter_location             Encounter[]             @relation("Encounter_location")
   from_ClinicalOrder_location         ClinicalOrder[]         @relation("ClinicalOrder_location")
   from_InventoryLot_location          InventoryLot[]          @relation("InventoryLot_location")
@@ -769,6 +775,18 @@ model StaffMember {
   from_GoodsReceipt_receivedBy              GoodsReceipt[]          @relation("GoodsReceipt_receivedBy")
   from_StockCount_countedBy                 StockCount[]            @relation("StockCount_countedBy")
   from_TemperatureLog_recordedBy            TemperatureLog[]        @relation("TemperatureLog_recordedBy")
+  from_Estimate_createdBy                   Estimate[]              @relation("Estimate_createdBy")
+  from_EstimateAcceptance_witness           EstimateAcceptance[]    @relation("EstimateAcceptance_witness")
+  from_EstimateAcceptance_recordedBy        EstimateAcceptance[]    @relation("EstimateAcceptance_recordedBy")
+  from_OverageApproval_witness              OverageApproval[]       @relation("OverageApproval_witness")
+  from_OverageApproval_emergencyOverrideBy  OverageApproval[]       @relation("OverageApproval_emergencyOverrideBy")
+  from_OverageApproval_recordedBy           OverageApproval[]       @relation("OverageApproval_recordedBy")
+  from_ArPeriod_closedBy                    ArPeriod[]              @relation("ArPeriod_closedBy")
+  from_Invoice_createdBy                    Invoice[]               @relation("Invoice_createdBy")
+  from_ChargeLine_performedBy               ChargeLine[]            @relation("ChargeLine_performedBy")
+  from_CreditNote_postedBy                  CreditNote[]            @relation("CreditNote_postedBy")
+  from_Payment_receivedBy                   Payment[]               @relation("Payment_receivedBy")
+  from_Refund_requestedBy                   Refund[]                @relation("Refund_requestedBy")
   from_Encounter_attendingDvm               Encounter[]             @relation("Encounter_attendingDvm")
   from_Encounter_participants               Encounter[]             @relation("Encounter_participants")
   from_Encounter_signedBy                   Encounter[]             @relation("Encounter_signedBy")
@@ -1057,74 +1075,84 @@ model Breed {
 }
 
 model Client {
-  id                           String             @id @default(cuid())
-  ref                          String             @unique @default("")
-  publicCode                   String?            @unique
-  displayName                  String             @default("")
-  kind                         String
-  status                       String             @default("prospect")
-  primaryLocation              Location?          @relation("Client_primaryLocation", fields: [primaryLocationId], references: [id])
-  primaryLocationId            String?            @map("primaryLocation")
-  addressLine1                 String             @default("")
-  addressLine2                 String             @default("")
-  city                         String             @default("")
-  stateCode                    String             @default("")
-  postalCode                   String             @default("")
-  creditLimitMinor             BigInt             @default(0)
-  accountFlags                 Json?              @default("{}")
-  taxExempt                    Boolean            @default(false)
-  mergedInto                   Client?            @relation("Client_mergedInto", fields: [mergedIntoId], references: [id])
-  mergedIntoId                 String?            @map("mergedInto")
-  people                       ClientPerson[]     @relation("ClientPerson_client")
-  ownerships                   PatientOwnership[] @relation("PatientOwnership_client")
-  source                       String
-  version                      Int                @default(0)
-  createdAt                    DateTime           @default(now())
-  updatedAt                    DateTime           @default(now()) @updatedAt
-  from_Client_mergedInto       Client[]           @relation("Client_mergedInto")
-  from_RecordsRequest_client   RecordsRequest[]   @relation("RecordsRequest_client")
-  from_RefillRequest_client    RefillRequest[]    @relation("RefillRequest_client")
-  from_Appointment_client      Appointment[]      @relation("Appointment_client")
-  from_TriageAssessment_client TriageAssessment[] @relation("TriageAssessment_client")
-  from_WaitlistEntry_client    WaitlistEntry[]    @relation("WaitlistEntry_client")
-  from_CallRecord_client       CallRecord[]       @relation("CallRecord_client")
-  from_CommsThread_client      CommsThread[]      @relation("CommsThread_client")
-  from_Suppression_client      Suppression[]      @relation("Suppression_client")
-  from_Prescription_client     Prescription[]     @relation("Prescription_client")
-  from_CsLogEntry_client       CsLogEntry[]       @relation("CsLogEntry_client")
-  from_Dispense_client         Dispense[]         @relation("Dispense_client")
-  from_RecallExposure_client   RecallExposure[]   @relation("RecallExposure_client")
+  id                            String              @id @default(cuid())
+  ref                           String              @unique @default("")
+  publicCode                    String?             @unique
+  displayName                   String              @default("")
+  kind                          String
+  status                        String              @default("prospect")
+  primaryLocation               Location?           @relation("Client_primaryLocation", fields: [primaryLocationId], references: [id])
+  primaryLocationId             String?             @map("primaryLocation")
+  addressLine1                  String              @default("")
+  addressLine2                  String              @default("")
+  city                          String              @default("")
+  stateCode                     String              @default("")
+  postalCode                    String              @default("")
+  creditLimitMinor              BigInt              @default(0)
+  accountFlags                  Json?               @default("{}")
+  taxExempt                     Boolean             @default(false)
+  mergedInto                    Client?             @relation("Client_mergedInto", fields: [mergedIntoId], references: [id])
+  mergedIntoId                  String?             @map("mergedInto")
+  people                        ClientPerson[]      @relation("ClientPerson_client")
+  ownerships                    PatientOwnership[]  @relation("PatientOwnership_client")
+  source                        String
+  version                       Int                 @default(0)
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @default(now()) @updatedAt
+  from_Client_mergedInto        Client[]            @relation("Client_mergedInto")
+  from_RecordsRequest_client    RecordsRequest[]    @relation("RecordsRequest_client")
+  from_RefillRequest_client     RefillRequest[]     @relation("RefillRequest_client")
+  from_Appointment_client       Appointment[]       @relation("Appointment_client")
+  from_TriageAssessment_client  TriageAssessment[]  @relation("TriageAssessment_client")
+  from_WaitlistEntry_client     WaitlistEntry[]     @relation("WaitlistEntry_client")
+  from_CallRecord_client        CallRecord[]        @relation("CallRecord_client")
+  from_CommsThread_client       CommsThread[]       @relation("CommsThread_client")
+  from_Suppression_client       Suppression[]       @relation("Suppression_client")
+  from_Prescription_client      Prescription[]      @relation("Prescription_client")
+  from_CsLogEntry_client        CsLogEntry[]        @relation("CsLogEntry_client")
+  from_Dispense_client          Dispense[]          @relation("Dispense_client")
+  from_RecallExposure_client    RecallExposure[]    @relation("RecallExposure_client")
+  from_Estimate_client          Estimate[]          @relation("Estimate_client")
+  from_TreatmentPlan_client     TreatmentPlan[]     @relation("TreatmentPlan_client")
+  from_Deposit_client           Deposit[]           @relation("Deposit_client")
+  from_Invoice_client           Invoice[]           @relation("Invoice_client")
+  from_ChargeLine_client        ChargeLine[]        @relation("ChargeLine_client")
+  from_CreditNote_client        CreditNote[]        @relation("CreditNote_client")
+  from_Payment_client           Payment[]           @relation("Payment_client")
+  from_ClientLedgerEntry_client ClientLedgerEntry[] @relation("ClientLedgerEntry_client")
 
   @@index([primaryLocationId])
   @@index([mergedIntoId])
 }
 
 model ClientPerson {
-  id                              String           @id @default(cuid())
-  client                          Client?          @relation("ClientPerson_client", fields: [clientId], references: [id])
-  clientId                        String?          @map("client")
-  firstName                       String           @default("")
-  lastName                        String           @default("")
+  id                              String               @id @default(cuid())
+  client                          Client?              @relation("ClientPerson_client", fields: [clientId], references: [id])
+  clientId                        String?              @map("client")
+  firstName                       String               @default("")
+  lastName                        String               @default("")
   relationship                    String
-  isPrimary                       Boolean          @default(false)
-  canBook                         Boolean          @default(true)
-  canApproveTreatment             Boolean          @default(false)
-  canReceiveRecords               Boolean          @default(false)
-  canPay                          Boolean          @default(true)
-  canAuthoriseEuthanasia          Boolean          @default(false)
-  dateOfBirth                     DateTime?        @postgresql.Date
-  preferredLanguage               String           @default("")
-  user                            User?            @relation("ClientPerson_user", fields: [userId], references: [id])
-  userId                          String?          @map("user")
+  isPrimary                       Boolean              @default(false)
+  canBook                         Boolean              @default(true)
+  canApproveTreatment             Boolean              @default(false)
+  canReceiveRecords               Boolean              @default(false)
+  canPay                          Boolean              @default(true)
+  canAuthoriseEuthanasia          Boolean              @default(false)
+  dateOfBirth                     DateTime?            @postgresql.Date
+  preferredLanguage               String               @default("")
+  user                            User?                @relation("ClientPerson_user", fields: [userId], references: [id])
+  userId                          String?              @map("user")
   identityVerifiedAt              DateTime?
-  contactPoints                   ContactPoint[]   @relation("ContactPoint_person")
-  version                         Int              @default(0)
-  createdAt                       DateTime         @default(now())
-  updatedAt                       DateTime         @default(now()) @updatedAt
-  from_RecordsRequest_requestedBy RecordsRequest[] @relation("RecordsRequest_requestedBy")
-  from_RefillRequest_requestedBy  RefillRequest[]  @relation("RefillRequest_requestedBy")
-  from_CallRecord_person          CallRecord[]     @relation("CallRecord_person")
-  from_PortalSession_person       PortalSession[]  @relation("PortalSession_person")
+  contactPoints                   ContactPoint[]       @relation("ContactPoint_person")
+  version                         Int                  @default(0)
+  createdAt                       DateTime             @default(now())
+  updatedAt                       DateTime             @default(now()) @updatedAt
+  from_RecordsRequest_requestedBy RecordsRequest[]     @relation("RecordsRequest_requestedBy")
+  from_RefillRequest_requestedBy  RefillRequest[]      @relation("RefillRequest_requestedBy")
+  from_CallRecord_person          CallRecord[]         @relation("CallRecord_person")
+  from_PortalSession_person       PortalSession[]      @relation("PortalSession_person")
+  from_EstimateAcceptance_signer  EstimateAcceptance[] @relation("EstimateAcceptance_signer")
+  from_OverageApproval_approver   OverageApproval[]    @relation("OverageApproval_approver")
 
   @@index([clientId])
   @@index([userId])
@@ -1260,6 +1288,10 @@ model Patient {
   from_Dispense_patient              Dispense[]              @relation("Dispense_patient")
   from_ExternalDispense_patient      ExternalDispense[]      @relation("ExternalDispense_patient")
   from_RecallExposure_patient        RecallExposure[]        @relation("RecallExposure_patient")
+  from_Estimate_patient              Estimate[]              @relation("Estimate_patient")
+  from_TreatmentPlan_patient         TreatmentPlan[]         @relation("TreatmentPlan_patient")
+  from_ChargeLine_patient            ChargeLine[]            @relation("ChargeLine_patient")
+  from_InsuranceClaimPacket_patient  InsuranceClaimPacket[]  @relation("InsuranceClaimPacket_patient")
   from_Encounter_patient             Encounter[]             @relation("Encounter_patient")
   from_VitalsObservation_patient     VitalsObservation[]     @relation("VitalsObservation_patient")
   from_Problem_patient               Problem[]               @relation("Problem_patient")
@@ -1332,22 +1364,24 @@ model PatientOwnership {
 }
 
 model PetInsurancePolicy {
-  id                    String           @id @default(cuid())
-  patient               Patient?         @relation("PetInsurancePolicy_patient", fields: [patientId], references: [id])
-  patientId             String?          @map("patient")
-  insurer               ThirdPartyPayer? @relation("PetInsurancePolicy_insurer", fields: [insurerId], references: [id])
-  insurerId             String?          @map("insurer")
-  policyNumber          String           @default("")
-  plan                  String           @default("")
-  deductibleMinor       BigInt?
-  reimbursementRate     Decimal?         @postgresql.Decimal(12, 6)
-  effectiveFrom         DateTime?        @postgresql.Date
-  effectiveTo           DateTime?        @postgresql.Date
-  directPayEligible     Boolean          @default(false)
-  clientAuthorisation   Document?        @relation("PetInsurancePolicy_clientAuthorisation", fields: [clientAuthorisationId], references: [id])
-  clientAuthorisationId String?          @map("clientAuthorisation")
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @default(now()) @updatedAt
+  id                               String                 @id @default(cuid())
+  patient                          Patient?               @relation("PetInsurancePolicy_patient", fields: [patientId], references: [id])
+  patientId                        String?                @map("patient")
+  insurer                          ThirdPartyPayer?       @relation("PetInsurancePolicy_insurer", fields: [insurerId], references: [id])
+  insurerId                        String?                @map("insurer")
+  policyNumber                     String                 @default("")
+  plan                             String                 @default("")
+  deductibleMinor                  BigInt?
+  reimbursementRate                Decimal?               @postgresql.Decimal(12, 6)
+  effectiveFrom                    DateTime?              @postgresql.Date
+  effectiveTo                      DateTime?              @postgresql.Date
+  directPayEligible                Boolean                @default(false)
+  clientAuthorisation              Document?              @relation("PetInsurancePolicy_clientAuthorisation", fields: [clientAuthorisationId], references: [id])
+  clientAuthorisationId            String?                @map("clientAuthorisation")
+  createdAt                        DateTime               @default(now())
+  updatedAt                        DateTime               @default(now()) @updatedAt
+  from_PayerAuthorization_policy   PayerAuthorization[]   @relation("PayerAuthorization_policy")
+  from_InsuranceClaimPacket_policy InsuranceClaimPacket[] @relation("InsuranceClaimPacket_policy")
 
   @@index([patientId])
   @@index([insurerId])
@@ -1355,18 +1389,19 @@ model PetInsurancePolicy {
 }
 
 model RecordsRelease {
-  id                           String          @id @default(cuid())
-  request                      RecordsRequest? @relation("RecordsRelease_request", fields: [requestId], references: [id])
-  requestId                    String?         @map("request")
-  recipient                    String          @default("")
-  channel                      String
-  documents                    Json?
-  releasedByUser               User?           @relation("RecordsRelease_releasedByUser", fields: [releasedByUserId], references: [id])
-  releasedByUserId             String?         @map("releasedByUser")
-  releasedByAgent              AgentIdentity?  @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
-  releasedByAgentId            String?         @map("releasedByAgent")
-  at                           DateTime
-  from_Referral_recordsRelease Referral[]      @relation("Referral_recordsRelease")
+  id                                       String                 @id @default(cuid())
+  request                                  RecordsRequest?        @relation("RecordsRelease_request", fields: [requestId], references: [id])
+  requestId                                String?                @map("request")
+  recipient                                String                 @default("")
+  channel                                  String
+  documents                                Json?
+  releasedByUser                           User?                  @relation("RecordsRelease_releasedByUser", fields: [releasedByUserId], references: [id])
+  releasedByUserId                         String?                @map("releasedByUser")
+  releasedByAgent                          AgentIdentity?         @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
+  releasedByAgentId                        String?                @map("releasedByAgent")
+  at                                       DateTime
+  from_InsuranceClaimPacket_recordsRelease InsuranceClaimPacket[] @relation("InsuranceClaimPacket_recordsRelease")
+  from_Referral_recordsRelease             Referral[]             @relation("Referral_recordsRelease")
 
   @@index([requestId])
   @@index([releasedByUserId])
@@ -1515,6 +1550,7 @@ model ThirdPartyPayer {
   createdAt                       DateTime             @default(now())
   updatedAt                       DateTime             @default(now()) @updatedAt
   from_PetInsurancePolicy_insurer PetInsurancePolicy[] @relation("PetInsurancePolicy_insurer")
+  from_PayerAuthorization_payer   PayerAuthorization[] @relation("PayerAuthorization_payer")
 }
 
 model VcprRecord {
@@ -2135,6 +2171,7 @@ model DrugProduct {
   from_Dispense_product         Dispense[]           @relation("Dispense_product")
   from_CsOrderFormLine_product  CsOrderFormLine[]    @relation("CsOrderFormLine_product")
   from_Item_drug                Item[]               @relation("Item_drug")
+  from_FeeItem_drug             FeeItem[]            @relation("FeeItem_drug")
   from_ClinicalOrder_drug       ClinicalOrder[]      @relation("ClinicalOrder_drug")
   from_DoseCalculation_product  DoseCalculation[]    @relation("DoseCalculation_product")
   from_InventoryLot_drug        InventoryLot[]       @relation("InventoryLot_drug")
@@ -2677,6 +2714,7 @@ model Item {
   from_ReorderRule_item       ReorderRule[]       @relation("ReorderRule_item")
   from_StockCountLine_item    StockCountLine[]    @relation("StockCountLine_item")
   from_RecallCase_item        RecallCase[]        @relation("RecallCase_item")
+  from_FeeItem_item           FeeItem[]           @relation("FeeItem_item")
 
   @@index([drugId])
   @@index([vaccineId])
@@ -3009,6 +3047,661 @@ model TemperatureExcursion {
   @@index([logId])
 }
 
+model FeeSchedule {
+  id        String               @id @default(cuid())
+  name      String               @default("")
+  code      String               @unique @default("")
+  versions  FeeScheduleVersion[] @relation("FeeScheduleVersion_schedule")
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @default(now()) @updatedAt
+}
+
+model FeeScheduleVersion {
+  id                                      String            @id @default(cuid())
+  schedule                                FeeSchedule?      @relation("FeeScheduleVersion_schedule", fields: [scheduleId], references: [id])
+  scheduleId                              String?           @map("schedule")
+  versionNo                               Int
+  label                                   String            @default("")
+  status                                  String            @default("draft")
+  effectiveFrom                           DateTime?         @postgresql.Date
+  publishedAt                             DateTime?
+  items                                   FeeItem[]         @relation("FeeItem_version")
+  version                                 Int               @default(0)
+  createdAt                               DateTime          @default(now())
+  updatedAt                               DateTime          @default(now()) @updatedAt
+  from_PriceRule_version                  PriceRule[]       @relation("PriceRule_version")
+  from_EstimateVersion_feeScheduleVersion EstimateVersion[] @relation("EstimateVersion_feeScheduleVersion")
+
+  @@index([scheduleId])
+}
+
+model FeeItem {
+  id                        String              @id @default(cuid())
+  version                   FeeScheduleVersion? @relation("FeeItem_version", fields: [versionId], references: [id])
+  versionId                 String?             @map("version")
+  code                      String              @default("")
+  name                      String              @default("")
+  category                  String
+  priceMinor                BigInt
+  currencyCode              String              @default("USD")
+  unit                      String              @default("")
+  minimumChargeMinor        BigInt?
+  dispensingFeeMinor        BigInt?
+  injectionFeeMinor         BigInt?
+  markupRate                Decimal?            @postgresql.Decimal(12, 6)
+  taxCategory               String
+  productionCategory        String              @default("")
+  orderKind                 String              @default("")
+  drug                      DrugProduct?        @relation("FeeItem_drug", fields: [drugId], references: [id])
+  drugId                    String?             @map("drug")
+  vaccine                   VaccineProduct?     @relation("FeeItem_vaccine", fields: [vaccineId], references: [id])
+  vaccineId                 String?             @map("vaccine")
+  item                      Item?               @relation("FeeItem_item", fields: [itemId], references: [id])
+  itemId                    String?             @map("item")
+  active                    Boolean             @default(true)
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @default(now()) @updatedAt
+  from_EstimateLine_feeItem EstimateLine[]      @relation("EstimateLine_feeItem")
+  from_ChargeLine_feeItem   ChargeLine[]        @relation("ChargeLine_feeItem")
+
+  @@index([versionId])
+  @@index([code])
+  @@index([orderKind])
+  @@index([drugId])
+  @@index([vaccineId])
+  @@index([itemId])
+}
+
+model PriceRule {
+  id            String              @id @default(cuid())
+  version       FeeScheduleVersion? @relation("PriceRule_version", fields: [versionId], references: [id])
+  versionId     String?             @map("version")
+  name          String              @default("")
+  kind          String
+  adjustmentBps Int
+  conditions    Json?               @default("{}")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @default(now()) @updatedAt
+
+  @@index([versionId])
+}
+
+model Estimate {
+  id                          String            @id @default(cuid())
+  ref                         String            @unique @default("")
+  patient                     Patient?          @relation("Estimate_patient", fields: [patientId], references: [id])
+  patientId                   String?           @map("patient")
+  client                      Client?           @relation("Estimate_client", fields: [clientId], references: [id])
+  clientId                    String?           @map("client")
+  location                    Location?         @relation("Estimate_location", fields: [locationId], references: [id])
+  locationId                  String?           @map("location")
+  encounter                   Encounter?        @relation("Estimate_encounter", fields: [encounterId], references: [id])
+  encounterId                 String?           @map("encounter")
+  title                       String            @default("")
+  elective                    Boolean           @default(false)
+  status                      String            @default("open")
+  acceptedVersion             EstimateVersion?  @relation("Estimate_acceptedVersion", fields: [acceptedVersionId], references: [id])
+  acceptedVersionId           String?           @map("acceptedVersion")
+  acceptedOption              EstimateOption?   @relation("Estimate_acceptedOption", fields: [acceptedOptionId], references: [id])
+  acceptedOptionId            String?           @map("acceptedOption")
+  versions                    EstimateVersion[] @relation("EstimateVersion_estimate")
+  createdBy                   StaffMember?      @relation("Estimate_createdBy", fields: [createdById], references: [id])
+  createdById                 String?           @map("createdBy")
+  version                     Int               @default(0)
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @default(now()) @updatedAt
+  from_TreatmentPlan_estimate TreatmentPlan[]   @relation("TreatmentPlan_estimate")
+  from_Deposit_estimate       Deposit[]         @relation("Deposit_estimate")
+
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+  @@index([encounterId])
+  @@index([acceptedVersionId])
+  @@index([acceptedOptionId])
+  @@index([createdById])
+}
+
+model EstimateVersion {
+  id                                      String               @id @default(cuid())
+  estimate                                Estimate?            @relation("EstimateVersion_estimate", fields: [estimateId], references: [id])
+  estimateId                              String?              @map("estimate")
+  versionNo                               Int
+  status                                  String               @default("draft")
+  presentedAt                             DateTime?
+  validUntil                              DateTime?
+  feeScheduleVersion                      FeeScheduleVersion?  @relation("EstimateVersion_feeScheduleVersion", fields: [feeScheduleVersionId], references: [id])
+  feeScheduleVersionId                    String?              @map("feeScheduleVersion")
+  quoteHash                               String               @default("")
+  isOverage                               Boolean              @default(false)
+  overageOf                               EstimateVersion?     @relation("EstimateVersion_overageOf", fields: [overageOfId], references: [id])
+  overageOfId                             String?              @map("overageOf")
+  declineReason                           String               @default("")
+  options                                 EstimateOption[]     @relation("EstimateOption_estimateVersion")
+  version                                 Int                  @default(0)
+  createdAt                               DateTime             @default(now())
+  updatedAt                               DateTime             @default(now()) @updatedAt
+  from_Estimate_acceptedVersion           Estimate[]           @relation("Estimate_acceptedVersion")
+  from_EstimateVersion_overageOf          EstimateVersion[]    @relation("EstimateVersion_overageOf")
+  from_EstimateAcceptance_estimateVersion EstimateAcceptance[] @relation("EstimateAcceptance_estimateVersion")
+  from_TreatmentPlan_estimateVersion      TreatmentPlan[]      @relation("TreatmentPlan_estimateVersion")
+
+  @@index([estimateId])
+  @@index([feeScheduleVersionId])
+  @@index([overageOfId])
+}
+
+model EstimateOption {
+  id                             String               @id @default(cuid())
+  estimateVersion                EstimateVersion?     @relation("EstimateOption_estimateVersion", fields: [estimateVersionId], references: [id])
+  estimateVersionId              String?              @map("estimateVersion")
+  label                          String               @default("")
+  lowTotalMinor                  BigInt
+  highTotalMinor                 BigInt
+  currencyCode                   String               @default("USD")
+  recommended                    Boolean              @default(false)
+  lines                          EstimateLine[]       @relation("EstimateLine_option")
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @default(now()) @updatedAt
+  from_Estimate_acceptedOption   Estimate[]           @relation("Estimate_acceptedOption")
+  from_EstimateAcceptance_option EstimateAcceptance[] @relation("EstimateAcceptance_option")
+  from_TreatmentPlan_option      TreatmentPlan[]      @relation("TreatmentPlan_option")
+
+  @@index([estimateVersionId])
+}
+
+model EstimateLine {
+  id                                  String              @id @default(cuid())
+  option                              EstimateOption?     @relation("EstimateLine_option", fields: [optionId], references: [id])
+  optionId                            String?             @map("option")
+  feeItem                             FeeItem?            @relation("EstimateLine_feeItem", fields: [feeItemId], references: [id])
+  feeItemId                           String?             @map("feeItem")
+  description                         String              @default("")
+  category                            String              @default("")
+  qtyLow                              Decimal             @postgresql.Decimal(18, 6)
+  qtyHigh                             Decimal             @postgresql.Decimal(18, 6)
+  unitPriceMinor                      BigInt
+  lowMinor                            BigInt
+  highMinor                           BigInt
+  taxable                             Boolean             @default(false)
+  optional                            Boolean             @default(false)
+  sortOrder                           Int?                @default(0)
+  createdAt                           DateTime            @default(now())
+  updatedAt                           DateTime            @default(now()) @updatedAt
+  from_TreatmentPlanItem_estimateLine TreatmentPlanItem[] @relation("TreatmentPlanItem_estimateLine")
+
+  @@index([optionId])
+  @@index([feeItemId])
+}
+
+model EstimateAcceptance {
+  id                String           @id @default(cuid())
+  estimateVersion   EstimateVersion? @relation("EstimateAcceptance_estimateVersion", fields: [estimateVersionId], references: [id])
+  estimateVersionId String?          @map("estimateVersion")
+  option            EstimateOption?  @relation("EstimateAcceptance_option", fields: [optionId], references: [id])
+  optionId          String?          @map("option")
+  signer            ClientPerson?    @relation("EstimateAcceptance_signer", fields: [signerId], references: [id])
+  signerId          String?          @map("signer")
+  method            String
+  quoteHash         String           @default("")
+  signatureText     String           @default("")
+  witness           StaffMember?     @relation("EstimateAcceptance_witness", fields: [witnessId], references: [id])
+  witnessId         String?          @map("witness")
+  recordedBy        StaffMember?     @relation("EstimateAcceptance_recordedBy", fields: [recordedById], references: [id])
+  recordedById      String?          @map("recordedBy")
+  at                DateTime
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @default(now()) @updatedAt
+
+  @@index([estimateVersionId])
+  @@index([optionId])
+  @@index([signerId])
+  @@index([witnessId])
+  @@index([recordedById])
+}
+
+model TreatmentPlan {
+  id                String              @id @default(cuid())
+  ref               String              @unique @default("")
+  estimate          Estimate?           @relation("TreatmentPlan_estimate", fields: [estimateId], references: [id])
+  estimateId        String?             @map("estimate")
+  estimateVersion   EstimateVersion?    @relation("TreatmentPlan_estimateVersion", fields: [estimateVersionId], references: [id])
+  estimateVersionId String?             @map("estimateVersion")
+  option            EstimateOption?     @relation("TreatmentPlan_option", fields: [optionId], references: [id])
+  optionId          String?             @map("option")
+  patient           Patient?            @relation("TreatmentPlan_patient", fields: [patientId], references: [id])
+  patientId         String?             @map("patient")
+  client            Client?             @relation("TreatmentPlan_client", fields: [clientId], references: [id])
+  clientId          String?             @map("client")
+  location          Location?           @relation("TreatmentPlan_location", fields: [locationId], references: [id])
+  locationId        String?             @map("location")
+  status            String              @default("active")
+  acceptedLowMinor  BigInt
+  acceptedHighMinor BigInt
+  currencyCode      String              @default("USD")
+  items             TreatmentPlanItem[] @relation("TreatmentPlanItem_plan")
+  overages          OverageApproval[]   @relation("OverageApproval_plan")
+  version           Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @default(now()) @updatedAt
+  from_Deposit_plan Deposit[]           @relation("Deposit_plan")
+
+  @@index([estimateId])
+  @@index([estimateVersionId])
+  @@index([optionId])
+  @@index([patientId])
+  @@index([clientId])
+  @@index([locationId])
+}
+
+model TreatmentPlanItem {
+  id                       String         @id @default(cuid())
+  plan                     TreatmentPlan? @relation("TreatmentPlanItem_plan", fields: [planId], references: [id])
+  planId                   String?        @map("plan")
+  estimateLine             EstimateLine?  @relation("TreatmentPlanItem_estimateLine", fields: [estimateLineId], references: [id])
+  estimateLineId           String?        @map("estimateLine")
+  order                    ClinicalOrder? @relation("TreatmentPlanItem_order", fields: [orderId], references: [id])
+  orderId                  String?        @map("order")
+  description              String         @default("")
+  status                   String         @default("planned")
+  projectedMinor           BigInt
+  chargedMinor             BigInt?
+  version                  Int            @default(0)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @default(now()) @updatedAt
+  from_ChargeLine_planItem ChargeLine[]   @relation("ChargeLine_planItem")
+
+  @@index([planId])
+  @@index([estimateLineId])
+  @@index([orderId])
+}
+
+model OverageApproval {
+  id                    String         @id @default(cuid())
+  plan                  TreatmentPlan? @relation("OverageApproval_plan", fields: [planId], references: [id])
+  planId                String?        @map("plan")
+  previousHighMinor     BigInt
+  newHighMinor          BigInt
+  method                String
+  approver              ClientPerson?  @relation("OverageApproval_approver", fields: [approverId], references: [id])
+  approverId            String?        @map("approver")
+  witness               StaffMember?   @relation("OverageApproval_witness", fields: [witnessId], references: [id])
+  witnessId             String?        @map("witness")
+  emergencyOverrideBy   StaffMember?   @relation("OverageApproval_emergencyOverrideBy", fields: [emergencyOverrideById], references: [id])
+  emergencyOverrideById String?        @map("emergencyOverrideBy")
+  recordedBy            StaffMember?   @relation("OverageApproval_recordedBy", fields: [recordedById], references: [id])
+  recordedById          String?        @map("recordedBy")
+  reason                String         @default("")
+  at                    DateTime
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @default(now()) @updatedAt
+
+  @@index([planId])
+  @@index([approverId])
+  @@index([witnessId])
+  @@index([emergencyOverrideById])
+  @@index([recordedById])
+}
+
+model Deposit {
+  id                             String              @id @default(cuid())
+  ref                            String              @unique @default("")
+  client                         Client?             @relation("Deposit_client", fields: [clientId], references: [id])
+  clientId                       String?             @map("client")
+  estimate                       Estimate?           @relation("Deposit_estimate", fields: [estimateId], references: [id])
+  estimateId                     String?             @map("estimate")
+  plan                           TreatmentPlan?      @relation("Deposit_plan", fields: [planId], references: [id])
+  planId                         String?             @map("plan")
+  requestedMinor                 BigInt
+  currencyCode                   String              @default("USD")
+  status                         String              @default("requested")
+  payment                        Payment?            @relation("Deposit_payment", fields: [paymentId], references: [id])
+  paymentId                      String?             @map("payment")
+  appliedInvoice                 Invoice?            @relation("Deposit_appliedInvoice", fields: [appliedInvoiceId], references: [id])
+  appliedInvoiceId               String?             @map("appliedInvoice")
+  appliedAt                      DateTime?
+  version                        Int                 @default(0)
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @default(now()) @updatedAt
+  from_Payment_forDeposit        Payment[]           @relation("Payment_forDeposit")
+  from_PaymentAllocation_deposit PaymentAllocation[] @relation("PaymentAllocation_deposit")
+
+  @@index([clientId])
+  @@index([estimateId])
+  @@index([planId])
+  @@index([paymentId])
+  @@index([appliedInvoiceId])
+}
+
+model ArPeriod {
+  id                            String              @id @default(cuid())
+  label                         String              @default("")
+  startsOn                      DateTime            @postgresql.Date
+  endsOn                        DateTime            @postgresql.Date
+  status                        String              @default("open")
+  closedAt                      DateTime?
+  closedBy                      StaffMember?        @relation("ArPeriod_closedBy", fields: [closedById], references: [id])
+  closedById                    String?             @map("closedBy")
+  version                       Int                 @default(0)
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @default(now()) @updatedAt
+  from_Invoice_period           Invoice[]           @relation("Invoice_period")
+  from_ClientLedgerEntry_period ClientLedgerEntry[] @relation("ClientLedgerEntry_period")
+
+  @@index([closedById])
+}
+
+model Invoice {
+  id                                String                 @id @default(cuid())
+  ref                               String                 @unique @default("")
+  client                            Client?                @relation("Invoice_client", fields: [clientId], references: [id])
+  clientId                          String?                @map("client")
+  location                          Location?              @relation("Invoice_location", fields: [locationId], references: [id])
+  locationId                        String?                @map("location")
+  encounter                         Encounter?             @relation("Invoice_encounter", fields: [encounterId], references: [id])
+  encounterId                       String?                @map("encounter")
+  status                            String                 @default("draft")
+  postedAt                          DateTime?
+  postedOn                          DateTime?              @postgresql.Date
+  period                            ArPeriod?              @relation("Invoice_period", fields: [periodId], references: [id])
+  periodId                          String?                @map("period")
+  currencyCode                      String                 @default("USD")
+  subtotalMinor                     BigInt                 @default(0)
+  discountMinor                     BigInt                 @default(0)
+  taxMinor                          BigInt                 @default(0)
+  totalMinor                        BigInt                 @default(0)
+  note                              String                 @default("")
+  lines                             ChargeLine[]           @relation("ChargeLine_invoice")
+  allocations                       PaymentAllocation[]    @relation("PaymentAllocation_invoice")
+  createdBy                         StaffMember?           @relation("Invoice_createdBy", fields: [createdById], references: [id])
+  createdById                       String?                @map("createdBy")
+  version                           Int                    @default(0)
+  createdAt                         DateTime               @default(now())
+  updatedAt                         DateTime               @default(now()) @updatedAt
+  from_Deposit_appliedInvoice       Deposit[]              @relation("Deposit_appliedInvoice")
+  from_CreditNote_invoice           CreditNote[]           @relation("CreditNote_invoice")
+  from_Payment_forInvoice           Payment[]              @relation("Payment_forInvoice")
+  from_Refund_invoice               Refund[]               @relation("Refund_invoice")
+  from_ClientLedgerEntry_invoice    ClientLedgerEntry[]    @relation("ClientLedgerEntry_invoice")
+  from_PayerAuthorization_invoice   PayerAuthorization[]   @relation("PayerAuthorization_invoice")
+  from_InsuranceClaimPacket_invoice InsuranceClaimPacket[] @relation("InsuranceClaimPacket_invoice")
+
+  @@index([clientId])
+  @@index([locationId])
+  @@index([encounterId])
+  @@index([periodId])
+  @@index([createdById])
+}
+
+model ChargeLine {
+  id             String             @id @default(cuid())
+  invoice        Invoice?           @relation("ChargeLine_invoice", fields: [invoiceId], references: [id])
+  invoiceId      String?            @map("invoice")
+  client         Client?            @relation("ChargeLine_client", fields: [clientId], references: [id])
+  clientId       String?            @map("client")
+  patient        Patient?           @relation("ChargeLine_patient", fields: [patientId], references: [id])
+  patientId      String?            @map("patient")
+  location       Location?          @relation("ChargeLine_location", fields: [locationId], references: [id])
+  locationId     String?            @map("location")
+  encounter      Encounter?         @relation("ChargeLine_encounter", fields: [encounterId], references: [id])
+  encounterId    String?            @map("encounter")
+  feeItem        FeeItem?           @relation("ChargeLine_feeItem", fields: [feeItemId], references: [id])
+  feeItemId      String?            @map("feeItem")
+  description    String             @default("")
+  qty            Decimal            @postgresql.Decimal(18, 6)
+  unitPriceMinor BigInt
+  extendedMinor  BigInt
+  discountMinor  BigInt             @default(0)
+  taxMinor       BigInt             @default(0)
+  taxCategory    String             @default("")
+  sourceType     String
+  sourceId       String             @default("")
+  manualReason   String             @default("")
+  performedBy    StaffMember?       @relation("ChargeLine_performedBy", fields: [performedById], references: [id])
+  performedById  String?            @map("performedBy")
+  planItem       TreatmentPlanItem? @relation("ChargeLine_planItem", fields: [planItemId], references: [id])
+  planItemId     String?            @map("planItem")
+  capturedAt     DateTime
+  reversedAt     DateTime?
+  reversalReason String             @default("")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @default(now()) @updatedAt
+
+  @@index([invoiceId])
+  @@index([clientId])
+  @@index([patientId])
+  @@index([locationId])
+  @@index([encounterId])
+  @@index([feeItemId])
+  @@index([sourceId])
+  @@index([performedById])
+  @@index([planItemId])
+}
+
+model CreditNote {
+  id           String       @id @default(cuid())
+  ref          String       @unique @default("")
+  invoice      Invoice?     @relation("CreditNote_invoice", fields: [invoiceId], references: [id])
+  invoiceId    String?      @map("invoice")
+  client       Client?      @relation("CreditNote_client", fields: [clientId], references: [id])
+  clientId     String?      @map("client")
+  amountMinor  BigInt
+  currencyCode String       @default("USD")
+  reason       String       @default("")
+  postedBy     StaffMember? @relation("CreditNote_postedBy", fields: [postedById], references: [id])
+  postedById   String?      @map("postedBy")
+  postedAt     DateTime
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @default(now()) @updatedAt
+
+  @@index([invoiceId])
+  @@index([clientId])
+  @@index([postedById])
+}
+
+model Payment {
+  id                             String              @id @default(cuid())
+  ref                            String              @unique @default("")
+  client                         Client?             @relation("Payment_client", fields: [clientId], references: [id])
+  clientId                       String?             @map("client")
+  location                       Location?           @relation("Payment_location", fields: [locationId], references: [id])
+  locationId                     String?             @map("location")
+  method                         String
+  provider                       String              @default("")
+  amountMinor                    BigInt
+  currencyCode                   String              @default("USD")
+  status                         String              @default("pending")
+  reference                      String              @default("")
+  providerRef                    String              @default("")
+  payerAuthorization             PayerAuthorization? @relation("Payment_payerAuthorization", fields: [payerAuthorizationId], references: [id])
+  payerAuthorizationId           String?             @map("payerAuthorization")
+  forInvoice                     Invoice?            @relation("Payment_forInvoice", fields: [forInvoiceId], references: [id])
+  forInvoiceId                   String?             @map("forInvoice")
+  forDeposit                     Deposit?            @relation("Payment_forDeposit", fields: [forDepositId], references: [id])
+  forDepositId                   String?             @map("forDeposit")
+  allowOverpay                   Boolean             @default(false)
+  postedOn                       DateTime?           @postgresql.Date
+  linkUrl                        String              @default("")
+  receivedAt                     DateTime?
+  receivedBy                     StaffMember?        @relation("Payment_receivedBy", fields: [receivedById], references: [id])
+  receivedById                   String?             @map("receivedBy")
+  note                           String              @default("")
+  attempts                       PaymentAttempt[]    @relation("PaymentAttempt_payment")
+  allocations                    PaymentAllocation[] @relation("PaymentAllocation_payment")
+  refunds                        Refund[]            @relation("Refund_payment")
+  version                        Int                 @default(0)
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @default(now()) @updatedAt
+  from_Deposit_payment           Deposit[]           @relation("Deposit_payment")
+  from_ClientLedgerEntry_payment ClientLedgerEntry[] @relation("ClientLedgerEntry_payment")
+
+  @@index([clientId])
+  @@index([locationId])
+  @@index([providerRef])
+  @@index([payerAuthorizationId])
+  @@index([forInvoiceId])
+  @@index([forDepositId])
+  @@index([receivedById])
+}
+
+model PaymentAttempt {
+  id                     String    @id @default(cuid())
+  payment                Payment?  @relation("PaymentAttempt_payment", fields: [paymentId], references: [id])
+  paymentId              String?   @map("payment")
+  status                 String    @default("created")
+  providerIdempotencyKey String    @unique @default("")
+  providerRef            String    @default("")
+  amountMinor            BigInt
+  message                String    @default("")
+  startedAt              DateTime?
+  resolvedAt             DateTime?
+  version                Int       @default(0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now()) @updatedAt
+
+  @@index([paymentId])
+}
+
+model PaymentAllocation {
+  id          String   @id @default(cuid())
+  payment     Payment? @relation("PaymentAllocation_payment", fields: [paymentId], references: [id])
+  paymentId   String?  @map("payment")
+  invoice     Invoice? @relation("PaymentAllocation_invoice", fields: [invoiceId], references: [id])
+  invoiceId   String?  @map("invoice")
+  deposit     Deposit? @relation("PaymentAllocation_deposit", fields: [depositId], references: [id])
+  depositId   String?  @map("deposit")
+  amountMinor BigInt
+  at          DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([depositId])
+}
+
+model Refund {
+  id                     String           @id @default(cuid())
+  ref                    String           @unique @default("")
+  payment                Payment?         @relation("Refund_payment", fields: [paymentId], references: [id])
+  paymentId              String?          @map("payment")
+  invoice                Invoice?         @relation("Refund_invoice", fields: [invoiceId], references: [id])
+  invoiceId              String?          @map("invoice")
+  amountMinor            BigInt
+  currencyCode           String           @default("USD")
+  reason                 String           @default("")
+  status                 String           @default("requested")
+  providerIdempotencyKey String           @unique @default("")
+  providerRef            String           @default("")
+  message                String           @default("")
+  requestedBy            StaffMember?     @relation("Refund_requestedBy", fields: [requestedById], references: [id])
+  requestedById          String?          @map("requestedBy")
+  approval               ApprovalRequest? @relation("Refund_approval", fields: [approvalId], references: [id])
+  approvalId             String?          @map("approval")
+  processedAt            DateTime?
+  version                Int              @default(0)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @default(now()) @updatedAt
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([requestedById])
+  @@index([approvalId])
+}
+
+model PaymentWebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String   @default("")
+  eventId    String   @default("")
+  type       String   @default("")
+  objectRef  String   @default("")
+  outcome    String   @default("")
+  receivedAt DateTime
+  duplicates Int?     @default(0)
+
+  @@index([provider])
+}
+
+model ClientLedgerEntry {
+  id           String    @id @default(cuid())
+  client       Client?   @relation("ClientLedgerEntry_client", fields: [clientId], references: [id])
+  clientId     String?   @map("client")
+  invoice      Invoice?  @relation("ClientLedgerEntry_invoice", fields: [invoiceId], references: [id])
+  invoiceId    String?   @map("invoice")
+  payment      Payment?  @relation("ClientLedgerEntry_payment", fields: [paymentId], references: [id])
+  paymentId    String?   @map("payment")
+  kind         String
+  amountMinor  BigInt
+  currencyCode String    @default("USD")
+  postedOn     DateTime  @postgresql.Date
+  period       ArPeriod? @relation("ClientLedgerEntry_period", fields: [periodId], references: [id])
+  periodId     String?   @map("period")
+  entryKey     String    @unique @default("")
+  memo         String    @default("")
+  at           DateTime
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([periodId])
+}
+
+model PayerAuthorization {
+  id                              String              @id @default(cuid())
+  ref                             String              @unique @default("")
+  payer                           ThirdPartyPayer?    @relation("PayerAuthorization_payer", fields: [payerId], references: [id])
+  payerId                         String?             @map("payer")
+  invoice                         Invoice?            @relation("PayerAuthorization_invoice", fields: [invoiceId], references: [id])
+  invoiceId                       String?             @map("invoice")
+  policy                          PetInsurancePolicy? @relation("PayerAuthorization_policy", fields: [policyId], references: [id])
+  policyId                        String?             @map("policy")
+  requestedMinor                  BigInt
+  authorisedMinor                 BigInt?
+  status                          String              @default("requested")
+  externalRef                     String              @default("")
+  validUntil                      DateTime?
+  version                         Int                 @default(0)
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @default(now()) @updatedAt
+  from_Payment_payerAuthorization Payment[]           @relation("Payment_payerAuthorization")
+
+  @@index([payerId])
+  @@index([invoiceId])
+  @@index([policyId])
+}
+
+model InsuranceClaimPacket {
+  id               String              @id @default(cuid())
+  ref              String              @unique @default("")
+  policy           PetInsurancePolicy? @relation("InsuranceClaimPacket_policy", fields: [policyId], references: [id])
+  policyId         String?             @map("policy")
+  patient          Patient?            @relation("InsuranceClaimPacket_patient", fields: [patientId], references: [id])
+  patientId        String?             @map("patient")
+  invoice          Invoice?            @relation("InsuranceClaimPacket_invoice", fields: [invoiceId], references: [id])
+  invoiceId        String?             @map("invoice")
+  recordsRelease   RecordsRelease?     @relation("InsuranceClaimPacket_recordsRelease", fields: [recordsReleaseId], references: [id])
+  recordsReleaseId String?             @map("recordsRelease")
+  formFields       Json?               @default("{}")
+  documents        Json?               @default("[]")
+  submitter        String
+  status           String              @default("draft")
+  approvedMinor    BigInt?
+  paidTo           String?
+  statusNote       String              @default("")
+  packetBody       String              @default("")
+  packetSha256     String              @default("")
+  version          Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @default(now()) @updatedAt
+
+  @@index([policyId])
+  @@index([patientId])
+  @@index([invoiceId])
+  @@index([recordsReleaseId])
+}
+
 model Encounter {
   id                                   String                  @id @default(cuid())
   ref                                  String                  @unique @default("")
@@ -3058,6 +3751,9 @@ model Encounter {
   version                              Int                     @default(0)
   createdAt                            DateTime                @default(now())
   updatedAt                            DateTime                @default(now()) @updatedAt
+  from_Estimate_encounter              Estimate[]              @relation("Estimate_encounter")
+  from_Invoice_encounter               Invoice[]               @relation("Invoice_encounter")
+  from_ChargeLine_encounter            ChargeLine[]            @relation("ChargeLine_encounter")
   from_Problem_encounter               Problem[]               @relation("Problem_encounter")
   from_ClinicalAttachment_encounter    ClinicalAttachment[]    @relation("ClinicalAttachment_encounter")
   from_ClinicalDocument_encounter      ClinicalDocument[]      @relation("ClinicalDocument_encounter")
@@ -3455,6 +4151,7 @@ model ClinicalOrder {
   version                        Int                   @default(0)
   createdAt                      DateTime              @default(now())
   updatedAt                      DateTime              @default(now()) @updatedAt
+  from_TreatmentPlanItem_order   TreatmentPlanItem[]   @relation("TreatmentPlanItem_order")
   from_TreatmentSheetOrder_order TreatmentSheetOrder[] @relation("TreatmentSheetOrder_order")
 
   @@index([encounterId])
@@ -3879,6 +4576,7 @@ model VaccineProduct {
   createdAt                          DateTime                @default(now())
   updatedAt                          DateTime                @default(now()) @updatedAt
   from_Item_vaccine                  Item[]                  @relation("Item_vaccine")
+  from_FeeItem_vaccine               FeeItem[]               @relation("FeeItem_vaccine")
   from_ClinicalOrder_vaccine         ClinicalOrder[]         @relation("ClinicalOrder_vaccine")
   from_InventoryLot_vaccine          InventoryLot[]          @relation("InventoryLot_vaccine")
   from_VaccineAdministration_product VaccineAdministration[] @relation("VaccineAdministration_product")

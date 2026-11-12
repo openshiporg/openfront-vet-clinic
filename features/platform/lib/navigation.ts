@@ -1,6 +1,6 @@
 import {
   Activity, BedDouble, BookOpenCheck, Bot, CalendarDays, ClipboardCheck, ClipboardList, Eye, FileLock2, HeartPulse, IdCard, Inbox, LucideIcon, MessageSquare,
-  PawPrint, Phone, Pill, Scale, Settings, ShieldCheck, Stethoscope, Syringe, Upload, Users, Warehouse,
+  PawPrint, Phone, Pill, Receipt, Scale, Settings, ShieldCheck, Stethoscope, Syringe, Upload, Users, Warehouse,
 } from 'lucide-react'
 
 export interface PlatformNavItem {
@@ -41,6 +41,8 @@ export const platformNavItems: PlatformNavItem[] = [
   { title: 'Controlled substances', href: '/platform/controlled', color: 'rose', description: 'Register, counts, discrepancies, PDMP.', icon: FileLock2, group: 'medical' },
   { title: 'Inventory', href: '/platform/inventory', color: 'cyan', description: 'Items, lots, orders and counts.', icon: Warehouse, group: 'medical' },
 
+  { title: 'Billing', href: '/platform/billing', color: 'emerald', description: 'Estimates, invoices, payments, insurance.', icon: Receipt, group: 'clients' },
+
   { title: 'Calls', href: '/platform/calls', color: 'violet', description: 'Inbound calls: AI receptionist and staff.', icon: Phone, group: 'comms' },
   { title: 'Messages', href: '/platform/messages', color: 'blue', description: 'Client threads, SMS and email.', icon: MessageSquare, group: 'comms' },
   { title: 'Records requests', href: '/platform/records-requests', color: 'slate', description: 'Requests and releases.', icon: Inbox, group: 'comms' },
@@ -60,7 +62,7 @@ export const SHIPPED_ROUTES = new Set<string>([
   '/platform/today', '/platform/approvals', '/platform/schedule', '/platform/whiteboard', '/platform/waitlist', '/platform/clients',
   '/platform/patients', '/platform/calls', '/platform/messages', '/platform/records-requests', '/platform/agents', '/platform/team', '/platform/policies', '/platform/compliance', '/platform/read-audit', '/platform/audit', '/platform/settings',
   '/platform/encounters', '/platform/hospital', '/platform/vaccines', '/platform/imports',
-  '/platform/prescriptions', '/platform/controlled', '/platform/inventory',
+  '/platform/prescriptions', '/platform/controlled', '/platform/inventory', '/platform/billing',
 ])
 
 const shipped = platformNavItems.filter(item => SHIPPED_ROUTES.has(item.href))

@@ -28,4 +28,6 @@ export function delegateOf(tx: Tx, model: string) {
   }
 }
 
-export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 60_000 } as const
+/** 60 s by default; a slow remote test database can raise it with VC_TX_TIMEOUT_MS (tests only). */
+const raised = Number(process.env.VC_TX_TIMEOUT_MS)
+export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: Number.isFinite(raised) && raised > 60_000 ? raised : 60_000 } as const

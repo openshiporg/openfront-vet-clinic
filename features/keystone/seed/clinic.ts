@@ -11,6 +11,7 @@ import { parseProtocol, protocolHash } from '../domain/triage'
 import { buildSegments, type SegmentTemplate } from '../domain/scheduling'
 import { seedClinical } from './clinical'
 import { seedInventory } from './inventory'
+import { seedBilling } from './billing'
 import {
   APPOINTMENT_TYPES, COLOURS, DRUG_PRODUCTS, households, KNOWLEDGE_BASE, MESSAGE_TEMPLATES, REFERRAL_HOSPITALS, RESOURCES, SCHEDULES, SPECIES, TRIAGE_PROTOCOL,
 } from './clinicData'
@@ -246,6 +247,7 @@ export async function seedClinic(uow: UnitOfWork, actor: Actor) {
   // ── Phase 2: formulary dose ranges, vaccines, reminder protocols, wards, codes, templates ──
   await seedClinical(uow, actor, count)
   await seedInventory(uow, actor, count)
+  await seedBilling(uow, actor, count)
 
   return created
 }

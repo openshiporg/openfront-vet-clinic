@@ -113,6 +113,27 @@ const required = (v: Record<string, string>, ...names: string[]) => { for (const
 
 /** Variable builders, by name (functions cannot cross the server → client boundary). */
 const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unknown>> = {
+  // Phase 4: money screens. Dollars typed by a person become whole cents; version numbers become numbers.
+  billing: (v) => {
+    const DOLLAR: Record<string, string> = { amount: 'amountMinor', requested: 'requestedMinor', authorised: 'authorisedMinor', newHigh: 'newHighMinor', price: 'priceMinor', minimum: 'minimumChargeMinor', approved: 'approvedMinor' };
+    const out: Record<string, unknown> = {};
+    for (const [k, raw] of Object.entries(v)) {
+      const t = (raw ?? '').trim();
+      if (!t) continue;
+      if (DOLLAR[k]) out[DOLLAR[k]] = cents(t, k);
+      else if (k === 'expectedVersion') out[k] = Number(t);
+      else if (k === 'percent') { const n = Number(t); if (!Number.isFinite(n)) throw new Error('Percent must be a number'); out[k] = n; }
+      else if (k === 'elective' || k === 'allowOverpay' || k === 'cancel') out[k] = t === 'true';
+      else out[k] = t;
+    }
+    return out;
+  },
+  // A simple estimate: one recommended option with up to three fee lines, each with a low and a high quantity.
+  estimate: (v) => {
+    required(v, 'patientId', 'locationId', 'title', 'fee1');
+    const lines = [1, 2, 3].filter((i) => v[`fee${i}`]?.trim()).map((i) => ({ feeItemId: v[`fee${i}`], qtyLow: v[`low${i}`]?.trim() || '1', qtyHigh: v[`high${i}`]?.trim() || v[`low${i}`]?.trim() || '1' }));
+    return { patientId: v.patientId, locationId: v.locationId, title: v.title, elective: v.elective === 'true', options: [{ label: v.optionLabel?.trim() || 'Recommended', recommended: true, lines }] };
+  },
   practiceControls: (v) => {
     required(v, 'reason');
     const changes: Record<string, unknown> = {};

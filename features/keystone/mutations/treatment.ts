@@ -14,6 +14,7 @@ import { dueTimes, sheetFrequency, taskStatusAt, taskWindowProblem } from '../do
 import { ROUTES } from '../models/treatment'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
+import { attachOrderToPlan } from './estimates'
 import { lotToDraw, returnToLot, takeFromLot } from './inventory'
 import { renderDischargeDocument } from '../lib/documents'
 import { activePatient, chartableEncounter, day, decimalText, latestWeight, locationDay, markInProgress, practiceSettings, staffById, staffOf, text, witnessFor, type Ctx, type StaffRow } from './clinical'
@@ -150,6 +151,7 @@ export async function placeOrder(_root: unknown, args: {
         },
       })
       await markInProgress(uow, enc)
+      await attachOrderToPlan(uow, { patientId: enc.patientId!, orderId: order.id, description, drugId: drug?.id ?? null, orderKind: args.kind, quantity: args.quantity ?? null })
       auditCreate(uow, actor, 'ClinicalOrder', order.id, 'order.placed', { ref, kind: args.kind, encounterId: enc.id, drugId: drug?.id ?? null, doseId, csSchedule: drug?.csSchedule ?? null, warnings: (warnings as { code: string }[]).map(w => w.code) })
       let sheetOrderId: string | null = null
       let tasks = 0

@@ -76,6 +76,7 @@ describe('hashes over secret or guessable values are not exposed', () => {
       'Addendum.hash', 'AuditEvent.hash', 'AuditEvent.prevHash', 'ClinicalDocument.sha256',
       'ClinicalDocument.sourceHash', 'CsLogEntry.hash', 'IntegrationConnection.secretRef', 'CsLogEntry.prevHash', 'Document.sha256', 'DoseCalculation.hash',
       'Encounter.contentHash', 'PolicyVersion.rulesHash', 'Proposal.payloadHash', 'ProviderObservation.contentHash',
+      'EstimateAcceptance.quoteHash', 'EstimateVersion.quoteHash', 'InsuranceClaimPacket.packetSha256', // the estimate the client was shown, and the packet document
       'PdmpSubmission.fileSha256', 'ReminderProtocolVersion.contentHash', 'SoapSectionRevision.contentHash', 'TriageProtocolVersion.contentHash', 'WrittenRxExport.contentSha256',
     ].sort())
   })

@@ -10,6 +10,7 @@ import * as schedule from './schedule'
 import * as comms from './comms'
 import * as pharmacy from './pharmacy'
 import { INVENTORY_LISTS } from './inventory'
+import { BILLING_LISTS } from './billing'
 import * as record from './record'
 import * as treatment from './treatment'
 import * as preventive from './preventive'
@@ -49,6 +50,8 @@ export const models = {
   ExternalDispense: pharmacy.ExternalDispense,
   WrittenRxExport: pharmacy.WrittenRxExport,
   ...INVENTORY_LISTS,
+  // Phase 4: estimates, fee schedules, invoices, payments, insurance
+  ...BILLING_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
   Encounter: record.Encounter,
   SoapSection: record.SoapSection,

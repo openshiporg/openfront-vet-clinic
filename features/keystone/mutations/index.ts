@@ -20,6 +20,10 @@ import * as clocks from './clocks'
 import * as pharmacy from './pharmacy'
 import * as inventory from './inventory'
 import * as register from './register'
+import * as fees from './fees'
+import * as estimates from './estimates'
+import * as billing from './billing'
+import * as insurance from './insurance'
 import '../lib/practiceControls'
 import { limitNestedLists } from '../security/breadthLimit'
 import { limitSignIn } from '../security/signInLimit'
@@ -135,6 +139,40 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         destroyControlled(containerId: ID!, qty: String, method: String!, form41Reference: String, witnessAId: ID!, witnessBId: ID!, idempotencyKey: String!): JSON
         submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
+        startFeeDraft(label: String!, idempotencyKey: String!): JSON
+        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, idempotencyKey: String!): JSON
+        requestFeePublish(versionId: ID!, effectiveFrom: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        discardFeeDraft(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        startEstimate(patientId: ID!, locationId: ID!, encounterId: ID, title: String!, elective: Boolean, options: JSON!, idempotencyKey: String!): JSON
+        presentEstimate(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reviseEstimate(estimateId: ID!, idempotencyKey: String!): JSON
+        declineEstimate(versionId: ID!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        refreshEstimates(idempotencyKey: String!): JSON
+        acceptEstimate(versionId: ID!, optionId: ID!, signerId: ID!, method: String!, signatureText: String, witnessId: ID, quoteHash: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordOverageApproval(planId: ID!, newHighMinor: String!, method: String!, approverId: ID, witnessId: ID, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        closePlan(planId: ID!, expectedVersion: Int!, cancel: Boolean, reason: String, idempotencyKey: String!): JSON
+        captureVisitCharges(encounterId: ID!, idempotencyKey: String!): JSON
+        addFeeCharge(patientId: ID!, encounterId: ID, feeItemId: ID!, qty: String!, idempotencyKey: String!): JSON
+        addManualCharge(patientId: ID!, encounterId: ID, description: String!, amountMinor: String!, taxCategory: String!, reason: String!, idempotencyKey: String!): JSON
+        reverseCharge(chargeId: ID!, reason: String!, idempotencyKey: String!): JSON
+        draftInvoice(clientId: ID!, encounterId: ID, idempotencyKey: String!): JSON
+        discountInvoice(invoiceId: ID!, percent: Float!, reason: String!, idempotencyKey: String!): JSON
+        postInvoice(invoiceId: ID!, postedOn: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordPayment(clientId: ID!, invoiceId: ID, depositId: ID, method: String!, amountMinor: String!, reference: String, note: String, postedOn: String, allowOverpay: Boolean, payerAuthorizationId: ID, idempotencyKey: String!): JSON
+        takeCardPayment(clientId: ID!, invoiceId: ID, depositId: ID, amountMinor: String!, paymentMethodId: String, idempotencyKey: String!): JSON
+        checkPaymentStatus(paymentId: ID!, idempotencyKey: String): JSON
+        applyDeposit(depositId: ID!, invoiceId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        issueCreditNote(invoiceId: ID!, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        requestRefund(paymentId: ID!, invoiceId: ID, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        issueApprovedRefund(refundId: ID!, idempotencyKey: String!): JSON
+        checkRefundStatus(refundId: ID!, idempotencyKey: String!): JSON
+        requestWriteOff(invoiceId: ID!, reason: String!, idempotencyKey: String!): JSON
+        closeArPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reopenArPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        requestAuthorization(invoiceId: ID!, policyId: ID!, requestedMinor: String!, idempotencyKey: String!): JSON
+        recordAuthorizationDecision(authorizationId: ID!, decision: String!, authorisedMinor: String, externalRef: String, validUntil: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        buildClaimPacket(invoiceId: ID!, policyId: ID!, recordsReleaseId: ID, submitter: String!, formFields: JSON, idempotencyKey: String!): JSON
+        advanceClaim(claimId: ID!, to: String!, note: String, approvedMinor: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         receiveStock(drugId: ID, vaccineId: ID, stockLocationId: ID!, lotNumber: String!, expiresOn: String!, quantity: String!, unit: String, idempotencyKey: String!): JSON
         adjustStock(itemId: ID!, lotId: ID, stockLocationId: ID!, kind: String!, quantity: String!, reason: String!, idempotencyKey: String!): JSON
         addSupplier(name: String!, accountNumber: String, phone: String, email: String, deaNumber: String, idempotencyKey: String!): JSON
@@ -263,6 +301,40 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         destroyControlled: op(pharmacy.destroyControlled),
         submitPdmp: op(pharmacy.submitPdmp),
         addStockLocation: op(inventory.addStockLocation),
+        startFeeDraft: op(fees.startFeeDraft),
+        saveFeeItem: op(fees.saveFeeItem),
+        requestFeePublish: op(fees.requestFeePublish),
+        discardFeeDraft: op(fees.discardFeeDraft),
+        startEstimate: op(estimates.createEstimate),
+        presentEstimate: op(estimates.presentEstimate),
+        reviseEstimate: op(estimates.reviseEstimate),
+        declineEstimate: op(estimates.declineEstimate),
+        refreshEstimates: op(estimates.refreshEstimates),
+        acceptEstimate: op(estimates.acceptEstimate),
+        recordOverageApproval: op(estimates.recordOverageApproval),
+        closePlan: op(estimates.closePlan),
+        captureVisitCharges: op(billing.captureVisitCharges),
+        addFeeCharge: op(billing.addFeeCharge),
+        addManualCharge: op(billing.addManualCharge),
+        reverseCharge: op(billing.reverseCharge),
+        draftInvoice: op(billing.draftInvoice),
+        discountInvoice: op(billing.discountInvoice),
+        postInvoice: op(billing.postInvoice),
+        recordPayment: op(billing.recordPayment),
+        takeCardPayment: op(billing.takeCardPayment),
+        checkPaymentStatus: op(billing.checkPaymentStatus),
+        applyDeposit: op(billing.applyDeposit),
+        issueCreditNote: op(billing.issueCreditNote),
+        requestRefund: op(billing.requestRefund),
+        issueApprovedRefund: op(billing.issueApprovedRefund),
+        checkRefundStatus: op(billing.checkRefundStatus),
+        requestWriteOff: op(billing.requestWriteOff),
+        closeArPeriod: op(billing.closeArPeriod),
+        reopenArPeriod: op(billing.reopenArPeriod),
+        requestAuthorization: op(insurance.requestAuthorization),
+        recordAuthorizationDecision: op(insurance.recordAuthorizationDecision),
+        buildClaimPacket: op(insurance.buildClaimPacket),
+        advanceClaim: op(insurance.advanceClaim),
         receiveStock: op(inventory.receiveStock),
         adjustStock: op(inventory.adjustStock),
         addSupplier: op(inventory.addSupplier),
