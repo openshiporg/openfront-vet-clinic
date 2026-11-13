@@ -77,9 +77,13 @@ export async function collectSpecimen(_root: unknown, args: { labOrderId: string
     const kind = pick(args.kind, ['whole_blood', 'serum', 'plasma', 'urine', 'feces', 'tissue', 'swab', 'fluid', 'other'] as const, 'specimen kind')
     const result = await command(context.prisma, { name: 'lab.collect', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const staff = await staffOf(uow, actor)
-      const row = await transition<Record<string, any>>(uow, { model: 'LabOrder', id: args.labOrderId, from: ['ordered'], to: 'specimen_collected', expectedVersion: args.expectedVersion, actor, eventType: 'lab.collected' })
+      // An in-house test never goes to a lab, so it takes its own order reference as its accession: results are entered against it.
+      const current = await lockRow<Record<string, any>>(uow.tx, 'LabOrder', args.labOrderId)
+      const lab = await uow.tx.laboratory.findUnique({ where: { id: current.labId }, select: { kind: true } })
+      const inHouse = lab?.kind === 'in_house'
+      const row = await transition<Record<string, any>>(uow, { model: 'LabOrder', id: args.labOrderId, from: ['ordered'], to: 'specimen_collected', expectedVersion: args.expectedVersion, actor, eventType: 'lab.collected', ...(inHouse ? { data: { accessionId: current.ref } } : {}) })
       const specimen = await uow.tx.specimen.create({ data: { labOrderId: row.id, kind, collectedAt: uow.now, collectedById: staff.id, containerId: String(args.containerId ?? '').slice(0, 60) } })
-      return { id: row.id, status: row.status, specimenId: specimen.id }
+      return { id: row.id, status: row.status, specimenId: specimen.id, accessionId: inHouse ? current.ref : null }
     })
     return { replay: result.replay, ...result.value }
   })

@@ -53,13 +53,16 @@ export async function startFeeDraft(_root: unknown, args: { label: string; idemp
   })
 }
 
-export async function saveFeeItem(_root: unknown, args: { versionId: string; itemId?: string | null; code: string; name: string; category: string; priceMinor: string; taxCategory: string; unit?: string | null; minimumChargeMinor?: string | null; drugId?: string | null; vaccineId?: string | null; orderKind?: string | null; idempotencyKey: string }, context: Ctx) {
+export async function saveFeeItem(_root: unknown, args: { versionId: string; itemId?: string | null; code: string; name: string; category: string; priceMinor: string; taxCategory: string; unit?: string | null; minimumChargeMinor?: string | null; drugId?: string | null; vaccineId?: string | null; orderKind?: string | null; productionCategory?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canManageFees'], tool: 'fees.item', humanOnly: true }, args, async actor => {
     if (!(FEE_CATEGORIES as readonly string[]).includes(args.category)) throw new DomainError(Codes.INVALID_INPUT, 'Choose a category.', { field: 'category' })
     if (!(TAX_CATEGORIES as readonly string[]).includes(args.taxCategory)) throw new DomainError(Codes.INVALID_INPUT, 'Choose how this is taxed.', { field: 'taxCategory' })
+    // The production group the pay rules are keyed on; blank means the fee category itself.
+    const productionCategory = String(args.productionCategory ?? '').trim().toLowerCase()
+    if (productionCategory && !/^[a-z][a-z0-9_]{1,39}$/.test(productionCategory)) throw new DomainError(Codes.INVALID_INPUT, 'Production group: a short name in lower case, like exam or surgery.', { field: 'productionCategory' })
     const data = {
       code: text(args.code, 'code', 40), name: text(args.name, 'name', 160), category: args.category, taxCategory: args.taxCategory, priceMinor: minorText(args.priceMinor, 'price', true), unit: (args.unit as never) ?? 'each',
-      minimumChargeMinor: args.minimumChargeMinor ? minorText(args.minimumChargeMinor, 'minimum charge', true) : null, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, orderKind: args.orderKind ?? '',
+      minimumChargeMinor: args.minimumChargeMinor ? minorText(args.minimumChargeMinor, 'minimum charge', true) : null, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, orderKind: args.orderKind ?? '', productionCategory: productionCategory || args.category,
     }
     const result = await command(context.prisma, { name: 'fees.item', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const version = await lockRow<{ id: string; status: string }>(uow.tx, 'FeeScheduleVersion', args.versionId)

@@ -62,9 +62,9 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     const patient = await prisma.patient.findUniqueOrThrow({ where: { id: patientId } })
     const fee = await prisma.feeItem.findFirstOrThrow({ where: { code: 'EXAM-OUTPATIENT', version: { status: 'published' } } })
 
-    const lab = await prisma.laboratory.create({ data: { code: 'REFLAB', name: 'Reference Lab', kind: 'reference', intake: 'file_drop', status: 'active' } as never })
+    const lab = await prisma.laboratory.create({ data: { code: 'TESTLAB', name: 'Test Reference Lab', kind: 'reference', intake: 'file_drop', status: 'active' } as never })
     labId = lab.id
-    const analyte = await prisma.analyte.create({ data: { code: 'CREA', name: 'Creatinine', canonicalUnit: 'mg/dL' } as never })
+    const analyte = await prisma.analyte.create({ data: { code: 'TCREA', name: 'Creatinine', canonicalUnit: 'mg/dL' } as never })
     await prisma.labAnalyteMap.create({ data: { labId, externalCode: 'CREAT', analyteId: analyte.id } as never })
     await prisma.referenceRange.create({ data: { analyteId: analyte.id, speciesId: patient.speciesId, ageClass: 'any', labId, low: '0.5', high: '1.8', criticalHigh: '5', unit: 'mg/dL' } as never })
     const t = await prisma.labTest.create({ data: { labId, code: 'CHEM', name: 'Chemistry panel', status: 'active', feeItemId: fee.id } as never })
@@ -140,6 +140,42 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     expect(await prisma.labResult.count({ where: { labOrderId: id } })).toBe(1)
   })
 
+  it('M2: an in-house order gets its result through the app (accession = its own ref at collection), using the seeded lab set-up', async () => {
+    const lab = await prisma.laboratory.findUniqueOrThrow({ where: { code: 'INHOUSE' } })
+    const glucose = await prisma.labTest.findFirstOrThrow({ where: { labId: lab.id, code: 'GLU' } })
+    expect(glucose.feeItemId).not.toBeNull()
+    const o = (await orderLab(null, { patientId, labId: lab.id, testIds: [glucose.id], idempotencyKey: key() }, ctx)) as { id: string; ref: string }
+    const v = (await prisma.labOrder.findUniqueOrThrow({ where: { id: o.id } })).version
+    const got = (await collectSpecimen(null, { labOrderId: o.id, kind: 'whole_blood', expectedVersion: v, idempotencyKey: key() }, ctx)) as { accessionId: string | null }
+    expect(got.accessionId).toBe(o.ref)
+    const res = (await enterLabResult(null, { labId: lab.id, accessionId: o.ref, status: 'final', lines: [{ code: 'GLU', value: '2.1', unit: 'mmol/L' }], idempotencyKey: key() }, ctx)) as { resultId: string; worstFlag: string }
+    expect(res.resultId).toBeTruthy()
+    expect(res.worstFlag).toBe('critical_low')
+    expect((await prisma.labOrder.findUniqueOrThrow({ where: { id: o.id } })).status).toBe('final')
+  })
+
+  it('M1: lab set-up is written through the API by people who manage the practice or integrations, never by a vet', async () => {
+    const { getContext } = await import('@keystone-6/core/context')
+    const PrismaModule = await import('@prisma/client')
+    const config = (await import('../index')).default
+    const kctx: any = getContext(config as never, PrismaModule)
+    const as = (granted: string[]) => kctx.withSession(sessionFor('seed_user_marsh', ['canAccessDashboard', 'canReadClinical', ...granted]))
+    const create = `mutation($d: LaboratoryCreateInput!) { createLaboratory(data: $d) { id name kind status } }`
+    const data = { code: `L${Math.random().toString(36).slice(2, 7)}`, name: 'Valley Pathology', kind: 'reference', intake: 'manual' }
+    const vet = await as(['canOrder', 'canSignRecord']).graphql.raw({ query: create, variables: { d: data } })
+    expect(JSON.stringify(vet.errors ?? [])).toMatch(/Access denied|not allowed|access/i)
+    const mgr = await as(['canManagePractice']).graphql.raw({ query: create, variables: { d: data } })
+    expect(mgr.errors).toBeUndefined()
+    const labIdNew = mgr.data.createLaboratory.id
+    const it2 = await as(['canManageIntegrations']).graphql.raw({ query: `mutation($id: ID!) { updateLaboratory(where: { id: $id }, data: { accountNumber: "VP-77" }) { accountNumber } } `, variables: { id: labIdNew } })
+    expect(it2.errors).toBeUndefined()
+    const t = await as(['canManagePractice']).graphql.raw({ query: `mutation($lab: ID!) { createLabTest(data: { lab: { connect: { id: $lab } }, code: "FT4", name: "Free T4", turnaroundHours: 72 }) { id status } }`, variables: { lab: labIdNew } })
+    expect(t.errors).toBeUndefined()
+    expect(t.data.createLabTest.status).toBe('active')
+    const del = await as(['canManagePractice']).graphql.raw({ query: `mutation($id: ID!) { deleteLaboratory(where: { id: $id }) { id } }`, variables: { id: labIdNew } })
+    expect(del.errors?.length).toBeGreaterThan(0)
+  })
+
   it('the notifier leaves a call-back with fixed wording and no value; cancel reverses an unposted charge', async () => {
     const { id, accession } = await orderAndSend()
     await enterLabResult(null, { labId, accessionId: accession, status: 'final', lines: [{ code: 'CREAT', value: '1.2', unit: 'mg/dL' }], idempotencyKey: key() }, ctx).catch(() => undefined)
@@ -200,12 +236,8 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     await decideApprovalRequest(null, { requestId: ap.id, decision: 'approve', expectedVersion: ap.version, idempotencyKey: key() }, second as never)
     expect((await prisma.productionRuleVersion.findUniqueOrThrow({ where: { id: d.id } })).status).toBe('published')
 
-    // Fixture only: a published fee schedule is frozen, so the category is set with the trigger off for this one statement.
-    await prisma.$transaction([
-      prisma.$executeRawUnsafe(`ALTER TABLE "FeeItem" DISABLE TRIGGER USER`),
-      prisma.$executeRawUnsafe(`UPDATE "FeeItem" SET "productionCategory" = 'exam' WHERE code = 'EXAM-OUTPATIENT'`),
-      prisma.$executeRawUnsafe(`ALTER TABLE "FeeItem" ENABLE TRIGGER USER`),
-    ])
+    // M3 (review r1): the seeded, published price list earns production as it stands; nothing is patched under the frozen fee version.
+    expect((await prisma.feeItem.findFirstOrThrow({ where: { code: 'EXAM-OUTPATIENT', version: { status: 'published' } } })).productionCategory).toBe('exam')
     await addFeeCharge(null, { patientId, feeItemId: (await prisma.feeItem.findFirstOrThrow({ where: { code: 'EXAM-OUTPATIENT', version: { status: 'published' } } })).id, qty: '1', idempotencyKey: key() }, ctx)
     const line = await prisma.chargeLine.findFirstOrThrow({ where: { clientId, invoiceId: null, reversedAt: null }, orderBy: { capturedAt: 'desc' } })
     await prisma.chargeLine.update({ where: { id: line.id }, data: { performedById: marshStaffId } })
@@ -214,6 +246,7 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     await postInvoice(null, { invoiceId: draft.id, expectedVersion: inv.version, idempotencyKey: key() }, ctx)
     const credits = await prisma.productionCredit.findMany({ where: { chargeLineId: line.id } })
     expect(credits).toHaveLength(1)
+    expect(credits[0].amountMinor).toBeGreaterThan(0n)
     expect(credits[0].amountMinor).toBe((line.extendedMinor - line.discountMinor) * 2000n / 10000n)
     // A second run for the same key is refused by the database.
     await expect(prisma.productionCredit.create({ data: { ...credits[0], id: undefined, entryKey: uniqueKey('e'), staffId: credits[0].staffId, chargeLineId: line.id, ruleVersionId: credits[0].ruleVersionId } as never })).rejects.toThrow()
@@ -228,6 +261,22 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     const adjustment = await prisma.productionCredit.findFirstOrThrow({ where: { adjustsId: credits[0].id } })
     expect(adjustment.amountMinor).toBe(-100n)
     expect(adjustment.kind).toBe('adjustment')
+
+    // M5 (review r1): two requests made while both are pending cannot together take more than the credit is worth.
+    const left = credits[0].amountMinor - 100n
+    const take = (left - 10n).toString()
+    const a1 = (await requestProductionAdjustment(null, { creditId: credits[0].id, amountMinor: `-${take}`, reason: 'Refunded visit', idempotencyKey: key() }, second)) as { approvalRequestId: string }
+    const a2 = (await requestProductionAdjustment(null, { creditId: credits[0].id, amountMinor: `-${take}`, reason: 'Refunded visit (again)', idempotencyKey: key() }, second)) as { approvalRequestId: string }
+    const r1 = await prisma.approvalRequest.findUniqueOrThrow({ where: { id: a1.approvalRequestId } })
+    const r2 = await prisma.approvalRequest.findUniqueOrThrow({ where: { id: a2.approvalRequestId } })
+    await decideApprovalRequest(null, { requestId: r1.id, decision: 'approve', expectedVersion: r1.version, idempotencyKey: key() }, third as never)
+    await expect(decideApprovalRequest(null, { requestId: r2.id, decision: 'approve', expectedVersion: r2.version, idempotencyKey: key() }, third as never)).rejects.toThrow(/more than the credit is worth/i)
+    const net = (await prisma.productionCredit.aggregate({ where: { OR: [{ id: credits[0].id }, { adjustsId: credits[0].id }] }, _sum: { amountMinor: true } }))._sum.amountMinor!
+    expect(net).toBe(10n)
+    // The database holds the same rule for a direct insert.
+    const thirdUser = (third.session as { itemId: string }).itemId
+    const secondUser = (second.session as { itemId: string }).itemId
+    await expect(prisma.$executeRawUnsafe(`INSERT INTO "ProductionCredit" (id, staff, "ruleVersion", category, basis, kind, adjusts, "baseMinor", bps, "amountMinor", reason, "requestedBy", "approvedBy", "creditedOn", "entryKey") VALUES ('m5x', '${credits[0].staffId}', '${credits[0].ruleVersionId}', 'exam', 'performed', 'adjustment', '${credits[0].id}', 0, 0, -11, 'x', '${secondUser}', '${thirdUser}', CURRENT_DATE, 'm5x')`)).rejects.toSatisfy(e => /more than the credit is worth/i.test(pgError(e)))
   })
 
   it('pay period: no overlap, totals are frozen and equal the lines, approval names the totals, one export, locked at the end', async () => {
@@ -258,12 +307,32 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     await expect(prisma.$executeRawUnsafe(`UPDATE "PayrollExportBatch" SET csv = 'x' WHERE "period" = '${period.id}'`)).rejects.toSatisfy(e => /append|cannot|immutable|not allowed/i.test(pgError(e)))
   })
 
+  it('M4: a credit dated inside a period that was already calculated is paid in the next period, not lost', async () => {
+    const at = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+    // A period that ended yesterday-ago is calculated; then a line dated inside it arrives late (here: dated into it directly).
+    const early = (await openPayPeriod(null, { startsOn: at(-40), endsOn: at(-30), idempotencyKey: key() }, ctx)) as { id: string }
+    let v = (await prisma.payPeriod.findUniqueOrThrow({ where: { id: early.id } })).version
+    await calculatePayPeriod(null, { periodId: early.id, expectedVersion: v, idempotencyKey: key() }, ctx)
+    const source = await prisma.productionCredit.findFirstOrThrow({ where: { kind: 'credit' } })
+    const late = await prisma.productionCredit.create({ data: { staffId: source.staffId, chargeLineId: source.chargeLineId, invoiceId: source.invoiceId, ruleVersionId: source.ruleVersionId, locationId: source.locationId, category: 'exam', basis: 'performed', kind: 'credit', baseMinor: 1000n, bps: 2000, amountMinor: 200n, creditedOn: new Date(`${at(-35)}T00:00:00Z`), entryKey: uniqueKey('late') } as never }).catch(async () => {
+      // One credit per line and rule version: use a fresh rule version for the late line.
+      const rv = await prisma.productionRuleVersion.create({ data: { versionNo: 900 + n++, label: 'late', rules: {}, commissionRules: {}, effectiveFrom: new Date('2020-01-01T00:00:00Z'), status: 'draft', ruleHash: uniqueKey('h') } as never })
+      return prisma.productionCredit.create({ data: { staffId: source.staffId, chargeLineId: source.chargeLineId, invoiceId: source.invoiceId, ruleVersionId: rv.id, locationId: source.locationId, category: 'exam', basis: 'performed', kind: 'credit', baseMinor: 1000n, bps: 2000, amountMinor: 200n, creditedOn: new Date(`${at(-35)}T00:00:00Z`), entryKey: uniqueKey('late') } as never })
+    })
+    expect(late.periodId).toBeNull()
+    const next = (await openPayPeriod(null, { startsOn: at(-29), endsOn: at(-20), idempotencyKey: key() }, ctx)) as { id: string }
+    v = (await prisma.payPeriod.findUniqueOrThrow({ where: { id: next.id } })).version
+    const calc = (await calculatePayPeriod(null, { periodId: next.id, expectedVersion: v, idempotencyKey: key() }, ctx)) as { totals: { productionMinor: string }[] }
+    expect((await prisma.productionCredit.findUniqueOrThrow({ where: { id: late.id } })).periodId).toBe(next.id)
+    expect(calc.totals.reduce((s, t) => s + BigInt(t.productionMinor), 0n)).toBeGreaterThanOrEqual(200n)
+  })
+
   it('a clinic role without the pay permissions cannot reach production or pay', async () => {
     const reception = { session: sessionFor('seed_user_marsh', ['canAccessDashboard', 'canBook']), prisma }
     await expect(draftRuleVersion(null, { label: 'x', effectiveFrom: '2030-01-01', rules: { exam: { basis: 'performed', bps: 1 } }, idempotencyKey: key() }, reception)).rejects.toThrow()
     await expect(openPayPeriod(null, { startsOn: '2031-01-01', endsOn: '2031-01-14', idempotencyKey: key() }, reception)).rejects.toThrow()
   })
-  it('import: an opening balance posts once per client and date, and a second run adds nothing', async () => {
+  it('import: an opening balance posts once per client and source system, and a second run or later as-of date adds nothing', async () => {
     const ext = `AV-${Math.random().toString(36).slice(2, 8)}`
     const email = `${ext.toLowerCase()}@cedarcreekvet.com`
     const run = async (entity: 'clients' | 'balances', csv: string) => {
@@ -285,6 +354,16 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     expect(bad.rowsFailed).toBe(2)
     const owed = await run('balances', `Client ID,Balance,As Of\n${ext},40.00,2026-11-03\n`)
     expect(owed.rowsFailed).toBe(1)
+    // M6 (review r1): the same balance exported a week later is refused with a plain message; the credit is not doubled.
+    const later = await run('balances', `Client ID,Balance,As Of\n${ext},"-$125.50",2026-11-08\n`)
+    expect(later.rowsCreated).toBe(0)
+    expect(later.rowsFailed).toBe(1)
+    const failedRow = await prisma.importRow.findFirstOrThrow({ where: { result: 'failed', externalId: `${ext}|2026-11-08` }, orderBy: { createdAt: 'desc' } })
+    expect(JSON.stringify(failedRow.errors)).toMatch(/already has an opening balance/)
+    const after = await prisma.clientLedgerEntry.findMany({ where: { clientId: mapped.recordId, kind: 'adjustment' } })
+    expect(after.reduce((s, e) => s + e.amountMinor, 0n)).toBe(-12550n)
+    // The database refuses a second opening balance for the client and system even with another key.
+    await expect(prisma.clientLedgerEntry.create({ data: { clientId: mapped.recordId, kind: 'adjustment', amountMinor: -100n, postedOn: new Date('2026-11-09T00:00:00Z'), entryKey: `import:avimark:balance:${ext}:2026-11-09`, at: new Date() } })).rejects.toThrow()
   }, 120_000)
   it('export and campaigns: the export is audited and hashed; a campaign sends nothing and never targets without consent', async () => {
     const k = key()

@@ -166,7 +166,7 @@ const OPS: Record<string, Record<string, string>> = {
   exportWrittenRx: { prescriptionId: 'ID!' },
   // Phase 4: fees, estimates, plans, charges, invoices, payments, refunds, insurance.
   startFeeDraft: { label: 'String!' },
-  saveFeeItem: { versionId: 'ID!', itemId: 'ID', code: 'String!', name: 'String!', category: 'String!', priceMinor: 'String!', taxCategory: 'String!', unit: 'String', minimumChargeMinor: 'String', drugId: 'ID', vaccineId: 'ID', orderKind: 'String' },
+  saveFeeItem: { versionId: 'ID!', itemId: 'ID', code: 'String!', name: 'String!', category: 'String!', priceMinor: 'String!', taxCategory: 'String!', unit: 'String', minimumChargeMinor: 'String', drugId: 'ID', vaccineId: 'ID', orderKind: 'String', productionCategory: 'String' },
   requestFeePublish: { versionId: 'ID!', effectiveFrom: 'String', expectedVersion: 'Int!' },
   discardFeeDraft: { versionId: 'ID!', expectedVersion: 'Int!' },
   startEstimate: { patientId: 'ID!', locationId: 'ID!', encounterId: 'ID', title: 'String!', elective: 'Boolean', options: 'JSON!' },

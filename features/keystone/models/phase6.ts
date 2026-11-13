@@ -1,8 +1,8 @@
 import { list } from '@keystone-6/core'
-import { calendarDay, checkbox, integer, json, text, timestamp } from '@keystone-6/core/fields'
+import { calendarDay, checkbox, integer, json, select, text, timestamp } from '@keystone-6/core/fields'
 import { relationship } from './guardedRelationship'
 import { fixedChoice, hiddenHash, lifecycle, minor, qty, readOnly, systemText, versionField } from './domainFields'
-import { governed } from './listAccess'
+import { governed, managed } from './listAccess'
 import { trackingFields } from './trackingFields'
 
 /*
@@ -19,20 +19,29 @@ export const LAB_ORDER_STATES = ['ordered', 'specimen_collected', 'sent', 'parti
 export const LAB_FLAGS = ['normal', 'low', 'high', 'critical_low', 'critical_high', 'abnormal'] as const
 export const PAY_PERIOD_STATES = ['open', 'calculated', 'approved', 'exported', 'locked'] as const
 
+/*
+ * Lab set-up (laboratories, tests, analytes, code maps, reference ranges) is reference data the practice keeps itself: people who
+ * manage the practice or its integrations create and edit it in the admin screens. Rows are never deleted (past results point at them);
+ * a lab or test is retired instead. The columns are the same as before, so this needs no migration.
+ */
+const setupText = (options: { indexed?: 'unique' } = {}) => text({ ...(options.indexed ? { isIndexed: options.indexed } : {}), validation: { isRequired: true } })
+const setupChoice = (values: readonly string[], initial?: string) =>
+  select({ type: 'string', options: values.map(value => ({ label: value.replaceAll('_', ' '), value })), ...(initial ? { defaultValue: initial } : {}), validation: { isRequired: true } })
+
 /* ───────── Diagnostics ───────── */
 
 export const Laboratory = list({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: 'name', listView: { initialColumns: ['name', 'kind', 'status'] } },
   fields: {
-    code: systemText({ indexed: 'unique', required: true }),
-    name: systemText({ required: true }),
-    kind: fixedChoice(['reference', 'in_house']),
+    code: setupText({ indexed: 'unique' }),
+    name: setupText(),
+    kind: setupChoice(['reference', 'in_house']),
     /** How results arrive: keyed by hand, a CSV/HL7 file dropped in, or the lab's own adapter. */
-    intake: fixedChoice(['manual', 'file_drop', 'adapter']),
+    intake: setupChoice(['manual', 'file_drop', 'adapter']),
     integration: relationship({ ref: 'IntegrationConnection', ...readOnly }),
-    accountNumber: systemText(),
-    status: lifecycle(['active', 'retired']),
+    accountNumber: text(),
+    status: setupChoice(['active', 'retired'], 'active'),
     tests: relationship({ ref: 'LabTest.lab', many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields,
@@ -40,60 +49,61 @@ export const Laboratory = list({
 })
 
 export const Analyte = list({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: 'code' },
   fields: {
-    code: systemText({ indexed: 'unique', required: true }),
-    name: systemText({ required: true }),
-    canonicalUnit: systemText({ required: true }),
+    code: setupText({ indexed: 'unique' }),
+    name: setupText(),
+    canonicalUnit: setupText(),
     ...trackingFields,
   },
 })
 
 export const LabTest = list({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: 'name', listView: { initialColumns: ['lab', 'code', 'name', 'turnaroundHours'] } },
   fields: {
-    lab: relationship({ ref: 'Laboratory.tests', ...readOnly }),
-    code: systemText({ required: true }),
-    name: systemText({ required: true }),
+    lab: relationship({ ref: 'Laboratory.tests' }),
+    code: setupText(),
+    name: setupText(),
     species: relationship({ ref: 'Species', many: true }),
-    specimenRequirements: json({ ...readOnly }),
-    feeItem: relationship({ ref: 'FeeItem', ...readOnly }),
-    turnaroundHours: integer({ defaultValue: 24, validation: { isRequired: true } }),
-    status: lifecycle(['active', 'retired']),
+    specimenRequirements: json(),
+    /** The price-list item charged when the test is ordered. */
+    feeItem: relationship({ ref: 'FeeItem' }),
+    turnaroundHours: integer({ defaultValue: 24, validation: { isRequired: true, min: 0, max: 2000 } }),
+    status: setupChoice(['active', 'retired'], 'active'),
     ...trackingFields,
   },
 })
 
 export const LabAnalyteMap = list({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: 'externalCode' },
   fields: {
-    lab: relationship({ ref: 'Laboratory', ...readOnly }),
-    externalCode: systemText({ required: true }),
-    analyte: relationship({ ref: 'Analyte', ...readOnly }),
+    lab: relationship({ ref: 'Laboratory' }),
+    externalCode: setupText(),
+    analyte: relationship({ ref: 'Analyte' }),
     /** { factor: "0.0555", offset?: "0" }: external value × factor + offset = canonical value. */
-    unitConversion: json({ ...readOnly }),
+    unitConversion: json(),
     ...trackingFields,
   },
 })
 
 export const ReferenceRange = list({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { listView: { initialColumns: ['analyte', 'species', 'ageClass', 'low', 'high', 'unit'] } },
   fields: {
-    analyte: relationship({ ref: 'Analyte', ...readOnly }),
-    species: relationship({ ref: 'Species', ...readOnly }),
-    ageClass: fixedChoice(['juvenile', 'adult', 'senior', 'any']),
-    lab: relationship({ ref: 'Laboratory', ...readOnly }),
+    analyte: relationship({ ref: 'Analyte' }),
+    species: relationship({ ref: 'Species' }),
+    ageClass: setupChoice(['juvenile', 'adult', 'senior', 'any']),
+    lab: relationship({ ref: 'Laboratory' }),
     low: qty(),
     high: qty(),
     /** Beyond these the value is critical, not just abnormal. */
     criticalLow: qty(),
     criticalHigh: qty(),
-    unit: systemText({ required: true }),
-    source: systemText(),
+    unit: setupText(),
+    source: text(),
     ...trackingFields,
   },
 })

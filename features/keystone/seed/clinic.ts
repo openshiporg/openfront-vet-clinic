@@ -13,6 +13,7 @@ import { seedClinical } from './clinical'
 import { seedInventory } from './inventory'
 import { seedBilling } from './billing'
 import { seedPhase5 } from './phase5'
+import { seedLabs } from './labs'
 import {
   APPOINTMENT_TYPES, COLOURS, DRUG_PRODUCTS, households, KNOWLEDGE_BASE, MESSAGE_TEMPLATES, REFERRAL_HOSPITALS, RESOURCES, SCHEDULES, SPECIES, TRIAGE_PROTOCOL,
 } from './clinicData'
@@ -250,6 +251,7 @@ export async function seedClinic(uow: UnitOfWork, actor: Actor) {
   await seedInventory(uow, actor, count)
   await seedBilling(uow, actor, count)
   await seedPhase5(uow, actor, count)
+  await seedLabs(uow, actor, count)
 
   return created
 }

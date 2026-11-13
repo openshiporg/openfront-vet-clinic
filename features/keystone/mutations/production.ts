@@ -45,14 +45,16 @@ export async function deriveProduction(uow: UnitOfWork, invoiceId: string) {
   if (!version) return { credits: 0, commissions: 0 }
   const rules = parseRules(version.rules)
   const commissionRules = parseCommissionRules(version.commissionRules)
-  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null }, include: { feeItem: { select: { productionCategory: true } } } })
+  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null }, include: { feeItem: { select: { productionCategory: true, category: true } } } })
   let credits = 0
   let commissions = 0
   for (const line of lines) {
     if (!line.performedById) continue
     const base = productionBase(line)
     if (base === 0n) continue
-    const category = line.feeItem?.productionCategory ?? ''
+    // The production group set on the price-list item, else its fee category (exam, surgery, laboratory…), so a published price list
+    // that predates production groups still earns: rules are keyed on those names.
+    const category = line.feeItem?.productionCategory || line.feeItem?.category || ''
     const rule = category ? rules[category] : undefined
     if (rule) {
       const key = sha256(`credit:${line.id}:${line.performedById}:${version.id}`)
@@ -145,6 +147,9 @@ registerApplier('production.adjust', async (uow, actor, request) => {
   const key = sha256(`adjust:${request.id}`)
   const existing = await uow.tx.productionCredit.findUnique({ where: { entryKey: key }, select: { id: true } })
   if (existing) return { id: existing.id }
+  // Checked again here, with the credit row locked: two requests made while both were pending must not together take more than it is worth.
+  const prior = await uow.tx.productionCredit.aggregate({ where: { adjustsId: credit.id }, _sum: { amountMinor: true } })
+  if (BigInt(credit.amountMinor) + (prior._sum.amountMinor ?? 0n) + amount < 0n) throw new DomainError(Codes.GUARD_FAILED, 'An adjustment cannot take more than the credit is worth. Other adjustments to this credit were approved first.')
   const row = await uow.tx.productionCredit.create({ data: { staffId: credit.staffId, ruleVersionId: credit.ruleVersionId, locationId: credit.locationId, invoiceId: credit.invoiceId, category: credit.category, basis: credit.basis, kind: 'adjustment', adjustsId: credit.id, baseMinor: 0n, bps: 0, amountMinor: amount, reason: String(request.payload.reason), requestedById: request.payload.requestedBy, approvedById: approver, creditedOn: new Date(`${(await uow.tx.$queryRaw<{ d: string }[]>`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS d`)[0].d}T00:00:00Z`), entryKey: key } })
   auditCreate(uow, actor, 'ProductionCredit', row.id, 'production.adjusted', { adjusts: credit.id, amountMinor: amount.toString() })
   return { id: row.id }
@@ -166,15 +171,17 @@ export async function openPayPeriod(_root: unknown, args: { startsOn: string; en
   })
 }
 
-/** Gather every unassigned credit and commission dated inside the period, freeze the per-person totals and hash them. */
+/** Gather every unassigned credit and commission dated up to the period's end, freeze the per-person totals and hash them. */
 export async function calculatePayPeriod(_root: unknown, args: { periodId: string; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: [...PAY], tool: 'pay.period.calculate', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'pay.period.calculate', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const period = await lockRow<Record<string, any>>(uow.tx, 'PayPeriod', args.periodId)
       if (period.status !== 'open') throw new DomainError(Codes.INVALID_TRANSITION, 'Only an open period can be calculated. Reopen a calculated one first.', { currentStatus: period.status })
-      const range = { gte: period.startsOn, lte: period.endsOn }
-      await uow.tx.productionCredit.updateMany({ where: { periodId: null, creditedOn: range }, data: { periodId: period.id } })
-      await uow.tx.commission.updateMany({ where: { periodId: null, earnedOn: range }, data: { periodId: period.id } })
+      // Everything not yet in a period up to the period's end: a line dated inside an earlier period that was already calculated (a late
+      // invoice, an adjustment) is paid in this one rather than never.
+      const upTo = { lte: period.endsOn }
+      await uow.tx.productionCredit.updateMany({ where: { periodId: null, creditedOn: upTo }, data: { periodId: period.id } })
+      await uow.tx.commission.updateMany({ where: { periodId: null, earnedOn: upTo }, data: { periodId: period.id } })
       const credits = await uow.tx.productionCredit.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } })
       const commissions = await uow.tx.commission.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } })
       const totals = totalsByStaff(credits.filter(c => c.staffId).map(c => ({ staffId: c.staffId!, amountMinor: c.amountMinor })), commissions.filter(c => c.staffId).map(c => ({ staffId: c.staffId!, amountMinor: c.amountMinor })))

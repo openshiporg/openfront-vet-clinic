@@ -4251,75 +4251,78 @@ var PAY = ["canViewFinance", "canManagePayments"];
 var LAB_ORDER_STATES = ["ordered", "specimen_collected", "sent", "partial", "final", "corrected", "reviewed", "communicated", "cancelled"];
 var LAB_FLAGS = ["normal", "low", "high", "critical_low", "critical_high", "abnormal"];
 var PAY_PERIOD_STATES = ["open", "calculated", "approved", "exported", "locked"];
+var setupText = (options = {}) => (0, import_fields18.text)({ ...options.indexed ? { isIndexed: options.indexed } : {}, validation: { isRequired: true } });
+var setupChoice = (values, initial) => (0, import_fields18.select)({ type: "string", options: values.map((value) => ({ label: value.replaceAll("_", " "), value })), ...initial ? { defaultValue: initial } : {}, validation: { isRequired: true } });
 var Laboratory = (0, import_core17.list)({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "status"] } },
   fields: {
-    code: systemText({ indexed: "unique", required: true }),
-    name: systemText({ required: true }),
-    kind: fixedChoice(["reference", "in_house"]),
+    code: setupText({ indexed: "unique" }),
+    name: setupText(),
+    kind: setupChoice(["reference", "in_house"]),
     /** How results arrive: keyed by hand, a CSV/HL7 file dropped in, or the lab's own adapter. */
-    intake: fixedChoice(["manual", "file_drop", "adapter"]),
+    intake: setupChoice(["manual", "file_drop", "adapter"]),
     integration: relationship({ ref: "IntegrationConnection", ...readOnly }),
-    accountNumber: systemText(),
-    status: lifecycle(["active", "retired"]),
+    accountNumber: (0, import_fields18.text)(),
+    status: setupChoice(["active", "retired"], "active"),
     tests: relationship({ ref: "LabTest.lab", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
 var Analyte = (0, import_core17.list)({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: "code" },
   fields: {
-    code: systemText({ indexed: "unique", required: true }),
-    name: systemText({ required: true }),
-    canonicalUnit: systemText({ required: true }),
+    code: setupText({ indexed: "unique" }),
+    name: setupText(),
+    canonicalUnit: setupText(),
     ...trackingFields
   }
 });
 var LabTest = (0, import_core17.list)({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: "name", listView: { initialColumns: ["lab", "code", "name", "turnaroundHours"] } },
   fields: {
-    lab: relationship({ ref: "Laboratory.tests", ...readOnly }),
-    code: systemText({ required: true }),
-    name: systemText({ required: true }),
+    lab: relationship({ ref: "Laboratory.tests" }),
+    code: setupText(),
+    name: setupText(),
     species: relationship({ ref: "Species", many: true }),
-    specimenRequirements: (0, import_fields18.json)({ ...readOnly }),
-    feeItem: relationship({ ref: "FeeItem", ...readOnly }),
-    turnaroundHours: (0, import_fields18.integer)({ defaultValue: 24, validation: { isRequired: true } }),
-    status: lifecycle(["active", "retired"]),
+    specimenRequirements: (0, import_fields18.json)(),
+    /** The price-list item charged when the test is ordered. */
+    feeItem: relationship({ ref: "FeeItem" }),
+    turnaroundHours: (0, import_fields18.integer)({ defaultValue: 24, validation: { isRequired: true, min: 0, max: 2e3 } }),
+    status: setupChoice(["active", "retired"], "active"),
     ...trackingFields
   }
 });
 var LabAnalyteMap = (0, import_core17.list)({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { labelField: "externalCode" },
   fields: {
-    lab: relationship({ ref: "Laboratory", ...readOnly }),
-    externalCode: systemText({ required: true }),
-    analyte: relationship({ ref: "Analyte", ...readOnly }),
+    lab: relationship({ ref: "Laboratory" }),
+    externalCode: setupText(),
+    analyte: relationship({ ref: "Analyte" }),
     /** { factor: "0.0555", offset?: "0" }: external value × factor + offset = canonical value. */
-    unitConversion: (0, import_fields18.json)({ ...readOnly }),
+    unitConversion: (0, import_fields18.json)(),
     ...trackingFields
   }
 });
 var ReferenceRange = (0, import_core17.list)({
-  access: governed([...LAB_READ, ...LAB_SETUP]),
+  access: managed([...LAB_READ, ...LAB_SETUP], [...LAB_SETUP]),
   ui: { listView: { initialColumns: ["analyte", "species", "ageClass", "low", "high", "unit"] } },
   fields: {
-    analyte: relationship({ ref: "Analyte", ...readOnly }),
-    species: relationship({ ref: "Species", ...readOnly }),
-    ageClass: fixedChoice(["juvenile", "adult", "senior", "any"]),
-    lab: relationship({ ref: "Laboratory", ...readOnly }),
+    analyte: relationship({ ref: "Analyte" }),
+    species: relationship({ ref: "Species" }),
+    ageClass: setupChoice(["juvenile", "adult", "senior", "any"]),
+    lab: relationship({ ref: "Laboratory" }),
     low: qty(),
     high: qty(),
     /** Beyond these the value is critical, not just abnormal. */
     criticalLow: qty(),
     criticalHigh: qty(),
-    unit: systemText({ required: true }),
-    source: systemText(),
+    unit: setupText(),
+    source: (0, import_fields18.text)(),
     ...trackingFields
   }
 });
@@ -8049,6 +8052,10 @@ var FEES = [
   { code: "RX-MIDAZOLAM", name: "Midazolam sedation", category: "anaesthesia", price: 1800, tax: "rx_animal_drug", unit: "mL", drug: "seed_drug_midazolam" },
   // Services ordered in the chart.
   { code: "LAB-CBC-CHEM", name: "Blood panel: complete blood count and chemistry", category: "laboratory", price: 14500, tax: "professional_service", orderKind: "lab" },
+  { code: "LAB-T4", name: "Total thyroxine (T4)", category: "laboratory", price: 6800, tax: "professional_service", orderKind: "lab" },
+  { code: "LAB-UA", name: "Urinalysis", category: "laboratory", price: 5200, tax: "professional_service", orderKind: "lab" },
+  { code: "LAB-IH-GLUCOSE", name: "Blood glucose (in-house)", category: "laboratory", price: 2800, tax: "professional_service", orderKind: "lab" },
+  { code: "LAB-IH-PCV-TP", name: "Packed cell volume and total protein (in-house)", category: "laboratory", price: 3400, tax: "professional_service", orderKind: "lab" },
   { code: "IMG-RADIOGRAPH", name: "Radiographs, two views", category: "imaging", price: 21e3, tax: "professional_service", orderKind: "imaging" },
   { code: "PROC-PROCEDURE", name: "In-clinic procedure", category: "surgery", price: 18500, tax: "professional_service", orderKind: "procedure" },
   { code: "TRT-TREATMENT", name: "Treatment and nursing care", category: "treatment", price: 4500, tax: "professional_service", orderKind: "treatment" },
@@ -8088,6 +8095,7 @@ async function seedBilling(uow, actor, count) {
         unit: f.unit ?? "each",
         taxCategory: f.tax,
         orderKind: f.orderKind ?? "",
+        productionCategory: f.category,
         drugId: f.drug ?? null,
         vaccineId: f.vaccine ?? null,
         itemId: itemFor.get(f.drug ?? f.vaccine ?? "") ?? null,
@@ -8186,6 +8194,99 @@ async function seedPhase5(uow, actor, count) {
     auditCreate(uow, actor, "WellnessPlanVersion", v.id, "wellness.plan_published", { code: p.code, versionNo: 1, seeded: true });
   }
   count("wellnessPlans", PLANS.length);
+}
+
+// features/keystone/seed/labs.ts
+var LABS = [
+  { id: "seed_lab_reference", code: "REFLAB", name: "Sacramento Veterinary Reference Laboratory", kind: "reference", intake: "file_drop", accountNumber: "SVRL-20418" },
+  { id: "seed_lab_inhouse", code: "INHOUSE", name: "In-house analysers", kind: "in_house", intake: "manual", accountNumber: "" }
+];
+var ANALYTES = [
+  { code: "WBC", name: "White blood cells", unit: "10^9/L" },
+  { code: "HCT", name: "Haematocrit", unit: "%" },
+  { code: "PLT", name: "Platelets", unit: "10^9/L" },
+  { code: "GLU", name: "Glucose", unit: "mmol/L" },
+  { code: "BUN", name: "Urea nitrogen", unit: "mmol/L" },
+  { code: "CREA", name: "Creatinine", unit: "umol/L" },
+  { code: "ALT", name: "Alanine aminotransferase", unit: "U/L" },
+  { code: "TP", name: "Total protein", unit: "g/L" },
+  { code: "T4", name: "Total thyroxine", unit: "nmol/L" },
+  { code: "USG", name: "Urine specific gravity", unit: "" }
+];
+var TESTS = [
+  ["seed_lab_reference", "CBCCHEM", "Complete blood count and chemistry", "LAB-CBC-CHEM", 24, ["WBC", "HCT", "PLT", "GLU", "BUN", "CREA", "ALT", "TP"]],
+  ["seed_lab_reference", "T4", "Total thyroxine (T4)", "LAB-T4", 48, ["T4"]],
+  ["seed_lab_reference", "UA", "Urinalysis", "LAB-UA", 24, ["USG"]],
+  ["seed_lab_inhouse", "GLU", "Blood glucose", "LAB-IH-GLUCOSE", 1, ["GLU"]],
+  ["seed_lab_inhouse", "PCVTP", "Packed cell volume and total protein", "LAB-IH-PCV-TP", 1, ["HCT", "TP"]]
+];
+var REF_MAPS = {
+  WBC: { ext: "WBC" },
+  HCT: { ext: "HCT" },
+  PLT: { ext: "PLT" },
+  GLU: { ext: "GLUC", factor: "0.0555" },
+  BUN: { ext: "BUN", factor: "0.357" },
+  CREA: { ext: "CREAT", factor: "88.4" },
+  ALT: { ext: "ALT" },
+  TP: { ext: "TPROT", factor: "10" },
+  T4: { ext: "TT4" },
+  USG: { ext: "SG" }
+};
+var RANGES = [
+  ["WBC", "seed_sp_canine", "5.5", "16.9", null, "40"],
+  ["WBC", "seed_sp_feline", "5.5", "19.5", null, "40"],
+  ["HCT", "seed_sp_canine", "37", "55", "20", null],
+  ["HCT", "seed_sp_feline", "30", "45", "15", null],
+  ["PLT", "seed_sp_canine", "175", "500", "50", null],
+  ["PLT", "seed_sp_feline", "175", "600", "50", null],
+  ["GLU", "seed_sp_canine", "4.1", "7.9", "3.0", "20"],
+  ["GLU", "seed_sp_feline", "4.0", "8.8", "3.0", "25"],
+  ["BUN", "seed_sp_canine", "2.5", "9.6", null, "30"],
+  ["BUN", "seed_sp_feline", "5.7", "12.9", null, "30"],
+  ["CREA", "seed_sp_canine", "44", "159", null, "500"],
+  ["CREA", "seed_sp_feline", "71", "212", null, "500"],
+  ["ALT", "seed_sp_canine", "10", "125", null, "1000"],
+  ["ALT", "seed_sp_feline", "12", "130", null, "1000"],
+  ["TP", "seed_sp_canine", "52", "82", "35", null],
+  ["TP", "seed_sp_feline", "57", "89", "35", null],
+  ["T4", "seed_sp_canine", "13", "51", null, null],
+  ["T4", "seed_sp_feline", "10", "60", null, null],
+  ["USG", "seed_sp_canine", "1.015", "1.045", null, null],
+  ["USG", "seed_sp_feline", "1.035", "1.060", null, null]
+];
+async function seedLabs(uow, actor, count) {
+  const { tx } = uow;
+  if (await tx.laboratory.findFirst({ select: { id: true } })) return;
+  const species = new Set((await tx.species.findMany({ select: { id: true } })).map((s) => s.id));
+  await tx.laboratory.createMany({ data: LABS.map((l) => ({ ...l, status: "active" })) });
+  const analytes = /* @__PURE__ */ new Map();
+  for (const a of ANALYTES) analytes.set(a.code, (await tx.analyte.create({ data: { code: a.code, name: a.name, canonicalUnit: a.unit } })).id);
+  const fees = new Map((await tx.feeItem.findMany({ where: { code: { startsWith: "LAB-" }, version: { status: "published" } }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
+  const dogCat = ["seed_sp_canine", "seed_sp_feline"].filter((id2) => species.has(id2));
+  for (const [labId, code, name, fee, hours] of TESTS) {
+    await tx.labTest.create({ data: { labId, code, name, feeItemId: fees.get(fee) ?? null, turnaroundHours: hours, status: "active", species: { connect: dogCat.map((id2) => ({ id: id2 })) } } });
+  }
+  const maps = [
+    ...ANALYTES.map((a) => ({ labId: "seed_lab_inhouse", externalCode: a.code, analyteId: analytes.get(a.code), unitConversion: void 0 })),
+    ...ANALYTES.map((a) => ({ labId: "seed_lab_reference", externalCode: REF_MAPS[a.code].ext, analyteId: analytes.get(a.code), unitConversion: REF_MAPS[a.code].factor ? { factor: REF_MAPS[a.code].factor } : void 0 }))
+  ];
+  await tx.labAnalyteMap.createMany({ data: maps });
+  const ranges = RANGES.filter((r) => species.has(r[1])).map(([a, sp, low, high, cl, ch]) => ({
+    analyteId: analytes.get(a),
+    speciesId: sp,
+    ageClass: "any",
+    labId: null,
+    low,
+    high,
+    criticalLow: cl,
+    criticalHigh: ch,
+    unit: ANALYTES.find((x) => x.code === a).unit,
+    source: "Typical adult reference interval; replace with your analyser\u2019s own."
+  }));
+  await tx.referenceRange.createMany({ data: ranges });
+  auditCreate(uow, actor, "Laboratory", LABS[0].id, "lab.setup_seeded", { labs: LABS.length, tests: TESTS.length, analytes: ANALYTES.length, ranges: ranges.length }, { metadata: { seed: true } });
+  count("laboratories", LABS.length);
+  count("labTests", TESTS.length);
 }
 
 // features/keystone/seed/clinicData.ts
@@ -8685,6 +8786,7 @@ async function seedClinic(uow, actor) {
   await seedInventory(uow, actor, count);
   await seedBilling(uow, actor, count);
   await seedPhase5(uow, actor, count);
+  await seedLabs(uow, actor, count);
   return created;
 }
 
@@ -9359,14 +9461,14 @@ async function deriveProduction(uow, invoiceId) {
   if (!version) return { credits: 0, commissions: 0 };
   const rules2 = parseRules(version.rules);
   const commissionRules = parseCommissionRules(version.commissionRules);
-  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null }, include: { feeItem: { select: { productionCategory: true } } } });
+  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null }, include: { feeItem: { select: { productionCategory: true, category: true } } } });
   let credits = 0;
   let commissions = 0;
   for (const line of lines) {
     if (!line.performedById) continue;
     const base = productionBase(line);
     if (base === 0n) continue;
-    const category = line.feeItem?.productionCategory ?? "";
+    const category = line.feeItem?.productionCategory || line.feeItem?.category || "";
     const rule2 = category ? rules2[category] : void 0;
     if (rule2) {
       const key2 = sha256(`credit:${line.id}:${line.performedById}:${version.id}`);
@@ -9453,6 +9555,8 @@ registerApplier("production.adjust", async (uow, actor, request) => {
   const key2 = sha256(`adjust:${request.id}`);
   const existing = await uow.tx.productionCredit.findUnique({ where: { entryKey: key2 }, select: { id: true } });
   if (existing) return { id: existing.id };
+  const prior = await uow.tx.productionCredit.aggregate({ where: { adjustsId: credit.id }, _sum: { amountMinor: true } });
+  if (BigInt(credit.amountMinor) + (prior._sum.amountMinor ?? 0n) + amount < 0n) throw new DomainError(Codes.GUARD_FAILED, "An adjustment cannot take more than the credit is worth. Other adjustments to this credit were approved first.");
   const row = await uow.tx.productionCredit.create({ data: { staffId: credit.staffId, ruleVersionId: credit.ruleVersionId, locationId: credit.locationId, invoiceId: credit.invoiceId, category: credit.category, basis: credit.basis, kind: "adjustment", adjustsId: credit.id, baseMinor: 0n, bps: 0, amountMinor: amount, reason: String(request.payload.reason), requestedById: request.payload.requestedBy, approvedById: approver, creditedOn: /* @__PURE__ */ new Date(`${(await uow.tx.$queryRaw`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS d`)[0].d}T00:00:00Z`), entryKey: key2 } });
   auditCreate(uow, actor, "ProductionCredit", row.id, "production.adjusted", { adjusts: credit.id, amountMinor: amount.toString() });
   return { id: row.id };
@@ -9475,9 +9579,9 @@ async function calculatePayPeriod(_root, args, context) {
     const result = await command(context.prisma, { name: "pay.period.calculate", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const period = await lockRow(uow.tx, "PayPeriod", args.periodId);
       if (period.status !== "open") throw new DomainError(Codes.INVALID_TRANSITION, "Only an open period can be calculated. Reopen a calculated one first.", { currentStatus: period.status });
-      const range = { gte: period.startsOn, lte: period.endsOn };
-      await uow.tx.productionCredit.updateMany({ where: { periodId: null, creditedOn: range }, data: { periodId: period.id } });
-      await uow.tx.commission.updateMany({ where: { periodId: null, earnedOn: range }, data: { periodId: period.id } });
+      const upTo = { lte: period.endsOn };
+      await uow.tx.productionCredit.updateMany({ where: { periodId: null, creditedOn: upTo }, data: { periodId: period.id } });
+      await uow.tx.commission.updateMany({ where: { periodId: null, earnedOn: upTo }, data: { periodId: period.id } });
       const credits = await uow.tx.productionCredit.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } });
       const commissions = await uow.tx.commission.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } });
       const totals = totalsByStaff(credits.filter((c) => c.staffId).map((c) => ({ staffId: c.staffId, amountMinor: c.amountMinor })), commissions.filter((c) => c.staffId).map((c) => ({ staffId: c.staffId, amountMinor: c.amountMinor })));
@@ -14606,8 +14710,10 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const minor2 = BigInt(whole) * 100n + BigInt(cents.padEnd(2, "0"));
       if (!neg && minor2 > 0n) throw new DomainError(Codes.GUARD_FAILED, "A balance owed cannot be imported as a ledger entry. Raise an invoice for it; only credit balances (negative) import.");
       const signed = -minor2;
-      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}:${importDate(row.asOf)}`;
+      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}`;
       if (signed === 0n) return { ...base, result: "skipped_existing", errors: ["Zero balance: nothing to post."] };
+      const opening = await uow.tx.clientLedgerEntry.findFirst({ where: { clientId: mapped.recordId, entryKey: { startsWith: `import:${batch.system}:balance:` } }, select: { postedOn: true } });
+      if (opening) return { ...base, result: "failed", errors: [`This client already has an opening balance from ${batch.system} (as of ${opening.postedOn.toISOString().slice(0, 10)}). A second one is not imported; correct the account with a credit note or a refund instead.`] };
       const { post: post2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
       const posted = await post2(uow, { clientId: mapped.recordId, kind: "adjustment", amountMinor: signed, postedOn: importDate(row.asOf), entryKey, memo: `Opening balance from ${batch.system} (${batch.ref})` });
       await mapExternal(uow, sys2, "ClientLedgerEntry", posted.id, key2);
@@ -15474,6 +15580,8 @@ async function saveFeeItem(_root, args, context) {
   return gated(context, { permissions: ["canManageFees"], tool: "fees.item", humanOnly: true }, args, async (actor) => {
     if (!FEE_CATEGORIES.includes(args.category)) throw new DomainError(Codes.INVALID_INPUT, "Choose a category.", { field: "category" });
     if (!TAX_CATEGORIES.includes(args.taxCategory)) throw new DomainError(Codes.INVALID_INPUT, "Choose how this is taxed.", { field: "taxCategory" });
+    const productionCategory = String(args.productionCategory ?? "").trim().toLowerCase();
+    if (productionCategory && !/^[a-z][a-z0-9_]{1,39}$/.test(productionCategory)) throw new DomainError(Codes.INVALID_INPUT, "Production group: a short name in lower case, like exam or surgery.", { field: "productionCategory" });
     const data = {
       code: text20(args.code, "code", 40),
       name: text20(args.name, "name", 160),
@@ -15484,7 +15592,8 @@ async function saveFeeItem(_root, args, context) {
       minimumChargeMinor: args.minimumChargeMinor ? minorText(args.minimumChargeMinor, "minimum charge", true) : null,
       drugId: args.drugId ?? null,
       vaccineId: args.vaccineId ?? null,
-      orderKind: args.orderKind ?? ""
+      orderKind: args.orderKind ?? "",
+      productionCategory: productionCategory || args.category
     };
     const result = await command(context.prisma, { name: "fees.item", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const version = await lockRow(uow.tx, "FeeScheduleVersion", args.versionId);
@@ -16283,9 +16392,12 @@ async function collectSpecimen(_root, args, context) {
     const kind = pick(args.kind, ["whole_blood", "serum", "plasma", "urine", "feces", "tissue", "swab", "fluid", "other"], "specimen kind");
     const result = await command(context.prisma, { name: "lab.collect", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
-      const row = await transition(uow, { model: "LabOrder", id: args.labOrderId, from: ["ordered"], to: "specimen_collected", expectedVersion: args.expectedVersion, actor, eventType: "lab.collected" });
+      const current = await lockRow(uow.tx, "LabOrder", args.labOrderId);
+      const lab = await uow.tx.laboratory.findUnique({ where: { id: current.labId }, select: { kind: true } });
+      const inHouse = lab?.kind === "in_house";
+      const row = await transition(uow, { model: "LabOrder", id: args.labOrderId, from: ["ordered"], to: "specimen_collected", expectedVersion: args.expectedVersion, actor, eventType: "lab.collected", ...inHouse ? { data: { accessionId: current.ref } } : {} });
       const specimen = await uow.tx.specimen.create({ data: { labOrderId: row.id, kind, collectedAt: uow.now, collectedById: staff.id, containerId: String(args.containerId ?? "").slice(0, 60) } });
-      return { id: row.id, status: row.status, specimenId: specimen.id };
+      return { id: row.id, status: row.status, specimenId: specimen.id, accessionId: inHouse ? current.ref : null };
     });
     return { replay: result.replay, ...result.value };
   });
@@ -17442,7 +17554,7 @@ function extendGraphqlSchema(baseSchema) {
         submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
         startFeeDraft(label: String!, idempotencyKey: String!): JSON
-        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, idempotencyKey: String!): JSON
+        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, productionCategory: String, idempotencyKey: String!): JSON
         requestFeePublish(versionId: ID!, effectiveFrom: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         discardFeeDraft(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         startEstimate(patientId: ID!, locationId: ID!, encounterId: ID, title: String!, elective: Boolean, options: JSON!, idempotencyKey: String!): JSON

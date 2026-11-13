@@ -40,6 +40,10 @@ const FEES: Fee[] = [
   { code: 'RX-MIDAZOLAM', name: 'Midazolam sedation', category: 'anaesthesia', price: 1800, tax: 'rx_animal_drug', unit: 'mL', drug: 'seed_drug_midazolam' },
   // Services ordered in the chart.
   { code: 'LAB-CBC-CHEM', name: 'Blood panel: complete blood count and chemistry', category: 'laboratory', price: 14500, tax: 'professional_service', orderKind: 'lab' },
+  { code: 'LAB-T4', name: 'Total thyroxine (T4)', category: 'laboratory', price: 6800, tax: 'professional_service', orderKind: 'lab' },
+  { code: 'LAB-UA', name: 'Urinalysis', category: 'laboratory', price: 5200, tax: 'professional_service', orderKind: 'lab' },
+  { code: 'LAB-IH-GLUCOSE', name: 'Blood glucose (in-house)', category: 'laboratory', price: 2800, tax: 'professional_service', orderKind: 'lab' },
+  { code: 'LAB-IH-PCV-TP', name: 'Packed cell volume and total protein (in-house)', category: 'laboratory', price: 3400, tax: 'professional_service', orderKind: 'lab' },
   { code: 'IMG-RADIOGRAPH', name: 'Radiographs, two views', category: 'imaging', price: 21000, tax: 'professional_service', orderKind: 'imaging' },
   { code: 'PROC-PROCEDURE', name: 'In-clinic procedure', category: 'surgery', price: 18500, tax: 'professional_service', orderKind: 'procedure' },
   { code: 'TRT-TREATMENT', name: 'Treatment and nursing care', category: 'treatment', price: 4500, tax: 'professional_service', orderKind: 'treatment' },
@@ -72,7 +76,7 @@ export async function seedBilling(uow: UnitOfWork, actor: Actor, count: (k: stri
     if (f.vaccine && !vaccines.has(f.vaccine)) continue
     await tx.feeItem.create({
       data: {
-        versionId: version.id, code: f.code, name: f.name, category: f.category, priceMinor: BigInt(f.price), unit: (f.unit as never) ?? 'each', taxCategory: f.tax, orderKind: f.orderKind ?? '',
+        versionId: version.id, code: f.code, name: f.name, category: f.category, priceMinor: BigInt(f.price), unit: (f.unit as never) ?? 'each', taxCategory: f.tax, orderKind: f.orderKind ?? '', productionCategory: f.category,
         drugId: f.drug ?? null, vaccineId: f.vaccine ?? null, itemId: itemFor.get(f.drug ?? f.vaccine ?? '') ?? null, dispensingFeeMinor: f.dispensing ? BigInt(f.dispensing) : null,
         minimumChargeMinor: f.drug && f.category === 'injection' ? 1500n : null,
       },

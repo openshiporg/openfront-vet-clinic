@@ -155,6 +155,34 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     }
     return out;
   },
+  // Phase 6: lab work, records requests, pay. Version numbers become numbers; result lines are typed one per line as "code value unit".
+  phase6: (v) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, raw] of Object.entries(v)) {
+      const t = (raw ?? '').trim();
+      if (!t) continue;
+      if (k === 'expectedVersion') out[k] = Number(t);
+      else if (k === 'testIds' || k === 'documentIds') out[k] = t.split(',').map((x) => x.trim()).filter(Boolean);
+      else if (k === 'rules') {
+        // One line per production group: name percent [ordered], e.g. "exam 20" or "laboratory 10 ordered".
+        out[k] = Object.fromEntries(t.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+          const [group, pct, basis = 'performed'] = l.split(/\s+/);
+          const n = Number(pct);
+          if (!group || !Number.isFinite(n) || n < 0 || n > 100 || !['performed', 'ordered'].includes(basis)) throw new Error('Each rule line: group percent, like "exam 20" or "laboratory 10 ordered".');
+          return [group.toLowerCase(), { basis, bps: Math.round(n * 100) }];
+        }));
+      }
+      else if (k === 'lines') {
+        out[k] = t.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+          const [code, value, ...unit] = l.split(/\s+/);
+          if (!code || !value) throw new Error('Each result line needs a code and a value, like: GLU 6.2 mmol/L');
+          return /^-?\d+(\.\d+)?$/.test(value) ? { code, value, unit: unit.join(' ') || undefined } : { code, text: [value, ...unit].join(' ') };
+        });
+      }
+      else out[k] = t;
+    }
+    return out;
+  },
   // A simple estimate: one recommended option with up to three fee lines, each with a low and a high quantity.
   estimate: (v) => {
     required(v, 'patientId', 'locationId', 'title', 'fee1');

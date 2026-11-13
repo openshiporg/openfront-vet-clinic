@@ -209,7 +209,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         submitPdmp(reportId: ID!, confirmation: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         addStockLocation(locationId: ID!, name: String!, kind: String!, minTempC: String, maxTempC: String, idempotencyKey: String!): JSON
         startFeeDraft(label: String!, idempotencyKey: String!): JSON
-        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, idempotencyKey: String!): JSON
+        saveFeeItem(versionId: ID!, itemId: ID, code: String!, name: String!, category: String!, priceMinor: String!, taxCategory: String!, unit: String, minimumChargeMinor: String, drugId: ID, vaccineId: ID, orderKind: String, productionCategory: String, idempotencyKey: String!): JSON
         requestFeePublish(versionId: ID!, effectiveFrom: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         discardFeeDraft(versionId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         startEstimate(patientId: ID!, locationId: ID!, encounterId: ID, title: String!, elective: Boolean, options: JSON!, idempotencyKey: String!): JSON

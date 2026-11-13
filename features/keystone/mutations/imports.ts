@@ -233,7 +233,8 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
       return { ...base, result: 'created', recordType: 'PatientReminder', recordId: reminder.id }
     }
     case 'balances': {
-      // An opening balance is one ledger adjustment per client and date, keyed so a re-import cannot post it twice.
+      // An opening balance is one ledger adjustment per client and source system, whatever its as-of date: a later export of the same
+      // balance is refused, never posted again (keys made before this change carried the date, hence the prefix check).
       const mapped = await findMapped(uow, `${batch.system}:clients`, 'Client', row.clientExternalId)
       if (!mapped) throw new DomainError(Codes.NOT_FOUND, `Client ${row.clientExternalId} has not been imported yet; import clients first.`)
       const raw = row.balance.replace(/[$,\s]/g, '')
@@ -244,8 +245,10 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
       // imported here: it needs an invoice a person raises. A credit (negative in the file) becomes money on account.
       if (!neg && minor > 0n) throw new DomainError(Codes.GUARD_FAILED, 'A balance owed cannot be imported as a ledger entry. Raise an invoice for it; only credit balances (negative) import.')
       const signed = -minor
-      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}:${importDate(row.asOf)}`
+      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}`
       if (signed === 0n) return { ...base, result: 'skipped_existing', errors: ['Zero balance: nothing to post.'] }
+      const opening = await uow.tx.clientLedgerEntry.findFirst({ where: { clientId: mapped.recordId, entryKey: { startsWith: `import:${batch.system}:balance:` } }, select: { postedOn: true } })
+      if (opening) return { ...base, result: 'failed', errors: [`This client already has an opening balance from ${batch.system} (as of ${opening.postedOn.toISOString().slice(0, 10)}). A second one is not imported; correct the account with a credit note or a refund instead.`] }
       const { post } = await import('../lib/ledger')
       const posted = await post(uow, { clientId: mapped.recordId, kind: 'adjustment', amountMinor: signed, postedOn: importDate(row.asOf)!, entryKey, memo: `Opening balance from ${batch.system} (${batch.ref})` })
       await mapExternal(uow, sys, 'ClientLedgerEntry', posted.id, key)
