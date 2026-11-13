@@ -7,7 +7,8 @@ export default defineConfig({
     include: ['features/**/*.test.ts', 'tests/**/*.test.ts'],
     exclude: ['node_modules/**', '.keystone/**', 'tests/**/*.test.cjs'],
     environment: 'node',
-    testTimeout: 30_000,
+    // Database suites over a laptop-to-Railway link need more than 30 s per test (P5 r2 backlog c).
+    testTimeout: process.env.VC_TEST_DATABASE_URL ? 180_000 : 30_000,
     hookTimeout: 60_000,
     // Database suites share one scratch database; run files one at a time.
     fileParallelism: false,

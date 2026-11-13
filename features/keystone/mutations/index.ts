@@ -25,6 +25,10 @@ import * as estimates from './estimates'
 import * as billing from './billing'
 import * as insurance from './insurance'
 import * as wellness from './wellness'
+import * as diagnostics from './diagnostics'
+import * as production from './production'
+import * as agentsWider from './agentsWider'
+import * as recordsRelease from './recordsRelease'
 import * as boarding from './boarding'
 import * as endOfLife from './endOfLife'
 import '../lib/practiceControls'
@@ -93,6 +97,36 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         recordEuthanasia(patientId: ID!, consentId: ID!, diedAt: String, causeNote: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         advanceAftercare(orderId: ID!, step: String!, place: String, crematory: String, manifestRef: String, crematoryRef: String, receivedBy: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         addMemorialItem(orderId: ID!, kind: String!, description: String, idempotencyKey: String!): JSON
+        orderLab(patientId: ID!, labId: ID!, testIds: [ID!]!, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+        collectSpecimen(labOrderId: ID!, kind: String!, containerId: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        sendLabOrder(labOrderId: ID!, accessionId: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelLabOrder(labOrderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        enterLabResult(labId: ID!, accessionId: String!, status: String!, lines: JSON!, idempotencyKey: String!): JSON
+        importLabFile(labId: ID!, fileText: String!, idempotencyKey: String!): JSON
+        reviewLabResult(resultId: ID!, interpretation: String!, idempotencyKey: String!): JSON
+        communicateLabResult(resultId: ID!, via: String!, idempotencyKey: String!): JSON
+        notifyResultsReady(labOrderId: ID!, idempotencyKey: String!): JSON
+        orderImaging(patientId: ID!, modality: String!, region: String, reason: String, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+        recordImagingStudy(imagingOrderId: ID!, studyInstanceUid: String!, images: Int, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+        decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        releaseRecords(requestId: ID!, documentIds: [ID!]!, recipient: String!, channel: String!, contactPointId: ID, approvalRequestId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+        draftRuleVersion(label: String!, effectiveFrom: String!, rules: JSON!, commissionRules: JSON, idempotencyKey: String!): JSON
+        requestRulePublication(ruleVersionId: ID!, idempotencyKey: String!): JSON
+        requestProductionAdjustment(creditId: ID!, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        openPayPeriod(startsOn: String!, endsOn: String!, idempotencyKey: String!): JSON
+        calculatePayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
+        exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+        lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        verifyReleasePacket(releaseId: ID!): JSON
+        suggestCharges(locationId: ID, idempotencyKey: String!): JSON
+        clinicInsights: JSON
         recordPatientDeath(patientId: ID!, diedAt: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         bookAppointment(input: JSON!, idempotencyKey: String!): JSON
         cancelAppointment(appointmentId: ID!, reason: String!, expectedVersion: Int!, callRecordId: ID, idempotencyKey: String!): JSON
@@ -418,6 +452,36 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         recordEuthanasia: op(endOfLife.recordEuthanasia),
         advanceAftercare: op(endOfLife.advanceAftercare),
         addMemorialItem: op(endOfLife.addMemorialItem),
+        orderLab: op(diagnostics.orderLab),
+        collectSpecimen: op(diagnostics.collectSpecimen),
+        sendLabOrder: op(diagnostics.sendLabOrder),
+        cancelLabOrder: op(diagnostics.cancelLabOrder),
+        enterLabResult: op(diagnostics.enterLabResult),
+        importLabFile: op(diagnostics.importLabFile),
+        reviewLabResult: op(diagnostics.reviewLabResult),
+        communicateLabResult: op(diagnostics.communicateLabResult),
+        notifyResultsReady: op(diagnostics.notifyResultsReady),
+        orderImaging: op(diagnostics.orderImaging),
+        recordImagingStudy: op(diagnostics.recordImagingStudy),
+        addImagingReport: op(diagnostics.addImagingReport),
+        communicateImaging: op(diagnostics.communicateImaging),
+        startRecordsVerification: op(recordsRelease.startRecordsVerification),
+        verifyRecordsRequest: op(recordsRelease.verifyRecordsRequest),
+        decideRecordsRequest: op(recordsRelease.decideRecordsRequest),
+        withdrawRecordsRequest: op(recordsRelease.withdrawRecordsRequest),
+        releaseRecords: op(recordsRelease.releaseRecords),
+        draftRuleVersion: op(production.draftRuleVersion),
+        requestRulePublication: op(production.requestRulePublication),
+        requestProductionAdjustment: op(production.requestProductionAdjustment),
+        openPayPeriod: op(production.openPayPeriod),
+        calculatePayPeriod: op(production.calculatePayPeriod),
+        reopenPayPeriod: op(production.reopenPayPeriod),
+        requestPayPeriodApproval: op(production.requestPayPeriodApproval),
+        exportPayPeriod: op(production.exportPayPeriod),
+        lockPayPeriod: op(production.lockPayPeriod),
+        suggestCharges: op(agentsWider.suggestCharges),
+        clinicInsights: (root: unknown, args: any, context: any) => agentsWider.clinicInsights(root, args, context),
+        verifyReleasePacket: (root: unknown, args: any, context: any) => recordsRelease.verifyReleasePacket(root, args, context),
       },
     },
   })))

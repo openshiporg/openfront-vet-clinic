@@ -38,18 +38,18 @@ function dec(value) {
     if (!Number.isSafeInteger(value)) throw new Error(`Refusing float ${value}: pass the exact decimal as a string`);
     return new Decimal(value);
   }
-  const text21 = String(value).trim();
-  if (!DECIMAL_TEXT.test(text21)) throw new Error(`Not a decimal number: ${JSON.stringify(text21).slice(0, 40)}`);
-  return new Decimal(text21);
+  const text22 = String(value).trim();
+  if (!DECIMAL_TEXT.test(text22)) throw new Error(`Not a decimal number: ${JSON.stringify(text22).slice(0, 40)}`);
+  return new Decimal(text22);
 }
 function toScale(value, scale, rounding = Decimal.ROUND_HALF_EVEN) {
   const places = typeof scale === "number" ? scale : Scale[scale];
   return dec(value).toDecimalPlaces(places, rounding).toFixed(places);
 }
 function toBpsInt(fraction) {
-  const text21 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
-  const n = Number.parseInt(text21, 10);
-  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text21}`);
+  const text22 = dec(fraction).times(BPS).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toFixed(0);
+  const n = Number.parseInt(text22, 10);
+  if (!Number.isSafeInteger(n)) throw new RangeError(`Basis points out of range: ${text22}`);
   return n;
 }
 function toKg(value, unit2) {
@@ -146,8 +146,8 @@ async function balanceOfInvoice(db, invoiceId) {
     const ids = /* @__PURE__ */ new Set();
     const made = { ids, done: Promise.resolve().then(() => new Promise((r) => setTimeout(r, 0))).then(async () => {
       pending.delete(key2);
-      const list23 = [...ids];
-      const rows = await db.$queryRaw`SELECT "invoice" AS id, COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ANY(${list23}::text[]) GROUP BY "invoice"`;
+      const list24 = [...ids];
+      const rows = await db.$queryRaw`SELECT "invoice" AS id, COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ANY(${list24}::text[]) GROUP BY "invoice"`;
       return new Map(rows.map((r) => [r.id, big(r.s)]));
     }) };
     pending.set(key2, made);
@@ -169,10 +169,10 @@ async function planSpend(db, planId) {
   const rows = await db.$queryRaw`SELECT COALESCE(SUM(COALESCE("chargedMinor", "projectedMinor")), 0) AS s FROM "TreatmentPlanItem" WHERE "plan" = ${planId} AND status IN ('ordered', 'done')`;
   return big(rows[0]?.s);
 }
-async function periodFor(tx, day4) {
-  const existing = await tx.arPeriod.findFirst({ where: { startsOn: { lte: /* @__PURE__ */ new Date(`${day4}T00:00:00Z`) }, endsOn: { gte: /* @__PURE__ */ new Date(`${day4}T00:00:00Z`) } }, select: { id: true, status: true, label: true } });
+async function periodFor(tx, day7) {
+  const existing = await tx.arPeriod.findFirst({ where: { startsOn: { lte: /* @__PURE__ */ new Date(`${day7}T00:00:00Z`) }, endsOn: { gte: /* @__PURE__ */ new Date(`${day7}T00:00:00Z`) } }, select: { id: true, status: true, label: true } });
   if (existing) return existing;
-  const [y, m] = day4.split("-").map(Number);
+  const [y, m] = day7.split("-").map(Number);
   const startsOn = `${y}-${String(m).padStart(2, "0")}-01`;
   const endsOn = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
   const label = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" }).format(/* @__PURE__ */ new Date(`${startsOn}T00:00:00Z`));
@@ -211,6 +211,88 @@ var init_ledger = __esm({
     init_errors();
     big = (v) => BigInt(String(v ?? 0));
     pending = /* @__PURE__ */ new WeakMap();
+  }
+});
+
+// features/keystone/domain/billing.ts
+var billing_exports = {};
+__export(billing_exports, {
+  AGE_BUCKETS: () => AGE_BUCKETS,
+  DEPOSIT_BASES: () => DEPOSIT_BASES,
+  adjustBps: () => adjustBps,
+  ageBucket: () => ageBucket,
+  allocateOldestFirst: () => allocateOldestFirst,
+  depositFor: () => depositFor,
+  estimateLineRange: () => estimateLineRange,
+  extend: () => extend,
+  optionTotals: () => optionTotals,
+  quantityText: () => quantityText,
+  taxOn: () => taxOn,
+  withinCeiling: () => withinCeiling
+});
+function wholeMinor(d) {
+  return BigInt(d.toString().split(".")[0] || "0");
+}
+function taxOn(rules2, taxCategory, netMinor) {
+  if (rules2.exemptCategories.includes(taxCategory)) return 0n;
+  if (!rules2.taxableCategories.includes(taxCategory)) throw new Error(`No sales tax treatment for ${taxCategory}`);
+  if (netMinor <= 0n) return 0n;
+  return wholeMinor(dec(netMinor.toString()).times(dec(rules2.baseRate)).toDecimalPlaces(0, 6));
+}
+function extend(qty2, unitPriceMinor, minimumChargeMinor = null) {
+  const raw = wholeMinor(dec(qty2).times(dec(unitPriceMinor.toString())).toDecimalPlaces(0, 6));
+  return minimumChargeMinor !== null && raw > 0n && raw < minimumChargeMinor ? minimumChargeMinor : raw;
+}
+function adjustBps(amountMinor, bps) {
+  return wholeMinor(dec(amountMinor.toString()).times(dec(bps)).div(1e4).toDecimalPlaces(0, 6));
+}
+function estimateLineRange(line) {
+  if (dec(line.qtyLow).lt(0) || dec(line.qtyLow).gt(dec(line.qtyHigh))) throw new Error("The low quantity cannot be more than the high quantity");
+  return { lowMinor: extend(line.qtyLow, line.unitPriceMinor), highMinor: extend(line.qtyHigh, line.unitPriceMinor) };
+}
+function optionTotals(lines) {
+  let low = 0n;
+  let high = 0n;
+  for (const l of lines) {
+    if (!l.optional) low += l.lowMinor;
+    high += l.highMinor;
+  }
+  return { lowTotalMinor: low, highTotalMinor: high };
+}
+function depositFor(totals, fraction, basis) {
+  const base = basis === "high" ? totals.highTotalMinor : totals.lowTotalMinor;
+  return wholeMinor(dec(base.toString()).times(dec(fraction)).toDecimalPlaces(0, 6));
+}
+function ageBucket(postedOn, asOf) {
+  const days2 = Math.floor((Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${postedOn}T00:00:00Z`)) / 864e5);
+  if (days2 <= 0) return "current";
+  if (days2 <= 30) return "d1_30";
+  if (days2 <= 60) return "d31_60";
+  if (days2 <= 90) return "d61_90";
+  return "d90_plus";
+}
+function allocateOldestFirst(amountMinor, open) {
+  let left = amountMinor;
+  const out = [];
+  for (const inv of open) {
+    if (left <= 0n) break;
+    const take = inv.balanceMinor < left ? inv.balanceMinor : left;
+    if (take > 0n) {
+      out.push({ id: inv.id, amountMinor: take });
+      left -= take;
+    }
+  }
+  return { allocations: out, remainderMinor: left };
+}
+var DEPOSIT_BASES, withinCeiling, AGE_BUCKETS, quantityText;
+var init_billing = __esm({
+  "features/keystone/domain/billing.ts"() {
+    "use strict";
+    init_decimal();
+    DEPOSIT_BASES = ["low", "high"];
+    withinCeiling = (usedMinor, addMinor, acceptedHighMinor) => usedMinor + addMinor <= acceptedHighMinor;
+    AGE_BUCKETS = ["current", "d1_30", "d31_60", "d61_90", "d90_plus"];
+    quantityText = (v) => toScale(dec(v), "qty");
   }
 });
 
@@ -349,6 +431,8 @@ var init_readAudit = __esm({
       "RecordsRelease",
       // Patients and the clinical record
       "Patient",
+      "BoardingReservation",
+      "BoardingStay",
       "PatientWeight",
       "PatientAlert",
       "PatientAllergy",
@@ -450,95 +534,25 @@ var init_readAudit = __esm({
       "VaccineAdministration",
       "PatientReminder",
       "ReminderSatisfaction",
-      "AdverseEventReport"
+      "AdverseEventReport",
+      // Phase 6: diagnostics and pay
+      "Specimen",
+      "LabResultValue",
+      "ResultReview",
+      "ImagingOrder",
+      "ImagingStudy",
+      "ImagingReport",
+      "ProductionCredit",
+      "Commission",
+      "PayPeriod",
+      "PayrollExportBatch",
+      "ExportJob"
     ]);
     subjectOf = (ref) => ({
       patientId: ref.resourceType === "Patient" ? ref.resourceId ?? "" : "",
       clientId: ref.resourceType === "Client" ? ref.resourceId ?? "" : ""
     });
     PURPOSES = /* @__PURE__ */ new Set(["treatment", "operations", "records_request", "agent_tool", "audit", "break_glass"]);
-  }
-});
-
-// features/keystone/domain/billing.ts
-var billing_exports = {};
-__export(billing_exports, {
-  AGE_BUCKETS: () => AGE_BUCKETS,
-  DEPOSIT_BASES: () => DEPOSIT_BASES,
-  adjustBps: () => adjustBps,
-  ageBucket: () => ageBucket,
-  allocateOldestFirst: () => allocateOldestFirst,
-  depositFor: () => depositFor,
-  estimateLineRange: () => estimateLineRange,
-  extend: () => extend,
-  optionTotals: () => optionTotals,
-  quantityText: () => quantityText,
-  taxOn: () => taxOn,
-  withinCeiling: () => withinCeiling
-});
-function wholeMinor(d) {
-  return BigInt(d.toString().split(".")[0] || "0");
-}
-function taxOn(rules2, taxCategory, netMinor) {
-  if (rules2.exemptCategories.includes(taxCategory)) return 0n;
-  if (!rules2.taxableCategories.includes(taxCategory)) throw new Error(`No sales tax treatment for ${taxCategory}`);
-  if (netMinor <= 0n) return 0n;
-  return wholeMinor(dec(netMinor.toString()).times(dec(rules2.baseRate)).toDecimalPlaces(0, 6));
-}
-function extend(qty2, unitPriceMinor, minimumChargeMinor = null) {
-  const raw = wholeMinor(dec(qty2).times(dec(unitPriceMinor.toString())).toDecimalPlaces(0, 6));
-  return minimumChargeMinor !== null && raw > 0n && raw < minimumChargeMinor ? minimumChargeMinor : raw;
-}
-function adjustBps(amountMinor, bps) {
-  return wholeMinor(dec(amountMinor.toString()).times(dec(bps)).div(1e4).toDecimalPlaces(0, 6));
-}
-function estimateLineRange(line) {
-  if (dec(line.qtyLow).lt(0) || dec(line.qtyLow).gt(dec(line.qtyHigh))) throw new Error("The low quantity cannot be more than the high quantity");
-  return { lowMinor: extend(line.qtyLow, line.unitPriceMinor), highMinor: extend(line.qtyHigh, line.unitPriceMinor) };
-}
-function optionTotals(lines) {
-  let low = 0n;
-  let high = 0n;
-  for (const l of lines) {
-    if (!l.optional) low += l.lowMinor;
-    high += l.highMinor;
-  }
-  return { lowTotalMinor: low, highTotalMinor: high };
-}
-function depositFor(totals, fraction, basis) {
-  const base = basis === "high" ? totals.highTotalMinor : totals.lowTotalMinor;
-  return wholeMinor(dec(base.toString()).times(dec(fraction)).toDecimalPlaces(0, 6));
-}
-function ageBucket(postedOn, asOf) {
-  const days2 = Math.floor((Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${postedOn}T00:00:00Z`)) / 864e5);
-  if (days2 <= 0) return "current";
-  if (days2 <= 30) return "d1_30";
-  if (days2 <= 60) return "d31_60";
-  if (days2 <= 90) return "d61_90";
-  return "d90_plus";
-}
-function allocateOldestFirst(amountMinor, open) {
-  let left = amountMinor;
-  const out = [];
-  for (const inv of open) {
-    if (left <= 0n) break;
-    const take = inv.balanceMinor < left ? inv.balanceMinor : left;
-    if (take > 0n) {
-      out.push({ id: inv.id, amountMinor: take });
-      left -= take;
-    }
-  }
-  return { allocations: out, remainderMinor: left };
-}
-var DEPOSIT_BASES, withinCeiling, AGE_BUCKETS, quantityText;
-var init_billing = __esm({
-  "features/keystone/domain/billing.ts"() {
-    "use strict";
-    init_decimal();
-    DEPOSIT_BASES = ["low", "high"];
-    withinCeiling = (usedMinor, addMinor, acceptedHighMinor) => usedMinor + addMinor <= acceptedHighMinor;
-    AGE_BUCKETS = ["current", "d1_30", "d31_60", "d61_90", "d90_plus"];
-    quantityText = (v) => toScale(dec(v), "qty");
   }
 });
 
@@ -551,7 +565,7 @@ module.exports = __toCommonJS(keystone_exports);
 
 // features/keystone/index.ts
 var import_auth = require("@keystone-6/auth");
-var import_core25 = require("@keystone-6/core");
+var import_core26 = require("@keystone-6/core");
 var import_config = require("dotenv/config");
 
 // features/keystone/models/User.ts
@@ -563,7 +577,7 @@ var import_fields3 = require("@keystone-6/core/fields");
 var import_fields = require("@keystone-6/core/fields");
 var registry = /* @__PURE__ */ new Map();
 function registerListAccess(lists) {
-  for (const [key2, list23] of Object.entries(lists)) registry.set(key2, list23.access);
+  for (const [key2, list24] of Object.entries(lists)) registry.set(key2, list24.access);
 }
 var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
 async function canReadWholeList(listKey, args) {
@@ -2262,6 +2276,11 @@ var RecordsRequest = (0, import_core10.list)({
     policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
     callRecord: relationship({ ref: "CallRecord", ...readOnly }),
     createdByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    /** Phase 6: who checked the requester's right to the records, and what they found. */
+    verifiedBy: relationship({ ref: "User", ...readOnly }),
+    verifiedAt: (0, import_fields11.timestamp)({ ...readOnly }),
+    verificationNote: systemText(),
+    decisionReason: systemText(),
     releases: relationship({ ref: "RecordsRelease.request", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -2276,6 +2295,9 @@ var RecordsRelease = (0, import_core10.list)({
     documents: (0, import_fields11.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{documentId, sha256, title}]" } }),
     releasedByUser: relationship({ ref: "User", ...readOnly }),
     releasedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
+    /** Phase 6: hash over the sorted document hashes, recipient and channel; the verified destination it went to. */
+    packetHash: hiddenHash(),
+    destination: systemText(),
     at: (0, import_fields11.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
@@ -2737,7 +2759,7 @@ function canonicalize(value) {
   throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
 }
 var canonicalJson = (value) => JSON.stringify(canonicalize(value));
-var sha256 = (text21) => (0, import_node_crypto2.createHash)("sha256").update(text21).digest("hex");
+var sha256 = (text22) => (0, import_node_crypto2.createHash)("sha256").update(text22).digest("hex");
 var payloadHash = (value) => sha256(canonicalJson(value));
 var toJsonValue = (value) => canonicalize(value);
 var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
@@ -3753,6 +3775,7 @@ var Deposit = (0, import_core15.list)({
     client: relationship({ ref: "Client", ...readOnly }),
     estimate: relationship({ ref: "Estimate", ...readOnly }),
     plan: relationship({ ref: "TreatmentPlan", ...readOnly }),
+    reservation: relationship({ ref: "BoardingReservation", ...readOnly }),
     requestedMinor: minor({ required: true }),
     currencyCode: ccy(),
     status: lifecycle(["requested", "paid", "applied", "refunded", "forfeited"]),
@@ -4210,6 +4233,7 @@ var PlanBillingAttempt = (0, import_core16.list)({
     /** The press of "Run billing" that made this attempt; the run row is written when the press finishes. */
     runKey: systemText({ indexed: true }),
     message: systemText(),
+    retryNote: systemText(),
     startedAt: (0, import_fields17.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     finishedAt: (0, import_fields17.timestamp)({ ...readOnly }),
     version: versionField(),
@@ -4218,28 +4242,386 @@ var PlanBillingAttempt = (0, import_core16.list)({
 });
 var WELLNESS_LISTS = { WellnessPlan, WellnessPlanVersion, Enrollment, EnrollmentConsent, EntitlementGrant, EntitlementEntry, PlanBillingRun, PlanBillingAttempt };
 
-// features/keystone/models/boarding.ts
+// features/keystone/models/phase6.ts
 var import_core17 = require("@keystone-6/core");
 var import_fields18 = require("@keystone-6/core/fields");
+var LAB_READ = ["canReadClinical"];
+var LAB_SETUP = ["canManageIntegrations", "canManagePractice"];
+var PAY = ["canViewFinance", "canManagePayments"];
+var LAB_ORDER_STATES = ["ordered", "specimen_collected", "sent", "partial", "final", "corrected", "reviewed", "communicated", "cancelled"];
+var LAB_FLAGS = ["normal", "low", "high", "critical_low", "critical_high", "abnormal"];
+var PAY_PERIOD_STATES = ["open", "calculated", "approved", "exported", "locked"];
+var Laboratory = (0, import_core17.list)({
+  access: governed([...LAB_READ, ...LAB_SETUP]),
+  ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "status"] } },
+  fields: {
+    code: systemText({ indexed: "unique", required: true }),
+    name: systemText({ required: true }),
+    kind: fixedChoice(["reference", "in_house"]),
+    /** How results arrive: keyed by hand, a CSV/HL7 file dropped in, or the lab's own adapter. */
+    intake: fixedChoice(["manual", "file_drop", "adapter"]),
+    integration: relationship({ ref: "IntegrationConnection", ...readOnly }),
+    accountNumber: systemText(),
+    status: lifecycle(["active", "retired"]),
+    tests: relationship({ ref: "LabTest.lab", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var Analyte = (0, import_core17.list)({
+  access: governed([...LAB_READ, ...LAB_SETUP]),
+  ui: { labelField: "code" },
+  fields: {
+    code: systemText({ indexed: "unique", required: true }),
+    name: systemText({ required: true }),
+    canonicalUnit: systemText({ required: true }),
+    ...trackingFields
+  }
+});
+var LabTest = (0, import_core17.list)({
+  access: governed([...LAB_READ, ...LAB_SETUP]),
+  ui: { labelField: "name", listView: { initialColumns: ["lab", "code", "name", "turnaroundHours"] } },
+  fields: {
+    lab: relationship({ ref: "Laboratory.tests", ...readOnly }),
+    code: systemText({ required: true }),
+    name: systemText({ required: true }),
+    species: relationship({ ref: "Species", many: true }),
+    specimenRequirements: (0, import_fields18.json)({ ...readOnly }),
+    feeItem: relationship({ ref: "FeeItem", ...readOnly }),
+    turnaroundHours: (0, import_fields18.integer)({ defaultValue: 24, validation: { isRequired: true } }),
+    status: lifecycle(["active", "retired"]),
+    ...trackingFields
+  }
+});
+var LabAnalyteMap = (0, import_core17.list)({
+  access: governed([...LAB_READ, ...LAB_SETUP]),
+  ui: { labelField: "externalCode" },
+  fields: {
+    lab: relationship({ ref: "Laboratory", ...readOnly }),
+    externalCode: systemText({ required: true }),
+    analyte: relationship({ ref: "Analyte", ...readOnly }),
+    /** { factor: "0.0555", offset?: "0" }: external value × factor + offset = canonical value. */
+    unitConversion: (0, import_fields18.json)({ ...readOnly }),
+    ...trackingFields
+  }
+});
+var ReferenceRange = (0, import_core17.list)({
+  access: governed([...LAB_READ, ...LAB_SETUP]),
+  ui: { listView: { initialColumns: ["analyte", "species", "ageClass", "low", "high", "unit"] } },
+  fields: {
+    analyte: relationship({ ref: "Analyte", ...readOnly }),
+    species: relationship({ ref: "Species", ...readOnly }),
+    ageClass: fixedChoice(["juvenile", "adult", "senior", "any"]),
+    lab: relationship({ ref: "Laboratory", ...readOnly }),
+    low: qty(),
+    high: qty(),
+    /** Beyond these the value is critical, not just abnormal. */
+    criticalLow: qty(),
+    criticalHigh: qty(),
+    unit: systemText({ required: true }),
+    source: systemText(),
+    ...trackingFields
+  }
+});
+var LabOrder = (0, import_core17.list)({
+  access: governed([...LAB_READ, "canOrder"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "lab", "status", "accessionId"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    order: relationship({ ref: "ClinicalOrder", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    lab: relationship({ ref: "Laboratory", ...readOnly }),
+    tests: relationship({ ref: "LabTest", many: true, ...readOnly }),
+    orderedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    accessionId: systemText({ nullable: true }),
+    status: lifecycle(LAB_ORDER_STATES),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    cancelReason: systemText(),
+    sentAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    specimens: relationship({ ref: "Specimen.labOrder", many: true, ...readOnly }),
+    results: relationship({ ref: "LabResult.labOrder", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var Specimen = (0, import_core17.list)({
+  access: governed([...LAB_READ, "canOrder"]),
+  graphql: { plural: "SpecimenList" },
+  fields: {
+    labOrder: relationship({ ref: "LabOrder.specimens", ...readOnly }),
+    kind: fixedChoice(["whole_blood", "serum", "plasma", "urine", "feces", "tissue", "swab", "fluid", "other"]),
+    collectedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    collectedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    containerId: systemText(),
+    ...trackingFields
+  }
+});
+var LabResult = (0, import_core17.list)({
+  access: governed([...LAB_READ]),
+  ui: { listView: { initialColumns: ["labOrder", "status", "receivedAt", "worstFlag"] } },
+  fields: {
+    labOrder: relationship({ ref: "LabOrder.results", ...readOnly }),
+    observation: relationship({ ref: "ProviderObservation", ...readOnly }),
+    status: fixedChoice(["partial", "final", "corrected"]),
+    supersedes: relationship({ ref: "LabResult.supersededBy", ...readOnly }),
+    supersededBy: relationship({ ref: "LabResult.supersedes", many: true, ...readOnly }),
+    reportDocument: relationship({ ref: "Document", ...readOnly }),
+    worstFlag: fixedChoice(LAB_FLAGS),
+    source: fixedChoice(["manual", "file_drop", "adapter"]),
+    contentHash: hiddenHash({ indexed: true }),
+    receivedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    values: relationship({ ref: "LabResultValue.result", many: true, ...readOnly }),
+    reviews: relationship({ ref: "ResultReview.result", many: true, ...readOnly }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var LabResultValue = (0, import_core17.list)({
+  access: governed([...LAB_READ]),
+  fields: {
+    result: relationship({ ref: "LabResult.values", ...readOnly }),
+    analyte: relationship({ ref: "Analyte", ...readOnly }),
+    externalCode: systemText(),
+    valueNumeric: qty(),
+    valueText: systemText(),
+    unit: systemText(),
+    /** The range used, copied at the time so a later range edit never rewrites history. */
+    refLow: qty(),
+    refHigh: qty(),
+    flag: fixedChoice(LAB_FLAGS),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var ResultReview = (0, import_core17.list)({
+  access: governed([...LAB_READ]),
+  fields: {
+    result: relationship({ ref: "LabResult.reviews", ...readOnly }),
+    dvm: relationship({ ref: "StaffMember", ...readOnly }),
+    kind: fixedChoice(["interpretation", "communication"]),
+    interpretation: (0, import_fields18.text)({ db: { isNullable: false }, defaultValue: "" }),
+    communicatedVia: fixedChoice(["call", "message", "in_person", "portal", "none"]),
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var ImagingOrder = (0, import_core17.list)({
+  access: governed([...LAB_READ, "canOrder"]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "modality", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    order: relationship({ ref: "ClinicalOrder", ...readOnly }),
+    patient: relationship({ ref: "Patient", ...readOnly }),
+    encounter: relationship({ ref: "Encounter", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    orderedBy: relationship({ ref: "StaffMember", ...readOnly }),
+    modality: fixedChoice(["DX", "US", "CT", "MR", "ECG", "ENDO"]),
+    region: systemText(),
+    reason: systemText(),
+    status: lifecycle(["ordered", "acquired", "read", "communicated", "cancelled"]),
+    studies: relationship({ ref: "ImagingStudy.order", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var ImagingStudy = (0, import_core17.list)({
+  access: governed([...LAB_READ]),
+  ui: { labelField: "studyInstanceUid" },
+  fields: {
+    order: relationship({ ref: "ImagingOrder.studies", ...readOnly }),
+    studyInstanceUid: systemText({ indexed: "unique", required: true }),
+    modality: fixedChoice(["DX", "US", "CT", "MR", "ECG", "ENDO"]),
+    pacs: relationship({ ref: "IntegrationConnection", ...readOnly }),
+    acquiredAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    images: (0, import_fields18.integer)({ defaultValue: 0, validation: { isRequired: true } }),
+    reports: relationship({ ref: "ImagingReport.study", many: true, ...readOnly }),
+    ...trackingFields
+  }
+});
+var ImagingReport = (0, import_core17.list)({
+  access: governed([...LAB_READ]),
+  fields: {
+    study: relationship({ ref: "ImagingStudy.reports", ...readOnly }),
+    author: fixedChoice(["in_house_dvm", "teleradiology"]),
+    authorStaff: relationship({ ref: "StaffMember", ...readOnly }),
+    authorName: systemText(),
+    text: (0, import_fields18.text)({ db: { isNullable: false }, defaultValue: "" }),
+    reportedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var ProductionRuleVersion = (0, import_core17.list)({
+  access: governed([...PAY]),
+  ui: { labelField: "label", listView: { initialColumns: ["versionNo", "label", "status", "effectiveFrom"] } },
+  fields: {
+    versionNo: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    label: systemText({ required: true }),
+    /** { "<productionCategory>": { basis: "performed"|"ordered", bps: 2000 }, … } */
+    rules: (0, import_fields18.json)({ ...readOnly }),
+    /** Groomer and retail commission: { groom: { bps: 4000 }, retail: { bps: 500 } } */
+    commissionRules: (0, import_fields18.json)({ ...readOnly }),
+    effectiveFrom: (0, import_fields18.calendarDay)({ validation: { isRequired: true } }),
+    status: lifecycle(["draft", "published", "retired"]),
+    publishedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    ruleHash: hiddenHash(),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var ProductionCredit = (0, import_core17.list)({
+  access: governed([...PAY]),
+  ui: { listView: { initialColumns: ["staff", "category", "amountMinor", "kind", "creditedOn"] } },
+  fields: {
+    staff: relationship({ ref: "StaffMember", ...readOnly }),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    invoice: relationship({ ref: "Invoice", ...readOnly }),
+    ruleVersion: relationship({ ref: "ProductionRuleVersion", ...readOnly }),
+    location: relationship({ ref: "Location", ...readOnly }),
+    category: systemText({ required: true }),
+    basis: fixedChoice(["performed", "ordered"]),
+    kind: fixedChoice(["credit", "adjustment"]),
+    adjusts: relationship({ ref: "ProductionCredit", ...readOnly }),
+    baseMinor: minor({ required: true }),
+    bps: (0, import_fields18.integer)({ validation: { isRequired: true } }),
+    amountMinor: minor({ required: true }),
+    reason: systemText(),
+    requestedBy: relationship({ ref: "User", ...readOnly }),
+    approvedBy: relationship({ ref: "User", ...readOnly }),
+    creditedOn: (0, import_fields18.calendarDay)({ validation: { isRequired: true } }),
+    period: relationship({ ref: "PayPeriod.credits", ...readOnly }),
+    entryKey: hiddenHash({ indexed: "unique", required: true }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var Commission = (0, import_core17.list)({
+  access: governed([...PAY]),
+  ui: { listView: { initialColumns: ["staff", "sourceType", "amountMinor", "earnedOn"] } },
+  fields: {
+    staff: relationship({ ref: "StaffMember", ...readOnly }),
+    chargeLine: relationship({ ref: "ChargeLine", ...readOnly }),
+    ruleVersion: relationship({ ref: "ProductionRuleVersion", ...readOnly }),
+    sourceType: systemText({ required: true }),
+    sourceId: systemText(),
+    baseMinor: minor({ required: true }),
+    bps: (0, import_fields18.integer)({ validation: { isRequired: true } }),
+    amountMinor: minor({ required: true }),
+    earnedOn: (0, import_fields18.calendarDay)({ validation: { isRequired: true } }),
+    period: relationship({ ref: "PayPeriod.commissions", ...readOnly }),
+    entryKey: hiddenHash({ indexed: "unique", required: true }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var PayPeriod = (0, import_core17.list)({
+  access: governed([...PAY]),
+  ui: { labelField: "ref", listView: { initialColumns: ["ref", "startsOn", "endsOn", "status"] } },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    startsOn: (0, import_fields18.calendarDay)({ validation: { isRequired: true } }),
+    endsOn: (0, import_fields18.calendarDay)({ validation: { isRequired: true } }),
+    status: lifecycle(PAY_PERIOD_STATES),
+    /** [{ staffId, productionMinor, commissionMinor }] frozen at calculation. */
+    totals: (0, import_fields18.json)({ ...readOnly }),
+    totalsHash: hiddenHash(),
+    calculatedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    approvedBy: relationship({ ref: "User", ...readOnly }),
+    approvedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    lockedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    credits: relationship({ ref: "ProductionCredit.period", many: true, ...readOnly }),
+    commissions: relationship({ ref: "Commission.period", many: true, ...readOnly }),
+    exports: relationship({ ref: "PayrollExportBatch.period", many: true, ...readOnly }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PayrollExportBatch = (0, import_core17.list)({
+  access: governed([...PAY]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    period: relationship({ ref: "PayPeriod.exports", ...readOnly }),
+    format: fixedChoice(["csv"]),
+    rows: (0, import_fields18.integer)({ defaultValue: 0, validation: { isRequired: true } }),
+    contentHash: hiddenHash({ required: true }),
+    csv: (0, import_fields18.text)({ db: { isNullable: false }, defaultValue: "", access: { create: () => false, update: () => false } }),
+    exportedBy: relationship({ ref: "User", ...readOnly }),
+    exportedAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    createdAt: (0, import_fields18.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+  }
+});
+var ExportJob = (0, import_core17.list)({
+  access: governed(["canManageOnboarding", "canManageIntegrations", "canReadAudit"]),
+  ui: { labelField: "ref" },
+  fields: {
+    ref: systemText({ indexed: "unique", required: true }),
+    kind: fixedChoice(["clients", "patients", "balances", "lab_results", "records_releases", "full"]),
+    status: lifecycle(["built", "failed"]),
+    rows: (0, import_fields18.integer)({ defaultValue: 0, validation: { isRequired: true } }),
+    contentHash: hiddenHash(),
+    requestedBy: relationship({ ref: "User", ...readOnly }),
+    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    ...trackingFields
+  }
+});
+var Campaign = (0, import_core17.list)({
+  access: governed(["canManagePractice", "canMessageClients"]),
+  ui: { labelField: "name", listView: { initialColumns: ["name", "purpose", "status"] } },
+  fields: {
+    name: systemText({ required: true }),
+    purpose: fixedChoice(["transactional", "reminder", "marketing"]),
+    template: relationship({ ref: "MessageTemplate", ...readOnly }),
+    audience: (0, import_fields18.json)({ ...readOnly }),
+    status: lifecycle(["draft", "approved", "running", "done", "cancelled"]),
+    outboundVoice: (0, import_fields18.checkbox)({ defaultValue: false, access: { create: () => false, update: () => false } }),
+    version: versionField(),
+    ...trackingFields
+  }
+});
+var PHASE6_LISTS = {
+  Laboratory,
+  Analyte,
+  LabTest,
+  LabAnalyteMap,
+  ReferenceRange,
+  LabOrder,
+  Specimen,
+  LabResult,
+  LabResultValue,
+  ResultReview,
+  ImagingOrder,
+  ImagingStudy,
+  ImagingReport,
+  ProductionRuleVersion,
+  ProductionCredit,
+  Commission,
+  PayPeriod,
+  PayrollExportBatch,
+  ExportJob,
+  Campaign
+};
+
+// features/keystone/models/boarding.ts
+var import_core18 = require("@keystone-6/core");
+var import_fields19 = require("@keystone-6/core/fields");
 var BOARDING = ["canManageBoarding", "canBook", "canCheckIn", "canReadClinical", "canManagePractice"];
 var KENNEL = ["canManageBoarding", "canReadClinical", "canManagePractice"];
 var GROOM = ["canGroom", "canManageBoarding", "canBook", "canCheckIn", "canManagePractice"];
-var RunType = (0, import_core17.list)({
+var PAY_ONLY = { access: { ...readOnly.access, read: permissions.canManagePeople }, isFilterable: permissions.canManagePeople, isOrderable: permissions.canManagePeople, ui: readOnly.ui };
+var RunType = (0, import_core18.list)({
   access: governed([...BOARDING]),
   ui: { labelField: "name", listView: { initialColumns: ["name", "location", "speciesCodes", "nightlyRateMinor"] } },
   fields: {
     code: systemText({ indexed: "unique", required: true }),
     name: systemText({ required: true }),
     location: relationship({ ref: "Location", ...readOnly }),
-    speciesCodes: (0, import_fields18.json)({ ...readOnly }),
-    maxWeightKg: (0, import_fields18.integer)({ ...readOnly }),
+    speciesCodes: (0, import_fields19.json)({ ...readOnly }),
+    maxWeightKg: (0, import_fields19.integer)({ ...readOnly }),
     nightlyRateMinor: minor({ required: true }),
     depositMinor: minor({ defaultValue: 0n }),
-    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
+    active: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
-var Run = (0, import_core17.list)({
+var Run = (0, import_core18.list)({
   access: governed([...BOARDING]),
   ui: { labelField: "label", listView: { initialColumns: ["label", "runType", "status"] } },
   fields: {
@@ -4251,19 +4633,19 @@ var Run = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var NightlyRunInventory = (0, import_core17.list)({
+var NightlyRunInventory = (0, import_core18.list)({
   access: governed([...BOARDING]),
   ui: { listView: { initialColumns: ["runType", "night", "capacity", "sold"] } },
   fields: {
     runType: relationship({ ref: "RunType", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
-    night: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    capacity: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
-    sold: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    night: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    capacity: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
+    sold: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
     ...trackingFields
   }
 });
-var BoardingReservation = (0, import_core17.list)({
+var BoardingReservation = (0, import_core18.list)({
   access: governed([...BOARDING]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "runType", "checkInOn", "checkOutOn", "status"] } },
   fields: {
@@ -4272,11 +4654,11 @@ var BoardingReservation = (0, import_core17.list)({
     client: relationship({ ref: "Client", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     runType: relationship({ ref: "RunType", ...readOnly }),
-    checkInOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    checkInOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     /** The morning the pet goes home: nights are check-in through the night before this day. */
-    checkOutOn: (0, import_fields18.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    checkOutOn: (0, import_fields19.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["requested", "confirmed", "checked_in", "checked_out", "cancelled", "no_show"]),
-    holdExpiresAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    holdExpiresAt: (0, import_fields19.timestamp)({ ...readOnly }),
     depositMinor: minor({ defaultValue: 0n }),
     vaccineOverrideReason: systemText(),
     notes: systemText(),
@@ -4285,7 +4667,7 @@ var BoardingReservation = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var BoardingStay = (0, import_core17.list)({
+var BoardingStay = (0, import_core18.list)({
   access: governed([...BOARDING]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "run", "checkedInAt", "status"] } },
   fields: {
@@ -4296,33 +4678,33 @@ var BoardingStay = (0, import_core17.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     run: relationship({ ref: "Run", ...readOnly }),
     status: lifecycle(["in_house", "checked_out"]),
-    checkedInAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    checkedOutAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    checkedInAt: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    checkedOutAt: (0, import_fields19.timestamp)({ ...readOnly }),
     invoice: relationship({ ref: "Invoice", ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var RunAssignment = (0, import_core17.list)({
+var RunAssignment = (0, import_core18.list)({
   access: governed([...KENNEL]),
   ui: { listView: { initialColumns: ["stay", "run", "startsAt", "endsAt"] } },
   fields: {
     stay: relationship({ ref: "BoardingStay", ...readOnly }),
     run: relationship({ ref: "Run", ...readOnly }),
-    startsAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endsAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    startsAt: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endsAt: (0, import_fields19.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
-var RunCard = (0, import_core17.list)({
+var RunCard = (0, import_core18.list)({
   access: governed([...KENNEL]),
   ui: { listView: { initialColumns: ["stay", "emergencyContactName", "medicalLimitMinor"] } },
   fields: {
     stay: relationship({ ref: "BoardingStay", ...readOnly }),
     reservation: relationship({ ref: "BoardingReservation", ...readOnly }),
-    feeding: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
-    handling: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
-    medications: (0, import_fields18.json)({ ...readOnly }),
+    feeding: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    handling: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    medications: (0, import_fields19.json)({ ...readOnly }),
     emergencyContactName: systemText(),
     emergencyContactPhone: systemText({ secret: true }),
     /** The most the owner has said the hospital may spend on emergency care without calling first. */
@@ -4330,18 +4712,18 @@ var RunCard = (0, import_core17.list)({
     ...trackingFields
   }
 });
-var BelongingItem = (0, import_core17.list)({
+var BelongingItem = (0, import_core18.list)({
   access: governed([...KENNEL]),
   ui: { listView: { initialColumns: ["stay", "description", "returnedAt"] } },
   fields: {
     stay: relationship({ ref: "BoardingStay", ...readOnly }),
     description: systemText({ required: true }),
-    returnedAt: (0, import_fields18.timestamp)({ ...readOnly }),
+    returnedAt: (0, import_fields19.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DailyCareLog = (0, import_core17.list)({
+var DailyCareLog = (0, import_core18.list)({
   access: governed([...KENNEL]),
   ui: { listView: { initialColumns: ["stay", "kind", "note", "at"] } },
   fields: {
@@ -4349,11 +4731,11 @@ var DailyCareLog = (0, import_core17.list)({
     kind: fixedChoice(["fed", "walked", "medicated", "played", "cleaned", "observation"]),
     note: systemText(),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var GroomAppointment = (0, import_core17.list)({
+var GroomAppointment = (0, import_core18.list)({
   access: governed([...GROOM]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "groomer", "startsAt", "service", "status"] } },
   fields: {
@@ -4362,37 +4744,37 @@ var GroomAppointment = (0, import_core17.list)({
     client: relationship({ ref: "Client", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     groomer: relationship({ ref: "StaffMember", ...readOnly }),
-    startsAt: (0, import_fields18.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    durationMinutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 60 }),
+    startsAt: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    durationMinutes: (0, import_fields19.integer)({ ...readOnly, defaultValue: 60 }),
     service: systemText({ required: true }),
     priceMinor: minor({ required: true }),
     status: lifecycle(["booked", "checked_in", "in_progress", "ready", "completed", "cancelled", "no_show"]),
     noteVersion: relationship({ ref: "GroomNote", ...readOnly }),
     cancelReason: systemText(),
     invoice: relationship({ ref: "Invoice", ...readOnly }),
-    /** Managers only: what the groomer earns on this groom. Not readable, filterable or sortable by anyone else. */
-    commissionBps: (0, import_fields18.integer)({ ...readOnly, access: { ...readOnly.access, read: permissions.canViewFinance }, isFilterable: permissions.canViewFinance, isOrderable: permissions.canViewFinance, defaultValue: 0 }),
-    commissionMinor: minor({ defaultValue: 0n }),
+    /** Owner or manager only (canManagePeople): what the groomer earns on this groom. Not readable, filterable or sortable by anyone else. */
+    commissionBps: (0, import_fields19.integer)({ ...PAY_ONLY, defaultValue: 0 }),
+    commissionMinor: (0, import_fields19.bigInt)({ ...PAY_ONLY, defaultValue: 0n, validation: { isRequired: true } }),
     version: versionField(),
     ...trackingFields
   }
 });
-var GroomNote = (0, import_core17.list)({
+var GroomNote = (0, import_core18.list)({
   access: governed([...GROOM]),
   ui: { listView: { initialColumns: ["patient", "versionNo", "style", "blade", "behaviour"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
-    versionNo: (0, import_fields18.integer)({ ...readOnly, validation: { isRequired: true } }),
+    versionNo: (0, import_fields19.integer)({ ...readOnly, validation: { isRequired: true } }),
     blade: systemText(),
     style: systemText(),
     behaviour: systemText(),
-    notes: (0, import_fields18.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    notes: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     photoUrl: systemText(),
     by: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
-var ServiceItem = (0, import_core17.list)({
+var ServiceItem = (0, import_core18.list)({
   access: governed(["canAccessDashboard"]),
   ui: { labelField: "name", listView: { initialColumns: ["name", "area", "priceMinor", "active"] } },
   fields: {
@@ -4400,20 +4782,20 @@ var ServiceItem = (0, import_core17.list)({
     area: fixedChoice(["grooming", "euthanasia", "aftercare"]),
     name: systemText({ required: true }),
     priceMinor: minor({ required: true }),
-    minutes: (0, import_fields18.integer)({ ...readOnly, defaultValue: 0 }),
+    minutes: (0, import_fields19.integer)({ ...readOnly, defaultValue: 0 }),
     taxCategory: fixedChoice(["professional_service", "grooming", "merchandise", "boarding"]),
-    active: (0, import_fields18.checkbox)({ ...readOnly, defaultValue: true }),
+    active: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: true }),
     ...trackingFields
   }
 });
 var BOARDING_LISTS = { ServiceItem, RunType, Run, NightlyRunInventory, BoardingReservation, BoardingStay, RunAssignment, RunCard, BelongingItem, DailyCareLog, GroomAppointment, GroomNote };
 
 // features/keystone/models/endOfLife.ts
-var import_core18 = require("@keystone-6/core");
-var import_fields19 = require("@keystone-6/core/fields");
+var import_core19 = require("@keystone-6/core");
+var import_fields20 = require("@keystone-6/core/fields");
 var EOL = ["canReadClinical", "canAuthoriseEuthanasia", "canManageBoarding", "canManagePractice"];
 var AFTERCARE_CHOICES = ["private_cremation", "communal_cremation", "home_burial", "rabies_testing"];
-var EuthanasiaConsent = (0, import_core18.list)({
+var EuthanasiaConsent = (0, import_core19.list)({
   access: governed(["canReadClinical", "canAuthoriseEuthanasia"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "signer", "aftercare", "status"] } },
   fields: {
@@ -4427,36 +4809,36 @@ var EuthanasiaConsent = (0, import_core18.list)({
     status: lifecycle(["draft", "signed", "used", "revoked"]),
     biteAttestation: fixedChoice(["no_bite", "bite_in_last_10_days"]),
     aftercare: fixedChoice(AFTERCARE_CHOICES),
-    clientPresent: (0, import_fields19.checkbox)({ ...readOnly, defaultValue: false }),
+    clientPresent: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
     method: fixedChoice(["in_person", "e_signature"]),
     witness: relationship({ ref: "StaffMember", ...readOnly }),
     verbalConfirmedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    verbalConfirmedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    verbalConfirmedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     signatureText: systemText(),
-    signedAt: (0, import_fields19.timestamp)({ ...readOnly }),
-    usedAt: (0, import_fields19.timestamp)({ ...readOnly }),
+    signedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    usedAt: (0, import_fields20.timestamp)({ ...readOnly }),
     revokedReason: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var DeathRecord = (0, import_core18.list)({
+var DeathRecord = (0, import_core19.list)({
   access: governed(["canReadClinical", "canManagePatients", "canAuthoriseEuthanasia"]),
   ui: { listView: { initialColumns: ["patient", "cause", "diedAt", "recordedBy"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     cause: fixedChoice(["euthanasia", "natural", "dead_on_arrival"]),
-    causeNote: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
-    diedAt: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    causeNote: (0, import_fields20.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    diedAt: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
     consent: relationship({ ref: "EuthanasiaConsent", ...readOnly }),
     administration: relationship({ ref: "Administration", ...readOnly }),
-    effects: (0, import_fields19.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    effects: (0, import_fields20.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     ...trackingFields
   }
 });
-var AftercareOrder = (0, import_core18.list)({
+var AftercareOrder = (0, import_core19.list)({
   access: governed([...EOL]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "choice", "tagNumber", "status"] } },
   fields: {
@@ -4478,7 +4860,7 @@ var AftercareOrder = (0, import_core18.list)({
     ...trackingFields
   }
 });
-var CustodyEvent = (0, import_core18.list)({
+var CustodyEvent = (0, import_core19.list)({
   access: governed([...EOL]),
   ui: { listView: { initialColumns: ["order", "kind", "tagNumber", "by", "at"] } },
   fields: {
@@ -4489,11 +4871,11 @@ var CustodyEvent = (0, import_core18.list)({
     crematoryRef: systemText(),
     receivedBy: systemText(),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields19.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var MemorialItem = (0, import_core18.list)({
+var MemorialItem = (0, import_core19.list)({
   access: governed([...EOL]),
   ui: { listView: { initialColumns: ["order", "kind", "description", "priceMinor"] } },
   fields: {
@@ -4508,13 +4890,13 @@ var MemorialItem = (0, import_core18.list)({
 var END_OF_LIFE_LISTS = { EuthanasiaConsent, DeathRecord, AftercareOrder, CustodyEvent, MemorialItem };
 
 // features/keystone/models/record.ts
-var import_core19 = require("@keystone-6/core");
-var import_fields20 = require("@keystone-6/core/fields");
+var import_core20 = require("@keystone-6/core");
+var import_fields21 = require("@keystone-6/core/fields");
 var CLINICAL_READ = ["canReadClinical"];
 var ENCOUNTER_KINDS = ["outpatient", "inpatient_day", "surgery", "dental", "emergency", "telehealth", "phone_consult", "records_import", "euthanasia", "tech_visit"];
 var SECTION_KINDS = ["history", "subjective", "objective", "assessment", "plan", "discharge", "surgery_report", "dental_chart", "anaesthesia_summary", "communication"];
 var REPEATABLE_SECTIONS = ["communication"];
-var Encounter = (0, import_core19.list)({
+var Encounter = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "status", "attendingDvm", "startedAt"] } },
   fields: {
@@ -4524,23 +4906,23 @@ var Encounter = (0, import_core19.list)({
     appointment: relationship({ ref: "Appointment", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     kind: fixedChoice(ENCOUNTER_KINDS),
-    vcprQualifying: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
+    vcprQualifying: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
     status: lifecycle(["open", "in_progress", "pending_signature", "signed", "voided"]),
     reason: systemText(),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
     participants: relationship({ ref: "StaffMember", many: true, ...readOnly }),
     weightUsed: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    startedAt: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    submittedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    submittedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    signedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    signedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     contentHash: systemText(),
-    signedContent: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
+    signedContent: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The canonical content that was hashed at signing (sections, vitals, findings, diagnoses, orders, administrations)." } }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     vcpr: relationship({ ref: "VcprRecord", ...readOnly }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     policyVersion: relationship({ ref: "PolicyVersion", ...readOnly }),
-    completeness: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
+    completeness: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "The last required-fields check against the medical_records policy (I-R4)." } }),
     voidReason: systemText(),
     voidApproval: relationship({ ref: "ApprovalRequest", ...readOnly }),
     importedFrom: systemText(),
@@ -4554,55 +4936,55 @@ var Encounter = (0, import_core19.list)({
     ...trackingFields
   }
 });
-var SoapSection = (0, import_core19.list)({
+var SoapSection = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "kind", "ordinal", "version", "lockedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.sections", ...readOnly }),
     kind: fixedChoice(SECTION_KINDS),
-    ordinal: (0, import_fields20.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
+    ordinal: (0, import_fields21.integer)({ ...readOnly, defaultValue: 1, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields20.json)({ ...readOnly }),
+    structured: (0, import_fields21.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     lastAuthor: relationship({ ref: "StaffMember", ...readOnly }),
     revisions: relationship({ ref: "SoapSectionRevision.section", many: true, ...readOnly }),
-    lockedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    lockedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var SoapSectionRevision = (0, import_core19.list)({
+var SoapSectionRevision = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["section", "source", "author", "at"] } },
   fields: {
     section: relationship({ ref: "SoapSection.revisions", ...readOnly }),
-    revisionNumber: (0, import_fields20.integer)({ ...readOnly, validation: { isRequired: true } }),
+    revisionNumber: (0, import_fields21.integer)({ ...readOnly, validation: { isRequired: true } }),
     body: systemText(),
-    structured: (0, import_fields20.json)({ ...readOnly }),
+    structured: (0, import_fields21.json)({ ...readOnly }),
     source: fixedChoice(["typed", "template", "scribe", "import"]),
     template: relationship({ ref: "RecordTemplate", ...readOnly }),
     scribeDraft: relationship({ ref: "ScribeDraft", ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     authorUser: relationship({ ref: "User", ...readOnly }),
-    at: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     contentHash: systemText({ required: true })
   }
 });
-var Addendum = (0, import_core19.list)({
+var Addendum = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "sectionKind", "author", "signedAt"] } },
   fields: {
     encounter: relationship({ ref: "Encounter.addenda", ...readOnly }),
     sectionKind: fixedChoice([...SECTION_KINDS, "general"]),
     author: relationship({ ref: "StaffMember", ...readOnly }),
-    authorIsDvm: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
+    authorIsDvm: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
     reason: systemText({ required: true }),
     body: systemText({ required: true }),
-    signedAt: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    signedAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     hash: systemText({ required: true })
   }
 });
-var VitalsObservation = (0, import_core19.list)({
+var VitalsObservation = (0, import_core20.list)({
   access: immutable([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "temperature", "heartRate", "respRate", "painScore", "at"] } },
   fields: {
@@ -4610,20 +4992,20 @@ var VitalsObservation = (0, import_core19.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     temperature: qty(),
     temperatureUnit: choice(["F", "C"], "F"),
-    heartRate: (0, import_fields20.integer)({ ...readOnly }),
-    respRate: (0, import_fields20.integer)({ ...readOnly }),
+    heartRate: (0, import_fields21.integer)({ ...readOnly }),
+    respRate: (0, import_fields21.integer)({ ...readOnly }),
     mucousMembranes: choice(["pink", "pale", "white", "cyanotic", "icteric", "injected", "brick_red", "not_assessed"], null),
     crtSeconds: qty(),
-    painScore: (0, import_fields20.integer)({ ...readOnly }),
-    bodyConditionScore: (0, import_fields20.integer)({ ...readOnly }),
+    painScore: (0, import_fields21.integer)({ ...readOnly }),
+    bodyConditionScore: (0, import_fields21.integer)({ ...readOnly }),
     mentation: choice(["bar", "qar", "dull", "obtunded", "stuporous", "comatose"], null),
     hydrationPct: qty(),
-    at: (0, import_fields20.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
 var EXAM_SYSTEMS = ["general", "integument", "eyes", "ears", "oral", "cardiovascular", "respiratory", "gi", "urogenital", "musculoskeletal", "neurologic", "lymphatic"];
-var PhysicalExamFinding = (0, import_core19.list)({
+var PhysicalExamFinding = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "system", "status", "text"] } },
   fields: {
@@ -4636,19 +5018,19 @@ var PhysicalExamFinding = (0, import_core19.list)({
     ...trackingFields
   }
 });
-var DiagnosisCode = (0, import_core19.list)({
+var DiagnosisCode = (0, import_core20.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term", listView: { initialColumns: ["codeSystem", "code", "term", "active"] } },
   fields: {
     codeSystem: choice(["practice", "venomcode", "snomed_vet"], "practice"),
-    code: (0, import_fields20.text)({ validation: { isRequired: true } }),
-    term: (0, import_fields20.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields21.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields21.text)({ validation: { isRequired: true } }),
     species: relationship({ ref: "Species", many: true }),
-    active: (0, import_fields20.checkbox)({ defaultValue: true }),
+    active: (0, import_fields21.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Problem = (0, import_core19.list)({
+var Problem = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["patient", "term", "status", "chronic", "onset"] } },
   fields: {
@@ -4657,14 +5039,14 @@ var Problem = (0, import_core19.list)({
     code: relationship({ ref: "DiagnosisCode", ...readOnly }),
     term: systemText({ required: true }),
     status: lifecycle(["active", "resolved", "inactive"]),
-    chronic: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
-    onset: (0, import_fields20.calendarDay)({ ...readOnly }),
-    resolvedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    chronic: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
+    onset: (0, import_fields21.calendarDay)({ ...readOnly }),
+    resolvedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Diagnosis = (0, import_core19.list)({
+var Diagnosis = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "term", listView: { initialColumns: ["encounter", "term", "certainty"] } },
   fields: {
@@ -4678,7 +5060,7 @@ var Diagnosis = (0, import_core19.list)({
     ...trackingFields
   }
 });
-var ClinicalAttachment = (0, import_core19.list)({
+var ClinicalAttachment = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "caption" },
   fields: {
@@ -4691,7 +5073,7 @@ var ClinicalAttachment = (0, import_core19.list)({
     ...trackingFields
   }
 });
-var ClinicalDocument = (0, import_core19.list)({
+var ClinicalDocument = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { labelField: "title", listView: { initialColumns: ["patient", "kind", "title", "status", "createdAt"] } },
   fields: {
@@ -4705,41 +5087,41 @@ var ClinicalDocument = (0, import_core19.list)({
     sourceHash: systemText(),
     document: relationship({ ref: "Document", ...readOnly }),
     signedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    renderedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    renderedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     // The rendered document (database store, the default; an object-store adapter keeps only the
     // key). Deterministic from the frozen source, so sha256 proves it was not altered.
     mimeType: systemText(),
-    body: (0, import_fields20.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
+    body: (0, import_fields21.text)({ ...readOnly, ui: { ...readOnly.ui, displayMode: "textarea" } }),
     sha256: systemText(),
     renderError: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var RecordTemplate = (0, import_core19.list)({
+var RecordTemplate = (0, import_core20.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "kind", "sectionKind", "active"] } },
   fields: {
-    name: (0, import_fields20.text)({ validation: { isRequired: true } }),
+    name: (0, import_fields21.text)({ validation: { isRequired: true } }),
     kind: choice(["wellness", "sick", "recheck", "surgery", "dental", "euthanasia", "discharge", "phone"], "wellness"),
     sectionKind: choice([...SECTION_KINDS], "objective"),
     species: relationship({ ref: "Species" }),
-    body: (0, import_fields20.text)({ ui: { displayMode: "textarea" } }),
-    templateVersion: (0, import_fields20.integer)({ defaultValue: 1 }),
-    active: (0, import_fields20.checkbox)({ defaultValue: true }),
+    body: (0, import_fields21.text)({ ui: { displayMode: "textarea" } }),
+    templateVersion: (0, import_fields21.integer)({ defaultValue: 1 }),
+    active: (0, import_fields21.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var Glossary = (0, import_core19.list)({
+var Glossary = (0, import_core20.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "term" },
   fields: {
-    term: (0, import_fields20.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
-    expansion: (0, import_fields20.text)({ validation: { isRequired: true } }),
+    term: (0, import_fields21.text)({ validation: { isRequired: true }, isIndexed: "unique" }),
+    expansion: (0, import_fields21.text)({ validation: { isRequired: true } }),
     ...trackingFields
   }
 });
-var ScribeSession = (0, import_core19.list)({
+var ScribeSession = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["encounter", "status", "transcriptionProvider", "modelProvider", "createdAt"] } },
   fields: {
@@ -4747,9 +5129,9 @@ var ScribeSession = (0, import_core19.list)({
     startedBy: relationship({ ref: "StaffMember", ...readOnly }),
     startedByAgent: relationship({ ref: "AgentIdentity", ...readOnly }),
     clientConsent: relationship({ ref: "ConsentRecord", ...readOnly }),
-    staffAcknowledged: (0, import_fields20.checkbox)({ ...readOnly, defaultValue: false }),
+    staffAcknowledged: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
     audioDocument: relationship({ ref: "Document", ...readOnly }),
-    audioDeleteAfter: (0, import_fields20.timestamp)({ ...readOnly }),
+    audioDeleteAfter: (0, import_fields21.timestamp)({ ...readOnly }),
     transcriptRef: systemText(),
     transcript: systemText(),
     transcriptionProvider: systemText(),
@@ -4761,23 +5143,23 @@ var ScribeSession = (0, import_core19.list)({
     ...trackingFields
   }
 });
-var ScribeDraft = (0, import_core19.list)({
+var ScribeDraft = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   fields: {
     session: relationship({ ref: "ScribeSession.drafts", ...readOnly }),
-    sections: (0, import_fields20.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
-    suggestedCharges: (0, import_fields20.json)({ ...readOnly }),
+    sections: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "[{ kind, body, evidence: [transcript spans] }]" } }),
+    suggestedCharges: (0, import_fields21.json)({ ...readOnly }),
     confidence: rate(),
     modelRef: systemText(),
-    acceptedBlocks: (0, import_fields20.json)({ ...readOnly }),
+    acceptedBlocks: (0, import_fields21.json)({ ...readOnly }),
     status: lifecycle(["proposed", "partly_accepted", "accepted", "rejected"]),
     decidedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    decidedAt: (0, import_fields20.timestamp)({ ...readOnly }),
+    decidedAt: (0, import_fields21.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Referral = (0, import_core19.list)({
+var Referral = (0, import_core20.list)({
   access: governed([...CLINICAL_READ]),
   ui: { listView: { initialColumns: ["patient", "direction", "hospital", "urgency", "status"] } },
   fields: {
@@ -4797,11 +5179,11 @@ var Referral = (0, import_core19.list)({
 });
 
 // features/keystone/models/treatment.ts
-var import_core20 = require("@keystone-6/core");
-var import_fields21 = require("@keystone-6/core/fields");
+var import_core21 = require("@keystone-6/core");
+var import_fields22 = require("@keystone-6/core/fields");
 var CLINICAL_READ2 = ["canReadClinical"];
 var ROUTES = ["po", "iv", "im", "sc", "topical", "otic", "ophthalmic", "inhaled", "intranasal", "io", "rectal", "transdermal", "other"];
-var ClinicalOrder = (0, import_core20.list)({
+var ClinicalOrder = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "kind", "description", "status", "orderedBy"] } },
   fields: {
@@ -4818,28 +5200,28 @@ var ClinicalOrder = (0, import_core20.list)({
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     dose: relationship({ ref: "DoseCalculation", ...readOnly }),
     frequency: systemText(),
-    schedule: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
+    schedule: (0, import_fields22.json)({ ...readOnly, ui: { ...readOnly.ui, description: '{ frequency: "q8h" | "SID" | "BID" | "TID" | "PRN" | "once", startAt, durationHours }' } }),
     route: fixedChoice(ROUTES),
     quantity: qty(),
     quantityUnit: unit(),
-    extralabel: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
-    emergencyStabilisation: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
+    extralabel: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
+    emergencyStabilisation: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
     overrideReason: systemText(),
-    warnings: (0, import_fields21.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
+    warnings: (0, import_fields22.json)({ ...readOnly, defaultValue: [], ui: { ...readOnly.ui, description: "Contraindication and safety warnings shown when ordering, acknowledged by the orderer." } }),
     cancelReason: systemText(),
     administrations: relationship({ ref: "Administration.order", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DoseCalculation = (0, import_core20.list)({
+var DoseCalculation = (0, import_core21.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["product", "weightKg", "doseAmount", "doseUnit", "totalAmount", "roundedQty", "computedUnit"] } },
   fields: {
     patient: relationship({ ref: "Patient", ...readOnly }),
     weight: relationship({ ref: "WeightMeasurement", ...readOnly }),
     weightKg: wt({ required: true }),
-    weightAgeHours: (0, import_fields21.integer)({ ...readOnly }),
+    weightAgeHours: (0, import_fields22.integer)({ ...readOnly }),
     doseAmount: qty({ required: true }),
     doseUnit: fixedChoice(["mg", "mcg", "g", "mL", "IU", "unit", "tablet", "capsule", "dose"]),
     dosePer: fixedChoice(["kg", "m2", "animal"]),
@@ -4852,20 +5234,20 @@ var DoseCalculation = (0, import_core20.list)({
     concentrationUnit: systemText(),
     computedQty: qty(),
     computedUnit: systemText(),
-    roundingRule: (0, import_fields21.json)({ ...readOnly }),
+    roundingRule: (0, import_fields22.json)({ ...readOnly }),
     roundedQty: qty(),
     deliveredAmount: qty(),
-    deviationBps: (0, import_fields21.integer)({ ...readOnly }),
+    deviationBps: (0, import_fields22.integer)({ ...readOnly }),
     manualOverrideQty: qty(),
     overrideReason: systemText(),
-    warnings: (0, import_fields21.json)({ ...readOnly, defaultValue: [] }),
+    warnings: (0, import_fields22.json)({ ...readOnly, defaultValue: [] }),
     calcVersion: systemText({ required: true }),
     hash: systemText({ required: true }),
     by: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var InventoryLot = (0, import_core20.list)({
+var InventoryLot = (0, import_core21.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "lotNumber", listView: { initialColumns: ["lotNumber", "drug", "vaccine", "expiresOn", "status", "location"] } },
   fields: {
@@ -4873,14 +5255,14 @@ var InventoryLot = (0, import_core20.list)({
     vaccine: relationship({ ref: "VaccineProduct", ...readOnly }),
     location: relationship({ ref: "Location", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    expiresOn: (0, import_fields21.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    expiresOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["available", "quarantined", "disposed"]),
     quarantineReason: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var Administration = (0, import_core20.list)({
+var Administration = (0, import_core21.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["order", "patient", "qty", "unit", "route", "givenBy", "givenAt"] } },
   fields: {
@@ -4890,7 +5272,7 @@ var Administration = (0, import_core20.list)({
     treatmentTask: relationship({ ref: "TreatmentTask", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText(),
-    lotExpiresOn: (0, import_fields21.calendarDay)({ ...readOnly }),
+    lotExpiresOn: (0, import_fields22.calendarDay)({ ...readOnly }),
     csContainer: relationship({ ref: "CsContainer", ...readOnly }),
     csLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
     qty: qty({ required: true }),
@@ -4902,7 +5284,7 @@ var Administration = (0, import_core20.list)({
     witness: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
     wasteLogEntry: relationship({ ref: "CsLogEntry", ...readOnly }),
-    givenAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    givenAt: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     wasteQty: qty(),
     reverses: relationship({ ref: "Administration", ...readOnly }),
     reason: systemText(),
@@ -4910,7 +5292,7 @@ var Administration = (0, import_core20.list)({
     qtyOverrideReason: systemText()
   }
 });
-var Ward = (0, import_core20.list)({
+var Ward = (0, import_core21.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
@@ -4921,19 +5303,19 @@ var Ward = (0, import_core20.list)({
     ...trackingFields
   }
 });
-var Cage = (0, import_core20.list)({
+var Cage = (0, import_core21.list)({
   access: managed("canReadClinical", "canManagePractice"),
   ui: { labelField: "code", listView: { initialColumns: ["code", "ward", "size", "active"] } },
   fields: {
     ward: relationship({ ref: "Ward.cages" }),
     code: systemText({ required: true, indexed: "unique" }),
     size: choice(["small", "medium", "large", "run"], "medium"),
-    features: (0, import_fields21.json)({ defaultValue: {} }),
-    active: (0, import_fields21.checkbox)({ defaultValue: true }),
+    features: (0, import_fields22.json)({ defaultValue: {} }),
+    active: (0, import_fields22.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var HospitalStay = (0, import_core20.list)({
+var HospitalStay = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "status", "cage", "admittedAt", "attendingDvm"] } },
   fields: {
@@ -4942,8 +5324,8 @@ var HospitalStay = (0, import_core20.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    admittedAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    dischargedAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    admittedAt: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dischargedAt: (0, import_fields22.timestamp)({ ...readOnly }),
     status: lifecycle(["admitted", "in_care", "ready_for_discharge", "discharged", "transferred", "deceased"]),
     codeStatus: fixedChoice(["full", "closed_chest_only", "dnr"]),
     attendingDvm: relationship({ ref: "StaffMember", ...readOnly }),
@@ -4954,17 +5336,17 @@ var HospitalStay = (0, import_core20.list)({
     ...trackingFields
   }
 });
-var CageAssignment = (0, import_core20.list)({
+var CageAssignment = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     stay: relationship({ ref: "HospitalStay.assignments", ...readOnly }),
     cage: relationship({ ref: "Cage", ...readOnly }),
-    fromAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    toAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    fromAt: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    toAt: (0, import_fields22.timestamp)({ ...readOnly }),
     ...trackingFields
   }
 });
-var TreatmentSheetOrder = (0, import_core20.list)({
+var TreatmentSheetOrder = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["stay", "order", "frequency", "active", "materialisedThrough"] } },
   fields: {
@@ -4972,37 +5354,37 @@ var TreatmentSheetOrder = (0, import_core20.list)({
     order: relationship({ ref: "ClinicalOrder", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
     frequency: fixedChoice(["q1h", "q2h", "q4h", "q6h", "q8h", "q12h", "sid", "bid", "tid", "qid", "prn", "cri", "once"]),
-    startAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    endAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    startAt: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    endAt: (0, import_fields22.timestamp)({ ...readOnly }),
     instructions: systemText(),
-    materialisedThrough: (0, import_fields21.timestamp)({ ...readOnly }),
-    graceMinutes: (0, import_fields21.integer)({ ...readOnly, defaultValue: 30 }),
-    active: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: true }),
+    materialisedThrough: (0, import_fields22.timestamp)({ ...readOnly }),
+    graceMinutes: (0, import_fields22.integer)({ ...readOnly, defaultValue: 30 }),
+    active: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: true }),
     tasks: relationship({ ref: "TreatmentTask.sheetOrder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var TreatmentTask = (0, import_core20.list)({
+var TreatmentTask = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["patient", "sheetOrder", "dueAt", "status", "doneBy"] } },
   fields: {
     sheetOrder: relationship({ ref: "TreatmentSheetOrder.tasks", ...readOnly }),
     stay: relationship({ ref: "HospitalStay", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    dueAt: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    dueAt: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "missed", "done", "skipped", "rescheduled"]),
     doneBy: relationship({ ref: "StaffMember", ...readOnly }),
-    doneAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    doneAt: (0, import_fields22.timestamp)({ ...readOnly }),
     skipReason: systemText(),
     rescheduledTo: relationship({ ref: "TreatmentTask", ...readOnly }),
     administration: relationship({ ref: "Administration", ...readOnly }),
-    observation: (0, import_fields21.json)({ ...readOnly }),
+    observation: (0, import_fields22.json)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AnaesthesiaRecord = (0, import_core20.list)({
+var AnaesthesiaRecord = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "asaStatus", "status", "anaesthetist", "inductionAt"] } },
   fields: {
@@ -5011,16 +5393,16 @@ var AnaesthesiaRecord = (0, import_core20.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     procedure: systemText({ required: true }),
     asaStatus: fixedChoice(["I", "II", "III", "IV", "V", "IE", "IIE", "IIIE", "IVE", "VE"]),
-    fastingConfirmed: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
-    consentConfirmed: (0, import_fields21.checkbox)({ ...readOnly, defaultValue: false }),
+    fastingConfirmed: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
+    consentConfirmed: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
     preWeight: relationship({ ref: "WeightMeasurement", ...readOnly }),
-    ivCatheter: (0, import_fields21.json)({ ...readOnly }),
-    protocol: (0, import_fields21.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
-    checklist: (0, import_fields21.json)({ ...readOnly }),
-    inductionAt: (0, import_fields21.timestamp)({ ...readOnly }),
-    intubatedAt: (0, import_fields21.timestamp)({ ...readOnly }),
-    extubatedAt: (0, import_fields21.timestamp)({ ...readOnly }),
-    recoveryEndAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    ivCatheter: (0, import_fields22.json)({ ...readOnly }),
+    protocol: (0, import_fields22.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Premedication, induction and maintenance plan." } }),
+    checklist: (0, import_fields22.json)({ ...readOnly }),
+    inductionAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    intubatedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    extubatedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    recoveryEndAt: (0, import_fields22.timestamp)({ ...readOnly }),
     anaesthetist: relationship({ ref: "StaffMember", ...readOnly }),
     dvm: relationship({ ref: "StaffMember", ...readOnly }),
     licenseEvaluation: relationship({ ref: "LicenseEvaluation", ...readOnly }),
@@ -5032,19 +5414,19 @@ var AnaesthesiaRecord = (0, import_core20.list)({
     ...trackingFields
   }
 });
-var MonitoringReading = (0, import_core20.list)({
+var MonitoringReading = (0, import_core21.list)({
   access: immutable([...CLINICAL_READ2]),
   ui: { listView: { initialColumns: ["record", "at", "hr", "rr", "spo2", "etco2", "map", "tempC"] } },
   fields: {
     record: relationship({ ref: "AnaesthesiaRecord.readings", ...readOnly }),
-    at: (0, import_fields21.timestamp)({ ...readOnly, validation: { isRequired: true } }),
-    hr: (0, import_fields21.integer)({ ...readOnly }),
-    rr: (0, import_fields21.integer)({ ...readOnly }),
-    spo2: (0, import_fields21.integer)({ ...readOnly }),
-    etco2: (0, import_fields21.integer)({ ...readOnly }),
-    sbp: (0, import_fields21.integer)({ ...readOnly }),
-    dbp: (0, import_fields21.integer)({ ...readOnly }),
-    map: (0, import_fields21.integer)({ ...readOnly }),
+    at: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } }),
+    hr: (0, import_fields22.integer)({ ...readOnly }),
+    rr: (0, import_fields22.integer)({ ...readOnly }),
+    spo2: (0, import_fields22.integer)({ ...readOnly }),
+    etco2: (0, import_fields22.integer)({ ...readOnly }),
+    sbp: (0, import_fields22.integer)({ ...readOnly }),
+    dbp: (0, import_fields22.integer)({ ...readOnly }),
+    map: (0, import_fields22.integer)({ ...readOnly }),
     tempC: qty(),
     agentPct: qty(),
     o2FlowLpm: qty(),
@@ -5053,7 +5435,7 @@ var MonitoringReading = (0, import_core20.list)({
     by: relationship({ ref: "StaffMember", ...readOnly })
   }
 });
-var SurgeryReport = (0, import_core20.list)({
+var SurgeryReport = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -5070,17 +5452,17 @@ var SurgeryReport = (0, import_core20.list)({
     ...trackingFields
   }
 });
-var DentalChart = (0, import_core20.list)({
+var DentalChart = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    teeth: (0, import_fields21.json)({ ...readOnly, defaultValue: {} }),
+    teeth: (0, import_fields22.json)({ ...readOnly, defaultValue: {} }),
     version: versionField(),
     ...trackingFields
   }
 });
-var DischargeInstruction = (0, import_core20.list)({
+var DischargeInstruction = (0, import_core21.list)({
   access: governed([...CLINICAL_READ2]),
   fields: {
     encounter: relationship({ ref: "Encounter", ...readOnly }),
@@ -5088,37 +5470,37 @@ var DischargeInstruction = (0, import_core20.list)({
     patient: relationship({ ref: "Patient", ...readOnly }),
     body: systemText({ required: true }),
     medsSummary: systemText(),
-    recheckOn: (0, import_fields21.calendarDay)({ ...readOnly }),
-    sentAt: (0, import_fields21.timestamp)({ ...readOnly }),
+    recheckOn: (0, import_fields22.calendarDay)({ ...readOnly }),
+    sentAt: (0, import_fields22.timestamp)({ ...readOnly }),
     author: relationship({ ref: "StaffMember", ...readOnly }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/preventive.ts
-var import_core21 = require("@keystone-6/core");
-var import_fields22 = require("@keystone-6/core/fields");
+var import_core22 = require("@keystone-6/core");
+var import_fields23 = require("@keystone-6/core/fields");
 var CLINICAL_READ3 = ["canReadClinical"];
 var REMINDER_READ = ["canReadClinical", "canBook", "canMessageClients"];
-var VaccineProduct = (0, import_core21.list)({
+var VaccineProduct = (0, import_core22.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name", listView: { initialColumns: ["name", "manufacturer", "isRabies", "licensedDoiMonths", "minAgeWeeks", "active"] } },
   fields: {
-    name: (0, import_fields22.text)({ validation: { isRequired: true } }),
-    manufacturer: (0, import_fields22.text)({ validation: { isRequired: true } }),
-    antigens: (0, import_fields22.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
+    name: (0, import_fields23.text)({ validation: { isRequired: true } }),
+    manufacturer: (0, import_fields23.text)({ validation: { isRequired: true } }),
+    antigens: (0, import_fields23.json)({ defaultValue: [], ui: { description: 'e.g. ["rabies"] or ["CDV","CAV2","CPV","CPiV"].' } }),
     species: relationship({ ref: "Species", many: true }),
-    licensedDoiMonths: (0, import_fields22.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
-    minAgeWeeks: (0, import_fields22.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
-    isRabies: (0, import_fields22.checkbox)({ defaultValue: false }),
-    usdaProductCode: (0, import_fields22.text)(),
+    licensedDoiMonths: (0, import_fields23.integer)({ validation: { isRequired: true, min: 1, max: 48 }, defaultValue: 12 }),
+    minAgeWeeks: (0, import_fields23.integer)({ validation: { isRequired: true, min: 4, max: 52 }, defaultValue: 8 }),
+    isRabies: (0, import_fields23.checkbox)({ defaultValue: false }),
+    usdaProductCode: (0, import_fields23.text)(),
     defaultRoute: choice(["sc", "im", "intranasal", "po", "transdermal"], "sc"),
     reminderType: relationship({ ref: "ReminderType" }),
-    active: (0, import_fields22.checkbox)({ defaultValue: true }),
+    active: (0, import_fields23.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var VaccineAdministration = (0, import_core21.list)({
+var VaccineAdministration = (0, import_core22.list)({
   access: immutable([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "lotNumber", "administeredOn", "dueNextOn", "vaccinatedBy"] } },
   fields: {
@@ -5128,17 +5510,17 @@ var VaccineAdministration = (0, import_core21.list)({
     product: relationship({ ref: "VaccineProduct", ...readOnly }),
     lot: relationship({ ref: "InventoryLot", ...readOnly }),
     lotNumber: systemText({ required: true }),
-    lotExpiresOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    doseSeries: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
-    isInitialSeries: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
+    lotExpiresOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    doseSeries: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
+    isInitialSeries: (0, import_fields23.checkbox)({ ...readOnly, defaultValue: false }),
     route: fixedChoice(["sc", "im", "intranasal", "po", "transdermal"]),
     site: systemText({ required: true }),
-    administeredOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
-    dueNextOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    administeredOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
+    dueNextOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     vaccinatedBy: relationship({ ref: "StaffMember", ...readOnly }),
     supervisingDvm: relationship({ ref: "StaffMember", ...readOnly }),
-    policyVersions: (0, import_fields22.json)({ ...readOnly }),
+    policyVersions: (0, import_fields23.json)({ ...readOnly }),
     certificate: relationship({ ref: "RabiesCertificate", ...readOnly }),
     source: fixedChoice(["administered", "import", "external_evidence", "reversal"]),
     /** M5: a reversal is a new row pointing at the dose it cancels (append-only, DVM, with a reason). */
@@ -5146,45 +5528,45 @@ var VaccineAdministration = (0, import_core21.list)({
     reason: systemText()
   }
 });
-var RabiesCertificate = (0, import_core21.list)({
+var RabiesCertificate = (0, import_core22.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "patient", "vaccinatedOn", "nextDueOn", "tagNumber"] } },
   fields: {
     ref: systemText({ indexed: "unique", required: true }),
     patient: relationship({ ref: "Patient", ...readOnly }),
-    ownerSnapshot: (0, import_fields22.json)({ ...readOnly }),
-    patientSnapshot: (0, import_fields22.json)({ ...readOnly }),
-    vaccineSnapshot: (0, import_fields22.json)({ ...readOnly }),
-    vetSnapshot: (0, import_fields22.json)({ ...readOnly }),
-    vaccinatedOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
-    durationMonths: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
-    nextDueOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    ownerSnapshot: (0, import_fields23.json)({ ...readOnly }),
+    patientSnapshot: (0, import_fields23.json)({ ...readOnly }),
+    vaccineSnapshot: (0, import_fields23.json)({ ...readOnly }),
+    vetSnapshot: (0, import_fields23.json)({ ...readOnly }),
+    vaccinatedOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    durationMonths: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
+    nextDueOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     tagNumber: systemText(),
     tagJurisdiction: systemText(),
-    fields: (0, import_fields22.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
-    missingFields: (0, import_fields22.json)({ ...readOnly, defaultValue: [] }),
+    fields: (0, import_fields23.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Every certificate field the rabies policy requires, by name." } }),
+    missingFields: (0, import_fields23.json)({ ...readOnly, defaultValue: [] }),
     document: relationship({ ref: "ClinicalDocument", ...readOnly }),
     reportedTo: fixedChoice(["none", "county", "city"]),
-    reportedAt: (0, import_fields22.timestamp)({ ...readOnly }),
-    policyVersions: (0, import_fields22.json)({ ...readOnly }),
+    reportedAt: (0, import_fields23.timestamp)({ ...readOnly }),
+    policyVersions: (0, import_fields23.json)({ ...readOnly }),
     /** Set when the vaccine it certifies is reversed; a void certificate is kept, never deleted. */
-    voidedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    voidedAt: (0, import_fields23.timestamp)({ ...readOnly }),
     voidReason: systemText(),
     ...trackingFields
   }
 });
-var ReminderType = (0, import_core21.list)({
+var ReminderType = (0, import_core22.list)({
   access: managed("signedIn", "canManagePractice"),
   ui: { labelField: "name" },
   fields: {
-    code: (0, import_fields22.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
-    name: (0, import_fields22.text)({ validation: { isRequired: true } }),
+    code: (0, import_fields23.text)({ isIndexed: "unique", validation: { isRequired: true, match: { regex: /^[A-Z0-9_]{2,32}$/, explanation: "Capital letters, digits and underscores." } } }),
+    name: (0, import_fields23.text)({ validation: { isRequired: true } }),
     kind: choice(["vaccine", "test", "procedure", "recheck", "preventive_med"], "vaccine"),
-    active: (0, import_fields22.checkbox)({ defaultValue: true }),
+    active: (0, import_fields23.checkbox)({ defaultValue: true }),
     ...trackingFields
   }
 });
-var ReminderProtocol = (0, import_core21.list)({
+var ReminderProtocol = (0, import_core22.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "name" },
   fields: {
@@ -5195,25 +5577,25 @@ var ReminderProtocol = (0, import_core21.list)({
     ...trackingFields
   }
 });
-var ReminderProtocolVersion = (0, import_core21.list)({
+var ReminderProtocolVersion = (0, import_core22.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "label" },
   fields: {
     protocol: relationship({ ref: "ReminderProtocol.versions", ...readOnly }),
     label: systemText({ required: true }),
-    versionNumber: (0, import_fields22.integer)({ ...readOnly, validation: { isRequired: true } }),
+    versionNumber: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
     rules: relationship({ ref: "ReminderRule.protocolVersion", many: true, ...readOnly }),
-    sourceRefs: (0, import_fields22.json)({ ...readOnly }),
-    verified: (0, import_fields22.checkbox)({ ...readOnly, defaultValue: false }),
-    unverifiedRules: (0, import_fields22.json)({ ...readOnly, defaultValue: [] }),
+    sourceRefs: (0, import_fields23.json)({ ...readOnly }),
+    verified: (0, import_fields23.checkbox)({ ...readOnly, defaultValue: false }),
+    unverifiedRules: (0, import_fields23.json)({ ...readOnly, defaultValue: [] }),
     status: lifecycle(["draft", "published", "superseded"]),
-    publishedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    publishedAt: (0, import_fields23.timestamp)({ ...readOnly }),
     contentHash: systemText(),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderRule = (0, import_core21.list)({
+var ReminderRule = (0, import_core22.list)({
   access: governed("canAccessDashboard"),
   fields: {
     protocolVersion: relationship({ ref: "ReminderProtocolVersion.rules", ...readOnly }),
@@ -5221,14 +5603,14 @@ var ReminderRule = (0, import_core21.list)({
     triggerVaccines: relationship({ ref: "VaccineProduct", many: true, ...readOnly }),
     triggerServiceCode: systemText(),
     satisfies: relationship({ ref: "ReminderType", ...readOnly }),
-    schedule: (0, import_fields22.json)({ ...readOnly }),
-    leadDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 30 }),
-    graceDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 30 }),
-    lapseDays: (0, import_fields22.integer)({ ...readOnly, defaultValue: 180 }),
+    schedule: (0, import_fields23.json)({ ...readOnly }),
+    leadDays: (0, import_fields23.integer)({ ...readOnly, defaultValue: 30 }),
+    graceDays: (0, import_fields23.integer)({ ...readOnly, defaultValue: 30 }),
+    lapseDays: (0, import_fields23.integer)({ ...readOnly, defaultValue: 180 }),
     ...trackingFields
   }
 });
-var PatientReminder = (0, import_core21.list)({
+var PatientReminder = (0, import_core22.list)({
   access: governed([...REMINDER_READ]),
   ui: { listView: { initialColumns: ["patient", "type", "dueOn", "status", "source"] } },
   fields: {
@@ -5236,19 +5618,19 @@ var PatientReminder = (0, import_core21.list)({
     location: relationship({ ref: "Location", ...readOnly }),
     type: relationship({ ref: "ReminderType", ...readOnly }),
     rule: relationship({ ref: "ReminderRule", ...readOnly }),
-    dueOn: (0, import_fields22.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
+    dueOn: (0, import_fields23.calendarDay)({ ...readOnly, validation: { isRequired: true } }),
     status: lifecycle(["scheduled", "due", "overdue", "satisfied", "suppressed", "lapsed"]),
     suppressedReason: systemText(),
     protocolVersion: relationship({ ref: "ReminderProtocolVersion", ...readOnly }),
     source: fixedChoice(["protocol", "vaccine", "manual", "import"]),
     sourceKey: systemText({ required: true }),
-    lastNotifiedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    lastNotifiedAt: (0, import_fields23.timestamp)({ ...readOnly }),
     satisfactions: relationship({ ref: "ReminderSatisfaction.reminder", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ReminderSatisfaction = (0, import_core21.list)({
+var ReminderSatisfaction = (0, import_core22.list)({
   access: immutable([...CLINICAL_READ3]),
   fields: {
     reminder: relationship({ ref: "PatientReminder.satisfactions", ...readOnly }),
@@ -5258,10 +5640,10 @@ var ReminderSatisfaction = (0, import_core21.list)({
     externalEvidence: relationship({ ref: "Document", ...readOnly }),
     note: systemText(),
     recordedBy: relationship({ ref: "StaffMember", ...readOnly }),
-    at: (0, import_fields22.timestamp)({ ...readOnly, validation: { isRequired: true } })
+    at: (0, import_fields23.timestamp)({ ...readOnly, validation: { isRequired: true } })
   }
 });
-var AdverseEventReport = (0, import_core21.list)({
+var AdverseEventReport = (0, import_core22.list)({
   access: governed([...CLINICAL_READ3]),
   ui: { listView: { initialColumns: ["patient", "product", "severity", "reportedTo", "status"] } },
   fields: {
@@ -5276,7 +5658,7 @@ var AdverseEventReport = (0, import_core21.list)({
     reportedTo: fixedChoice(["manufacturer", "fda_cvm", "usda_cvb"]),
     status: lifecycle(["draft", "submitted", "acknowledged"]),
     reference: systemText(),
-    submittedAt: (0, import_fields22.timestamp)({ ...readOnly }),
+    submittedAt: (0, import_fields23.timestamp)({ ...readOnly }),
     createdBy: relationship({ ref: "StaffMember", ...readOnly }),
     version: versionField(),
     ...trackingFields
@@ -5284,9 +5666,9 @@ var AdverseEventReport = (0, import_core21.list)({
 });
 
 // features/keystone/models/imports.ts
-var import_core22 = require("@keystone-6/core");
-var import_fields23 = require("@keystone-6/core/fields");
-var ImportBatch = (0, import_core22.list)({
+var import_core23 = require("@keystone-6/core");
+var import_fields24 = require("@keystone-6/core/fields");
+var ImportBatch = (0, import_core23.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { labelField: "ref", listView: { initialColumns: ["ref", "system", "entity", "status", "rowsTotal", "rowsCreated", "rowsFailed"] } },
   fields: {
@@ -5298,36 +5680,36 @@ var ImportBatch = (0, import_core22.list)({
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),
     status: lifecycle(["received", "validated", "applying", "applied", "failed"]),
-    rowsTotal: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsCreated: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsSkipped: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
-    rowsFailed: (0, import_fields23.integer)({ ...readOnly, defaultValue: 0 }),
-    mapping: (0, import_fields23.json)({ ...readOnly }),
+    rowsTotal: (0, import_fields24.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsCreated: (0, import_fields24.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsSkipped: (0, import_fields24.integer)({ ...readOnly, defaultValue: 0 }),
+    rowsFailed: (0, import_fields24.integer)({ ...readOnly, defaultValue: 0 }),
+    mapping: (0, import_fields24.json)({ ...readOnly }),
     startedBy: relationship({ ref: "User", ...readOnly }),
-    finishedAt: (0, import_fields23.timestamp)({ ...readOnly }),
+    finishedAt: (0, import_fields24.timestamp)({ ...readOnly }),
     rows: relationship({ ref: "ImportRow.batch", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var ImportRow = (0, import_core22.list)({
+var ImportRow = (0, import_core23.list)({
   access: governed(["canManageOnboarding", "canManageIntegrations"]),
   ui: { listView: { initialColumns: ["batch", "rowNumber", "externalId", "result", "recordType"] } },
   fields: {
     batch: relationship({ ref: "ImportBatch.rows", ...readOnly }),
-    rowNumber: (0, import_fields23.integer)({ ...readOnly, validation: { isRequired: true } }),
+    rowNumber: (0, import_fields24.integer)({ ...readOnly, validation: { isRequired: true } }),
     externalId: systemText({ required: true }),
     result: fixedChoice(["created", "skipped_existing", "failed"]),
     recordType: systemText(),
     recordId: systemText(),
-    errors: (0, import_fields23.json)({ ...readOnly, defaultValue: [] }),
+    errors: (0, import_fields24.json)({ ...readOnly, defaultValue: [] }),
     ...trackingFields
   }
 });
 
 // features/keystone/models/agents.ts
-var import_core23 = require("@keystone-6/core");
-var import_fields24 = require("@keystone-6/core/fields");
+var import_core24 = require("@keystone-6/core");
+var import_fields25 = require("@keystone-6/core/fields");
 var AGENT_SCOPES = [
   "reception.read",
   "reception.book",
@@ -5357,43 +5739,43 @@ var PROPOSAL_KINDS = [
   "boarding.reserve",
   "reminder.send"
 ];
-var AgentToolGrant = (0, import_core23.list)({
+var AgentToolGrant = (0, import_core24.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "scope", listView: { initialColumns: ["agent", "scope", "status", "createdAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.grants", ...readOnly }),
     scope: fixedChoice(AGENT_SCOPES),
-    constraints: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
+    constraints: (0, import_fields25.json)({ ...readOnly, ui: { ...readOnly.ui, description: 'Limits, e.g. {"locations":["\u2026"],"maxBookingsPerCall":3}.' } }),
     status: lifecycle(["requested", "active", "revoked"]),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    revokedAt: (0, import_fields24.timestamp)({ ...readOnly }),
+    revokedAt: (0, import_fields25.timestamp)({ ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentRun = (0, import_core23.list)({
+var AgentRun = (0, import_core24.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "callRecordId", listView: { initialColumns: ["agent", "status", "startedAt", "endedAt"] } },
   fields: {
     agent: relationship({ ref: "AgentIdentity.runs", ...readOnly }),
-    startedAt: (0, import_fields24.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
-    endedAt: (0, import_fields24.timestamp)({ ...readOnly }),
+    startedAt: (0, import_fields25.timestamp)({ defaultValue: { kind: "now" }, ...readOnly }),
+    endedAt: (0, import_fields25.timestamp)({ ...readOnly }),
     status: lifecycle(["started", "completed", "failed", "aborted"]),
     promptHash: hiddenHash(),
-    toolCalls: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
-    costMeta: (0, import_fields24.json)({ ...readOnly }),
+    toolCalls: (0, import_fields25.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Tool names and argument hashes, never raw arguments." } }),
+    costMeta: (0, import_fields25.json)({ ...readOnly }),
     callRecordId: systemText({ indexed: true }),
     proposals: relationship({ ref: "Proposal.agentRun", many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields
   }
 });
-var Proposal = (0, import_core23.list)({
+var Proposal = (0, import_core24.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "kind", listView: { initialColumns: ["kind", "status", "proposedByAgent", "proposedByUser", "createdAt"] } },
   fields: {
     kind: fixedChoice(PROPOSAL_KINDS),
-    payload: (0, import_fields24.json)({ ...readOnly }),
+    payload: (0, import_fields25.json)({ ...readOnly }),
     payloadHash: systemText({ required: true, secret: true }),
     status: lifecycle(["proposed", "validated", "approved", "rejected", "expired", "applied"]),
     agentRun: relationship({ ref: "AgentRun.proposals", ...readOnly }),
@@ -5402,12 +5784,12 @@ var Proposal = (0, import_core23.list)({
     targetList: systemText(),
     targetId: systemText({ indexed: true }),
     approval: relationship({ ref: "ApprovalRequest", ...readOnly }),
-    validation: (0, import_fields24.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
+    validation: (0, import_fields25.json)({ ...readOnly, ui: { ...readOnly.ui, description: "Check results recorded when the proposal was validated." } }),
     version: versionField(),
     ...trackingFields
   }
 });
-var AgentAction = (0, import_core23.list)({
+var AgentAction = (0, import_core24.list)({
   access: governed("canAccessDashboard"),
   ui: { labelField: "tool", listView: { initialColumns: ["tool", "outcome", "agent", "at"] } },
   fields: {
@@ -5418,7 +5800,7 @@ var AgentAction = (0, import_core23.list)({
     outcome: fixedChoice(["ok", "scope_denied", "never_allowed", "guard_failed", "error", "killed"]),
     errorCode: systemText(),
     auditEventId: systemText(),
-    at: (0, import_fields24.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
+    at: (0, import_fields25.timestamp)({ defaultValue: { kind: "now" }, ...readOnly })
   }
 });
 
@@ -5459,6 +5841,8 @@ var models = {
   ...BILLING_LISTS,
   // Phase 5: wellness plans, boarding, grooming and end of life
   ...WELLNESS_LISTS,
+  // Phase 6: diagnostics, production and pay, exports, campaigns
+  ...PHASE6_LISTS,
   ...BOARDING_LISTS,
   ...END_OF_LIFE_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import
@@ -5511,8 +5895,8 @@ var models = {
   Proposal
 };
 var API_MAX_TAKE = 500;
-for (const list23 of Object.values(models)) {
-  list23.graphql = { ...list23.graphql ?? {}, maxTake: API_MAX_TAKE };
+for (const list24 of Object.values(models)) {
+  list24.graphql = { ...list24.graphql ?? {}, maxTake: API_MAX_TAKE };
 }
 registerListAccess(models);
 
@@ -7232,7 +7616,7 @@ function parseProtocol(input) {
   return parsed.data;
 }
 var protocolHash = (p) => payloadHash(p);
-var normalise = (text21) => ` ${String(text21 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
+var normalise = (text22) => ` ${String(text22 ?? "").toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
 var mentions = (complaint, keyword) => complaint.includes(normalise(keyword));
 function scoreTriage(protocol, input) {
   const complaint = normalise(input.complaint);
@@ -7311,8 +7695,8 @@ function findSlots(input) {
   return out;
 }
 function buildSegments(template, start, totalMinutes) {
-  const list23 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
-  return list23.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
+  const list24 = template?.length ? template : [{ kind: "exam", offset: 0, minutes: totalMinutes }];
+  return list24.map((s) => ({ kind: s.kind, startsAt: new Date(start + s.offset * 6e4), endsAt: new Date(start + (s.offset + s.minutes) * 6e4) }));
 }
 var SLOT_TTL_MS = 5 * 6e4;
 var DEVELOPMENT_SECRET3 = "this secret should only be used in testing";
@@ -7717,6 +8101,91 @@ async function seedBilling(uow, actor, count) {
   await tx.feeScheduleVersion.update({ where: { id: version.id }, data: { status: "published", publishedAt: now, effectiveFrom: /* @__PURE__ */ new Date("2026-01-01T00:00:00Z") } });
   auditCreate(uow, actor, "FeeScheduleVersion", version.id, "fees.published", { items: made, seeded: true });
   count("feeItems", made);
+}
+
+// features/keystone/seed/phase5.ts
+var SERVICES = [
+  { code: "GROOM-BATH_BRUSH", area: "grooming", name: "Bath and brush", price: 5500, minutes: 60, tax: "grooming" },
+  { code: "GROOM-FULL_GROOM", area: "grooming", name: "Full groom", price: 9500, minutes: 120, tax: "grooming" },
+  { code: "GROOM-NAIL_TRIM", area: "grooming", name: "Nail trim", price: 2e3, minutes: 15, tax: "grooming" },
+  { code: "GROOM-DE_SHED", area: "grooming", name: "De-shedding treatment", price: 7500, minutes: 75, tax: "grooming" },
+  { code: "GROOM-DENTAL_SCALE", area: "grooming", name: "Teeth brushing and breath care", price: 3500, minutes: 30, tax: "grooming" },
+  { code: "EUTH-STANDARD", area: "euthanasia", name: "Euthanasia", price: 18500, minutes: null, tax: "professional_service" },
+  { code: "AFTER-PRIVATE", area: "aftercare", name: "Private cremation, ashes returned", price: 24500, minutes: null, tax: "professional_service" },
+  { code: "AFTER-COMMUNAL", area: "aftercare", name: "Communal cremation", price: 8500, minutes: null, tax: "professional_service" },
+  { code: "MEM-PAW_PRINT", area: "aftercare", name: "Ink paw print", price: 2500, minutes: null, tax: "merchandise" },
+  { code: "MEM-CLAY_IMPRESSION", area: "aftercare", name: "Clay paw impression", price: 4500, minutes: null, tax: "merchandise" },
+  { code: "MEM-FUR_CLIPPING", area: "aftercare", name: "Fur clipping in a keepsake envelope", price: 1500, minutes: null, tax: "merchandise" },
+  { code: "MEM-URN", area: "aftercare", name: "Wooden urn", price: 11e3, minutes: null, tax: "merchandise" },
+  { code: "MEM-KEEPSAKE", area: "aftercare", name: "Engraved keepsake", price: 6500, minutes: null, tax: "merchandise" }
+];
+var RUN_TYPES = [
+  { id: "seed_rt_small", code: "dog_small", name: "Small dog suite", species: ["canine"], maxKg: 10, rate: 4800, deposit: 5e3, runs: 4 },
+  { id: "seed_rt_large", code: "dog_large", name: "Large dog run", species: ["canine"], maxKg: 60, rate: 6500, deposit: 6500, runs: 3 },
+  { id: "seed_rt_cat", code: "cat_condo", name: "Cat condo", species: ["feline"], maxKg: 15, rate: 3600, deposit: 3600, runs: 4 }
+];
+var PLANS = [
+  {
+    code: "PUPPY",
+    name: "Puppy wellness plan",
+    summary: "The first year of exams, vaccines and parasite care in twelve payments.",
+    label: "Puppy plan 2026",
+    price: 3900,
+    species: ["canine"],
+    minAgeWeeks: 6,
+    maxAgeMonths: 12,
+    entitlements: [
+      { code: "EXAM", label: "Wellness exams", qty: 4, retailValueMinor: "7800" },
+      { code: "VACCINE", label: "Core vaccines", qty: 6, retailValueMinor: "3800" },
+      { code: "FECAL", label: "Fecal tests", qty: 2, retailValueMinor: "4200" },
+      { code: "NAIL", label: "Nail trims", qty: 12, retailValueMinor: "2000" }
+    ]
+  },
+  {
+    code: "ADULT",
+    name: "Adult wellness plan",
+    summary: "A yearly exam, vaccines, blood work and dental care spread over twelve months.",
+    label: "Adult plan 2026",
+    price: 4900,
+    species: ["canine", "feline"],
+    minAgeWeeks: null,
+    maxAgeMonths: null,
+    entitlements: [
+      { code: "EXAM", label: "Wellness exams", qty: 2, retailValueMinor: "7800" },
+      { code: "VACCINE", label: "Core vaccines", qty: 3, retailValueMinor: "3800" },
+      { code: "BLOOD", label: "Annual blood panel", qty: 1, retailValueMinor: "14500" },
+      { code: "NAIL", label: "Nail trims", qty: 12, retailValueMinor: "2000" }
+    ]
+  }
+];
+async function seedPhase5(uow, actor, count) {
+  const { tx, now } = uow;
+  if (await tx.serviceItem.findFirst({ select: { id: true } })) return;
+  await tx.serviceItem.createMany({ data: SERVICES.map((s) => ({ code: s.code, area: s.area, name: s.name, priceMinor: BigInt(s.price), minutes: s.minutes, taxCategory: s.tax, active: true })) });
+  count("serviceItems", SERVICES.length);
+  const places = new Set((await tx.location.findMany({ select: { id: true } })).map((l) => l.id));
+  const types = [];
+  const runs = [];
+  for (const loc of ["seed_loc_main", "seed_loc_elkgrove"]) {
+    if (!places.has(loc)) continue;
+    const main = loc === "seed_loc_main";
+    for (const t of RUN_TYPES) {
+      const id2 = main ? t.id : `${t.id}_eg`;
+      types.push({ id: id2, code: main ? t.code : `${t.code}_eg`, name: t.name, locationId: loc, speciesCodes: [...t.species], maxWeightKg: t.maxKg, nightlyRateMinor: BigInt(t.rate), depositMinor: BigInt(t.deposit), active: true });
+      const n = main ? t.runs : Math.max(1, t.runs - 2);
+      for (let i = 1; i <= n; i += 1) runs.push({ label: `${t.name} ${i}`, runTypeId: id2, locationId: loc, status: "available" });
+    }
+  }
+  await tx.runType.createMany({ data: types });
+  await tx.run.createMany({ data: runs });
+  for (const p of PLANS) {
+    const plan = await tx.wellnessPlan.create({ data: { code: p.code, name: p.name, summary: p.summary, status: "active" } });
+    const v = await tx.wellnessPlanVersion.create({
+      data: { planId: plan.id, versionNo: 1, label: p.label, status: "published", monthlyPriceMinor: BigInt(p.price), termMonths: 12, speciesCodes: [...p.species], minAgeWeeks: p.minAgeWeeks, maxAgeMonths: p.maxAgeMonths, entitlements: p.entitlements.map((e) => ({ ...e })), otherServicesDiscountBps: 1e3, trueUpNote: "", disclosure: "", publishedAt: now }
+    });
+    auditCreate(uow, actor, "WellnessPlanVersion", v.id, "wellness.plan_published", { code: p.code, versionNo: 1, seeded: true });
+  }
+  count("wellnessPlans", PLANS.length);
 }
 
 // features/keystone/seed/clinicData.ts
@@ -8215,6 +8684,7 @@ async function seedClinic(uow, actor) {
   await seedClinical(uow, actor, count);
   await seedInventory(uow, actor, count);
   await seedBilling(uow, actor, count);
+  await seedPhase5(uow, actor, count);
   return created;
 }
 
@@ -8350,9 +8820,9 @@ function validatePracticeControls(input) {
   if (!keys.length) throw new DomainError(Codes.INVALID_INPUT, "Nothing to change.");
   for (const key2 of keys) if (!CONTROL_KEYS.includes(key2)) throw new DomainError(Codes.INVALID_INPUT, `${key2} is not a practice control.`, { field: key2 });
   if (input.refundApprovalThresholdMinor !== void 0) {
-    const text21 = String(input.refundApprovalThresholdMinor);
-    if (!/^\d{1,12}$/.test(text21)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
-    out.refundApprovalThresholdMinor = text21;
+    const text22 = String(input.refundApprovalThresholdMinor);
+    if (!/^\d{1,12}$/.test(text22)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
+    out.refundApprovalThresholdMinor = text22;
   }
   if (input.discountApprovalThresholdBps !== void 0) {
     intIn(input.discountApprovalThresholdBps, 0, 1e4, "discountApprovalThresholdBps");
@@ -8503,10 +8973,1521 @@ async function policyMatrix(_root, _args, context) {
   return rows;
 }
 
+// features/keystone/mutations/endOfLife.ts
+init_errors();
+
+// features/keystone/domain/licensure.ts
+init_errors();
+var DEA_SCHEDULE_CODE = { CI: "1", CII: "2", CIIN: "2N", CIII: "3", CIIIN: "3N", CIV: "4", CV: "5" };
+var day = (d) => d == null ? null : typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
+async function locationOf(tx, locationId) {
+  const location = await tx.location.findUnique({ where: { id: locationId }, select: { id: true, stateCode: true, timeZone: true, active: true } });
+  if (!location || !location.active) throw new DomainError(Codes.NOT_FOUND, "Location not found or inactive.", { locationId });
+  return location;
+}
+async function requireLicence(tx, input) {
+  const location = await locationOf(tx, input.locationId);
+  const onDate = localDate({ timeZone: location.timeZone }, input.at);
+  const policy = await resolvePolicy(tx, "licensure", { locationId: location.id, on: onDate });
+  const kinds = policy.rules.licenceKindsByAction[input.action];
+  if (!kinds?.length) throw new DomainError(Codes.POLICY_UNRESOLVED, `The licensure policy does not say who may ${input.action.replaceAll("_", " ")}.`, { action: input.action });
+  const licences = await tx.professionalLicense.findMany({
+    where: { staffMemberId: input.staffMemberId, kind: { in: kinds }, ...policy.rules.licenceMustMatchLocationState ? { stateCode: location.stateCode } : {} },
+    orderBy: { expiresOn: "desc" }
+  });
+  const valid = licences.find((l) => l.status === "active" && (!l.issuedOn || day(l.issuedOn) <= onDate) && day(l.expiresOn) >= onDate);
+  if (!valid) {
+    const latest = licences[0];
+    const why = !latest ? `no ${kinds.join(" or ")} licence in ${location.stateCode}` : latest.status !== "active" ? `the ${location.stateCode} licence is ${latest.status}` : `the ${location.stateCode} licence expired on ${day(latest.expiresOn)}`;
+    throw new DomainError(Codes.LICENSE_INACTIVE, `This needs an active licence: ${why}.`, { action: input.action, staffMemberId: input.staffMemberId, onDate });
+  }
+  const evaluation = await tx.licenseEvaluation.create({
+    data: {
+      action: input.action,
+      staffMemberId: input.staffMemberId,
+      locationId: location.id,
+      at: input.at,
+      onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
+      licenseId: valid.id,
+      policyVersions: policy.versions.map((v) => v.id),
+      result: "allowed",
+      findings: { kinds, state: location.stateCode, verified: policy.verified }
+    }
+  });
+  return { evaluationId: evaluation.id, licenseId: valid.id, policyVersionIds: policy.versions.map((v) => v.id), onDate };
+}
+async function requireDeaRegistration(tx, input) {
+  const location = await locationOf(tx, input.locationId);
+  const onDate = localDate({ timeZone: location.timeZone }, input.at);
+  if (input.schedule === "CI") throw new DomainError(Codes.DEA_REGISTRATION_INVALID, "Schedule I substances have no veterinary use under a practitioner registration.");
+  const code = DEA_SCHEDULE_CODE[input.schedule];
+  const registrations = await tx.deaRegistration.findMany({
+    where: { locationId: location.id, ...input.registrantStaffMemberId ? { staffMemberId: input.registrantStaffMemberId } : {} },
+    orderBy: { expiresOn: "desc" }
+  });
+  const covers = (r) => Array.isArray(r.schedules) && r.schedules.includes(code);
+  const valid = registrations.find((r) => r.status === "active" && (!r.issuedOn || day(r.issuedOn) <= onDate) && day(r.expiresOn) >= onDate && covers(r));
+  if (!valid) {
+    const latest = registrations[0];
+    const why = !latest ? "no DEA registration for this location" + (input.registrantStaffMemberId ? " held by this prescriber" : "") : latest.status !== "active" ? `the registration is ${latest.status}` : day(latest.expiresOn) < onDate ? `the registration expired on ${day(latest.expiresOn)}` : `the registration does not cover schedule ${code}`;
+    throw new DomainError(Codes.DEA_REGISTRATION_INVALID, `This controlled-substance action needs a valid DEA registration: ${why}.`, { locationId: location.id, schedule: input.schedule, onDate });
+  }
+  const evaluation = await tx.licenseEvaluation.create({
+    data: {
+      action: input.action,
+      staffMemberId: input.actorStaffMemberId ?? input.registrantStaffMemberId ?? null,
+      locationId: location.id,
+      at: input.at,
+      onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
+      deaRegistrationId: valid.id,
+      result: "allowed",
+      findings: { schedule: input.schedule, code }
+    }
+  });
+  return { evaluationId: evaluation.id, deaRegistrationId: valid.id, registrationNumber: valid.registrationNumber, onDate };
+}
+
+// features/keystone/mutations/serviceCharge.ts
+init_errors();
+init_billing();
+
+// features/keystone/lib/pricing.ts
+init_errors();
+init_billing();
+var STANDARD_SCHEDULE = "standard";
+async function activeFeeVersion(tx) {
+  const version = await tx.feeScheduleVersion.findFirst({ where: { status: "published", schedule: { code: STANDARD_SCHEDULE } }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
+  if (!version) throw new DomainError(Codes.GUARD_FAILED, "No fee schedule is published yet. Publish one before pricing work.", { reason: "no_fee_schedule" });
+  return version;
+}
+async function feeItemFor(tx, versionId, match) {
+  const where2 = match.drugId ? { drugId: match.drugId } : match.vaccineId ? { vaccineId: match.vaccineId } : match.code ? { code: match.code } : match.orderKind ? { orderKind: match.orderKind } : match.category ? { category: match.category } : null;
+  if (!where2) return null;
+  return tx.feeItem.findFirst({ where: { versionId, active: true, ...where2 }, orderBy: { code: "asc" } });
+}
+async function taxRulesFor(tx, locationId, on) {
+  const policy = await resolvePolicy(tx, "sales_tax", { locationId, on });
+  return policy.rules;
+}
+function priceCharge(fee, qty2, opts) {
+  let extended = extend(qty2, fee.priceMinor, fee.minimumChargeMinor);
+  if (opts.dispensing && fee.dispensingFeeMinor) extended += fee.dispensingFeeMinor;
+  if (opts.injection && fee.injectionFeeMinor) extended += fee.injectionFeeMinor;
+  if (opts.surchargeBps) extended += adjustBps(extended, opts.surchargeBps);
+  const discount = opts.discountBps ? -adjustBps(extended, -opts.discountBps) : 0n;
+  const tax = taxOn(opts.taxRules, fee.taxCategory, extended - discount);
+  return { extendedMinor: extended, discountMinor: discount, taxMinor: tax };
+}
+
+// features/keystone/mutations/clinical.ts
+init_errors();
+var text20 = (value, field, max = 200, required = true) => {
+  const out = String(value ?? "").trim();
+  if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
+  if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
+  return out;
+};
+var DECIMAL_TEXT2 = /^\d{1,9}(\.\d{1,6})?$/;
+function decimalText(value, field) {
+  const out = String(value ?? "").trim();
+  if (!DECIMAL_TEXT2.test(out)) throw new DomainError(Codes.INVALID_INPUT, `${field} is a positive number with up to 6 decimals.`, { field });
+  return out;
+}
+async function staffOf(uow, actor) {
+  if (actor.kind !== "user") throw new DomainError(Codes.NEVER_ALLOWED_FOR_AGENTS, "Clinical records are written by people.");
+  const staff = await uow.tx.staffMember.findFirst({ where: { userId: actor.userId, active: true }, select: { id: true, kind: true, displayName: true, homeLocationId: true } });
+  if (!staff) throw new DomainError(Codes.NOT_AUTHORIZED, "Your user is not linked to an active staff member.");
+  return staff;
+}
+async function staffById(uow, id2) {
+  const staff = await uow.tx.staffMember.findUnique({ where: { id: id2 }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true } });
+  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Staff member not found.");
+  return staff;
+}
+async function witnessFor(uow, witnessId, administratorId) {
+  if (witnessId === administratorId) throw new DomainError(Codes.GUARD_FAILED, "The witness must be someone other than the person giving the dose.", { field: "witnessId" });
+  const staff = await uow.tx.staffMember.findUnique({ where: { id: witnessId }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true, user: { select: { accessExpiresAt: true, role: { select: { canWitnessControlled: true } } } } } });
+  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Witness not found.", { field: "witnessId" });
+  const expired = staff.user?.accessExpiresAt && staff.user.accessExpiresAt <= uow.now;
+  if (!staff.user?.role?.canWitnessControlled || expired) throw new DomainError(Codes.NOT_AUTHORIZED, `${staff.displayName} is not authorised to witness controlled drugs. Ask a veterinarian or a credentialed technician.`, { field: "witnessId" });
+  return { id: staff.id, kind: staff.kind, displayName: staff.displayName, homeLocationId: staff.homeLocationId };
+}
+async function activePatient(uow, patientId) {
+  const patient = await uow.tx.patient.findUnique({
+    where: { id: patientId },
+    select: { id: true, ref: true, name: true, status: true, dateOfBirth: true, sex: true, codeStatus: true, speciesId: true, species: { select: { code: true, name: true } }, breed: { select: { name: true, geneticFlags: true } } }
+  });
+  if (!patient) throw new DomainError(Codes.NOT_FOUND, "Patient not found.");
+  if (patient.status === "deceased" || patient.status === "merged") throw new DomainError(Codes.PATIENT_DECEASED, `The patient is ${patient.status}.`);
+  if (patient.status !== "active") throw new DomainError(Codes.GUARD_FAILED, `The patient is ${patient.status}; confirm the registration first.`);
+  return patient;
+}
+async function locationDay(uow, locationId, at) {
+  const location = await uow.tx.location.findUnique({ where: { id: locationId }, select: { id: true, timeZone: true, stateCode: true, name: true } });
+  if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
+  return { location, on: localDate({ timeZone: location.timeZone }, at) };
+}
+async function chartableEncounter(uow, encounterId) {
+  const enc = await uow.tx.encounter.findUnique({ where: { id: encounterId }, select: { id: true, ref: true, status: true, version: true, patientId: true, locationId: true, kind: true, stayId: true, attendingDvmId: true } });
+  if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
+  if (enc.status === "signed") throw new DomainError(Codes.GUARD_FAILED, `${enc.ref} is signed. Add an addendum instead.`, { reason: "signed" });
+  if (enc.status === "voided") throw new DomainError(Codes.GUARD_FAILED, `${enc.ref} was voided.`, { reason: "voided" });
+  return enc;
+}
+async function markInProgress(uow, enc) {
+  if (enc.status !== "open") return;
+  await uow.tx.encounter.updateMany({ where: { id: enc.id, status: "open" }, data: { status: "in_progress", version: { increment: 1 } } });
+}
+var day2 = (d) => d ? d.toISOString().slice(0, 10) : null;
+async function latestWeight(uow, patientId) {
+  const w = await uow.tx.weightMeasurement.findFirst({ where: { patientId }, orderBy: { measuredAt: "desc" }, select: { id: true, valueKg: true, measuredAt: true } });
+  if (!w) return null;
+  return { id: w.id, valueKg: w.valueKg.toString(), measuredAt: w.measuredAt, ageHours: Math.floor((uow.now.getTime() - w.measuredAt.getTime()) / 36e5) };
+}
+async function practiceSettings(uow) {
+  const row = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { weightMaxAgeHours: true, features: true, unsignedRecordTaskHours: true, unsignedRecordEscalateHours: true, medicalDirectorId: true } });
+  return {
+    weightMaxAgeHours: row?.weightMaxAgeHours ?? { anaesthesia: 24, inpatient: 72, outpatient: 720 },
+    features: row?.features ?? {},
+    unsignedTaskHours: row?.unsignedRecordTaskHours ?? 24,
+    unsignedEscalateHours: row?.unsignedRecordEscalateHours ?? 72,
+    medicalDirectorId: row?.medicalDirectorId ?? null
+  };
+}
+
+// features/keystone/mutations/serviceCharge.ts
+async function memberDiscountBps(tx, patientId) {
+  const e = await tx.enrollment.findFirst({ where: { patientId, status: "active" }, select: { planVersion: { select: { otherServicesDiscountBps: true } } } });
+  return e?.planVersion?.otherServicesDiscountBps ?? 0;
+}
+async function serviceCharge(uow, actor, input) {
+  if (input.unitPriceMinor < 0n) throw new DomainError(Codes.GUARD_FAILED, "A price cannot be negative.");
+  const { on } = await locationDay(uow, input.locationId, uow.now);
+  const qty2 = BigInt(input.qty ?? 1);
+  const net = input.unitPriceMinor * qty2;
+  const client = await uow.tx.client.findUnique({ where: { id: input.clientId }, select: { taxExempt: true } });
+  const bps = await memberDiscountBps(uow.tx, input.patientId);
+  const discount = bps ? -adjustBps(net, -bps) : 0n;
+  const tax = client?.taxExempt ? 0n : taxOn(await taxRulesFor(uow.tx, input.locationId, on), input.taxCategory, net - discount);
+  const row = await uow.tx.chargeLine.create({
+    data: { clientId: input.clientId, patientId: input.patientId, locationId: input.locationId, description: input.description.slice(0, 200), qty: qty2.toString(), unitPriceMinor: input.unitPriceMinor, extendedMinor: net, discountMinor: discount, taxMinor: tax, taxCategory: input.taxCategory, sourceType: input.sourceType, sourceId: input.sourceId, capturedAt: uow.now }
+  });
+  auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: input.sourceType, extendedMinor: net.toString(), discountMinor: discount.toString(), taxMinor: tax.toString() });
+  return row;
+}
+async function serviceItemCharge(uow, actor, code, rest) {
+  const item = await uow.tx.serviceItem.findFirst({ where: { code, active: true } });
+  if (!item) throw new DomainError(Codes.GUARD_FAILED, "That service has no price in the price list.", { code });
+  return serviceCharge(uow, actor, { ...rest, unitPriceMinor: item.priceMinor, taxCategory: item.taxCategory, description: rest.description ?? item.name });
+}
+
+// features/keystone/domain/wellness.ts
+var import_node_crypto7 = require("node:crypto");
+function addMonths(date, months) {
+  const [y, m, d] = date.split("-").map(Number);
+  const index = y * 12 + (m - 1) + months;
+  const year = Math.floor(index / 12);
+  const month = index % 12 + 1;
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+var monthOf = (date) => date.slice(0, 7);
+var PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+function termMonthsOf(startsOn, endsOn) {
+  const out = [];
+  const last = monthOf(addDays2(endsOn, -1));
+  for (let m = monthOf(startsOn); m <= last; m = monthOf(addMonths(`${m}-01`, 1))) out.push(m);
+  return out;
+}
+function addDays2(date, days2) {
+  const d = /* @__PURE__ */ new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days2);
+  return d.toISOString().slice(0, 10);
+}
+var periodLabel = (key2) => (/* @__PURE__ */ new Date(`${key2}-01T12:00:00Z`)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+var dollars = (minor2) => `$${(minor2 / 100n).toLocaleString("en-US")}.${String(minor2 % 100n).padStart(2, "0")}`;
+function disclosureText(input) {
+  const price = dollars(input.monthlyPriceMinor);
+  const total = dollars(input.monthlyPriceMinor * BigInt(input.termMonths));
+  return [
+    `${input.planName} is a ${input.termMonths}-month wellness plan from ${input.practiceName}. It costs ${price} a month (${total} over the term), charged to the card you save today.`,
+    `The plan renews automatically at the end of each ${input.termMonths}-month term at the price then in force, and your card is charged each month, until you cancel.`,
+    `We will write to you at least ${input.renewalNoticeDays} days before a term renews, with the price and how to cancel.`,
+    `You can cancel at any time online in your client portal or at the front desk. Cancelling stops future monthly charges. If you have used more included care than you have paid for, you owe the difference at the usual prices (shown to you before you cancel).`,
+    input.cancelNote ? input.cancelNote : "",
+    "By saving your card and ticking the box you agree to these terms and allow the monthly charges."
+  ].filter(Boolean).join("\n\n");
+}
+var disclosureHash = (text22) => (0, import_node_crypto7.createHash)("sha256").update(text22).digest("hex");
+function parseEntitlements(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const raw of value) {
+    const r = raw;
+    const code = String(r?.code ?? "").trim();
+    const qty2 = Number.parseInt(String(r?.qty), 10);
+    if (!code || !Number.isInteger(qty2) || qty2 < 0) continue;
+    out.push({ code, label: String(r.label ?? code), qty: qty2, retailValueMinor: BigInt(String(r.retailValueMinor ?? "0").replace(/\D/g, "") || "0") });
+  }
+  return out;
+}
+function ageOn(dob, on) {
+  if (!dob) return null;
+  const born = dob.toISOString().slice(0, 10);
+  const weeks = Math.floor((Date.parse(`${on}T00:00:00Z`) - Date.parse(`${born}T00:00:00Z`)) / (7 * 864e5));
+  const [by, bm, bd] = born.split("-").map(Number);
+  const [oy, om, od] = on.split("-").map(Number);
+  const months = (oy - by) * 12 + (om - bm) - (od < bd ? 1 : 0);
+  return { weeks, months };
+}
+
+// features/keystone/mutations/production.ts
+init_errors();
+
+// features/keystone/domain/pay.ts
+var import_node_crypto8 = require("node:crypto");
+function bpsOf(baseMinor, bps) {
+  if (!Number.isInteger(bps) || bps < 0 || bps > 1e4) throw new Error("Basis points must be a whole number from 0 to 10000.");
+  const n = baseMinor * BigInt(bps);
+  const d = 10000n;
+  const neg = n < 0n;
+  const abs = neg ? -n : n;
+  let q = abs / d;
+  const r = abs % d;
+  if (r * 2n > d || r * 2n === d && q % 2n === 1n) q += 1n;
+  return neg ? -q : q;
+}
+var productionBase = (line) => line.reversedAt ? 0n : line.extendedMinor - line.discountMinor;
+function parseRules(value) {
+  const out = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [category, raw] of Object.entries(value)) {
+    const r = raw;
+    if (r?.basis !== "performed" && r?.basis !== "ordered" || typeof r.bps !== "number" || !Number.isInteger(r.bps) || r.bps < 0 || r.bps > 1e4) {
+      throw new Error(`The production rule for "${category}" needs a basis (performed or ordered) and whole basis points from 0 to 10000.`);
+    }
+    out[category] = { basis: r.basis, bps: r.bps };
+  }
+  return out;
+}
+function parseCommissionRules(value) {
+  const out = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [source, raw] of Object.entries(value)) {
+    const bps = raw?.bps;
+    if (typeof bps !== "number" || !Number.isInteger(bps) || bps < 0 || bps > 1e4) throw new Error(`The commission rule for "${source}" needs whole basis points from 0 to 10000.`);
+    out[source] = { bps };
+  }
+  return out;
+}
+var ruleHash = (rules2, commissionRules) => (0, import_node_crypto8.createHash)("sha256").update(JSON.stringify([sortKeys(rules2), sortKeys(commissionRules)])).digest("hex");
+function sortKeys(value) {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sortKeys(v)]));
+  return value;
+}
+function totalsByStaff(production, commission) {
+  const map = /* @__PURE__ */ new Map();
+  for (const l of production) {
+    const e = map.get(l.staffId) ?? { p: 0n, c: 0n };
+    e.p += l.amountMinor;
+    map.set(l.staffId, e);
+  }
+  for (const l of commission) {
+    const e = map.get(l.staffId) ?? { p: 0n, c: 0n };
+    e.c += l.amountMinor;
+    map.set(l.staffId, e);
+  }
+  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([staffId, e]) => ({ staffId, productionMinor: e.p.toString(), commissionMinor: e.c.toString() }));
+}
+var totalsHash = (totals) => (0, import_node_crypto8.createHash)("sha256").update(JSON.stringify(totals)).digest("hex");
+var cell = (value) => {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+var money2 = (minor2) => `${minor2 < 0n ? "-" : ""}${(minor2 < 0n ? -minor2 : minor2) / 100n}.${String((minor2 < 0n ? -minor2 : minor2) % 100n).padStart(2, "0")}`;
+function payrollCsv(period, rows) {
+  const header = ["period", "starts_on", "ends_on", "staff_id", "employee_ref", "name", "production", "commission", "total"];
+  const lines = [...rows].sort((a, b) => a.staffId.localeCompare(b.staffId)).map((r) => [period.ref, period.startsOn, period.endsOn, r.staffId, r.employeeRef, r.name, money2(r.productionMinor), money2(r.commissionMinor), money2(r.productionMinor + r.commissionMinor)].map(cell).join(","));
+  return [header.join(","), ...lines].join("\n") + "\n";
+}
+var csvHash = (csv) => (0, import_node_crypto8.createHash)("sha256").update(csv).digest("hex");
+
+// features/keystone/mutations/billingInput.ts
+init_errors();
+var dateOnly = (value, field) => {
+  const t = String(value ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || Number.isNaN(Date.parse(`${t}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
+  return t;
+};
+function minorText(value, field, allowZero = false) {
+  const t = String(value ?? "").trim();
+  if (!/^\d{1,12}$/.test(t)) throw new DomainError(Codes.INVALID_INPUT, `${field} is a whole number of cents.`, { field });
+  const n = BigInt(t);
+  if (n === 0n && !allowZero) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
+  return n;
+}
+var pick = (value, allowed, field) => {
+  if (!allowed.includes(String(value))) throw new DomainError(Codes.INVALID_INPUT, `Choose a valid ${field}.`, { field });
+  return value;
+};
+async function billingSettings(uow) {
+  const p = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { currencyCode: true, estimateValidityDays: true, electiveDepositPct: true, depositBasis: true, refundApprovalThresholdMinor: true, discountApprovalThresholdBps: true, writeOffRequiresApproval: true } });
+  return {
+    currencyCode: p?.currencyCode || "USD",
+    estimateValidityDays: p?.estimateValidityDays ?? 30,
+    electiveDepositPct: p?.electiveDepositPct ? p.electiveDepositPct.toString() : null,
+    depositBasis: p?.depositBasis ?? "low",
+    refundApprovalThresholdMinor: p?.refundApprovalThresholdMinor ?? 25000n,
+    discountApprovalThresholdBps: p?.discountApprovalThresholdBps ?? 1e3,
+    writeOffRequiresApproval: p?.writeOffRequiresApproval !== false
+  };
+}
+
+// features/keystone/mutations/production.ts
+var PAY2 = ["canViewFinance", "canManagePayments"];
+var GROOM_SOURCES = /* @__PURE__ */ new Set(["groom", "grooming", "groom_appointment"]);
+var day3 = (d) => d ? d.toISOString().slice(0, 10) : null;
+async function ruleVersionOn(uow, on) {
+  return uow.tx.productionRuleVersion.findFirst({ where: { status: "published", effectiveFrom: { lte: /* @__PURE__ */ new Date(`${on}T00:00:00Z`) } }, orderBy: [{ effectiveFrom: "desc" }, { versionNo: "desc" }] });
+}
+async function deriveProduction(uow, invoiceId) {
+  const inv = await uow.tx.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, locationId: true, postedOn: true } });
+  if (!inv?.postedOn) return { credits: 0, commissions: 0 };
+  const on = day3(inv.postedOn);
+  const version = await ruleVersionOn(uow, on);
+  if (!version) return { credits: 0, commissions: 0 };
+  const rules2 = parseRules(version.rules);
+  const commissionRules = parseCommissionRules(version.commissionRules);
+  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null }, include: { feeItem: { select: { productionCategory: true } } } });
+  let credits = 0;
+  let commissions = 0;
+  for (const line of lines) {
+    if (!line.performedById) continue;
+    const base = productionBase(line);
+    if (base === 0n) continue;
+    const category = line.feeItem?.productionCategory ?? "";
+    const rule2 = category ? rules2[category] : void 0;
+    if (rule2) {
+      const key2 = sha256(`credit:${line.id}:${line.performedById}:${version.id}`);
+      const exists = await uow.tx.productionCredit.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+      if (!exists) {
+        await uow.tx.productionCredit.create({ data: { staffId: line.performedById, chargeLineId: line.id, invoiceId: inv.id, ruleVersionId: version.id, locationId: inv.locationId, category, basis: rule2.basis, kind: "credit", baseMinor: base, bps: rule2.bps, amountMinor: bpsOf(base, rule2.bps), creditedOn: inv.postedOn, entryKey: key2 } });
+        credits++;
+      }
+    }
+    const source = GROOM_SOURCES.has(line.sourceType) ? "groom" : line.sourceType;
+    const crule = commissionRules[source];
+    if (crule) {
+      const key2 = sha256(`commission:${line.id}:${line.performedById}:${version.id}`);
+      const exists = await uow.tx.commission.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+      if (!exists) {
+        await uow.tx.commission.create({ data: { staffId: line.performedById, chargeLineId: line.id, ruleVersionId: version.id, sourceType: source, sourceId: line.sourceId, baseMinor: base, bps: crule.bps, amountMinor: bpsOf(base, crule.bps), earnedOn: inv.postedOn, entryKey: key2 } });
+        commissions++;
+      }
+    }
+  }
+  return { credits, commissions };
+}
+async function draftRuleVersion(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "production.rules.draft", humanOnly: true }, args, async (actor) => {
+    const label = text20(args.label, "label", 120);
+    const effectiveFrom = dateOnly(args.effectiveFrom, "effective from");
+    let rules2;
+    let commissionRules;
+    try {
+      rules2 = parseRules(args.rules);
+      commissionRules = parseCommissionRules(args.commissionRules ?? {});
+    } catch (error) {
+      throw new DomainError(Codes.INVALID_INPUT, error.message, { field: "rules" });
+    }
+    if (!Object.keys(rules2).length && !Object.keys(commissionRules).length) throw new DomainError(Codes.INVALID_INPUT, "Give at least one production or commission rule.", { field: "rules" });
+    const result = await command(context.prisma, { name: "production.rules.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const last = await uow.tx.productionRuleVersion.aggregate({ _max: { versionNo: true } });
+      const row = await uow.tx.productionRuleVersion.create({ data: { versionNo: (last._max.versionNo ?? 0) + 1, label, rules: rules2, commissionRules, effectiveFrom: /* @__PURE__ */ new Date(`${effectiveFrom}T00:00:00Z`), status: "draft", ruleHash: ruleHash(rules2, commissionRules) } });
+      auditCreate(uow, actor, "ProductionRuleVersion", row.id, "production.rules_drafted", { versionNo: row.versionNo });
+      return { id: row.id, versionNo: row.versionNo, status: "draft", ruleHash: row.ruleHash };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function requestRulePublication(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "production.rules.publish", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "production.rules.publish", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await lockRow(uow.tx, "ProductionRuleVersion", args.ruleVersionId);
+      if (row.status !== "draft") throw new DomainError(Codes.INVALID_TRANSITION, "Only a draft can be published.", { currentStatus: row.status });
+      const approval = await requestApproval(uow, actor, { action: "production.rules_publish", targetList: "ProductionRuleVersion", targetId: row.id, payload: { ruleHash: row.ruleHash }, requiredPermission: "canManagePayments", summary: `Publish production rules "${row.label}" from ${day3(row.effectiveFrom)}` });
+      return { approvalRequestId: approval.id, status: "draft" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+registerApplier("production.rules_publish", async (uow, actor, request) => {
+  const row = await lockRow(uow.tx, "ProductionRuleVersion", request.targetId);
+  if (row.status !== "draft" || row.ruleHash !== request.payload?.ruleHash) throw new DomainError(Codes.APPROVAL_MISMATCH, "The rules changed after they were approved.");
+  await transition(uow, { model: "ProductionRuleVersion", id: row.id, from: ["draft"], to: "published", actor, eventType: "production.rules_published", data: { publishedAt: uow.now } });
+  return { id: row.id, status: "published" };
+});
+async function requestProductionAdjustment(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "production.adjust", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const negative = String(args.amountMinor ?? "").trim().startsWith("-");
+    const amount = minorText(String(args.amountMinor ?? "").trim().replace(/^-/, ""), "amount");
+    const signed = negative ? -amount : amount;
+    const result = await command(context.prisma, { name: "production.adjust", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const credit = await uow.tx.productionCredit.findUnique({ where: { id: args.creditId }, select: { id: true, kind: true, amountMinor: true, staffId: true } });
+      if (!credit) throw new DomainError(Codes.NOT_FOUND, "Credit not found.");
+      if (credit.kind !== "credit") throw new DomainError(Codes.GUARD_FAILED, "Adjust the original credit, not an adjustment.");
+      const prior = await uow.tx.productionCredit.aggregate({ where: { adjustsId: credit.id }, _sum: { amountMinor: true } });
+      if (credit.amountMinor + (prior._sum.amountMinor ?? 0n) + signed < 0n) throw new DomainError(Codes.GUARD_FAILED, "An adjustment cannot take more than the credit is worth.");
+      const approval = await requestApproval(uow, actor, { action: "production.adjust", targetList: "ProductionCredit", targetId: credit.id, payload: { amountMinor: signed.toString(), reason, requestedBy: actorUserId(actor) }, requiredPermission: "canManagePayments", summary: `Adjust production by ${signed.toString()} cents: ${reason}` });
+      return { approvalRequestId: approval.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+registerApplier("production.adjust", async (uow, actor, request) => {
+  const approver = actorUserId(actor);
+  const credit = await lockRow(uow.tx, "ProductionCredit", request.targetId);
+  const amount = BigInt(request.payload.amountMinor);
+  const key2 = sha256(`adjust:${request.id}`);
+  const existing = await uow.tx.productionCredit.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+  if (existing) return { id: existing.id };
+  const row = await uow.tx.productionCredit.create({ data: { staffId: credit.staffId, ruleVersionId: credit.ruleVersionId, locationId: credit.locationId, invoiceId: credit.invoiceId, category: credit.category, basis: credit.basis, kind: "adjustment", adjustsId: credit.id, baseMinor: 0n, bps: 0, amountMinor: amount, reason: String(request.payload.reason), requestedById: request.payload.requestedBy, approvedById: approver, creditedOn: /* @__PURE__ */ new Date(`${(await uow.tx.$queryRaw`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS d`)[0].d}T00:00:00Z`), entryKey: key2 } });
+  auditCreate(uow, actor, "ProductionCredit", row.id, "production.adjusted", { adjusts: credit.id, amountMinor: amount.toString() });
+  return { id: row.id };
+});
+async function openPayPeriod(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.create", humanOnly: true }, args, async (actor) => {
+    const startsOn = dateOnly(args.startsOn, "start");
+    const endsOn = dateOnly(args.endsOn, "end");
+    if (endsOn < startsOn) throw new DomainError(Codes.INVALID_INPUT, "The period cannot end before it starts.", { field: "endsOn" });
+    const result = await command(context.prisma, { name: "pay.period.create", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const ref = await nextReference(uow.tx, "PAY", uow.now);
+      const row = await uow.tx.payPeriod.create({ data: { ref, startsOn: /* @__PURE__ */ new Date(`${startsOn}T00:00:00Z`), endsOn: /* @__PURE__ */ new Date(`${endsOn}T00:00:00Z`), status: "open" } });
+      return { id: row.id, ref, status: "open" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function calculatePayPeriod(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.calculate", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "pay.period.calculate", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const period = await lockRow(uow.tx, "PayPeriod", args.periodId);
+      if (period.status !== "open") throw new DomainError(Codes.INVALID_TRANSITION, "Only an open period can be calculated. Reopen a calculated one first.", { currentStatus: period.status });
+      const range = { gte: period.startsOn, lte: period.endsOn };
+      await uow.tx.productionCredit.updateMany({ where: { periodId: null, creditedOn: range }, data: { periodId: period.id } });
+      await uow.tx.commission.updateMany({ where: { periodId: null, earnedOn: range }, data: { periodId: period.id } });
+      const credits = await uow.tx.productionCredit.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } });
+      const commissions = await uow.tx.commission.findMany({ where: { periodId: period.id }, select: { staffId: true, amountMinor: true } });
+      const totals = totalsByStaff(credits.filter((c) => c.staffId).map((c) => ({ staffId: c.staffId, amountMinor: c.amountMinor })), commissions.filter((c) => c.staffId).map((c) => ({ staffId: c.staffId, amountMinor: c.amountMinor })));
+      const hash2 = totalsHash(totals);
+      const row = await transition(uow, { model: "PayPeriod", id: period.id, from: ["open"], to: "calculated", expectedVersion: args.expectedVersion, actor, eventType: "pay.calculated", data: { totals, totalsHash: hash2, calculatedAt: uow.now } });
+      return { id: row.id, status: row.status, totals, totalsHash: hash2, credits: credits.length, commissions: commissions.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reopenPayPeriod(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.reopen", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "pay.period.reopen", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "PayPeriod", id: args.periodId, from: ["calculated"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "pay.reopened", reason, data: { totals: [], totalsHash: "", calculatedAt: null } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function requestPayPeriodApproval(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.approve", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "pay.period.approve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const period = await lockRow(uow.tx, "PayPeriod", args.periodId);
+      if (period.status !== "calculated") throw new DomainError(Codes.INVALID_TRANSITION, "Calculate the period first.", { currentStatus: period.status });
+      const approval = await requestApproval(uow, actor, { action: "pay_period.approve", targetList: "PayPeriod", targetId: period.id, payload: { totalsHash: period.totalsHash }, requiredPermission: "canManagePayments", summary: `Approve pay period ${period.ref}` });
+      return { approvalRequestId: approval.id, totalsHash: period.totalsHash };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+registerApplier("pay_period.approve", async (uow, actor, request) => {
+  const period = await lockRow(uow.tx, "PayPeriod", request.targetId);
+  if (period.totalsHash !== request.payload?.totalsHash) throw new DomainError(Codes.APPROVAL_MISMATCH, "The totals changed after they were shown for approval.");
+  await transition(uow, { model: "PayPeriod", id: period.id, from: ["calculated"], to: "approved", actor, eventType: "pay.approved", data: { approvedById: actorUserId(actor), approvedAt: uow.now } });
+  return { id: period.id, status: "approved" };
+});
+async function exportPayPeriod(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.export", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "pay.period.export", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const period = await lockRow(uow.tx, "PayPeriod", args.periodId);
+      const prior = await uow.tx.payrollExportBatch.findFirst({ where: { periodId: period.id } });
+      if (prior) return { id: prior.id, ref: prior.ref, rows: prior.rows, contentHash: prior.contentHash, csv: prior.csv, status: period.status };
+      if (period.status !== "approved") throw new DomainError(Codes.INVALID_TRANSITION, "Only an approved period can be exported.", { currentStatus: period.status });
+      const totals = period.totals ?? [];
+      const staff = await uow.tx.staffMember.findMany({ where: { id: { in: totals.map((t) => t.staffId) } }, select: { id: true, displayName: true, employment: true } });
+      const by = new Map(staff.map((s) => [s.id, s]));
+      const csv = payrollCsv({ ref: period.ref, startsOn: day3(period.startsOn), endsOn: day3(period.endsOn) }, totals.map((t) => ({ staffId: t.staffId, name: by.get(t.staffId)?.displayName ?? "", employeeRef: String(by.get(t.staffId)?.employment ?? ""), productionMinor: BigInt(t.productionMinor), commissionMinor: BigInt(t.commissionMinor) })));
+      const ref = await nextReference(uow.tx, "PXB", uow.now);
+      const batch = await uow.tx.payrollExportBatch.create({ data: { ref, periodId: period.id, format: "csv", rows: totals.length, contentHash: csvHash(csv), csv, exportedById: actorUserId(actor), exportedAt: uow.now } });
+      await transition(uow, { model: "PayPeriod", id: period.id, from: ["approved"], to: "exported", actor, eventType: "pay.exported", metadata: { batchId: batch.id, contentHash: batch.contentHash } });
+      auditCreate(uow, actor, "PayrollExportBatch", batch.id, "pay.exported", { rows: totals.length, contentHash: batch.contentHash });
+      return { id: batch.id, ref, rows: totals.length, contentHash: batch.contentHash, csv, status: "exported" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function lockPayPeriod(_root, args, context) {
+  return gated(context, { permissions: [...PAY2], tool: "pay.period.lock", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "pay.period.lock", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "PayPeriod", id: args.periodId, from: ["exported"], to: "locked", expectedVersion: args.expectedVersion, actor, eventType: "pay.locked", data: { lockedAt: uow.now } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/billing.ts
+var import_node_crypto10 = require("node:crypto");
+init_errors();
+init_ledger();
+init_billing();
+
+// features/integrations/payment/index.ts
+var import_node_crypto9 = require("node:crypto");
+var STRIPE = "https://api.stripe.com/v1";
+function stripeKey() {
+  const key2 = process.env.STRIPE_SECRET_KEY ?? "";
+  if (!key2) throw new Error("Card payments are not set up on this server yet.");
+  if (!key2.startsWith("sk_test_") && !key2.startsWith("rk_test_")) throw new Error("Only Stripe test keys are accepted here.");
+  return key2;
+}
+var form = (data) => new URLSearchParams(data).toString();
+async function stripeCall(path, method, body, idempotencyKey) {
+  const res = await fetch(`${STRIPE}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${stripeKey()}`,
+      ...body ? { "content-type": "application/x-www-form-urlencoded" } : {},
+      ...idempotencyKey ? { "idempotency-key": idempotencyKey } : {}
+    },
+    ...body ? { body: form(body) } : {},
+    signal: AbortSignal.timeout(2e4)
+  });
+  const json20 = await res.json().catch(() => ({}));
+  return { status: res.status, json: json20 };
+}
+function intentResult(status, j) {
+  const ref = j.error?.payment_intent?.id ?? j.id ?? null;
+  if (status >= 500 || status === 429 || status === 409) return { outcome: "unknown", providerRef: ref, message: "The card processor did not answer. Check the status in a moment." };
+  if (j.error?.type === "idempotency_error") return { outcome: "unknown", providerRef: ref, message: 'This payment was already sent to the card processor. Use "Check status".' };
+  if (status >= 400) {
+    const pi = j.error?.payment_intent;
+    if (pi?.status && pi.status !== "requires_payment_method" && pi.status !== "canceled") return intentResult(200, pi);
+    if (j.error?.type === "card_error" || pi) return { outcome: "failed", providerRef: ref, message: String(j.error?.message ?? "The card was declined.") };
+    return { outcome: "failed", providerRef: ref, message: "The payment could not be started." };
+  }
+  switch (j.status) {
+    case "succeeded":
+      return { outcome: "succeeded", providerRef: j.id, message: "Paid." };
+    case "requires_action":
+    case "requires_confirmation":
+      return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm." };
+    case "processing":
+    case "requires_capture":
+      return { outcome: "processing", providerRef: j.id, message: "The bank is still processing this payment." };
+    case "canceled":
+      return { outcome: "failed", providerRef: j.id, message: "The payment was cancelled." };
+    case "requires_payment_method":
+      return { outcome: "failed", providerRef: j.id, message: String(j.last_payment_error?.message ?? "The card was declined.") };
+    default:
+      return { outcome: "unknown", providerRef: j.id ?? null, message: "The card processor gave an answer this app does not know. Check the Stripe dashboard." };
+  }
+}
+async function findIntent(input) {
+  const q = (s) => s.replace(/['\\]/g, "");
+  const ours = (pi) => pi.metadata?.idempotencyKey === input.idempotencyKey || !!input.metadata.payment && pi.metadata?.payment === input.metadata.payment;
+  const clauses = [`metadata['idempotencyKey']:'${q(input.idempotencyKey)}'`, ...input.metadata.payment ? [`metadata['payment']:'${q(input.metadata.payment)}'`] : []];
+  const searched = await stripeCall(`/payment_intents/search?${form({ query: clauses.join(" OR "), limit: "10" })}`, "GET", null);
+  let found = searched.status === 200 && Array.isArray(searched.json.data) ? searched.json.data.filter(ours) : null;
+  if (!found?.length) {
+    const listed = await stripeCall(`/payment_intents?limit=100`, "GET", null);
+    if (listed.status === 200 && Array.isArray(listed.json.data)) found = listed.json.data.filter(ours);
+  }
+  if (!found) return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
+  if (found.length === 0) return { outcome: "unknown", providerRef: null, message: "The card processor has no record of this payment yet. Check again in a minute, or look it up in the Stripe dashboard." };
+  if (found.length > 1) return { outcome: "unknown", providerRef: null, message: "More than one card charge matches this payment. Look it up in the Stripe dashboard." };
+  return intentResult(200, found[0]);
+}
+var stripeAdapter = {
+  key: "stripe",
+  async charge(input) {
+    try {
+      const { status, json: json20 } = await stripeCall("/payment_intents", "POST", {
+        amount: input.amountMinor.toString(),
+        currency: input.currencyCode.toLowerCase(),
+        confirm: "true",
+        payment_method: input.paymentMethod || "pm_card_visa",
+        ...input.customer ? { customer: input.customer } : {},
+        ...input.offSession ? { off_session: "true" } : {},
+        "automatic_payment_methods[enabled]": "true",
+        "automatic_payment_methods[allow_redirects]": "never",
+        description: input.description,
+        ...Object.fromEntries(Object.entries({ ...input.metadata, idempotencyKey: input.idempotencyKey }).map(([k, v]) => [`metadata[${k}]`, v]))
+      }, input.idempotencyKey);
+      return intentResult(status, json20);
+    } catch {
+      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
+    }
+  },
+  async resolve(input) {
+    try {
+      if (input.providerRef) {
+        const got = await stripeCall(`/payment_intents/${encodeURIComponent(input.providerRef)}`, "GET", null);
+        if (got.status === 200) return intentResult(got.status, got.json);
+        return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor did not answer. Check the status in a moment." };
+      }
+      return await findIntent(input);
+    } catch {
+      return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor still did not answer." };
+    }
+  },
+  async refund(input) {
+    try {
+      const { status, json: json20 } = await stripeCall("/refunds", "POST", {
+        payment_intent: input.providerRef,
+        amount: input.amountMinor.toString(),
+        "metadata[reason]": input.reason.slice(0, 200)
+      }, input.idempotencyKey);
+      if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: json20.id ?? null, message: "The card processor did not answer." };
+      if (status >= 400) return { outcome: "failed", providerRef: null, message: String(json20.error?.message ?? "The refund was refused.") };
+      if (json20.status === "succeeded") return { outcome: "succeeded", providerRef: json20.id, message: "Refunded." };
+      if (json20.status === "pending") return { outcome: "unknown", providerRef: json20.id, message: "The refund is on its way." };
+      return { outcome: "failed", providerRef: json20.id ?? null, message: "The refund did not go through." };
+    } catch {
+      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer." };
+    }
+  },
+  readEvent(rawBody, headers) {
+    const secret2 = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+    if (!secret2) throw new Error("Card events are not set up on this server.");
+    const header = headers["stripe-signature"] ?? "";
+    const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+    const t = parts.t;
+    const v1 = header.split(",").filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
+    if (!t || !v1.length) throw new Error("The event signature is missing.");
+    if (Math.abs(Date.now() / 1e3 - Number(t)) > 600) throw new Error("The event is too old.");
+    const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${t}.${rawBody}`).digest();
+    const ok = v1.some((sig) => {
+      const b = Buffer.from(sig, "hex");
+      return b.length === expected.length && (0, import_node_crypto9.timingSafeEqual)(b, expected);
+    });
+    if (!ok) throw new Error("The event signature does not match.");
+    const event = JSON.parse(rawBody);
+    const o = event.data.object;
+    const outcome = event.type === "payment_intent.succeeded" ? "succeeded" : event.type === "payment_intent.payment_failed" ? "failed" : event.type === "charge.refunded" ? "refunded" : "ignored";
+    return { id: event.id, type: event.type, objectRef: event.type.startsWith("charge.") ? o.payment_intent ?? o.id : o.id, outcome };
+  }
+};
+var manualAdapter = {
+  key: "manual",
+  async charge() {
+    return { outcome: "failed", providerRef: null, message: "This tender is recorded by hand, not charged." };
+  },
+  async resolve() {
+    return { outcome: "failed", providerRef: null, message: "Nothing to check for a hand-recorded payment." };
+  },
+  async refund(input) {
+    return { outcome: "succeeded", providerRef: `manual-${input.idempotencyKey.slice(-12)}`, message: "Refund recorded; hand the money back." };
+  },
+  readEvent() {
+    throw new Error("A hand-recorded tender has no events.");
+  }
+};
+var terminalAdapter = {
+  key: "terminal",
+  async charge() {
+    return { outcome: "failed", providerRef: null, message: "No card reader is attached. Record the card payment by hand or use the card form." };
+  },
+  resolve: async () => ({ outcome: "failed", providerRef: null, message: "No card reader is attached." }),
+  refund: (input) => stripeAdapter.refund(input),
+  readEvent: (raw, headers) => stripeAdapter.readEvent(raw, headers)
+};
+var ADAPTERS = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter };
+var adapterFor = (key2) => ADAPTERS[key2] ?? manualAdapter;
+var cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? "");
+async function saveCard(input) {
+  try {
+    const meta4 = Object.fromEntries(Object.entries(input.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]));
+    const cus = await stripeCall("/customers", "POST", { name: input.name.slice(0, 120), ...input.email ? { email: input.email } : {}, ...meta4 }, `${input.idempotencyKey}:customer`);
+    if (cus.status >= 400 || !cus.json.id) return { ok: false, message: "The card processor could not start saving the card." };
+    const seti = await stripeCall("/setup_intents", "POST", {
+      customer: cus.json.id,
+      payment_method: input.paymentMethod || "pm_card_visa",
+      confirm: "true",
+      usage: "off_session",
+      "automatic_payment_methods[enabled]": "true",
+      "automatic_payment_methods[allow_redirects]": "never",
+      ...meta4
+    }, `${input.idempotencyKey}:setup`);
+    if (seti.status >= 400) return { ok: false, message: String(seti.json.error?.message ?? "The card was not accepted.") };
+    if (seti.json.status !== "succeeded") return { ok: false, message: "The bank needs the cardholder to confirm this card. Try another card." };
+    const pmId = String(seti.json.payment_method ?? "");
+    const pm = await stripeCall(`/payment_methods/${encodeURIComponent(pmId)}`, "GET", null);
+    const card = pm.json.card;
+    const brand = card?.brand ? card.brand.charAt(0).toUpperCase() + card.brand.slice(1) : "Card";
+    return { ok: true, customer: cus.json.id, paymentMethod: pmId, setupIntent: String(seti.json.id), label: card?.last4 ? `${brand} ending ${card.last4}` : brand };
+  } catch {
+    return { ok: false, message: "The card processor did not answer. Try again in a moment." };
+  }
+}
+
+// features/keystone/mutations/billing.ts
+var money3 = (minor2) => `$${minor2 / 100n}.${String(minor2 % 100n).padStart(2, "0")}`;
+var TAKERS = ["canTakePayments", "canManagePayments"];
+var POSTERS = ["canPostInvoices", "canManagePayments"];
+var ZERO2 = 0n;
+async function clientOfPatient(uow, patientId) {
+  const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } });
+  if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, "This patient has no client of record to bill.");
+  return own.clientId;
+}
+async function createCharge(uow, actor, c) {
+  const fee = await uow.tx.feeItem.findUniqueOrThrow({ where: { id: c.feeItemId } });
+  const { on } = await locationDay(uow, c.locationId, uow.now);
+  const client = await uow.tx.client.findUnique({ where: { id: c.clientId }, select: { taxExempt: true } });
+  const taxRules = await taxRulesFor(uow.tx, c.locationId, on);
+  const discountBps = await memberDiscountBps(uow.tx, c.patientId);
+  const priced = priceCharge(fee, c.qty, { dispensing: c.dispensing, injection: c.injection, discountBps, taxRules });
+  const tax = client?.taxExempt ? ZERO2 : priced.taxMinor;
+  const row = await uow.tx.chargeLine.create({
+    data: {
+      clientId: c.clientId,
+      patientId: c.patientId,
+      locationId: c.locationId,
+      encounterId: c.encounterId,
+      feeItemId: fee.id,
+      description: (c.description || fee.name).slice(0, 200),
+      qty: c.qty,
+      unitPriceMinor: fee.priceMinor,
+      extendedMinor: priced.extendedMinor,
+      discountMinor: priced.discountMinor,
+      taxMinor: tax,
+      taxCategory: fee.taxCategory,
+      sourceType: c.sourceType,
+      sourceId: c.sourceId,
+      manualReason: c.manualReason ?? "",
+      performedById: c.performedById ?? null,
+      capturedAt: uow.now
+    }
+  });
+  auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: c.sourceType, extendedMinor: priced.extendedMinor.toString(), taxMinor: tax.toString() });
+  return row;
+}
+async function captureVisitCharges(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.capture", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "charges.capture", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, kind: true, patientId: true, locationId: true, attendingDvmId: true } });
+      if (!enc?.patientId || !enc.locationId) throw new DomainError(Codes.NOT_FOUND, "Visit not found.");
+      const clientId = await clientOfPatient(uow, enc.patientId);
+      const fees = await activeFeeVersion(uow.tx);
+      const base = { patientId: enc.patientId, clientId, locationId: enc.locationId, encounterId: enc.id };
+      const existing = new Set((await uow.tx.chargeLine.findMany({ where: { reversedAt: null, encounterId: enc.id }, select: { sourceType: true, sourceId: true } })).map((c) => `${c.sourceType}:${c.sourceId}`));
+      let made = 0;
+      let unpriced = 0;
+      const add = async (sourceType, sourceId, match, qty2, extra = {}) => {
+        if (existing.has(`${sourceType}:${sourceId}`)) return;
+        const fee = await feeItemFor(uow.tx, fees.id, match);
+        if (!fee) {
+          unpriced += 1;
+          return;
+        }
+        await createCharge(uow, actor, { ...base, feeItemId: fee.id, qty: qty2, sourceType, sourceId, ...extra });
+        made += 1;
+      };
+      await add("encounter_exam", enc.id, { code: `EXAM-${enc.kind.toUpperCase()}` }, "1", { performedById: enc.attendingDvmId });
+      const given = await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: null }, select: { id: true, qty: true, givenById: true, order: { select: { drugId: true, vaccineId: true, kind: true } } } });
+      const undone = new Set((await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: { not: null } }, select: { reversesId: true } })).map((r) => r.reversesId));
+      for (const a of given) {
+        if (undone.has(a.id)) continue;
+        const o = a.order;
+        if (!o) continue;
+        if (o.vaccineId) await add("administration", a.id, { vaccineId: o.vaccineId }, "1", { performedById: a.givenById });
+        else if (o.drugId) await add("administration", a.id, { drugId: o.drugId }, a.qty.toString(), { performedById: a.givenById, injection: false });
+      }
+      const dispenses = await uow.tx.dispense.findMany({ where: { prescription: { patientId: enc.patientId }, dispensedAt: { gte: new Date(uow.now.getTime() - 864e5) } }, select: { id: true, quantity: true, productId: true, dispensedById: true } });
+      for (const d of dispenses) if (d.productId) await add("dispense", d.id, { drugId: d.productId }, d.quantity.toString(), { performedById: d.dispensedById, dispensing: true });
+      return { made, unpriced };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addFeeCharge(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.add", humanOnly: true }, args, async (actor) => {
+    const qty2 = decimalText(args.qty, "quantity");
+    const result = await command(context.prisma, { name: "charges.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const clientId = await clientOfPatient(uow, args.patientId);
+      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
+      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
+      const fees = await activeFeeVersion(uow.tx);
+      const fee = await uow.tx.feeItem.findFirst({ where: { id: args.feeItemId, versionId: fees.id } });
+      if (!fee) throw new DomainError(Codes.NOT_FOUND, "That fee is not in the published schedule.", { field: "feeItemId" });
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const row = await createCharge(uow, actor, { patientId: args.patientId, clientId, locationId, encounterId: args.encounterId ?? null, feeItemId: fee.id, qty: qty2, sourceType: "fee", sourceId: (0, import_node_crypto10.randomUUID)(), performedById: staff?.id ?? null });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addManualCharge(_root, args, context) {
+  return gated(context, { permissions: ["canAddManualCharge"], tool: "charges.manual", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const description = text20(args.description, "description", 160);
+    const amount = minorText(args.amountMinor, "amount");
+    const result = await command(context.prisma, { name: "charges.manual", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const clientId = await clientOfPatient(uow, args.patientId);
+      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
+      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
+      const { on } = await locationDay(uow, locationId, uow.now);
+      const taxRules = await taxRulesFor(uow.tx, locationId, on);
+      let tax = ZERO2;
+      try {
+        tax = priceCharge({ priceMinor: amount, minimumChargeMinor: null, dispensingFeeMinor: null, injectionFeeMinor: null, taxCategory: args.taxCategory }, "1", { taxRules }).taxMinor;
+      } catch {
+        throw new DomainError(Codes.INVALID_INPUT, "Choose how this charge is taxed.", { field: "taxCategory" });
+      }
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const row = await uow.tx.chargeLine.create({ data: { clientId, patientId: args.patientId, locationId, encounterId: args.encounterId ?? null, description, qty: "1", unitPriceMinor: amount, extendedMinor: amount, discountMinor: ZERO2, taxMinor: tax, taxCategory: args.taxCategory, sourceType: "manual", sourceId: "", manualReason: reason, performedById: staff?.id ?? null, capturedAt: uow.now } });
+      auditCreate(uow, actor, "ChargeLine", row.id, "charge.manual", { amountMinor: amount.toString() }, { reason });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reverseCharge(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "charges.reverse", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "charges.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const line = await lockRow(uow.tx, "ChargeLine", args.chargeId);
+      if (line.reversedAt) throw new DomainError(Codes.GUARD_FAILED, "That charge was already reversed.");
+      if (line.invoiceId) {
+        const inv = await uow.tx.invoice.findUnique({ where: { id: line.invoiceId }, select: { status: true } });
+        if (inv?.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "This charge is on a posted invoice. Issue a credit note instead.");
+      }
+      await uow.tx.chargeLine.update({ where: { id: line.id }, data: { reversedAt: uow.now, reversalReason: reason, invoiceId: null } });
+      auditCreate(uow, actor, "ChargeLine", line.id, "charge.reversed", {}, { reason });
+      return { id: line.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function draftInvoice(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "invoice.draft", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "invoice.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const lines = await uow.tx.chargeLine.findMany({ where: { clientId: args.clientId, invoiceId: null, reversedAt: null, ...args.encounterId ? { encounterId: args.encounterId } : {} }, orderBy: { capturedAt: "asc" } });
+      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "There are no open charges to invoice.");
+      const locationId = lines[0].locationId;
+      const settings = await billingSettings(uow);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = `DRAFT-${(0, import_node_crypto10.randomUUID)().slice(0, 8).toUpperCase()}`;
+      const inv = await uow.tx.invoice.create({ data: { ref, clientId: args.clientId, locationId, encounterId: args.encounterId ?? lines[0].encounterId, status: "draft", currencyCode: settings.currencyCode, note: "", createdById: staff?.id ?? null } });
+      await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: inv.id } });
+      auditCreate(uow, actor, "Invoice", inv.id, "invoice.drafted", { lines: lines.length });
+      return { id: inv.id, lines: lines.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function discountInvoice(_root, args, context) {
+  return gated(context, { permissions: ["canDiscount", "canApproveDiscount"], tool: "invoice.discount", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const bps = Math.round(Number(args.percent) * 100);
+    if (!Number.isFinite(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "Discount is a percentage from 0 to 100.", { field: "percent" });
+    const result = await command(context.prisma, { name: "invoice.discount", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const settings = await billingSettings(uow);
+      if (bps > settings.discountApprovalThresholdBps && !can(actor, "canApproveDiscount")) throw new DomainError(Codes.APPROVAL_REQUIRED, `Discounts over ${settings.discountApprovalThresholdBps / 100}% need someone who can approve discounts.`);
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (inv.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "Only a draft invoice can be discounted.");
+      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id } });
+      const { on } = await locationDay(uow, inv.locationId, uow.now);
+      const taxRules = await taxRulesFor(uow.tx, inv.locationId, on);
+      const client = await uow.tx.client.findUnique({ where: { id: inv.clientId }, select: { taxExempt: true } });
+      let total = ZERO2;
+      for (const l of lines) {
+        const discount = -adjustBps(l.extendedMinor, -bps);
+        const net = l.extendedMinor - discount;
+        const { taxOn: taxOn2 } = await Promise.resolve().then(() => (init_billing(), billing_exports));
+        const tax = client?.taxExempt ? ZERO2 : taxOn2(taxRules, l.taxCategory, net);
+        await uow.tx.chargeLine.update({ where: { id: l.id }, data: { discountMinor: discount, taxMinor: tax } });
+        total += discount;
+      }
+      auditCreate(uow, actor, "Invoice", inv.id, "invoice.discounted", { bps, discountMinor: total.toString() }, { reason });
+      return { id: inv.id, discountMinor: total.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function postDraftInvoice(uow, actor, invoiceId, expectedVersion, postedOnArg) {
+  const inv = await lockRow(uow.tx, "Invoice", invoiceId);
+  const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null } });
+  if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "An invoice needs at least one charge.");
+  const { on } = await locationDay(uow, inv.locationId, uow.now);
+  const postedOn = postedOnArg ? dateOnly(postedOnArg, "posting day") : on;
+  if (postedOn > on) throw new DomainError(Codes.INVALID_INPUT, "An invoice cannot be posted for a future day.", { field: "postedOn" });
+  const subtotal = lines.reduce((n, l) => n + l.extendedMinor, ZERO2);
+  const discount = lines.reduce((n, l) => n + l.discountMinor, ZERO2);
+  const tax = lines.reduce((n, l) => n + l.taxMinor, ZERO2);
+  const total = subtotal - discount + tax;
+  const { periodFor: periodFor2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
+  const period = await periodFor2(uow.tx, postedOn);
+  const ref = await nextReference(uow.tx, "INV", uow.now);
+  const row = await transition(uow, { model: "Invoice", id: inv.id, from: ["draft"], to: "posted", expectedVersion, actor, eventType: "invoice.posted", data: { ref, postedAt: uow.now, postedOn: /* @__PURE__ */ new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } });
+  if (total > ZERO2) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "invoice", amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref });
+  else await transition(uow, { model: "Invoice", id: inv.id, from: ["posted"], to: "paid", actor, eventType: "invoice.paid" });
+  await deriveProduction(uow, inv.id);
+  return { id: inv.id, ref, status: row.status, totalMinor: total.toString() };
+}
+async function postInvoice(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "invoice.post", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "invoice.post", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      return postDraftInvoice(uow, actor, args.invoiceId, args.expectedVersion, args.postedOn);
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function syncInvoiceStatus(uow, actor, invoiceId, reason) {
+  const inv = await uow.tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, select: { status: true, version: true, totalMinor: true } });
+  if (inv.status === "written_off" || inv.status === "draft") return inv.status;
+  const balance = await balanceOfInvoice(uow.tx, invoiceId);
+  const next = balance <= ZERO2 ? "paid" : balance < inv.totalMinor ? "partially_paid" : "posted";
+  if (next !== inv.status) await casUpdate(uow, { model: "Invoice", id: invoiceId, version: inv.version, from: [inv.status], to: next, actor, eventType: `invoice.${next}`, reason });
+  return next;
+}
+async function settleSucceeded(uow, actor, paymentId, providerRef) {
+  const pay = await lockRow(uow.tx, "Payment", paymentId);
+  if (pay.status === "succeeded") return { settled: false, paymentId };
+  if (!["pending", "unknown"].includes(pay.status)) throw new DomainError(Codes.GUARD_FAILED, `This payment is ${pay.status} and cannot be marked paid.`);
+  const locationId = pay.locationId ?? (await uow.tx.location.findFirst({ select: { id: true } })).id;
+  const day7 = pay.postedOn ? pay.postedOn.toISOString().slice(0, 10) : (await locationDay(uow, locationId, uow.now)).on;
+  await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "succeeded", actor, eventType: "payment.succeeded", data: { receivedAt: uow.now, ...providerRef ? { providerRef } : {} } });
+  let left = pay.amountMinor;
+  if (pay.forDepositId) {
+    const dep = await lockRow(uow.tx, "Deposit", pay.forDepositId);
+    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
+    await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, depositId: dep.id, amountMinor: pay.amountMinor, at: uow.now } });
+    await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["requested"], to: "paid", actor, eventType: "deposit.paid", data: { paymentId: pay.id } });
+    await post(uow, { clientId: pay.clientId, kind: "deposit_received", amountMinor: -pay.amountMinor, currencyCode: pay.currencyCode, postedOn: day7, entryKey: `payment:${pay.id}:deposit`, paymentId: pay.id, memo: pay.ref });
+    left = ZERO2;
+  } else if (pay.forInvoiceId) {
+    await lockRow(uow.tx, "Invoice", pay.forInvoiceId);
+    const balance = await balanceOfInvoice(uow.tx, pay.forInvoiceId);
+    const apply = balance < left ? balance > ZERO2 ? balance : ZERO2 : left;
+    if (apply > ZERO2) {
+      await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, invoiceId: pay.forInvoiceId, amountMinor: apply, at: uow.now } });
+      await post(uow, { clientId: pay.clientId, invoiceId: pay.forInvoiceId, paymentId: pay.id, kind: "payment", amountMinor: -apply, currencyCode: pay.currencyCode, postedOn: day7, entryKey: `payment:${pay.id}:invoice`, memo: pay.ref });
+      left -= apply;
+    }
+  }
+  if (left > ZERO2) await post(uow, { clientId: pay.clientId, paymentId: pay.id, kind: "payment_unallocated", amountMinor: -left, currencyCode: pay.currencyCode, postedOn: day7, entryKey: `payment:${pay.id}:account`, memo: `${pay.ref} held on account` });
+  if (pay.forInvoiceId) await syncInvoiceStatus(uow, actor, pay.forInvoiceId, pay.ref);
+  return { settled: true, paymentId, heldOnAccountMinor: left.toString() };
+}
+async function newPayment(uow, actor, a) {
+  const settings = await billingSettings(uow);
+  let locationId = a.locationId ?? null;
+  let invoice = null;
+  if (a.target.invoiceId) {
+    invoice = await uow.tx.invoice.findUnique({ where: { id: a.target.invoiceId }, select: { id: true, status: true, clientId: true, currencyCode: true, locationId: true } });
+    if (!invoice || invoice.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
+    if (!["posted", "partially_paid"].includes(invoice.status)) throw new DomainError(Codes.GUARD_FAILED, invoice.status === "paid" ? "That invoice is already paid." : "That invoice cannot take a payment.");
+    locationId = invoice.locationId;
+    const balance = await balanceOfInvoice(uow.tx, invoice.id);
+    if (a.amountMinor > balance && !a.allowOverpay) throw new DomainError(Codes.GUARD_FAILED, "That is more than the invoice balance. Take the balance, or choose to hold the extra on account.", { reason: "overpay" });
+  }
+  if (a.target.depositId) {
+    const dep = await uow.tx.deposit.findUnique({ where: { id: a.target.depositId }, select: { clientId: true, status: true, requestedMinor: true } });
+    if (!dep || dep.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Deposit not found for this client.");
+    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
+    if (dep.requestedMinor !== a.amountMinor) throw new DomainError(Codes.GUARD_FAILED, "A deposit is paid in full, at the amount that was asked for.", { reason: "deposit_amount" });
+  }
+  const staff = await staffOf(uow, actor).catch(() => null);
+  const ref = await nextReference(uow.tx, "PAY", uow.now);
+  return uow.tx.payment.create({
+    data: {
+      ref,
+      clientId: a.clientId,
+      locationId,
+      method: a.method,
+      provider: a.provider,
+      amountMinor: a.amountMinor,
+      currencyCode: invoice?.currencyCode ?? settings.currencyCode,
+      status: "pending",
+      reference: (a.reference ?? "").slice(0, 120),
+      note: (a.note ?? "").slice(0, 300),
+      forInvoiceId: a.target.invoiceId ?? null,
+      forDepositId: a.target.depositId ?? null,
+      allowOverpay: a.allowOverpay === true,
+      payerAuthorizationId: a.payerAuthorizationId ?? null,
+      receivedById: staff?.id ?? null,
+      postedOn: a.postedOn ? /* @__PURE__ */ new Date(`${dateOnly(a.postedOn, "posting day")}T00:00:00Z`) : null
+    }
+  });
+}
+async function recordPayment(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.record", humanOnly: true }, args, async (actor) => {
+    const method = pick(args.method, PAYMENT_METHODS.filter((m) => !["payment_link", "client_credit"].includes(m)), "payment method");
+    const amount = minorText(args.amountMinor, "amount");
+    if (method === "insurer_direct" && !args.payerAuthorizationId) throw new DomainError(Codes.INVALID_INPUT, "An insurer payment needs the authorisation it was paid against.", { field: "payerAuthorizationId" });
+    if (["check", "ach"].includes(method) && !String(args.reference ?? "").trim()) throw new DomainError(Codes.INVALID_INPUT, "Enter the check or reference number.", { field: "reference" });
+    const result = await command(context.prisma, { name: "payment.record", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.payerAuthorizationId) {
+        const auth = await uow.tx.payerAuthorization.findUnique({ where: { id: args.payerAuthorizationId }, select: { status: true, invoiceId: true } });
+        if (!auth || !["authorised", "paid"].includes(auth.status)) throw new DomainError(Codes.GUARD_FAILED, "That authorisation has not been approved by the insurer.");
+        if (auth.invoiceId && auth.invoiceId !== args.invoiceId) throw new DomainError(Codes.GUARD_FAILED, "That authorisation is for a different invoice.");
+      }
+      const pay = await newPayment(uow, actor, { clientId: args.clientId, method, provider: "manual", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId }, reference: args.reference ?? "", note: args.note ?? "", postedOn: args.postedOn, allowOverpay: args.allowOverpay === true, payerAuthorizationId: args.payerAuthorizationId });
+      const settled = await settleSucceeded(uow, actor, pay.id);
+      auditCreate(uow, actor, "Payment", pay.id, "payment.recorded", { method, amountMinor: amount.toString() });
+      return { id: pay.id, ref: pay.ref, status: "succeeded", heldOnAccountMinor: settled.heldOnAccountMinor ?? "0" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function takeCardPayment(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.card", humanOnly: true }, args, async (actor) => {
+    const amount = minorText(args.amountMinor, "amount");
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
+    const started = await command(context.prisma, { name: "payment.card.start", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.invoiceId) await lockRow(uow.tx, "Invoice", args.invoiceId);
+      else if (args.depositId) await lockRow(uow.tx, "Deposit", args.depositId);
+      const open = await uow.tx.payment.findFirst({ where: { method: "card_on_file", status: { in: ["pending", "unknown"] }, ...args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? "" } }, select: { ref: true } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: "card_in_flight" });
+      const pay = await newPayment(uow, actor, { clientId: args.clientId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } });
+      const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
+      return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode };
+    });
+    if (started.replay) return { replay: true, ...await settleFromState(context, actor, started.value.paymentId) };
+    const outcome = await adapterFor("stripe").charge({ amountMinor: amount, currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod: args.paymentMethodId ?? void 0 });
+    return { replay: false, ...await recordOutcome(context, actor, started.value.paymentId, started.value.attemptId, outcome, `${args.idempotencyKey}:result`) };
+  });
+}
+async function settleFromState(context, actor, paymentId) {
+  const p = await context.prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, ref: true, status: true } });
+  return { id: p.id, ref: p.ref, status: p.status };
+}
+async function recordOutcome(context, actor, paymentId, attemptId, outcome, key2) {
+  const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key2, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
+    let pay = await lockRow(uow.tx, "Payment", paymentId);
+    if (pay.status === "succeeded") return { id: pay.id, ref: pay.ref, status: "succeeded", message: "Paid." };
+    const open = outcome.outcome === "requires_action" || outcome.outcome === "processing";
+    if (pay.status === "failed") {
+      if (pay.providerRef || !outcome.providerRef || !(open || outcome.outcome === "succeeded")) return { id: pay.id, ref: pay.ref, status: "failed", message: outcome.outcome === "failed" ? outcome.message : `Still marked failed. ${outcome.message}` };
+      await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["failed"], to: "pending", actor, eventType: "payment.reopened", reason: "The card processor reports this payment is not final.", data: { providerRef: outcome.providerRef } });
+      pay = await lockRow(uow.tx, "Payment", paymentId);
+    }
+    const attempt = await lockRow(uow.tx, "PaymentAttempt", attemptId);
+    const attemptStatus = outcome.outcome;
+    const ref = outcome.providerRef ?? "";
+    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: "PaymentAttempt", id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { ...ref ? { providerRef: ref } : {}, message: outcome.message.slice(0, 200), ...attemptStatus === "unknown" || open ? { resolvedAt: null } : { resolvedAt: uow.now } } });
+    if (outcome.outcome === "succeeded") await settleSucceeded(uow, actor, paymentId, outcome.providerRef);
+    else if (outcome.outcome === "failed") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "failed", actor, eventType: "payment.failed", data: ref ? { providerRef: ref } : {} });
+    else if (outcome.outcome === "unknown" && pay.status === "pending") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["pending"], to: "unknown", actor, eventType: "payment.unknown", data: ref ? { providerRef: ref } : {} });
+    else if (open && (pay.status !== "pending" || ref && pay.providerRef !== ref)) await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "pending", actor, eventType: "payment.pending", data: ref ? { providerRef: ref } : {} });
+    else if (ref && !pay.providerRef) await uow.tx.payment.update({ where: { id: pay.id }, data: { providerRef: ref } });
+    return { id: pay.id, ref: pay.ref, status: open ? "pending" : outcome.outcome, message: outcome.message };
+  });
+  return done.value;
+}
+async function resolveUnknownPayment(prisma, actor, paymentId) {
+  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true, providerRef: true } } } });
+  if (!pay) throw new DomainError(Codes.NOT_FOUND, "Payment not found.");
+  const checkable = ["unknown", "pending"].includes(pay.status) || pay.status === "failed" && pay.provider === "stripe";
+  if (!checkable || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: "Nothing to check." };
+  const attempt = pay.attempts[0];
+  if (!cardConfigured()) return { id: pay.id, ref: pay.ref, status: pay.status, message: "The card processor is not reachable from here." };
+  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || attempt.providerRef || null });
+  return recordOutcome({ prisma, session: null }, actor, pay.id, attempt.id, outcome, `resolve:${pay.id}:${outcome.outcome}:${outcome.providerRef ?? ""}`);
+}
+async function checkPaymentStatus(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS], tool: "payment.check", humanOnly: true }, args, async (actor) => resolveUnknownPayment(context.prisma, actor, args.paymentId));
+}
+async function applyDepositTo(uow, actor, depositId, invoiceId) {
+  const dep = await lockRow(uow.tx, "Deposit", depositId);
+  if (dep.status === "applied") throw new DomainError(Codes.GUARD_FAILED, "This deposit was already applied.", { reason: "already_applied" });
+  if (dep.status !== "paid") throw new DomainError(Codes.GUARD_FAILED, "This deposit has not been paid yet.");
+  const inv = await lockRow(uow.tx, "Invoice", invoiceId);
+  if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, "A deposit can only go against the same client\u2019s invoice.");
+  if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "That invoice cannot take a deposit.");
+  const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId }, select: { amountMinor: true } });
+  const balance = await balanceOfInvoice(uow.tx, inv.id);
+  const apply = pay.amountMinor < balance ? pay.amountMinor : balance;
+  const { on } = await locationDay(uow, inv.locationId, uow.now);
+  await post(uow, { clientId: dep.clientId, kind: "deposit_released", amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: "Deposit applied" });
+  await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: "deposit_applied", amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: "Deposit applied" });
+  await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["paid"], to: "applied", actor, eventType: "deposit.applied", data: { appliedInvoiceId: inv.id, appliedAt: uow.now } });
+  const status = await syncInvoiceStatus(uow, actor, inv.id, "Deposit applied");
+  return { depositId: dep.id, invoiceId: inv.id, appliedMinor: apply.toString(), invoiceStatus: status };
+}
+async function applyDeposit(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS, ...POSTERS], tool: "deposit.apply", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "deposit.apply", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      return applyDepositTo(uow, actor, args.depositId, args.invoiceId);
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function issueCreditNote(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS], tool: "credit.note", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const amount = minorText(args.amountMinor, "amount");
+    const result = await command(context.prisma, { name: "credit.note", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (!["posted", "partially_paid", "paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only a posted invoice can be credited.");
+      if (amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "A credit note cannot be more than the invoice total.");
+      const credited = (await uow.tx.creditNote.aggregate({ where: { invoiceId: inv.id }, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO2;
+      if (credited + amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "Credit notes cannot add up to more than the invoice total.");
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = await nextReference(uow.tx, "CRN", uow.now);
+      const note = await uow.tx.creditNote.create({ data: { ref, invoiceId: inv.id, clientId: inv.clientId, amountMinor: amount, currencyCode: inv.currencyCode, reason, postedById: staff?.id ?? null, postedAt: uow.now } });
+      const { on } = await locationDay(uow, inv.locationId, uow.now);
+      const balance = await balanceOfInvoice(uow.tx, inv.id);
+      await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "credit_note", amountMinor: -amount, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}`, memo: ref });
+      const excess = amount > balance ? amount - (balance > ZERO2 ? balance : ZERO2) : ZERO2;
+      if (excess > ZERO2) {
+        await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "adjustment", amountMinor: excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:invoice`, memo: `${ref}: already paid` });
+        await post(uow, { clientId: inv.clientId, kind: "adjustment", amountMinor: -excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:account`, memo: `${ref}: credit held on account` });
+      }
+      await syncInvoiceStatus(uow, actor, inv.id, ref);
+      auditCreate(uow, actor, "CreditNote", note.id, "credit.issued", { ref, amountMinor: amount.toString(), heldOnAccountMinor: excess.toString() }, { reason });
+      return { id: note.id, ref, heldOnAccountMinor: excess.toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function runRefund(prisma, actor, refundId, key2) {
+  const start = await command(prisma, { name: "refund.start", actor, idempotencyKey: `${key2}:start`, params: { refundId } }, async (uow) => {
+    const r = await lockRow(uow.tx, "Refund", refundId);
+    if (r.status === "succeeded") return { skip: true, status: r.status };
+    if (!["requested", "approved", "processing", "unknown"].includes(r.status)) throw new DomainError(Codes.GUARD_FAILED, `This refund is ${r.status}.`);
+    if (r.status === "requested" || r.status === "approved") await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "processing", actor, eventType: "refund.processing" });
+    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { provider: true, providerRef: true } });
+    return { skip: false, id: r.id, amountMinor: r.amountMinor, reason: r.reason, key: r.providerIdempotencyKey, provider: pay.provider, providerRef: pay.providerRef };
+  });
+  if (start.value.skip) return { id: refundId, status: start.value.status, message: "Already refunded." };
+  const s = start.value;
+  const out = await adapterFor(s.provider).refund({ providerRef: s.providerRef, amountMinor: s.amountMinor, idempotencyKey: s.key, reason: s.reason });
+  const settle = (outcome) => command(prisma, { name: "refund.settle", actor, idempotencyKey: `${key2}:settle:${outcome.outcome}:${outcome.providerRef ?? ""}`, params: { refundId, outcome: outcome.outcome } }, async (uow) => {
+    const r = await lockRow(uow.tx, "Refund", refundId);
+    if (r.status === "succeeded") return { id: r.id, status: "succeeded" };
+    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { clientId: true, currencyCode: true, locationId: true } });
+    if (out.outcome === "succeeded") {
+      const locationId = pay.locationId ?? (await uow.tx.location.findFirstOrThrow({ select: { id: true } })).id;
+      const { on } = await locationDay(uow, locationId, uow.now);
+      await post(uow, { clientId: pay.clientId, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: "refund", amountMinor: r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}`, memo: r.ref });
+      const planMonth = r.invoiceId ? await uow.tx.planBillingAttempt.findFirst({ where: { paymentId: r.paymentId }, select: { id: true } }) : null;
+      if (planMonth && r.invoiceId) {
+        await post(uow, { clientId: pay.clientId, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: "adjustment", amountMinor: -r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}:plan_settled`, memo: `${r.ref}: refunded plan month` });
+        auditCreate(uow, actor, "Refund", r.id, "refund.plan_month_kept_paid", { invoiceId: r.invoiceId });
+      } else if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref);
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "succeeded", actor, eventType: "refund.succeeded", data: { providerRef: out.providerRef ?? "", processedAt: uow.now, message: out.message.slice(0, 200) } });
+    } else if (out.outcome === "failed") {
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "failed", actor, eventType: "refund.failed", data: { message: out.message.slice(0, 200) } });
+    } else if (r.status !== "unknown") {
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "unknown", actor, eventType: "refund.unknown", data: { message: out.message.slice(0, 200), providerRef: out.providerRef ?? "" } });
+    }
+    return { id: r.id, status: out.outcome, message: out.message };
+  });
+  try {
+    const done = await settle(out);
+    return done.value;
+  } catch (error) {
+    if (!isDomainError(error) && !/check_violation|cannot go below zero|database rule/i.test(String(error?.message))) throw error;
+    const why = isDomainError(error) ? error.message : String(error.message);
+    const message = `${out.outcome === "succeeded" ? "The processor made this refund, but the books refused the entry" : "The books refused this refund"}: ${why}`.slice(0, 200);
+    const done = await command(prisma, { name: "refund.settle_refused", actor, idempotencyKey: `${key2}:refused`, params: { refundId } }, async (uow) => {
+      const r = await lockRow(uow.tx, "Refund", refundId);
+      if (r.status === "succeeded" || r.status === "failed") return { id: r.id, status: r.status, message };
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "failed", actor, eventType: "refund.failed", data: { message, providerRef: out.providerRef ?? "" } });
+      return { id: r.id, status: "failed", message };
+    });
+    return done.value;
+  }
+}
+async function requestRefund(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.request", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const amount = minorText(args.amountMinor, "amount");
+    const made = await command(context.prisma, { name: "refund.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const pay = await lockRow(uow.tx, "Payment", args.paymentId);
+      if (pay.status !== "succeeded") throw new DomainError(Codes.GUARD_FAILED, "Only a payment that went through can be refunded.");
+      if (args.invoiceId) {
+        const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } });
+        if (!inv || inv.clientId !== pay.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
+      }
+      const { refunded } = await paymentTotals(uow.tx, pay.id);
+      const dep = await uow.tx.deposit.findFirst({ where: { paymentId: pay.id, status: "applied" }, select: { id: true } });
+      const applied = dep ? -((await uow.tx.clientLedgerEntry.findUnique({ where: { entryKey: `deposit:${dep.id}:apply` }, select: { amountMinor: true } }))?.amountMinor ?? ZERO2) : ZERO2;
+      const refundable = pay.amountMinor - applied - refunded;
+      if (amount > refundable) throw new DomainError(Codes.GUARD_FAILED, `Only ${money3(refundable > ZERO2 ? refundable : ZERO2)} of this payment can still be refunded${applied > ZERO2 ? ` (${money3(applied)} of it was applied to an invoice)` : ""}.`, { reason: "over_refund", refundableMinor: (refundable > ZERO2 ? refundable : ZERO2).toString() });
+      const settings = await billingSettings(uow);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const ref = await nextReference(uow.tx, "REF", uow.now);
+      const needsApproval = amount > settings.refundApprovalThresholdMinor;
+      const refund = await uow.tx.refund.create({ data: { ref, paymentId: pay.id, invoiceId: args.invoiceId ?? null, amountMinor: amount, currencyCode: "USD", reason, status: "requested", providerIdempotencyKey: `vet-refund-${(0, import_node_crypto10.randomUUID)()}`, requestedById: staff?.id ?? null } });
+      let approvalId = null;
+      if (needsApproval) {
+        const req = await requestApproval(uow, actor, { action: "refund.issue", targetList: "Refund", targetId: refund.id, payload: { refundId: refund.id, amountMinor: amount.toString() }, requiredPermission: "canIssueRefunds", summary: `Refund ${ref}` });
+        approvalId = req.id;
+        await uow.tx.refund.update({ where: { id: refund.id }, data: { approvalId } });
+      }
+      auditCreate(uow, actor, "Refund", refund.id, "refund.requested", { ref, amountMinor: amount.toString(), needsApproval }, { reason });
+      return { id: refund.id, ref, needsApproval, approvalRequestId: approvalId };
+    });
+    if (made.replay || made.value.needsApproval) return { replay: made.replay, ...made.value, status: "requested" };
+    const out = await runRefund(context.prisma, actor, made.value.id, args.idempotencyKey);
+    return { replay: false, ...made.value, ...out };
+  });
+}
+async function issueApprovedRefund(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.issue", humanOnly: true }, args, async (actor) => {
+    await command(context.prisma, { name: "refund.approve.use", actor, idempotencyKey: `${args.idempotencyKey}:use`, params: args }, async (uow) => {
+      const r = await lockRow(uow.tx, "Refund", args.refundId);
+      if (r.status !== "requested") return { skipped: true };
+      if (!r.approvalId) return { skipped: true };
+      const used = await consumeApproval(uow, { requestId: r.approvalId, action: "refund.issue", targetList: "Refund", targetId: r.id, payload: { refundId: r.id, amountMinor: r.amountMinor.toString() } });
+      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: ["requested"], to: "approved", actor, eventType: "refund.approved", approverId: used.approverId });
+      return { skipped: false };
+    });
+    return runRefund(context.prisma, actor, args.refundId, args.idempotencyKey);
+  });
+}
+async function checkRefundStatus(_root, args, context) {
+  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.check", humanOnly: true }, args, async (actor) => runRefund(context.prisma, actor, args.refundId, args.idempotencyKey));
+}
+async function requestWriteOff(_root, args, context) {
+  return gated(context, { permissions: [...POSTERS, "canApproveWriteOff"], tool: "invoice.writeoff", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "invoice.writeoff", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
+      if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only an invoice that still has a balance can be written off.");
+      const settings = await billingSettings(uow);
+      if (!settings.writeOffRequiresApproval && can(actor, "canApproveWriteOff")) return writeOff(uow, actor, inv.id, reason);
+      const req = await requestApproval(uow, actor, { action: "invoice.writeoff", targetList: "Invoice", targetId: inv.id, payload: { invoiceId: inv.id, reason }, requiredPermission: "canApproveWriteOff", summary: `Write off ${inv.ref}` });
+      return { id: inv.id, status: "pending_approval", approvalRequestId: req.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function writeOff(uow, actor, invoiceId, reason) {
+  const inv = await lockRow(uow.tx, "Invoice", invoiceId);
+  const balance = await balanceOfInvoice(uow.tx, inv.id);
+  if (balance <= ZERO2) throw new DomainError(Codes.GUARD_FAILED, "This invoice has no balance to write off.");
+  const { on } = await locationDay(uow, inv.locationId, uow.now);
+  await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "write_off", amountMinor: -balance, currencyCode: inv.currencyCode, postedOn: on, entryKey: `writeoff:${inv.id}`, memo: reason });
+  await transition(uow, { model: "Invoice", id: inv.id, from: ["posted", "partially_paid"], to: "written_off", actor, eventType: "invoice.written_off", reason, metadata: { writtenOffMinor: balance.toString() } });
+  return { id: inv.id, status: "written_off", writtenOffMinor: balance.toString() };
+}
+registerApplier("invoice.writeoff", async (uow, actor, request) => writeOff(uow, actor, request.payload.invoiceId, request.payload.reason));
+async function closeArPeriod(_root, args, context) {
+  return gated(context, { permissions: ["canManagePayments", "canViewFinance"], tool: "period.close", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "period.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const period = await lockRow(uow.tx, "ArPeriod", args.periodId);
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const drafts = await uow.tx.invoice.count({ where: { status: "draft", createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
+      const pending2 = await uow.tx.payment.count({ where: { status: { in: ["pending", "unknown"] }, createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
+      if (pending2) throw new DomainError(Codes.GUARD_FAILED, `${pending2} ${pending2 === 1 ? "payment is" : "payments are"} still waiting on the card processor. Check ${pending2 === 1 ? "its" : "their"} status first.`, { reason: "pending_payments" });
+      const row = await transition(uow, { model: "ArPeriod", id: period.id, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "period.closed", data: { closedAt: uow.now, closedById: staff?.id ?? null }, metadata: { draftInvoices: drafts } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reopenArPeriod(_root, args, context) {
+  return gated(context, { permissions: ["canManagePractice"], tool: "period.reopen", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "period.reopen", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "ArPeriod", id: args.periodId, from: ["closed"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "period.reopened", reason, data: { closedAt: null, closedById: null } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/wellnessDeath.ts
+async function cancelEnrollmentByDeath(uow, actor, enrollmentId) {
+  await transition(uow, {
+    model: "Enrollment",
+    id: enrollmentId,
+    from: ["pending_payment", "active", "cancelling", "suspended"],
+    to: "ended_by_death",
+    actor,
+    eventType: "wellness.ended_by_death",
+    reason: "The patient died",
+    data: { endedAt: uow.now, autoRenew: false, cancelReason: "The patient died" }
+  });
+}
+
+// features/keystone/mutations/endOfLife.ts
+var AFTERCARE = ["private_cremation", "communal_cremation", "home_burial", "rabies_testing"];
+async function deathEffects(uow, actor, patientId) {
+  const counts = { plansEnded: 0, boardingsCancelled: 0, groomsCancelled: 0, remindersSuppressed: 0, estimatesClosed: 0 };
+  const enrolments = await uow.tx.enrollment.findMany({ where: { patientId, status: { in: ["pending_payment", "active", "cancelling", "suspended"] } }, select: { id: true } });
+  for (const e of enrolments) {
+    await cancelEnrollmentByDeath(uow, actor, e.id);
+    counts.plansEnded += 1;
+  }
+  const stays = await uow.tx.boardingStay.findMany({ where: { patientId, status: "in_house" }, select: { id: true } });
+  if (stays.length) throw new DomainError(Codes.GUARD_FAILED, "This patient is boarding with us. Check them out before recording a death.", { reason: "in_house" });
+  const reservations = await uow.tx.boardingReservation.findMany({ where: { patientId, status: { in: ["requested", "confirmed"] } }, select: { id: true, runTypeId: true, checkInOn: true, checkOutOn: true } });
+  for (const r of reservations) {
+    await transition(uow, { model: "BoardingReservation", id: r.id, from: ["requested", "confirmed"], to: "cancelled", actor, eventType: "boarding.cancelled", reason: "deceased", data: { cancelReason: "The patient died" } });
+    const nights = [];
+    for (let d = r.checkInOn.toISOString().slice(0, 10); d < r.checkOutOn.toISOString().slice(0, 10); d = addDays2(d, 1)) nights.push(/* @__PURE__ */ new Date(`${d}T00:00:00Z`));
+    await uow.tx.nightlyRunInventory.updateMany({ where: { runTypeId: r.runTypeId, night: { in: nights }, sold: { gt: 0 } }, data: { sold: { decrement: 1 } } });
+    counts.boardingsCancelled += 1;
+  }
+  const grooms = await uow.tx.groomAppointment.findMany({ where: { patientId, status: { in: ["booked", "checked_in"] } }, select: { id: true } });
+  for (const g of grooms) {
+    await transition(uow, { model: "GroomAppointment", id: g.id, from: ["booked", "checked_in"], to: "cancelled", actor, eventType: "groom.cancelled", reason: "deceased", data: { cancelReason: "The patient died" } });
+    counts.groomsCancelled += 1;
+  }
+  counts.remindersSuppressed = (await uow.tx.patientReminder.updateMany({ where: { patientId, status: { in: ["scheduled", "due", "overdue"] } }, data: { status: "suppressed", suppressedReason: "deceased" } })).count;
+  counts.estimatesClosed = (await uow.tx.estimate.updateMany({ where: { patientId, status: "open" }, data: { status: "closed" } })).count;
+  return counts;
+}
+async function signEuthanasiaConsent(_root, args, context) {
+  return gated(context, { permissions: ["canAuthoriseEuthanasia", "canManagePatients"], tool: "euthanasia.sign_consent", humanOnly: true }, args, async (actor) => {
+    const authority = pick(args.authority, ["owner", "animal_control", "court_order", "shelter_policy"], "who is authorising");
+    const bite = pick(args.biteAttestation, ["no_bite", "bite_in_last_10_days"], "bite history");
+    const aftercare = pick(args.aftercare, AFTERCARE, "aftercare");
+    const method = pick(args.method, ["in_person", "e_signature"], "how it was signed");
+    if (bite === "bite_in_last_10_days" && aftercare !== "rabies_testing") throw new DomainError(Codes.GUARD_FAILED, "A bite in the last 10 days means the animal goes to rabies testing. Choose rabies testing.", { reason: "bite_testing" });
+    const result = await command(context.prisma, { name: "euthanasia.sign_consent", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const patient = await uow.tx.patient.findUnique({ where: { id: args.patientId }, select: { id: true, name: true, status: true } });
+      if (!patient) throw new DomainError(Codes.NOT_FOUND, "Patient not found.");
+      if (patient.status !== "active") throw new DomainError(Codes.PATIENT_DECEASED, `${patient.name} is ${patient.status}.`);
+      const clientId = await clientOfPatient(uow, patient.id);
+      const staff = await staffOf(uow, actor);
+      let signer = null;
+      if (authority === "owner") {
+        if (!args.signerId) throw new DomainError(Codes.CONSENT_REQUIRED, "Choose the owner who is signing.", { field: "signerId" });
+        const person = await uow.tx.clientPerson.findUnique({ where: { id: args.signerId }, select: { id: true, clientId: true, firstName: true, lastName: true, canAuthoriseEuthanasia: true } });
+        if (!person || person.clientId !== clientId) throw new DomainError(Codes.NOT_FOUND, "That person is not on this client.", { field: "signerId" });
+        if (!person.canAuthoriseEuthanasia) throw new DomainError(Codes.CONSENT_REQUIRED, `${person.firstName} ${person.lastName} is not marked as allowed to authorise euthanasia for this client.`, { field: "signerId" });
+        signer = person;
+      } else if (!(args.authorityNote ?? "").trim()) {
+        throw new DomainError(Codes.INVALID_INPUT, "Write down the case number or the name of the authority.", { field: "authorityNote" });
+      }
+      const signature = text20(args.signatureText, "signature", 120);
+      if (args.method === "in_person" && !args.clientPresent) throw new DomainError(Codes.INVALID_INPUT, "An in-person signature needs the person present.", { field: "clientPresent" });
+      const live = await uow.tx.euthanasiaConsent.findFirst({ where: { patientId: patient.id, status: { in: ["draft", "signed"] } }, select: { id: true, ref: true } });
+      if (live) throw new DomainError(Codes.GUARD_FAILED, `${live.ref} is already signed for ${patient.name}. Revoke it first to make a new one.`);
+      const ref = await nextReference(uow.tx, "EUC", uow.now);
+      const row = await uow.tx.euthanasiaConsent.create({
+        data: { ref, patientId: patient.id, clientId, signerId: signer?.id ?? null, authority, authorityNote: text20(args.authorityNote ?? "", "authority", 200, false), status: "signed", biteAttestation: bite, aftercare, clientPresent: args.clientPresent === true, method, witnessId: args.witnessId || staff.id, signatureText: signature, signedAt: uow.now }
+      });
+      auditCreate(uow, actor, "EuthanasiaConsent", row.id, "euthanasia.consent_signed", { ref, authority, aftercare, bite });
+      return { id: row.id, ref, status: "signed" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function revokeEuthanasiaConsent(_root, args, context) {
+  return gated(context, { permissions: ["canAuthoriseEuthanasia", "canManagePatients"], tool: "euthanasia.revoke_consent", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 200);
+    const result = await command(context.prisma, { name: "euthanasia.revoke_consent", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "EuthanasiaConsent", id: args.consentId, from: ["signed", "draft"], to: "revoked", expectedVersion: args.expectedVersion, actor, eventType: "euthanasia.consent_revoked", reason, data: { revokedReason: reason } });
+      return { id: args.consentId, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function recordEuthanasia(_root, args, context) {
+  return gated(context, { permissions: ["canAuthoriseEuthanasia"], tool: "euthanasia.record", humanOnly: true }, args, async (actor) => {
+    const tag = text20(args.tagNumber, "tag number", 40);
+    const result = await command(context.prisma, { name: "euthanasia.record", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      if (!staff.homeLocationId) throw new DomainError(Codes.GUARD_FAILED, "Your staff record has no home location.");
+      const locationId = staff.homeLocationId;
+      await requireLicence(uow.tx, { staffMemberId: staff.id, locationId, action: "authorise_euthanasia", at: uow.now });
+      const consent = await lockRow(uow.tx, "EuthanasiaConsent", args.consentId);
+      if (consent.patientId !== args.patientId) throw new DomainError(Codes.GUARD_FAILED, "That consent is for a different patient.");
+      if (consent.status !== "signed") throw new DomainError(Codes.CONSENT_REQUIRED, "There is no signed consent for this patient.", { reason: consent.status });
+      const at = args.diedAt ? new Date(args.diedAt) : uow.now;
+      if (Number.isNaN(at.getTime()) || at > uow.now) throw new DomainError(Codes.INVALID_INPUT, "The time must be in the past.", { field: "diedAt" });
+      const clientId = await clientOfPatient(uow, args.patientId);
+      const dead = await deceasePatient(uow, actor, args.patientId, at, args.expectedVersion);
+      const record = await uow.tx.deathRecord.create({ data: { patientId: args.patientId, locationId, cause: "euthanasia", causeNote: text20(args.causeNote ?? "", "cause", 300, false), diedAt: at, recordedById: staff.id, consentId: consent.id, effects: JSON.stringify(dead) } });
+      await transition(uow, { model: "EuthanasiaConsent", id: consent.id, from: ["signed"], to: "used", actor, eventType: "euthanasia.consent_used", data: { usedAt: uow.now } });
+      const ref = await nextReference(uow.tx, "AFT", uow.now);
+      const order = await uow.tx.aftercareOrder.create({ data: { ref, patientId: args.patientId, clientId, locationId, deathRecordId: record.id, choice: consent.aftercare, status: "body_tagged", tagNumber: tag, heldFrom: consent.aftercare === "rabies_testing" ? "testing" : "" } });
+      await uow.tx.custodyEvent.create({ data: { orderId: order.id, kind: "tagged", tagNumber: tag, place: "Treatment room", byId: staff.id, at: uow.now } });
+      const charge = await serviceItemCharge(uow, actor, "EUTH-STANDARD", { patientId: args.patientId, clientId, locationId, sourceType: "fee", sourceId: `euthanasia:${record.id}` });
+      const aftercareCode = { private_cremation: "AFTER-PRIVATE", communal_cremation: "AFTER-COMMUNAL", home_burial: "", rabies_testing: "" }[consent.aftercare] ?? "";
+      if (aftercareCode) await serviceItemCharge(uow, actor, aftercareCode, { patientId: args.patientId, clientId, locationId, sourceType: "aftercare", sourceId: `aftercare:${order.id}` });
+      auditCreate(uow, actor, "DeathRecord", record.id, "patient.death_recorded", { cause: "euthanasia", ...dead, chargeId: charge.id, tag });
+      return { ...dead, id: record.id, aftercareId: order.id, aftercareRef: order.ref };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var STEPS = {
+  store: { from: ["body_tagged"], to: "stored", kind: "stored" },
+  pick_up: { from: ["stored"], to: "picked_up", kind: "picked_up" },
+  return_ashes: { from: ["picked_up"], to: "returned", kind: "returned" },
+  release_to_owner: { from: ["stored", "body_tagged"], to: "released_to_owner", kind: "released" },
+  hold_for_testing: { from: ["stored", "body_tagged"], to: "held_for_testing", kind: "testing_hold" },
+  close: { from: ["returned", "released_to_owner", "held_for_testing"], to: "closed", kind: "closed" }
+};
+async function advanceAftercare(_root, args, context) {
+  return gated(context, { permissions: ["canAuthoriseEuthanasia", "canManagePatients", "canManageBoarding"], tool: "aftercare.advance", humanOnly: true }, args, async (actor) => {
+    const step = STEPS[pick(args.step, Object.keys(STEPS), "step")];
+    const result = await command(context.prisma, { name: "aftercare.advance", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const o = await lockRow(uow.tx, "AftercareOrder", args.orderId);
+      if (String(args.tagNumber).trim() !== o.tagNumber) throw new DomainError(Codes.GUARD_FAILED, "The tag you entered does not match the tag on this animal. Check the tag before moving them.", { reason: "tag_mismatch" });
+      if (step.to === "picked_up" && !(args.crematory ?? o.crematory)) throw new DomainError(Codes.INVALID_INPUT, "Name the crematory collecting them.", { field: "crematory" });
+      if (step.to === "picked_up" && !(args.manifestRef ?? o.manifestRef)) throw new DomainError(Codes.INVALID_INPUT, "Write the manifest number.", { field: "manifestRef" });
+      if (step.to === "returned") {
+        const ref = (args.crematoryRef ?? "").trim();
+        if (!ref) throw new DomainError(Codes.INVALID_INPUT, "Write the number on the ashes container.", { field: "crematoryRef" });
+        if (ref !== o.manifestRef) throw new DomainError(Codes.GUARD_FAILED, "The number on the ashes does not match the manifest. Do not hand them over until the crematory confirms.", { reason: "manifest_mismatch" });
+      }
+      if (step.to === "released_to_owner" && o.choice === "rabies_testing") throw new DomainError(Codes.GUARD_FAILED, "This animal is held for rabies testing and cannot be released.");
+      if (step.to === "released_to_owner" && !(args.receivedBy ?? "").trim()) throw new DomainError(Codes.INVALID_INPUT, "Write who received the animal.", { field: "receivedBy" });
+      const staff = await staffOf(uow, actor);
+      const data = {};
+      if (args.crematory) data.crematory = text20(args.crematory, "crematory", 80);
+      if (args.manifestRef) data.manifestRef = text20(args.manifestRef, "manifest", 60);
+      if (step.to === "returned") data.crematoryRef = args.crematoryRef.trim();
+      await uow.tx.custodyEvent.create({ data: { orderId: o.id, kind: step.kind, tagNumber: o.tagNumber, place: text20(args.place ?? "", "place", 80, false), crematoryRef: String(data.crematoryRef ?? ""), receivedBy: text20(args.receivedBy ?? "", "received by", 80, false), byId: staff.id, at: uow.now } });
+      const row = await transition(uow, { model: "AftercareOrder", id: o.id, from: step.from, to: step.to, expectedVersion: args.expectedVersion, actor, eventType: `aftercare.${step.kind}`, data });
+      return { id: o.id, ref: o.ref, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addMemorialItem(_root, args, context) {
+  return gated(context, { permissions: ["canAuthoriseEuthanasia", "canManagePatients", "canManageBoarding"], tool: "aftercare.add_memorial", humanOnly: true }, args, async (actor) => {
+    const kind = pick(args.kind, ["paw_print", "clay_impression", "fur_clipping", "urn", "keepsake"], "keepsake");
+    const result = await command(context.prisma, { name: "aftercare.add_memorial", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const o = await lockRow(uow.tx, "AftercareOrder", args.orderId);
+      if (o.status === "closed") throw new DomainError(Codes.GUARD_FAILED, "This order is closed.");
+      const item = await uow.tx.serviceItem.findFirst({ where: { code: `MEM-${kind.toUpperCase()}`, active: true } });
+      if (!item) throw new DomainError(Codes.GUARD_FAILED, "That keepsake has no price yet.");
+      const memorial = await uow.tx.memorialItem.create({ data: { orderId: o.id, kind, description: text20(args.description || item.name, "description", 120), priceMinor: item.priceMinor } });
+      const line = await serviceItemCharge(uow, actor, item.code, { patientId: o.patientId, clientId: o.clientId, locationId: o.locationId, sourceType: "memorial", sourceId: memorial.id });
+      await uow.tx.memorialItem.update({ where: { id: memorial.id }, data: { chargeLineId: line.id } });
+      auditCreate(uow, actor, "MemorialItem", memorial.id, "aftercare.memorial_added", { kind, priceMinor: item.priceMinor.toString() });
+      return { id: memorial.id, chargeId: line.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/mutations/clients.ts
 init_errors();
 init_decimal();
-var text19 = (value, field, max = 200, required = true) => {
+var text21 = (value, field, max = 200, required = true) => {
   const out = String(value ?? "").trim();
   if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
   if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
@@ -8521,8 +10502,8 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   const row = await uow.tx.clientPerson.create({
     data: {
       clientId,
-      firstName: text19(person.firstName, "firstName", 80),
-      lastName: text19(person.lastName, "lastName", 80),
+      firstName: text21(person.firstName, "firstName", 80),
+      lastName: text21(person.lastName, "lastName", 80),
       relationship: person.relationship ?? "owner",
       isPrimary,
       canBook: true,
@@ -8545,7 +10526,7 @@ async function createPerson(uow, actor, clientId, person, isPrimary, source) {
   return row;
 }
 async function createPatient(uow, actor, clientId, input, status) {
-  const species = await uow.tx.species.findUnique({ where: { code: text19(input.speciesCode, "speciesCode", 40) } });
+  const species = await uow.tx.species.findUnique({ where: { code: text21(input.speciesCode, "speciesCode", 40) } });
   if (!species || !species.active) throw new DomainError(Codes.INVALID_INPUT, `Unknown species ${input.speciesCode}.`, { field: "speciesCode" });
   const breed = input.breedName ? await uow.tx.breed.findFirst({ where: { speciesId: species.id, name: { equals: input.breedName.trim(), mode: "insensitive" } } }) : null;
   if (input.dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth)) throw new DomainError(Codes.INVALID_INPUT, "dateOfBirth is YYYY-MM-DD.", { field: "dateOfBirth" });
@@ -8561,7 +10542,7 @@ async function createPatient(uow, actor, clientId, input, status) {
   const patient = await uow.tx.patient.create({
     data: {
       ref,
-      name: text19(input.name, "name", 80),
+      name: text21(input.name, "name", 80),
       kind: "individual",
       speciesId: species.id,
       breedId: breed?.id ?? null,
@@ -8596,7 +10577,7 @@ async function registerClient(_root, args, context) {
         data: {
           ref,
           publicCode: publicCode("CL"),
-          displayName: text19(input.displayName || `${primary.lastName} household`, "displayName", 120),
+          displayName: text21(input.displayName || `${primary.lastName} household`, "displayName", 120),
           kind: input.kind ?? "household",
           status: "active",
           primaryLocationId: location.id,
@@ -8628,7 +10609,7 @@ async function registerPendingClient(_root, args, context) {
       const ref = await nextSerial(uow.tx, "C");
       const source = actor.kind === "agent" ? "ai_voice" : "csr";
       const client = await uow.tx.client.create({
-        data: { ref, publicCode: publicCode("CL"), displayName: `${text19(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
+        data: { ref, publicCode: publicCode("CL"), displayName: `${text21(input.lastName, "lastName", 80)} household`, kind: "household", status: "prospect", primaryLocationId: location.id, stateCode: location.stateCode, source, accountFlags: dupes.length ? { possibleDuplicate: true } : {} }
       });
       auditCreate(uow, actor, "Client", client.id, "client.registered_pending", { ref, source, possibleDuplicate: dupes.length > 0 });
       await createPerson(uow, actor, client.id, { firstName: input.firstName, lastName: input.lastName, relationship: "owner", contacts }, true, source);
@@ -8706,7 +10687,7 @@ async function recordWeight(_root, args, context) {
 async function addPatientAlert(_root, args, context) {
   return gated(context, { permissions: ["canManagePatients", "canWriteRecord"], tool: "patient.alert", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "patient.alert.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text19(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
+      const row = await uow.tx.patientAlert.create({ data: { patientId: args.patientId, kind: args.kind, severity: args.severity, text: text21(args.text, "text", 500), active: true, createdById: actorUserId(actor) } });
       auditCreate(uow, actor, "PatientAlert", row.id, "patient.alert_added", { patientId: args.patientId, kind: args.kind, severity: args.severity });
       return { id: row.id };
     });
@@ -8728,25 +10709,29 @@ async function recordConsent(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
+async function deceasePatient(uow, actor, patientId, at, expectedVersion) {
+  await transition(uow, { model: "Patient", id: patientId, from: ["active", "pending", "inactive"], to: "deceased", expectedVersion, actor, eventType: "patient.deceased", data: { deceasedAt: at } });
+  await uow.tx.suppression.create({ data: { patientId, reason: "deceased", active: true } });
+  const future = await uow.tx.appointmentPatient.findMany({ where: { patientId, appointment: { startsAt: { gt: uow.now }, status: { in: ["requested", "booked", "confirmed"] } } }, select: { appointmentId: true } });
+  let cancelled = 0;
+  for (const { appointmentId } of future) {
+    const others = await uow.tx.appointmentPatient.count({ where: { appointmentId, patientId: { not: patientId }, status: { notIn: ["cancelled"] } } });
+    if (others === 0 && appointmentId) {
+      await transition(uow, { model: "Appointment", id: appointmentId, from: ["requested", "booked", "confirmed"], to: "cancelled", actor, eventType: "appointment.cancelled", reason: "deceased", data: { cancelReason: "deceased", cancelledAt: uow.now } });
+      await uow.tx.resourceReservation.updateMany({ where: { appointmentId, status: { not: "released" } }, data: { status: "released" } });
+      await uow.tx.providerReservation.updateMany({ where: { appointmentId, status: { not: "released" } }, data: { status: "released" } });
+      cancelled += 1;
+    }
+  }
+  const effects = await deathEffects(uow, actor, patientId);
+  return { id: patientId, status: "deceased", appointmentsCancelled: cancelled, ...effects };
+}
 async function recordPatientDeath(_root, args, context) {
   return gated(context, { permissions: ["canManagePatients"], tool: "patient.record_death", humanOnly: true }, args, async (actor) => {
     const result = await command(context.prisma, { name: "patient.record_death", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const at = args.diedAt ? new Date(args.diedAt) : uow.now;
       if (Number.isNaN(at.getTime()) || at > uow.now) throw new DomainError(Codes.INVALID_INPUT, "diedAt must be a past time.", { field: "diedAt" });
-      await transition(uow, { model: "Patient", id: args.patientId, from: ["active", "pending", "inactive"], to: "deceased", expectedVersion: args.expectedVersion, actor, eventType: "patient.deceased", data: { deceasedAt: at } });
-      await uow.tx.suppression.create({ data: { patientId: args.patientId, reason: "deceased", active: true } });
-      const future = await uow.tx.appointmentPatient.findMany({ where: { patientId: args.patientId, appointment: { startsAt: { gt: uow.now }, status: { in: ["requested", "booked", "confirmed"] } } }, select: { appointmentId: true } });
-      let cancelled = 0;
-      for (const { appointmentId } of future) {
-        const others = await uow.tx.appointmentPatient.count({ where: { appointmentId, patientId: { not: args.patientId }, status: { notIn: ["cancelled"] } } });
-        if (others === 0 && appointmentId) {
-          await transition(uow, { model: "Appointment", id: appointmentId, from: ["requested", "booked", "confirmed"], to: "cancelled", actor, eventType: "appointment.cancelled", reason: "deceased", data: { cancelReason: "deceased", cancelledAt: uow.now } });
-          await uow.tx.resourceReservation.updateMany({ where: { appointmentId, status: { not: "released" } }, data: { status: "released" } });
-          await uow.tx.providerReservation.updateMany({ where: { appointmentId, status: { not: "released" } }, data: { status: "released" } });
-          cancelled += 1;
-        }
-      }
-      return { id: args.patientId, status: "deceased", appointmentsCancelled: cancelled };
+      return deceasePatient(uow, actor, args.patientId, at, args.expectedVersion);
     });
     return { replay: result.replay, ...result.value };
   });
@@ -8755,7 +10740,7 @@ async function recordPatientDeath(_root, args, context) {
 // features/keystone/mutations/schedule.ts
 init_errors();
 var STEP_MINUTES = 15;
-var list22 = (v) => Array.isArray(v) ? v.map(String) : [];
+var list23 = (v) => Array.isArray(v) ? v.map(String) : [];
 async function loadAvailability(tx, input) {
   const [location, type] = await Promise.all([
     tx.location.findUnique({ where: { id: input.locationId }, select: { id: true, timeZone: true, active: true } }),
@@ -8763,8 +10748,8 @@ async function loadAvailability(tx, input) {
   ]);
   if (!location?.active) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
   if (!type?.active) throw new DomainError(Codes.NOT_FOUND, "Appointment type not found.");
-  const providerKinds = list22(type.providerKinds);
-  const resourceKinds = list22(type.requiredResourceKinds);
+  const providerKinds = list23(type.providerKinds);
+  const resourceKinds = list23(type.requiredResourceKinds);
   const windowStart = (/* @__PURE__ */ new Date(`${input.from}T00:00:00Z`)).getTime() - 864e5;
   const windowEnd = (/* @__PURE__ */ new Date(`${addDays(input.from, input.days)}T00:00:00Z`)).getTime() + 864e5;
   const range = { startsAt: { lt: new Date(windowEnd) }, endsAt: { gt: new Date(windowStart) }, status: { not: "released" } };
@@ -8799,7 +10784,7 @@ function computeSlots(data, input) {
           localDate: isoDay2(b.localDate),
           startTime: b.startTime,
           endTime: b.endTime,
-          categories: list22(b.appointmentCategories),
+          categories: list23(b.appointmentCategories),
           effectiveFrom: isoDay2(b.effectiveFrom),
           effectiveTo: isoDay2(b.effectiveTo)
         })),
@@ -9120,7 +11105,7 @@ async function addToWaitlist(_root, args, context) {
 
 // features/keystone/mutations/reception.ts
 init_errors();
-async function locationDay(uow, locationId) {
+async function locationDay3(uow, locationId) {
   const location = await uow.tx.location.findUnique({ where: { id: locationId }, select: { timeZone: true } });
   if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
   return localDate({ timeZone: location.timeZone }, uow.now);
@@ -9176,7 +11161,7 @@ async function recordCallDisclosure(_root, args, context) {
         eventType: "call.disclosed",
         data: { disclosurePlayedAt: uow.now, recordingConsent: args.recordingConsent }
       });
-      const contact = await resolvePolicy(uow.tx, "contact", { locationId: row.locationId, on: await locationDay(uow, row.locationId) });
+      const contact = await resolvePolicy(uow.tx, "contact", { locationId: row.locationId, on: await locationDay3(uow, row.locationId) });
       return { id: row.id, status: row.status, recording: contact.rules.recordingConsent === "all_party" ? args.recordingConsent === "accepted" : true };
     });
     return { replay: result.replay, ...result.value };
@@ -9392,7 +11377,7 @@ async function requestRecords(_root, args, context) {
         const call2 = input.callRecordId ? await uow.tx.callRecord.findUnique({ where: { id: input.callRecordId }, select: { callerVerifiedAt: true, clientId: true } }) : null;
         if (!call2?.callerVerifiedAt || call2.clientId !== clientId) throw new DomainError(Codes.CALLER_NOT_VERIFIED, "Verify the caller before taking a records request.");
       }
-      const today = await locationDay(uow, input.locationId);
+      const today = await locationDay3(uow, input.locationId);
       const records = await resolvePolicy(uow.tx, "medical_records", { locationId: input.locationId, on: today });
       const ref = await nextReference(uow.tx, "REC", uow.now);
       const due = addDays(today, records.rules.clientCopyDays);
@@ -9478,77 +11463,6 @@ async function receptionContext(_root, args, context) {
 // features/keystone/mutations/record.ts
 init_errors();
 
-// features/keystone/domain/licensure.ts
-init_errors();
-var DEA_SCHEDULE_CODE = { CI: "1", CII: "2", CIIN: "2N", CIII: "3", CIIIN: "3N", CIV: "4", CV: "5" };
-var day = (d) => d == null ? null : typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10);
-async function locationOf(tx, locationId) {
-  const location = await tx.location.findUnique({ where: { id: locationId }, select: { id: true, stateCode: true, timeZone: true, active: true } });
-  if (!location || !location.active) throw new DomainError(Codes.NOT_FOUND, "Location not found or inactive.", { locationId });
-  return location;
-}
-async function requireLicence(tx, input) {
-  const location = await locationOf(tx, input.locationId);
-  const onDate = localDate({ timeZone: location.timeZone }, input.at);
-  const policy = await resolvePolicy(tx, "licensure", { locationId: location.id, on: onDate });
-  const kinds = policy.rules.licenceKindsByAction[input.action];
-  if (!kinds?.length) throw new DomainError(Codes.POLICY_UNRESOLVED, `The licensure policy does not say who may ${input.action.replaceAll("_", " ")}.`, { action: input.action });
-  const licences = await tx.professionalLicense.findMany({
-    where: { staffMemberId: input.staffMemberId, kind: { in: kinds }, ...policy.rules.licenceMustMatchLocationState ? { stateCode: location.stateCode } : {} },
-    orderBy: { expiresOn: "desc" }
-  });
-  const valid = licences.find((l) => l.status === "active" && (!l.issuedOn || day(l.issuedOn) <= onDate) && day(l.expiresOn) >= onDate);
-  if (!valid) {
-    const latest = licences[0];
-    const why = !latest ? `no ${kinds.join(" or ")} licence in ${location.stateCode}` : latest.status !== "active" ? `the ${location.stateCode} licence is ${latest.status}` : `the ${location.stateCode} licence expired on ${day(latest.expiresOn)}`;
-    throw new DomainError(Codes.LICENSE_INACTIVE, `This needs an active licence: ${why}.`, { action: input.action, staffMemberId: input.staffMemberId, onDate });
-  }
-  const evaluation = await tx.licenseEvaluation.create({
-    data: {
-      action: input.action,
-      staffMemberId: input.staffMemberId,
-      locationId: location.id,
-      at: input.at,
-      onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
-      licenseId: valid.id,
-      policyVersions: policy.versions.map((v) => v.id),
-      result: "allowed",
-      findings: { kinds, state: location.stateCode, verified: policy.verified }
-    }
-  });
-  return { evaluationId: evaluation.id, licenseId: valid.id, policyVersionIds: policy.versions.map((v) => v.id), onDate };
-}
-async function requireDeaRegistration(tx, input) {
-  const location = await locationOf(tx, input.locationId);
-  const onDate = localDate({ timeZone: location.timeZone }, input.at);
-  if (input.schedule === "CI") throw new DomainError(Codes.DEA_REGISTRATION_INVALID, "Schedule I substances have no veterinary use under a practitioner registration.");
-  const code = DEA_SCHEDULE_CODE[input.schedule];
-  const registrations = await tx.deaRegistration.findMany({
-    where: { locationId: location.id, ...input.registrantStaffMemberId ? { staffMemberId: input.registrantStaffMemberId } : {} },
-    orderBy: { expiresOn: "desc" }
-  });
-  const covers = (r) => Array.isArray(r.schedules) && r.schedules.includes(code);
-  const valid = registrations.find((r) => r.status === "active" && (!r.issuedOn || day(r.issuedOn) <= onDate) && day(r.expiresOn) >= onDate && covers(r));
-  if (!valid) {
-    const latest = registrations[0];
-    const why = !latest ? "no DEA registration for this location" + (input.registrantStaffMemberId ? " held by this prescriber" : "") : latest.status !== "active" ? `the registration is ${latest.status}` : day(latest.expiresOn) < onDate ? `the registration expired on ${day(latest.expiresOn)}` : `the registration does not cover schedule ${code}`;
-    throw new DomainError(Codes.DEA_REGISTRATION_INVALID, `This controlled-substance action needs a valid DEA registration: ${why}.`, { locationId: location.id, schedule: input.schedule, onDate });
-  }
-  const evaluation = await tx.licenseEvaluation.create({
-    data: {
-      action: input.action,
-      staffMemberId: input.actorStaffMemberId ?? input.registrantStaffMemberId ?? null,
-      locationId: location.id,
-      at: input.at,
-      onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
-      deaRegistrationId: valid.id,
-      result: "allowed",
-      findings: { schedule: input.schedule, code }
-    }
-  });
-  return { evaluationId: evaluation.id, deaRegistrationId: valid.id, registrationNumber: valid.registrationNumber, onDate };
-}
-
 // features/keystone/domain/record.ts
 var has = (sections, kinds) => sections.some((s) => kinds.includes(s.kind) && s.body.trim().length > 0);
 var CHECKS = {
@@ -9594,7 +11508,7 @@ function signedContentHash(content) {
 var addendumHash = (input) => sha256(canonicalJson(input));
 
 // features/keystone/domain/vaccines.ts
-function addMonths(date, months) {
+function addMonths2(date, months) {
   const [y, m, d] = date.split("-").map(Number);
   const total = y * 12 + (m - 1) + months;
   const ny = Math.floor(total / 12);
@@ -9637,7 +11551,7 @@ function vaccineDuration(input) {
   return { months: input.labelMonths, weeks: 0, reason: "label" };
 }
 function dueDate(on, duration) {
-  return duration.weeks ? addDays(on, duration.weeks * 7) : addMonths(on, duration.months);
+  return duration.weeks ? addDays(on, duration.weeks * 7) : addMonths2(on, duration.months);
 }
 function inInitialSeries(schedule, dateOfBirth, on) {
   const s = schedule?.initialSeries;
@@ -9668,7 +11582,7 @@ function calendarDayText(isoDay3) {
 }
 
 // features/keystone/lib/documents.ts
-var import_node_crypto7 = require("node:crypto");
+var import_node_crypto11 = require("node:crypto");
 var esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 var words = (code) => String(code ?? "").replace(/_/g, " ");
 var zoned = (iso, timeZone) => new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(iso));
@@ -9730,7 +11644,7 @@ ${d.recheckOn ? `<h2>Recheck</h2><p>Please book a recheck for ${esc(calendarDayT
 <p class="meta">If your pet's breathing changes, it collapses, bleeds, or cannot keep water down, call us or the nearest emergency hospital now.</p>`;
   return page(`Discharge instructions for ${d.patientName}`, body);
 }
-var sha = (html) => (0, import_node_crypto7.createHash)("sha256").update(html, "utf8").digest("hex");
+var sha = (html) => (0, import_node_crypto11.createHash)("sha256").update(html, "utf8").digest("hex");
 async function practiceName(tx) {
   const loc = await tx.location.findFirst({ where: { active: true }, orderBy: { code: "asc" }, select: { name: true, timeZone: true } });
   return { name: loc?.name ?? "", timeZone: loc?.timeZone ?? "America/Los_Angeles" };
@@ -9775,82 +11689,6 @@ async function renderDischargeDocument(uow, instructionId) {
   await store(uow, doc.id, html);
 }
 
-// features/keystone/mutations/clinical.ts
-init_errors();
-var text20 = (value, field, max = 200, required = true) => {
-  const out = String(value ?? "").trim();
-  if (required && !out) throw new DomainError(Codes.INVALID_INPUT, `${field} is required.`, { field });
-  if (out.length > max) throw new DomainError(Codes.INVALID_INPUT, `${field} is too long.`, { field });
-  return out;
-};
-var DECIMAL_TEXT2 = /^\d{1,9}(\.\d{1,6})?$/;
-function decimalText(value, field) {
-  const out = String(value ?? "").trim();
-  if (!DECIMAL_TEXT2.test(out)) throw new DomainError(Codes.INVALID_INPUT, `${field} is a positive number with up to 6 decimals.`, { field });
-  return out;
-}
-async function staffOf(uow, actor) {
-  if (actor.kind !== "user") throw new DomainError(Codes.NEVER_ALLOWED_FOR_AGENTS, "Clinical records are written by people.");
-  const staff = await uow.tx.staffMember.findFirst({ where: { userId: actor.userId, active: true }, select: { id: true, kind: true, displayName: true, homeLocationId: true } });
-  if (!staff) throw new DomainError(Codes.NOT_AUTHORIZED, "Your user is not linked to an active staff member.");
-  return staff;
-}
-async function staffById(uow, id2) {
-  const staff = await uow.tx.staffMember.findUnique({ where: { id: id2 }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true } });
-  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Staff member not found.");
-  return staff;
-}
-async function witnessFor(uow, witnessId, administratorId) {
-  if (witnessId === administratorId) throw new DomainError(Codes.GUARD_FAILED, "The witness must be someone other than the person giving the dose.", { field: "witnessId" });
-  const staff = await uow.tx.staffMember.findUnique({ where: { id: witnessId }, select: { id: true, kind: true, displayName: true, homeLocationId: true, active: true, user: { select: { accessExpiresAt: true, role: { select: { canWitnessControlled: true } } } } } });
-  if (!staff || !staff.active) throw new DomainError(Codes.NOT_FOUND, "Witness not found.", { field: "witnessId" });
-  const expired = staff.user?.accessExpiresAt && staff.user.accessExpiresAt <= uow.now;
-  if (!staff.user?.role?.canWitnessControlled || expired) throw new DomainError(Codes.NOT_AUTHORIZED, `${staff.displayName} is not authorised to witness controlled drugs. Ask a veterinarian or a credentialed technician.`, { field: "witnessId" });
-  return { id: staff.id, kind: staff.kind, displayName: staff.displayName, homeLocationId: staff.homeLocationId };
-}
-async function activePatient(uow, patientId) {
-  const patient = await uow.tx.patient.findUnique({
-    where: { id: patientId },
-    select: { id: true, ref: true, name: true, status: true, dateOfBirth: true, sex: true, codeStatus: true, speciesId: true, species: { select: { code: true, name: true } }, breed: { select: { name: true, geneticFlags: true } } }
-  });
-  if (!patient) throw new DomainError(Codes.NOT_FOUND, "Patient not found.");
-  if (patient.status === "deceased" || patient.status === "merged") throw new DomainError(Codes.PATIENT_DECEASED, `The patient is ${patient.status}.`);
-  if (patient.status !== "active") throw new DomainError(Codes.GUARD_FAILED, `The patient is ${patient.status}; confirm the registration first.`);
-  return patient;
-}
-async function locationDay2(uow, locationId, at) {
-  const location = await uow.tx.location.findUnique({ where: { id: locationId }, select: { id: true, timeZone: true, stateCode: true, name: true } });
-  if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
-  return { location, on: localDate({ timeZone: location.timeZone }, at) };
-}
-async function chartableEncounter(uow, encounterId) {
-  const enc = await uow.tx.encounter.findUnique({ where: { id: encounterId }, select: { id: true, ref: true, status: true, version: true, patientId: true, locationId: true, kind: true, stayId: true, attendingDvmId: true } });
-  if (!enc) throw new DomainError(Codes.NOT_FOUND, "Encounter not found.");
-  if (enc.status === "signed") throw new DomainError(Codes.GUARD_FAILED, `${enc.ref} is signed. Add an addendum instead.`, { reason: "signed" });
-  if (enc.status === "voided") throw new DomainError(Codes.GUARD_FAILED, `${enc.ref} was voided.`, { reason: "voided" });
-  return enc;
-}
-async function markInProgress(uow, enc) {
-  if (enc.status !== "open") return;
-  await uow.tx.encounter.updateMany({ where: { id: enc.id, status: "open" }, data: { status: "in_progress", version: { increment: 1 } } });
-}
-var day2 = (d) => d ? d.toISOString().slice(0, 10) : null;
-async function latestWeight(uow, patientId) {
-  const w = await uow.tx.weightMeasurement.findFirst({ where: { patientId }, orderBy: { measuredAt: "desc" }, select: { id: true, valueKg: true, measuredAt: true } });
-  if (!w) return null;
-  return { id: w.id, valueKg: w.valueKg.toString(), measuredAt: w.measuredAt, ageHours: Math.floor((uow.now.getTime() - w.measuredAt.getTime()) / 36e5) };
-}
-async function practiceSettings(uow) {
-  const row = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { weightMaxAgeHours: true, features: true, unsignedRecordTaskHours: true, unsignedRecordEscalateHours: true, medicalDirectorId: true } });
-  return {
-    weightMaxAgeHours: row?.weightMaxAgeHours ?? { anaesthesia: 24, inpatient: 72, outpatient: 720 },
-    features: row?.features ?? {},
-    unsignedTaskHours: row?.unsignedRecordTaskHours ?? 24,
-    unsignedEscalateHours: row?.unsignedRecordEscalateHours ?? 72,
-    medicalDirectorId: row?.medicalDirectorId ?? null
-  };
-}
-
 // features/keystone/mutations/record.ts
 var IN_PERSON = /* @__PURE__ */ new Set(["outpatient", "inpatient_day", "surgery", "dental", "emergency", "euthanasia"]);
 async function openEncounter(_root, args, context) {
@@ -9859,7 +11697,7 @@ async function openEncounter(_root, args, context) {
     const result = await command(context.prisma, { name: "encounter.open", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const patient = await activePatient(uow, args.patientId);
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       if (args.appointmentId) {
         const appt = await uow.tx.appointment.findUnique({ where: { id: args.appointmentId }, select: { status: true, locationId: true, providerId: true, patients: { select: { patientId: true } } } });
         if (!appt) throw new DomainError(Codes.NOT_FOUND, "Appointment not found.");
@@ -10119,7 +11957,7 @@ async function encounterEvidence(uow, encounterId, signer) {
   return { enc, evidence, content };
 }
 async function recordsPolicy(uow, locationId, at) {
-  const { on } = await locationDay2(uow, locationId, at);
+  const { on } = await locationDay(uow, locationId, at);
   return resolvePolicy(uow.tx, "medical_records", { locationId, on });
 }
 async function submitEncounter(_root, args, context) {
@@ -10165,11 +12003,11 @@ async function signEncounter(_root, args, context) {
       const check = checkCompleteness(policy.rules.requiredFields, evidence);
       if (!check.complete) throw new DomainError(Codes.GUARD_FAILED, `The record is incomplete: ${check.missing.map((m) => m.message).join(" ")}`, { reason: "incomplete", problems: check.missing });
       let vcprId = null;
-      const { on } = await locationDay2(uow, current.locationId, uow.now);
+      const { on } = await locationDay(uow, current.locationId, uow.now);
       const vcpr = await resolvePolicy(uow.tx, "vcpr", { locationId: current.locationId, on });
       if (establishesVcpr(current.kind, vcpr.rules.establishment)) {
         await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: current.locationId, action: "establish_vcpr", at: uow.now });
-        const expiresOn = addMonths(on, vcpr.rules.durationMonths);
+        const expiresOn = addMonths2(on, vcpr.rules.durationMonths);
         const row = await uow.tx.vcprRecord.create({
           data: { patientId: current.patientId, scope: vcpr.rules.level, dvmId: staff.id, locationId: current.locationId, establishedByRef: current.ref, establishedVia: "encounter", establishedAt: uow.now, expiresAt: /* @__PURE__ */ new Date(`${expiresOn}T23:59:59Z`), status: "active", policyVersionId: vcpr.versions[vcpr.versions.length - 1]?.id ?? null }
         });
@@ -10303,8 +12141,8 @@ var DraftSchema = import_zod3.z.object({
   suggestedCharges: import_zod3.z.array(import_zod3.z.object({ description: import_zod3.z.string().max(200), reason: import_zod3.z.string().max(400) })).max(20).default([]),
   confidence: import_zod3.z.string().regex(/^(0(\.\d{1,4})?|1(\.0{1,4})?)$/).default("0")
 });
-function parsePasted(text21) {
-  const lines = text21.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+function parsePasted(text22) {
+  const lines = text22.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return lines.map((line) => {
     const m = /^([A-Za-z][A-Za-z .'-]{0,30}):\s*(.+)$/.exec(line);
     return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: "unknown", text: line };
@@ -10313,9 +12151,9 @@ function parsePasted(text21) {
 var manualTranscription = {
   key: "manual",
   async transcribe(input) {
-    const text21 = (input.pastedText ?? "").trim();
-    if (!text21) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
-    return { text: text21, segments: parsePasted(text21), provider: "manual", ref: `manual:${text21.length}` };
+    const text22 = (input.pastedText ?? "").trim();
+    if (!text22) throw new Error("Paste or dictate the conversation; no transcription service is connected.");
+    return { text: text22, segments: parsePasted(text22), provider: "manual", ref: `manual:${text22.length}` };
   }
 };
 var manualScribeModel = {
@@ -10338,7 +12176,7 @@ async function startScribeSession(_root, args, context) {
       const settings = await practiceSettings(uow);
       if (!settings.features.scribe) throw new DomainError(Codes.FEATURE_DISABLED, "The ambient scribe is turned off for this practice. An owner turns it on in Settings.");
       const enc = await chartableEncounter(uow, args.encounterId);
-      const { on } = await locationDay2(uow, enc.locationId, uow.now);
+      const { on } = await locationDay(uow, enc.locationId, uow.now);
       const contact = await resolvePolicy(uow.tx, "contact", { locationId: enc.locationId, on });
       if (!args.staffAcknowledged) throw new DomainError(Codes.CONSENT_REQUIRED, "Everyone on the team in the room must know the visit is being recorded.");
       let consentId = null;
@@ -10693,70 +12531,7 @@ function taskWindowProblem(input) {
 init_errors();
 init_ledger();
 init_decimal();
-
-// features/keystone/lib/pricing.ts
-init_errors();
 init_billing();
-var STANDARD_SCHEDULE = "standard";
-async function activeFeeVersion(tx) {
-  const version = await tx.feeScheduleVersion.findFirst({ where: { status: "published", schedule: { code: STANDARD_SCHEDULE } }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
-  if (!version) throw new DomainError(Codes.GUARD_FAILED, "No fee schedule is published yet. Publish one before pricing work.", { reason: "no_fee_schedule" });
-  return version;
-}
-async function feeItemFor(tx, versionId, match) {
-  const where2 = match.drugId ? { drugId: match.drugId } : match.vaccineId ? { vaccineId: match.vaccineId } : match.code ? { code: match.code } : match.orderKind ? { orderKind: match.orderKind } : match.category ? { category: match.category } : null;
-  if (!where2) return null;
-  return tx.feeItem.findFirst({ where: { versionId, active: true, ...where2 }, orderBy: { code: "asc" } });
-}
-async function taxRulesFor(tx, locationId, on) {
-  const policy = await resolvePolicy(tx, "sales_tax", { locationId, on });
-  return policy.rules;
-}
-function priceCharge(fee, qty2, opts) {
-  let extended = extend(qty2, fee.priceMinor, fee.minimumChargeMinor);
-  if (opts.dispensing && fee.dispensingFeeMinor) extended += fee.dispensingFeeMinor;
-  if (opts.injection && fee.injectionFeeMinor) extended += fee.injectionFeeMinor;
-  if (opts.surchargeBps) extended += adjustBps(extended, opts.surchargeBps);
-  const discount = opts.discountBps ? -adjustBps(extended, -opts.discountBps) : 0n;
-  const tax = taxOn(opts.taxRules, fee.taxCategory, extended - discount);
-  return { extendedMinor: extended, discountMinor: discount, taxMinor: tax };
-}
-
-// features/keystone/mutations/estimates.ts
-init_billing();
-
-// features/keystone/mutations/billingInput.ts
-init_errors();
-var dateOnly = (value, field) => {
-  const t = String(value ?? "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || Number.isNaN(Date.parse(`${t}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `${field}: use YYYY-MM-DD.`, { field });
-  return t;
-};
-function minorText(value, field, allowZero = false) {
-  const t = String(value ?? "").trim();
-  if (!/^\d{1,12}$/.test(t)) throw new DomainError(Codes.INVALID_INPUT, `${field} is a whole number of cents.`, { field });
-  const n = BigInt(t);
-  if (n === 0n && !allowZero) throw new DomainError(Codes.INVALID_INPUT, `${field} must be more than zero.`, { field });
-  return n;
-}
-var pick = (value, allowed, field) => {
-  if (!allowed.includes(String(value))) throw new DomainError(Codes.INVALID_INPUT, `Choose a valid ${field}.`, { field });
-  return value;
-};
-async function billingSettings(uow) {
-  const p = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { currencyCode: true, estimateValidityDays: true, electiveDepositPct: true, depositBasis: true, refundApprovalThresholdMinor: true, discountApprovalThresholdBps: true, writeOffRequiresApproval: true } });
-  return {
-    currencyCode: p?.currencyCode || "USD",
-    estimateValidityDays: p?.estimateValidityDays ?? 30,
-    electiveDepositPct: p?.electiveDepositPct ? p.electiveDepositPct.toString() : null,
-    depositBasis: p?.depositBasis ?? "low",
-    refundApprovalThresholdMinor: p?.refundApprovalThresholdMinor ?? 25000n,
-    discountApprovalThresholdBps: p?.discountApprovalThresholdBps ?? 1e3,
-    writeOffRequiresApproval: p?.writeOffRequiresApproval !== false
-  };
-}
-
-// features/keystone/mutations/estimates.ts
 var SELLERS = ["canPostInvoices", "canTakePayments", "canOrder", "canManagePractice"];
 async function primaryClient(uow, patientId) {
   const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } });
@@ -11020,7 +12795,7 @@ async function addStockLocation(_root, args, context) {
     if (cold && (!args.minTempC || !args.maxTempC)) throw new DomainError(Codes.INVALID_INPUT, "A fridge or freezer needs its allowed temperature range.", { field: "minTempC" });
     if (cold && !dec(args.minTempC).lt(dec(args.maxTempC))) throw new DomainError(Codes.INVALID_INPUT, "The lowest allowed temperature must be below the highest.", { field: "minTempC" });
     const result = await command(context.prisma, { name: "stock.add_place", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       const row = await uow.tx.stockLocation.create({ data: { name, locationId: args.locationId, kind: args.kind, minTempC: cold ? toScale(dec(args.minTempC), "qty") : null, maxTempC: cold ? toScale(dec(args.maxTempC), "qty") : null } });
       auditCreate(uow, actor, "StockLocation", row.id, "stock.place_added", { name, kind: args.kind });
       return { id: row.id, status: "active" };
@@ -11039,12 +12814,12 @@ async function receiveStock(_root, args, context) {
       const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
       if (!place?.active || !place.locationId) throw new DomainError(Codes.NOT_FOUND, "That storage place is not available.");
       if (place.kind === "controlled_cabinet") throw new DomainError(Codes.GUARD_FAILED, "Controlled drugs are received through the controlled-substance register.");
-      const { on } = await locationDay2(uow, place.locationId, uow.now);
-      if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
+      const { on } = await locationDay(uow, place.locationId, uow.now);
+      if (day4(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
       const itemId = await ensureItem(uow, args);
       let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: place.locationId, lotNumber, drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null }, select: { id: true, expiresOn: true, status: true } });
       if (lot && lot.status !== "available") throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is ${lot.status} and cannot take more stock.`);
-      if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+      if (lot && day4(lot.expiresOn) !== day4(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
       lot ??= await uow.tx.inventoryLot.create({ data: { drugId: args.drugId ?? null, vaccineId: args.vaccineId ?? null, locationId: place.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true, status: true } });
       const mv = await moveStock(uow, { itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: quantity, unit: args.unit, sourceType: "receive", sourceId: lot.id, actorId: staff.id });
       auditCreate(uow, actor, "InventoryLot", lot.id, "stock.received", { lotNumber, quantity, stockLocationId: place.id, movementId: mv.id });
@@ -11053,7 +12828,7 @@ async function receiveStock(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
-var day3 = (d) => d.toISOString().slice(0, 10);
+var day4 = (d) => d.toISOString().slice(0, 10);
 async function adjustStock(_root, args, context) {
   return gated(context, { permissions: ["canManageInventory", "canReceiveStock"], tool: "stock.adjust", humanOnly: true }, args, async (actor) => {
     const quantity = positive(args.quantity, "quantity");
@@ -11086,7 +12861,7 @@ async function draftPurchaseOrder(_root, args, context) {
     if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 60) throw new DomainError(Codes.INVALID_INPUT, "An order needs between one and sixty lines.", { field: "lines" });
     const result = await command(context.prisma, { name: "po.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       if (!await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
       for (const l of args.lines) {
         positive(l.quantity, "quantity");
@@ -11134,7 +12909,7 @@ async function receivePurchaseOrder(_root, args, context) {
       if (!["submitted", "partially_received"].includes(po.status)) throw new DomainError(Codes.INVALID_TRANSITION, `${po.ref} is ${po.status.replaceAll("_", " ")}; it cannot be received.`);
       const place = await uow.tx.stockLocation.findUnique({ where: { id: args.stockLocationId }, select: { id: true, locationId: true, kind: true, active: true } });
       if (!place?.active || place.locationId !== po.locationId) throw new DomainError(Codes.GUARD_FAILED, "Choose a storage place at the ordering location.");
-      const { on } = await locationDay2(uow, po.locationId, uow.now);
+      const { on } = await locationDay(uow, po.locationId, uow.now);
       const receiptRef = await nextReference(uow.tx, "GRN", uow.now);
       const receipt = await uow.tx.goodsReceipt.create({ data: { ref: receiptRef, purchaseOrderId: po.id, locationId: po.locationId, receivedById: staff.id, receivedAt: uow.now, packingSlip: String(args.packingSlip ?? "").trim().slice(0, 60) } });
       for (const l of args.lines) {
@@ -11144,11 +12919,11 @@ async function receivePurchaseOrder(_root, args, context) {
         const remaining = dec(String(line.qtyOrdered)).minus(dec(String(line.qtyReceived)));
         if (dec(qty2).gt(remaining)) throw new DomainError(Codes.GUARD_FAILED, `Only ${plain(remaining)} more of that line is expected.`);
         const expiresOn = dateOnly2(l.expiresOn, "Expires");
-        if (day3(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
+        if (day4(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, `Lot ${l.lotNumber} is already expired; refuse it at the door.`);
         const item = await uow.tx.item.findUniqueOrThrow({ where: { id: line.itemId }, select: { drugId: true, vaccineId: true } });
         const lotNumber = text20(l.lotNumber, "lotNumber", 60);
         let lot = await uow.tx.inventoryLot.findFirst({ where: { locationId: po.locationId, lotNumber, drugId: item.drugId, vaccineId: item.vaccineId }, select: { id: true, expiresOn: true } });
-        if (lot && day3(lot.expiresOn) !== day3(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
+        if (lot && day4(lot.expiresOn) !== day4(expiresOn)) throw new DomainError(Codes.GUARD_FAILED, `Lot ${lotNumber} is already here with a different expiry date.`);
         lot ??= await uow.tx.inventoryLot.create({ data: { drugId: item.drugId, vaccineId: item.vaccineId, locationId: po.locationId, lotNumber, expiresOn, status: "available" }, select: { id: true, expiresOn: true } });
         await moveStock(uow, { itemId: line.itemId, lotId: lot.id, stockLocationId: place.id, kind: "receive", qtySigned: qty2, unit: line.unit, sourceType: "goods_receipt", sourceId: receipt.id, actorId: staff.id });
         await uow.tx.goodsReceiptLine.create({ data: { receiptId: receipt.id, purchaseOrderLineId: line.id, itemId: line.itemId, lotId: lot.id, qty: toScale(dec(qty2), "qty"), unit: line.unit ?? null } });
@@ -11169,7 +12944,7 @@ async function setReorderRule(_root, args, context) {
     const targetQty = positive(args.targetQty, "targetQty");
     if (!dec(targetQty).gt(dec(minQty))) throw new DomainError(Codes.INVALID_INPUT, "The target must be above the re-order point.", { field: "targetQty" });
     const result = await command(context.prisma, { name: "stock.reorder_rule", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       const existing = await uow.tx.reorderRule.findFirst({ where: { itemId: args.itemId, locationId: args.locationId }, select: { id: true } });
       const data = { minQty: toScale(dec(minQty), "qty"), targetQty: toScale(dec(targetQty), "qty") };
       const row = existing ? await uow.tx.reorderRule.update({ where: { id: existing.id }, data }) : await uow.tx.reorderRule.create({ data: { itemId: args.itemId, locationId: args.locationId, ...data } });
@@ -11429,7 +13204,7 @@ async function placeOrder(_root, args, context) {
       if (args.kind === "medication") {
         if (!args.drugId || !args.dose) throw new DomainError(Codes.INVALID_INPUT, "A medication order needs the drug and the dose.", { field: "dose" });
         if (!args.route || !args.frequency) throw new DomainError(Codes.INVALID_INPUT, "A medication order needs the route and frequency.", { field: "route" });
-        const { on } = await locationDay2(uow, enc.locationId, uow.now);
+        const { on } = await locationDay(uow, enc.locationId, uow.now);
         if (args.extralabel) {
           const vcpr = await resolvePolicy(uow.tx, "vcpr", { locationId: enc.locationId, on });
           if (vcpr.rules.requiredFor.includes("extralabel")) {
@@ -11526,7 +13301,7 @@ async function administer(uow, actor, staff, args) {
     if (staff.kind !== "dvm") throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} Give the ordered amount, or ask a veterinarian to record it with a reason.`, { field: "qty", reason: "qty_outside_order" });
     if (qtyOverrideReason.length < 8) throw new DomainError(Codes.GUARD_FAILED, `${qtyProblem} To record it anyway, give the reason (at least 8 characters).`, { field: "qtyOverrideReason", reason: "qty_outside_order" });
   }
-  const { on } = await locationDay2(uow, order.locationId, uow.now);
+  const { on } = await locationDay(uow, order.locationId, uow.now);
   const controlled = Boolean(drug && drug.csSchedule && drug.csSchedule !== "none");
   let licenceId = null;
   let lotNumber = "";
@@ -11974,10 +13749,10 @@ async function saveDentalChart(_root, args, context) {
       if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
       for (const key2 of ["findings", "procedures"]) {
-        const list23 = entry[key2];
-        if (list23 === void 0) continue;
-        if (!Array.isArray(list23) || list23.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
-        if (list23.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+        const list24 = entry[key2];
+        if (list24 === void 0) continue;
+        if (!Array.isArray(list24) || list24.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list24.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
       }
     }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -12029,7 +13804,7 @@ async function administerVaccine(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
       const patient = await activePatient(uow, enc.patientId);
-      const { on } = await locationDay2(uow, enc.locationId, uow.now);
+      const { on } = await locationDay(uow, enc.locationId, uow.now);
       const product = await uow.tx.vaccineProduct.findUnique({ where: { id: args.productId }, select: { id: true, name: true, manufacturer: true, isRabies: true, minAgeWeeks: true, licensedDoiMonths: true, active: true, defaultRoute: true, usdaProductCode: true, reminderTypeId: true, species: { select: { code: true } } } });
       if (!product) throw new DomainError(Codes.NOT_FOUND, "Vaccine not found.");
       const lot = await uow.tx.inventoryLot.findUnique({ where: { id: args.lotId }, select: { id: true, lotNumber: true, expiresOn: true, status: true, vaccineId: true, locationId: true } });
@@ -12169,7 +13944,7 @@ async function recordOutsideVaccine(_root, args, context) {
       if (!product) throw new DomainError(Codes.NOT_FOUND, "Vaccine not found.");
       const locationId = staff.homeLocationId ?? (await uow.tx.location.findFirst({ where: { active: true }, select: { id: true }, orderBy: { createdAt: "asc" } }))?.id;
       if (!locationId) throw new DomainError(Codes.GUARD_FAILED, "No location to file the reminder under.");
-      const { on } = await locationDay2(uow, locationId, uow.now);
+      const { on } = await locationDay(uow, locationId, uow.now);
       if (args.administeredOn > on) throw new DomainError(Codes.INVALID_INPUT, "The date given cannot be in the future.", { field: "administeredOn" });
       const rules2 = await activeRulesFor(uow, product.id, patient.speciesId ?? null);
       const rule2 = rules2[0] ?? null;
@@ -12207,7 +13982,7 @@ async function reverseVaccineAdministration(_root, args, context) {
       for (const s of satisfied) {
         const r = await uow.tx.patientReminder.findUnique({ where: { id: s.reminderId }, select: { id: true, status: true, dueOn: true, sourceKey: true, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } } } });
         if (!r || r.status !== "satisfied" || r.sourceKey === `VA:${va.id}`) continue;
-        const { on } = await locationDay2(uow, (await uow.tx.patientReminder.findUnique({ where: { id: r.id }, select: { locationId: true } })).locationId, uow.now);
+        const { on } = await locationDay(uow, (await uow.tx.patientReminder.findUnique({ where: { id: r.id }, select: { locationId: true } })).locationId, uow.now);
         const status = reminderStatusOn({ dueOn: day2(r.dueOn), status: "scheduled" }, { leadDays: r.rule?.leadDays ?? 30, graceDays: r.rule?.graceDays ?? 30, lapseDays: r.rule?.lapseDays ?? 180 }, on);
         await uow.tx.patientReminder.update({ where: { id: r.id }, data: { status, version: { increment: 1 } } });
         reopened++;
@@ -12249,7 +14024,7 @@ async function addManualReminder(_root, args, context) {
   });
 }
 async function runReminderJob(uow, locationId) {
-  const { on } = await locationDay2(uow, locationId, uow.now);
+  const { on } = await locationDay(uow, locationId, uow.now);
   const open = await uow.tx.patientReminder.findMany({
     where: { locationId, status: { in: ["scheduled", "due", "overdue"] }, dueOn: { lte: /* @__PURE__ */ new Date(`${addDays(on, 60)}T00:00:00Z`) } },
     select: { id: true, dueOn: true, status: true, lastNotifiedAt: true, patientId: true, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } }, type: { select: { name: true } }, patient: { select: { name: true, status: true, ownerships: { where: { role: "primary", effectiveTo: null }, select: { clientId: true }, take: 1 } } } },
@@ -12273,7 +14048,7 @@ async function runReminderJob(uow, locationId) {
 }
 
 // features/keystone/mutations/imports.ts
-var import_node_crypto8 = require("node:crypto");
+var import_node_crypto12 = require("node:crypto");
 init_errors();
 init_decimal();
 
@@ -12283,12 +14058,12 @@ function parseCsv(input) {
   let row = [];
   let field = "";
   let quoted = false;
-  const text21 = input.replace(/^\uFEFF/, "");
-  for (let i = 0; i < text21.length; i++) {
-    const c = text21[i];
+  const text22 = input.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text22.length; i++) {
+    const c = text22[i];
     if (quoted) {
       if (c === '"') {
-        if (text21[i + 1] === '"') {
+        if (text22[i + 1] === '"') {
           field += '"';
           i++;
         } else quoted = false;
@@ -12300,7 +14075,7 @@ function parseCsv(input) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text21[i + 1] === "\n") i++;
+      if (c === "\r" && text22[i + 1] === "\n") i++;
       row.push(field);
       field = "";
       if (row.some((v) => v.trim() !== "")) rows.push(row);
@@ -12592,7 +14367,7 @@ async function previewImport(_root, args, context) {
     if (parsed.missingRequired.length) throw new DomainError(Codes.INVALID_INPUT, `The file has no column for: ${parsed.missingRequired.join(", ")}. Map those columns and try again.`, { field: "mapping", problems: parsed.missingRequired });
     if (parsed.rows.length > MAX_ROWS) throw new DomainError(Codes.INVALID_INPUT, `Split the file: at most ${MAX_ROWS} rows per batch.`);
     const species = await speciesList(context.prisma);
-    const fileHash = (0, import_node_crypto8.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
+    const fileHash = (0, import_node_crypto12.createHash)("sha256").update(args.csv ?? JSON.stringify(parsed.rows)).digest("hex");
     const seen = /* @__PURE__ */ new Set();
     const results = parsed.rows.map((r) => {
       const errors = validateRow(args.entity, r.values, species);
@@ -12708,7 +14483,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const product = await uow.tx.vaccineProduct.findFirst({ where: { name: { equals: label, mode: "insensitive" } }, select: { id: true, licensedDoiMonths: true, reminderTypeId: true } });
       const type = product?.reminderTypeId ? { id: product.reminderTypeId } : await uow.tx.reminderType.findFirst({ where: { OR: [{ name: { equals: label, mode: "insensitive" } }, { code: label.toUpperCase().replace(/[^A-Z0-9]+/g, "_") }] }, select: { id: true } });
       if (!type) return { ...base, result: "failed", errors: [`"${label}" does not match a vaccine or reminder type. Add it under Reminders, or map it.`] };
-      const dueOn = batch.entity === "reminders" ? importDate(row.dueOn) : row.dueOn ? importDate(row.dueOn) : addMonths(importDate(row.givenOn), product?.licensedDoiMonths ?? 12);
+      const dueOn = batch.entity === "reminders" ? importDate(row.dueOn) : row.dueOn ? importDate(row.dueOn) : addMonths2(importDate(row.givenOn), product?.licensedDoiMonths ?? 12);
       const reminder = await uow.tx.patientReminder.upsert({
         where: { patientId_typeId_dueOn: { patientId, typeId: type.id, dueOn: /* @__PURE__ */ new Date(`${dueOn}T00:00:00Z`) } },
         create: { patientId, locationId: batch.locationId, typeId: type.id, dueOn: /* @__PURE__ */ new Date(`${dueOn}T00:00:00Z`), status: "scheduled", source: "import", sourceKey: `${sys2}:${key2}` },
@@ -12846,7 +14621,7 @@ async function writePrescription(_root, args, context) {
       const staff = await staffOf(uow, actor);
       if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian can write a prescription.");
       const patient = await activePatient(uow, args.patientId);
-      const { on, location } = await locationDay2(uow, args.locationId, uow.now);
+      const { on, location } = await locationDay(uow, args.locationId, uow.now);
       const licence = await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: location.id, action: "prescribe", at: uow.now });
       const vcprPolicy = await resolvePolicy(uow.tx, "vcpr", { locationId: location.id, on });
       const vcpr = await uow.tx.vcprRecord.findFirst({
@@ -12927,7 +14702,7 @@ async function decideRefill(_root, args, context) {
       if (staff.kind !== "dvm") throw new DomainError(Codes.NOT_AUTHORIZED, "Only a veterinarian decides a refill.");
       const request = await uow.tx.refillRequest.findUnique({ where: { id: args.requestId }, select: { id: true, ref: true, patientId: true } });
       if (!request) throw new DomainError(Codes.NOT_FOUND, "Refill request not found.");
-      const { on, location } = await locationDay2(uow, staff.homeLocationId ?? (await uow.tx.location.findFirstOrThrow({ where: { active: true }, select: { id: true } })).id, uow.now);
+      const { on, location } = await locationDay(uow, staff.homeLocationId ?? (await uow.tx.location.findFirstOrThrow({ where: { active: true }, select: { id: true } })).id, uow.now);
       await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: location.id, action: "approve_refill", at: uow.now });
       if (args.decision !== "deny") {
         const vcprPolicy = await resolvePolicy(uow.tx, "vcpr", { locationId: location.id, on });
@@ -12970,7 +14745,7 @@ async function dispenseFill(_root, args, context) {
       if (line.expiresAt < uow.now) throw new DomainError(Codes.GUARD_FAILED, "This prescription line has expired.");
       if (!rx.location || !rx.patient) throw new DomainError(Codes.GUARD_FAILED, "The prescription is missing its location or patient.");
       await activePatient(uow, rx.patient.id);
-      const { on } = await locationDay2(uow, rx.location.id, uow.now);
+      const { on } = await locationDay(uow, rx.location.id, uow.now);
       const fills = await uow.tx.dispense.count({ where: { lineId: line.id } });
       if (fills > line.refillsAuthorised) throw new DomainError(Codes.GUARD_FAILED, "Every fill of this prescription has been used.");
       if (dec(qty2).gt(dec(line.quantity.toString()))) throw new DomainError(Codes.GUARD_FAILED, `A fill is at most ${line.quantity.toString()} ${line.quantityUnit ?? ""} (the quantity written).`.replace(/ +\./, "."));
@@ -13067,7 +14842,7 @@ async function receiveStockLot(_root, args, context) {
     const expiresOn = dateOnly3(args.expiresOn, "Expires");
     if (!args.drugId === !args.vaccineId) throw new DomainError(Codes.INVALID_INPUT, "Choose a drug or a vaccine.");
     const result = await command(context.prisma, { name: "stock.receive", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      const { on } = await locationDay(uow, args.locationId, uow.now);
       if (day2(expiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That lot is already expired.");
       if (args.drugId) {
         const drug = await uow.tx.drugProduct.findUnique({ where: { id: args.drugId }, select: { csSchedule: true, active: true } });
@@ -13114,7 +14889,7 @@ async function receiveControlled(_root, args, context) {
       const staff = await staffOf(uow, actor);
       const product = await uow.tx.drugProduct.findUnique({ where: { id: args.productId }, select: { id: true, displayName: true, csSchedule: true, active: true } });
       if (!product?.active || !isCs(product.csSchedule)) throw new DomainError(Codes.NOT_FOUND, "That is not a controlled drug in the formulary.", { field: "productId" });
-      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      const { on } = await locationDay(uow, args.locationId, uow.now);
       if (day2(lotExpiresOn) <= on) throw new DomainError(Codes.GUARD_FAILED, "That bottle is already expired.");
       const reg = await requireDeaRegistration(uow.tx, { locationId: args.locationId, schedule: product.csSchedule, at: uow.now, action: "receive_controlled", actorStaffMemberId: staff.id });
       const scheduleII = product.csSchedule === "CII" || product.csSchedule === "CIIN";
@@ -13160,7 +14935,7 @@ async function wasteControlled(_root, args, context) {
   });
 }
 async function openCase(uow, input) {
-  const { on } = await locationDay2(uow, input.locationId, uow.now);
+  const { on } = await locationDay(uow, input.locationId, uow.now);
   const policy = await resolvePolicy(uow.tx, "controlled_substances", { locationId: input.locationId, on });
   const calendar = await calendarFor(uow, input.locationId);
   const ref = await nextReference(uow.tx, "CSD", uow.now);
@@ -13188,7 +14963,7 @@ async function countControlled(_root, args, context) {
     const result = await command(context.prisma, { name: "cs.count", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const witness = await witnessFor(uow, args.witnessId, staff.id);
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       const open = await uow.tx.csContainer.findMany({ where: { locationId: args.locationId, status: "open" }, orderBy: { ref: "asc" }, select: { id: true, ref: true } });
       const given = new Map(args.counts.map((c) => [c.containerId, c.countedQty]));
       if (given.size !== args.counts.length) throw new DomainError(Codes.INVALID_INPUT, "A container is counted twice.");
@@ -13340,7 +15115,7 @@ async function issueOrderForm(_root, args, context) {
     if (!Array.isArray(args.lines) || !args.lines.length || args.lines.length > 20) throw new DomainError(Codes.INVALID_INPUT, "A form lists between one and twenty drugs.", { field: "lines" });
     const result = await command(context.prisma, { name: "cs.order_form", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
-      const { on } = await locationDay2(uow, args.locationId, uow.now);
+      const { on } = await locationDay(uow, args.locationId, uow.now);
       if (issuedOn > on) throw new DomainError(Codes.GUARD_FAILED, "A form cannot be issued in the future.");
       const supplier = await uow.tx.supplier.findFirst({ where: { id: args.supplierId, active: true }, select: { id: true } });
       if (!supplier) throw new DomainError(Codes.NOT_FOUND, "Supplier not found.");
@@ -13372,7 +15147,7 @@ async function receiveOnOrderForm(_root, args, context) {
       const line = await lockRow(uow.tx, "CsOrderFormLine", args.lineId);
       const form2 = await uow.tx.csOrderForm.findUnique({ where: { id: line.orderFormId }, select: { id: true, ref: true, formNumber: true, status: true, locationId: true, expiresOn: true, version: true } });
       if (!form2 || !["open", "partially_filled"].includes(form2.status)) throw new DomainError(Codes.GUARD_FAILED, `That order form is ${form2?.status.replaceAll("_", " ") ?? "missing"}.`);
-      const { on } = await locationDay2(uow, form2.locationId, uow.now);
+      const { on } = await locationDay(uow, form2.locationId, uow.now);
       if (form2.expiresOn.toISOString().slice(0, 10) < on) throw new DomainError(Codes.GUARD_FAILED, `Form ${form2.formNumber} expired on ${form2.expiresOn.toISOString().slice(0, 10)}; it is valid for 60 days.`);
       if (line.packagesReceived >= line.packages) throw new DomainError(Codes.GUARD_FAILED, "Every package on that line has arrived.");
       const product = await uow.tx.drugProduct.findUniqueOrThrow({ where: { id: line.productId }, select: { id: true, csSchedule: true } });
@@ -13429,7 +15204,7 @@ async function logCabinetAccess(_root, args, context) {
     if (!["opened", "closed", "failed_attempt"].includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose opened, closed or failed attempt.", { field: "kind" });
     const result = await command(context.prisma, { name: "cs.cabinet", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
-      await locationDay2(uow, args.locationId, uow.now);
+      await locationDay(uow, args.locationId, uow.now);
       const row = await uow.tx.cabinetAccessEvent.create({ data: { locationId: args.locationId, staffId: staff.id, kind: args.kind, note: String(args.note ?? "").slice(0, 200), occurredAt: uow.now } });
       return { id: row.id, status: args.kind };
     });
@@ -13647,715 +15422,6 @@ async function discardFeeDraft(_root, args, context) {
   });
 }
 
-// features/keystone/mutations/billing.ts
-var import_node_crypto10 = require("node:crypto");
-init_errors();
-init_ledger();
-init_billing();
-
-// features/integrations/payment/index.ts
-var import_node_crypto9 = require("node:crypto");
-var STRIPE = "https://api.stripe.com/v1";
-function stripeKey() {
-  const key2 = process.env.STRIPE_SECRET_KEY ?? "";
-  if (!key2) throw new Error("Card payments are not set up on this server yet.");
-  if (!key2.startsWith("sk_test_") && !key2.startsWith("rk_test_")) throw new Error("Only Stripe test keys are accepted here.");
-  return key2;
-}
-var form = (data) => new URLSearchParams(data).toString();
-async function stripeCall(path, method, body, idempotencyKey) {
-  const res = await fetch(`${STRIPE}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${stripeKey()}`,
-      ...body ? { "content-type": "application/x-www-form-urlencoded" } : {},
-      ...idempotencyKey ? { "idempotency-key": idempotencyKey } : {}
-    },
-    ...body ? { body: form(body) } : {},
-    signal: AbortSignal.timeout(2e4)
-  });
-  const json19 = await res.json().catch(() => ({}));
-  return { status: res.status, json: json19 };
-}
-function intentResult(status, j) {
-  const ref = j.error?.payment_intent?.id ?? j.id ?? null;
-  if (status >= 500 || status === 429 || status === 409) return { outcome: "unknown", providerRef: ref, message: "The card processor did not answer. Check the status in a moment." };
-  if (j.error?.type === "idempotency_error") return { outcome: "unknown", providerRef: ref, message: 'This payment was already sent to the card processor. Use "Check status".' };
-  if (status >= 400) {
-    const pi = j.error?.payment_intent;
-    if (pi?.status && pi.status !== "requires_payment_method" && pi.status !== "canceled") return intentResult(200, pi);
-    if (j.error?.type === "card_error" || pi) return { outcome: "failed", providerRef: ref, message: String(j.error?.message ?? "The card was declined.") };
-    return { outcome: "failed", providerRef: ref, message: "The payment could not be started." };
-  }
-  switch (j.status) {
-    case "succeeded":
-      return { outcome: "succeeded", providerRef: j.id, message: "Paid." };
-    case "requires_action":
-    case "requires_confirmation":
-      return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm." };
-    case "processing":
-    case "requires_capture":
-      return { outcome: "processing", providerRef: j.id, message: "The bank is still processing this payment." };
-    case "canceled":
-      return { outcome: "failed", providerRef: j.id, message: "The payment was cancelled." };
-    case "requires_payment_method":
-      return { outcome: "failed", providerRef: j.id, message: String(j.last_payment_error?.message ?? "The card was declined.") };
-    default:
-      return { outcome: "unknown", providerRef: j.id ?? null, message: "The card processor gave an answer this app does not know. Check the Stripe dashboard." };
-  }
-}
-async function findIntent(input) {
-  const q = (s) => s.replace(/['\\]/g, "");
-  const ours = (pi) => pi.metadata?.idempotencyKey === input.idempotencyKey || !!input.metadata.payment && pi.metadata?.payment === input.metadata.payment;
-  const clauses = [`metadata['idempotencyKey']:'${q(input.idempotencyKey)}'`, ...input.metadata.payment ? [`metadata['payment']:'${q(input.metadata.payment)}'`] : []];
-  const searched = await stripeCall(`/payment_intents/search?${form({ query: clauses.join(" OR "), limit: "10" })}`, "GET", null);
-  let found = searched.status === 200 && Array.isArray(searched.json.data) ? searched.json.data.filter(ours) : null;
-  if (!found?.length) {
-    const listed = await stripeCall(`/payment_intents?limit=100`, "GET", null);
-    if (listed.status === 200 && Array.isArray(listed.json.data)) found = listed.json.data.filter(ours);
-  }
-  if (!found) return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
-  if (found.length === 0) return { outcome: "unknown", providerRef: null, message: "The card processor has no record of this payment yet. Check again in a minute, or look it up in the Stripe dashboard." };
-  if (found.length > 1) return { outcome: "unknown", providerRef: null, message: "More than one card charge matches this payment. Look it up in the Stripe dashboard." };
-  return intentResult(200, found[0]);
-}
-var stripeAdapter = {
-  key: "stripe",
-  async charge(input) {
-    try {
-      const { status, json: json19 } = await stripeCall("/payment_intents", "POST", {
-        amount: input.amountMinor.toString(),
-        currency: input.currencyCode.toLowerCase(),
-        confirm: "true",
-        payment_method: input.paymentMethod || "pm_card_visa",
-        "automatic_payment_methods[enabled]": "true",
-        "automatic_payment_methods[allow_redirects]": "never",
-        description: input.description,
-        ...Object.fromEntries(Object.entries({ ...input.metadata, idempotencyKey: input.idempotencyKey }).map(([k, v]) => [`metadata[${k}]`, v]))
-      }, input.idempotencyKey);
-      return intentResult(status, json19);
-    } catch {
-      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer. Check the status in a moment." };
-    }
-  },
-  async resolve(input) {
-    try {
-      if (input.providerRef) {
-        const got = await stripeCall(`/payment_intents/${encodeURIComponent(input.providerRef)}`, "GET", null);
-        if (got.status === 200) return intentResult(got.status, got.json);
-        return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor did not answer. Check the status in a moment." };
-      }
-      return await findIntent(input);
-    } catch {
-      return { outcome: "unknown", providerRef: input.providerRef, message: "The card processor still did not answer." };
-    }
-  },
-  async refund(input) {
-    try {
-      const { status, json: json19 } = await stripeCall("/refunds", "POST", {
-        payment_intent: input.providerRef,
-        amount: input.amountMinor.toString(),
-        "metadata[reason]": input.reason.slice(0, 200)
-      }, input.idempotencyKey);
-      if (status >= 500 || status === 429) return { outcome: "unknown", providerRef: json19.id ?? null, message: "The card processor did not answer." };
-      if (status >= 400) return { outcome: "failed", providerRef: null, message: String(json19.error?.message ?? "The refund was refused.") };
-      if (json19.status === "succeeded") return { outcome: "succeeded", providerRef: json19.id, message: "Refunded." };
-      if (json19.status === "pending") return { outcome: "unknown", providerRef: json19.id, message: "The refund is on its way." };
-      return { outcome: "failed", providerRef: json19.id ?? null, message: "The refund did not go through." };
-    } catch {
-      return { outcome: "unknown", providerRef: null, message: "The card processor did not answer." };
-    }
-  },
-  readEvent(rawBody, headers) {
-    const secret2 = process.env.STRIPE_WEBHOOK_SECRET ?? "";
-    if (!secret2) throw new Error("Card events are not set up on this server.");
-    const header = headers["stripe-signature"] ?? "";
-    const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
-    const t = parts.t;
-    const v1 = header.split(",").filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
-    if (!t || !v1.length) throw new Error("The event signature is missing.");
-    if (Math.abs(Date.now() / 1e3 - Number(t)) > 600) throw new Error("The event is too old.");
-    const expected = (0, import_node_crypto9.createHmac)("sha256", secret2).update(`${t}.${rawBody}`).digest();
-    const ok = v1.some((sig) => {
-      const b = Buffer.from(sig, "hex");
-      return b.length === expected.length && (0, import_node_crypto9.timingSafeEqual)(b, expected);
-    });
-    if (!ok) throw new Error("The event signature does not match.");
-    const event = JSON.parse(rawBody);
-    const o = event.data.object;
-    const outcome = event.type === "payment_intent.succeeded" ? "succeeded" : event.type === "payment_intent.payment_failed" ? "failed" : event.type === "charge.refunded" ? "refunded" : "ignored";
-    return { id: event.id, type: event.type, objectRef: event.type.startsWith("charge.") ? o.payment_intent ?? o.id : o.id, outcome };
-  }
-};
-var manualAdapter = {
-  key: "manual",
-  async charge() {
-    return { outcome: "failed", providerRef: null, message: "This tender is recorded by hand, not charged." };
-  },
-  async resolve() {
-    return { outcome: "failed", providerRef: null, message: "Nothing to check for a hand-recorded payment." };
-  },
-  async refund(input) {
-    return { outcome: "succeeded", providerRef: `manual-${input.idempotencyKey.slice(-12)}`, message: "Refund recorded; hand the money back." };
-  },
-  readEvent() {
-    throw new Error("A hand-recorded tender has no events.");
-  }
-};
-var terminalAdapter = {
-  key: "terminal",
-  async charge() {
-    return { outcome: "failed", providerRef: null, message: "No card reader is attached. Record the card payment by hand or use the card form." };
-  },
-  resolve: async () => ({ outcome: "failed", providerRef: null, message: "No card reader is attached." }),
-  refund: (input) => stripeAdapter.refund(input),
-  readEvent: (raw, headers) => stripeAdapter.readEvent(raw, headers)
-};
-var ADAPTERS = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter };
-var adapterFor = (key2) => ADAPTERS[key2] ?? manualAdapter;
-var cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? "");
-
-// features/keystone/mutations/billing.ts
-var TAKERS = ["canTakePayments", "canManagePayments"];
-var POSTERS = ["canPostInvoices", "canManagePayments"];
-var ZERO2 = 0n;
-async function clientOfPatient(uow, patientId) {
-  const own = await uow.tx.patientOwnership.findFirst({ where: { patientId, effectiveTo: null, role: "primary" }, select: { clientId: true } });
-  if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, "This patient has no client of record to bill.");
-  return own.clientId;
-}
-async function createCharge(uow, actor, c) {
-  const fee = await uow.tx.feeItem.findUniqueOrThrow({ where: { id: c.feeItemId } });
-  const { on } = await locationDay2(uow, c.locationId, uow.now);
-  const client = await uow.tx.client.findUnique({ where: { id: c.clientId }, select: { taxExempt: true } });
-  const taxRules = await taxRulesFor(uow.tx, c.locationId, on);
-  const priced = priceCharge(fee, c.qty, { dispensing: c.dispensing, injection: c.injection, taxRules });
-  const tax = client?.taxExempt ? ZERO2 : priced.taxMinor;
-  const row = await uow.tx.chargeLine.create({
-    data: {
-      clientId: c.clientId,
-      patientId: c.patientId,
-      locationId: c.locationId,
-      encounterId: c.encounterId,
-      feeItemId: fee.id,
-      description: (c.description || fee.name).slice(0, 200),
-      qty: c.qty,
-      unitPriceMinor: fee.priceMinor,
-      extendedMinor: priced.extendedMinor,
-      discountMinor: ZERO2,
-      taxMinor: tax,
-      taxCategory: fee.taxCategory,
-      sourceType: c.sourceType,
-      sourceId: c.sourceId,
-      manualReason: c.manualReason ?? "",
-      performedById: c.performedById ?? null,
-      capturedAt: uow.now
-    }
-  });
-  auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: c.sourceType, extendedMinor: priced.extendedMinor.toString(), taxMinor: tax.toString() });
-  return row;
-}
-async function captureVisitCharges(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.capture", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "charges.capture", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const enc = await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, kind: true, patientId: true, locationId: true, attendingDvmId: true } });
-      if (!enc?.patientId || !enc.locationId) throw new DomainError(Codes.NOT_FOUND, "Visit not found.");
-      const clientId = await clientOfPatient(uow, enc.patientId);
-      const fees = await activeFeeVersion(uow.tx);
-      const base = { patientId: enc.patientId, clientId, locationId: enc.locationId, encounterId: enc.id };
-      const existing = new Set((await uow.tx.chargeLine.findMany({ where: { reversedAt: null, encounterId: enc.id }, select: { sourceType: true, sourceId: true } })).map((c) => `${c.sourceType}:${c.sourceId}`));
-      let made = 0;
-      let unpriced = 0;
-      const add = async (sourceType, sourceId, match, qty2, extra = {}) => {
-        if (existing.has(`${sourceType}:${sourceId}`)) return;
-        const fee = await feeItemFor(uow.tx, fees.id, match);
-        if (!fee) {
-          unpriced += 1;
-          return;
-        }
-        await createCharge(uow, actor, { ...base, feeItemId: fee.id, qty: qty2, sourceType, sourceId, ...extra });
-        made += 1;
-      };
-      await add("encounter_exam", enc.id, { code: `EXAM-${enc.kind.toUpperCase()}` }, "1", { performedById: enc.attendingDvmId });
-      const given = await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: null }, select: { id: true, qty: true, givenById: true, order: { select: { drugId: true, vaccineId: true, kind: true } } } });
-      const undone = new Set((await uow.tx.administration.findMany({ where: { encounterId: enc.id, reversesId: { not: null } }, select: { reversesId: true } })).map((r) => r.reversesId));
-      for (const a of given) {
-        if (undone.has(a.id)) continue;
-        const o = a.order;
-        if (!o) continue;
-        if (o.vaccineId) await add("administration", a.id, { vaccineId: o.vaccineId }, "1", { performedById: a.givenById });
-        else if (o.drugId) await add("administration", a.id, { drugId: o.drugId }, a.qty.toString(), { performedById: a.givenById, injection: false });
-      }
-      const dispenses = await uow.tx.dispense.findMany({ where: { prescription: { patientId: enc.patientId }, dispensedAt: { gte: new Date(uow.now.getTime() - 864e5) } }, select: { id: true, quantity: true, productId: true, dispensedById: true } });
-      for (const d of dispenses) if (d.productId) await add("dispense", d.id, { drugId: d.productId }, d.quantity.toString(), { performedById: d.dispensedById, dispensing: true });
-      return { made, unpriced };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function addFeeCharge(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "charges.add", humanOnly: true }, args, async (actor) => {
-    const qty2 = decimalText(args.qty, "quantity");
-    const result = await command(context.prisma, { name: "charges.add", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const clientId = await clientOfPatient(uow, args.patientId);
-      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
-      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
-      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
-      const fees = await activeFeeVersion(uow.tx);
-      const fee = await uow.tx.feeItem.findFirst({ where: { id: args.feeItemId, versionId: fees.id } });
-      if (!fee) throw new DomainError(Codes.NOT_FOUND, "That fee is not in the published schedule.", { field: "feeItemId" });
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const row = await createCharge(uow, actor, { patientId: args.patientId, clientId, locationId, encounterId: args.encounterId ?? null, feeItemId: fee.id, qty: qty2, sourceType: "fee", sourceId: (0, import_node_crypto10.randomUUID)(), performedById: staff?.id ?? null });
-      return { id: row.id };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function addManualCharge(_root, args, context) {
-  return gated(context, { permissions: ["canAddManualCharge"], tool: "charges.manual", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const description = text20(args.description, "description", 160);
-    const amount = minorText(args.amountMinor, "amount");
-    const result = await command(context.prisma, { name: "charges.manual", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const clientId = await clientOfPatient(uow, args.patientId);
-      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { locationId: true } }) : null;
-      const locationId = enc?.locationId ?? (await uow.tx.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
-      if (!locationId) throw new DomainError(Codes.NOT_FOUND, "No location.");
-      const { on } = await locationDay2(uow, locationId, uow.now);
-      const taxRules = await taxRulesFor(uow.tx, locationId, on);
-      let tax = ZERO2;
-      try {
-        tax = priceCharge({ priceMinor: amount, minimumChargeMinor: null, dispensingFeeMinor: null, injectionFeeMinor: null, taxCategory: args.taxCategory }, "1", { taxRules }).taxMinor;
-      } catch {
-        throw new DomainError(Codes.INVALID_INPUT, "Choose how this charge is taxed.", { field: "taxCategory" });
-      }
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const row = await uow.tx.chargeLine.create({ data: { clientId, patientId: args.patientId, locationId, encounterId: args.encounterId ?? null, description, qty: "1", unitPriceMinor: amount, extendedMinor: amount, discountMinor: ZERO2, taxMinor: tax, taxCategory: args.taxCategory, sourceType: "manual", sourceId: "", manualReason: reason, performedById: staff?.id ?? null, capturedAt: uow.now } });
-      auditCreate(uow, actor, "ChargeLine", row.id, "charge.manual", { amountMinor: amount.toString() }, { reason });
-      return { id: row.id };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function reverseCharge(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS], tool: "charges.reverse", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const result = await command(context.prisma, { name: "charges.reverse", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const line = await lockRow(uow.tx, "ChargeLine", args.chargeId);
-      if (line.reversedAt) throw new DomainError(Codes.GUARD_FAILED, "That charge was already reversed.");
-      if (line.invoiceId) {
-        const inv = await uow.tx.invoice.findUnique({ where: { id: line.invoiceId }, select: { status: true } });
-        if (inv?.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "This charge is on a posted invoice. Issue a credit note instead.");
-      }
-      await uow.tx.chargeLine.update({ where: { id: line.id }, data: { reversedAt: uow.now, reversalReason: reason, invoiceId: null } });
-      auditCreate(uow, actor, "ChargeLine", line.id, "charge.reversed", {}, { reason });
-      return { id: line.id };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function draftInvoice(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS, "canTakePayments"], tool: "invoice.draft", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "invoice.draft", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const lines = await uow.tx.chargeLine.findMany({ where: { clientId: args.clientId, invoiceId: null, reversedAt: null, ...args.encounterId ? { encounterId: args.encounterId } : {} }, orderBy: { capturedAt: "asc" } });
-      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "There are no open charges to invoice.");
-      const locationId = lines[0].locationId;
-      const settings = await billingSettings(uow);
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const ref = `DRAFT-${(0, import_node_crypto10.randomUUID)().slice(0, 8).toUpperCase()}`;
-      const inv = await uow.tx.invoice.create({ data: { ref, clientId: args.clientId, locationId, encounterId: args.encounterId ?? lines[0].encounterId, status: "draft", currencyCode: settings.currencyCode, note: "", createdById: staff?.id ?? null } });
-      await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: inv.id } });
-      auditCreate(uow, actor, "Invoice", inv.id, "invoice.drafted", { lines: lines.length });
-      return { id: inv.id, lines: lines.length };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function discountInvoice(_root, args, context) {
-  return gated(context, { permissions: ["canDiscount", "canApproveDiscount"], tool: "invoice.discount", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const bps = Math.round(Number(args.percent) * 100);
-    if (!Number.isFinite(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "Discount is a percentage from 0 to 100.", { field: "percent" });
-    const result = await command(context.prisma, { name: "invoice.discount", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const settings = await billingSettings(uow);
-      if (bps > settings.discountApprovalThresholdBps && !can(actor, "canApproveDiscount")) throw new DomainError(Codes.APPROVAL_REQUIRED, `Discounts over ${settings.discountApprovalThresholdBps / 100}% need someone who can approve discounts.`);
-      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
-      if (inv.status !== "draft") throw new DomainError(Codes.GUARD_FAILED, "Only a draft invoice can be discounted.");
-      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id } });
-      const { on } = await locationDay2(uow, inv.locationId, uow.now);
-      const taxRules = await taxRulesFor(uow.tx, inv.locationId, on);
-      const client = await uow.tx.client.findUnique({ where: { id: inv.clientId }, select: { taxExempt: true } });
-      let total = ZERO2;
-      for (const l of lines) {
-        const discount = -adjustBps(l.extendedMinor, -bps);
-        const net = l.extendedMinor - discount;
-        const { taxOn: taxOn2 } = await Promise.resolve().then(() => (init_billing(), billing_exports));
-        const tax = client?.taxExempt ? ZERO2 : taxOn2(taxRules, l.taxCategory, net);
-        await uow.tx.chargeLine.update({ where: { id: l.id }, data: { discountMinor: discount, taxMinor: tax } });
-        total += discount;
-      }
-      auditCreate(uow, actor, "Invoice", inv.id, "invoice.discounted", { bps, discountMinor: total.toString() }, { reason });
-      return { id: inv.id, discountMinor: total.toString() };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function postInvoice(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS], tool: "invoice.post", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "invoice.post", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
-      const lines = await uow.tx.chargeLine.findMany({ where: { invoiceId: inv.id, reversedAt: null } });
-      if (!lines.length) throw new DomainError(Codes.GUARD_FAILED, "An invoice needs at least one charge.");
-      const { on } = await locationDay2(uow, inv.locationId, uow.now);
-      const postedOn = args.postedOn ? dateOnly(args.postedOn, "posting day") : on;
-      if (postedOn > on) throw new DomainError(Codes.INVALID_INPUT, "An invoice cannot be posted for a future day.", { field: "postedOn" });
-      const subtotal = lines.reduce((n, l) => n + l.extendedMinor, ZERO2);
-      const discount = lines.reduce((n, l) => n + l.discountMinor, ZERO2);
-      const tax = lines.reduce((n, l) => n + l.taxMinor, ZERO2);
-      const total = subtotal - discount + tax;
-      const { periodFor: periodFor2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
-      const period = await periodFor2(uow.tx, postedOn);
-      const ref = await nextReference(uow.tx, "INV", uow.now);
-      const row = await transition(uow, { model: "Invoice", id: inv.id, from: ["draft"], to: "posted", expectedVersion: args.expectedVersion, actor, eventType: "invoice.posted", data: { ref, postedAt: uow.now, postedOn: /* @__PURE__ */ new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } });
-      if (total > ZERO2) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "invoice", amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref });
-      else await transition(uow, { model: "Invoice", id: inv.id, from: ["posted"], to: "paid", actor, eventType: "invoice.paid" });
-      return { id: inv.id, ref, status: row.status, totalMinor: total.toString() };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function syncInvoiceStatus(uow, actor, invoiceId, reason) {
-  const inv = await uow.tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, select: { status: true, version: true, totalMinor: true } });
-  if (inv.status === "written_off" || inv.status === "draft") return inv.status;
-  const balance = await balanceOfInvoice(uow.tx, invoiceId);
-  const next = balance <= ZERO2 ? "paid" : balance < inv.totalMinor ? "partially_paid" : "posted";
-  if (next !== inv.status) await casUpdate(uow, { model: "Invoice", id: invoiceId, version: inv.version, from: [inv.status], to: next, actor, eventType: `invoice.${next}`, reason });
-  return next;
-}
-async function settleSucceeded(uow, actor, paymentId, providerRef) {
-  const pay = await lockRow(uow.tx, "Payment", paymentId);
-  if (pay.status === "succeeded") return { settled: false, paymentId };
-  if (!["pending", "unknown"].includes(pay.status)) throw new DomainError(Codes.GUARD_FAILED, `This payment is ${pay.status} and cannot be marked paid.`);
-  const locationId = pay.locationId ?? (await uow.tx.location.findFirst({ select: { id: true } })).id;
-  const day4 = pay.postedOn ? pay.postedOn.toISOString().slice(0, 10) : (await locationDay2(uow, locationId, uow.now)).on;
-  await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "succeeded", actor, eventType: "payment.succeeded", data: { receivedAt: uow.now, ...providerRef ? { providerRef } : {} } });
-  let left = pay.amountMinor;
-  if (pay.forDepositId) {
-    const dep = await lockRow(uow.tx, "Deposit", pay.forDepositId);
-    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
-    await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, depositId: dep.id, amountMinor: pay.amountMinor, at: uow.now } });
-    await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["requested"], to: "paid", actor, eventType: "deposit.paid", data: { paymentId: pay.id } });
-    await post(uow, { clientId: pay.clientId, kind: "deposit_received", amountMinor: -pay.amountMinor, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:deposit`, paymentId: pay.id, memo: pay.ref });
-    left = ZERO2;
-  } else if (pay.forInvoiceId) {
-    await lockRow(uow.tx, "Invoice", pay.forInvoiceId);
-    const balance = await balanceOfInvoice(uow.tx, pay.forInvoiceId);
-    const apply = balance < left ? balance > ZERO2 ? balance : ZERO2 : left;
-    if (apply > ZERO2) {
-      await uow.tx.paymentAllocation.create({ data: { paymentId: pay.id, invoiceId: pay.forInvoiceId, amountMinor: apply, at: uow.now } });
-      await post(uow, { clientId: pay.clientId, invoiceId: pay.forInvoiceId, paymentId: pay.id, kind: "payment", amountMinor: -apply, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:invoice`, memo: pay.ref });
-      left -= apply;
-    }
-  }
-  if (left > ZERO2) await post(uow, { clientId: pay.clientId, paymentId: pay.id, kind: "payment_unallocated", amountMinor: -left, currencyCode: pay.currencyCode, postedOn: day4, entryKey: `payment:${pay.id}:account`, memo: `${pay.ref} held on account` });
-  if (pay.forInvoiceId) await syncInvoiceStatus(uow, actor, pay.forInvoiceId, pay.ref);
-  return { settled: true, paymentId, heldOnAccountMinor: left.toString() };
-}
-async function newPayment(uow, actor, a) {
-  const settings = await billingSettings(uow);
-  let locationId = a.locationId ?? null;
-  let invoice = null;
-  if (a.target.invoiceId) {
-    invoice = await uow.tx.invoice.findUnique({ where: { id: a.target.invoiceId }, select: { id: true, status: true, clientId: true, currencyCode: true, locationId: true } });
-    if (!invoice || invoice.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
-    if (!["posted", "partially_paid"].includes(invoice.status)) throw new DomainError(Codes.GUARD_FAILED, invoice.status === "paid" ? "That invoice is already paid." : "That invoice cannot take a payment.");
-    locationId = invoice.locationId;
-    const balance = await balanceOfInvoice(uow.tx, invoice.id);
-    if (a.amountMinor > balance && !a.allowOverpay) throw new DomainError(Codes.GUARD_FAILED, "That is more than the invoice balance. Take the balance, or choose to hold the extra on account.", { reason: "overpay" });
-  }
-  if (a.target.depositId) {
-    const dep = await uow.tx.deposit.findUnique({ where: { id: a.target.depositId }, select: { clientId: true, status: true, requestedMinor: true } });
-    if (!dep || dep.clientId !== a.clientId) throw new DomainError(Codes.NOT_FOUND, "Deposit not found for this client.");
-    if (dep.status !== "requested") throw new DomainError(Codes.GUARD_FAILED, "That deposit was already paid.");
-    if (dep.requestedMinor !== a.amountMinor) throw new DomainError(Codes.GUARD_FAILED, "A deposit is paid in full, at the amount that was asked for.", { reason: "deposit_amount" });
-  }
-  const staff = await staffOf(uow, actor).catch(() => null);
-  const ref = await nextReference(uow.tx, "PAY", uow.now);
-  return uow.tx.payment.create({
-    data: {
-      ref,
-      clientId: a.clientId,
-      locationId,
-      method: a.method,
-      provider: a.provider,
-      amountMinor: a.amountMinor,
-      currencyCode: invoice?.currencyCode ?? settings.currencyCode,
-      status: "pending",
-      reference: (a.reference ?? "").slice(0, 120),
-      note: (a.note ?? "").slice(0, 300),
-      forInvoiceId: a.target.invoiceId ?? null,
-      forDepositId: a.target.depositId ?? null,
-      allowOverpay: a.allowOverpay === true,
-      payerAuthorizationId: a.payerAuthorizationId ?? null,
-      receivedById: staff?.id ?? null,
-      postedOn: a.postedOn ? /* @__PURE__ */ new Date(`${dateOnly(a.postedOn, "posting day")}T00:00:00Z`) : null
-    }
-  });
-}
-async function recordPayment(_root, args, context) {
-  return gated(context, { permissions: [...TAKERS], tool: "payment.record", humanOnly: true }, args, async (actor) => {
-    const method = pick(args.method, PAYMENT_METHODS.filter((m) => !["payment_link", "client_credit"].includes(m)), "payment method");
-    const amount = minorText(args.amountMinor, "amount");
-    if (method === "insurer_direct" && !args.payerAuthorizationId) throw new DomainError(Codes.INVALID_INPUT, "An insurer payment needs the authorisation it was paid against.", { field: "payerAuthorizationId" });
-    if (["check", "ach"].includes(method) && !String(args.reference ?? "").trim()) throw new DomainError(Codes.INVALID_INPUT, "Enter the check or reference number.", { field: "reference" });
-    const result = await command(context.prisma, { name: "payment.record", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      if (args.payerAuthorizationId) {
-        const auth = await uow.tx.payerAuthorization.findUnique({ where: { id: args.payerAuthorizationId }, select: { status: true, invoiceId: true } });
-        if (!auth || !["authorised", "paid"].includes(auth.status)) throw new DomainError(Codes.GUARD_FAILED, "That authorisation has not been approved by the insurer.");
-        if (auth.invoiceId && auth.invoiceId !== args.invoiceId) throw new DomainError(Codes.GUARD_FAILED, "That authorisation is for a different invoice.");
-      }
-      const pay = await newPayment(uow, actor, { clientId: args.clientId, method, provider: "manual", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId }, reference: args.reference ?? "", note: args.note ?? "", postedOn: args.postedOn, allowOverpay: args.allowOverpay === true, payerAuthorizationId: args.payerAuthorizationId });
-      const settled = await settleSucceeded(uow, actor, pay.id);
-      auditCreate(uow, actor, "Payment", pay.id, "payment.recorded", { method, amountMinor: amount.toString() });
-      return { id: pay.id, ref: pay.ref, status: "succeeded", heldOnAccountMinor: settled.heldOnAccountMinor ?? "0" };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function takeCardPayment(_root, args, context) {
-  return gated(context, { permissions: [...TAKERS], tool: "payment.card", humanOnly: true }, args, async (actor) => {
-    const amount = minorText(args.amountMinor, "amount");
-    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
-    const started = await command(context.prisma, { name: "payment.card.start", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      if (args.invoiceId) await lockRow(uow.tx, "Invoice", args.invoiceId);
-      else if (args.depositId) await lockRow(uow.tx, "Deposit", args.depositId);
-      const open = await uow.tx.payment.findFirst({ where: { method: "card_on_file", status: { in: ["pending", "unknown"] }, ...args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? "" } }, select: { ref: true } });
-      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: "card_in_flight" });
-      const pay = await newPayment(uow, actor, { clientId: args.clientId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } });
-      const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
-      return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode };
-    });
-    if (started.replay) return { replay: true, ...await settleFromState(context, actor, started.value.paymentId) };
-    const outcome = await adapterFor("stripe").charge({ amountMinor: amount, currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod: args.paymentMethodId ?? void 0 });
-    return { replay: false, ...await recordOutcome(context, actor, started.value.paymentId, started.value.attemptId, outcome, `${args.idempotencyKey}:result`) };
-  });
-}
-async function settleFromState(context, actor, paymentId) {
-  const p = await context.prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, ref: true, status: true } });
-  return { id: p.id, ref: p.ref, status: p.status };
-}
-async function recordOutcome(context, actor, paymentId, attemptId, outcome, key2) {
-  const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key2, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
-    let pay = await lockRow(uow.tx, "Payment", paymentId);
-    if (pay.status === "succeeded") return { id: pay.id, ref: pay.ref, status: "succeeded", message: "Paid." };
-    const open = outcome.outcome === "requires_action" || outcome.outcome === "processing";
-    if (pay.status === "failed") {
-      if (pay.providerRef || !outcome.providerRef || !(open || outcome.outcome === "succeeded")) return { id: pay.id, ref: pay.ref, status: "failed", message: outcome.outcome === "failed" ? outcome.message : `Still marked failed. ${outcome.message}` };
-      await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["failed"], to: "pending", actor, eventType: "payment.reopened", reason: "The card processor reports this payment is not final.", data: { providerRef: outcome.providerRef } });
-      pay = await lockRow(uow.tx, "Payment", paymentId);
-    }
-    const attempt = await lockRow(uow.tx, "PaymentAttempt", attemptId);
-    const attemptStatus = outcome.outcome;
-    const ref = outcome.providerRef ?? "";
-    if (attempt.status !== attemptStatus) await casUpdate(uow, { model: "PaymentAttempt", id: attempt.id, version: attempt.version, from: [attempt.status], to: attemptStatus, actor, eventType: `payment.attempt.${attemptStatus}`, data: { ...ref ? { providerRef: ref } : {}, message: outcome.message.slice(0, 200), ...attemptStatus === "unknown" || open ? { resolvedAt: null } : { resolvedAt: uow.now } } });
-    if (outcome.outcome === "succeeded") await settleSucceeded(uow, actor, paymentId, outcome.providerRef);
-    else if (outcome.outcome === "failed") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "failed", actor, eventType: "payment.failed", data: ref ? { providerRef: ref } : {} });
-    else if (outcome.outcome === "unknown" && pay.status === "pending") await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: ["pending"], to: "unknown", actor, eventType: "payment.unknown", data: ref ? { providerRef: ref } : {} });
-    else if (open && (pay.status !== "pending" || ref && pay.providerRef !== ref)) await casUpdate(uow, { model: "Payment", id: pay.id, version: pay.version, from: [pay.status], to: "pending", actor, eventType: "payment.pending", data: ref ? { providerRef: ref } : {} });
-    else if (ref && !pay.providerRef) await uow.tx.payment.update({ where: { id: pay.id }, data: { providerRef: ref } });
-    return { id: pay.id, ref: pay.ref, status: open ? "pending" : outcome.outcome, message: outcome.message };
-  });
-  return done.value;
-}
-async function resolveUnknownPayment(prisma, actor, paymentId) {
-  const pay = await prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, status: true, provider: true, amountMinor: true, currencyCode: true, providerRef: true, ref: true, attempts: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, providerIdempotencyKey: true, status: true, providerRef: true } } } });
-  if (!pay) throw new DomainError(Codes.NOT_FOUND, "Payment not found.");
-  const checkable = ["unknown", "pending"].includes(pay.status) || pay.status === "failed" && pay.provider === "stripe";
-  if (!checkable || !pay.attempts[0]) return { id: pay.id, ref: pay.ref, status: pay.status, message: "Nothing to check." };
-  const attempt = pay.attempts[0];
-  if (!cardConfigured()) return { id: pay.id, ref: pay.ref, status: pay.status, message: "The card processor is not reachable from here." };
-  const outcome = await adapterFor(pay.provider).resolve({ amountMinor: pay.amountMinor, currencyCode: pay.currencyCode, idempotencyKey: attempt.providerIdempotencyKey, description: `Payment ${pay.ref}`, metadata: { payment: pay.id }, providerRef: pay.providerRef || attempt.providerRef || null });
-  return recordOutcome({ prisma, session: null }, actor, pay.id, attempt.id, outcome, `resolve:${pay.id}:${outcome.outcome}:${outcome.providerRef ?? ""}`);
-}
-async function checkPaymentStatus(_root, args, context) {
-  return gated(context, { permissions: [...TAKERS], tool: "payment.check", humanOnly: true }, args, async (actor) => resolveUnknownPayment(context.prisma, actor, args.paymentId));
-}
-async function applyDeposit(_root, args, context) {
-  return gated(context, { permissions: [...TAKERS, ...POSTERS], tool: "deposit.apply", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "deposit.apply", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const dep = await lockRow(uow.tx, "Deposit", args.depositId);
-      if (dep.status === "applied") throw new DomainError(Codes.GUARD_FAILED, "This deposit was already applied.", { reason: "already_applied" });
-      if (dep.status !== "paid") throw new DomainError(Codes.GUARD_FAILED, "This deposit has not been paid yet.");
-      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
-      if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, "A deposit can only go against the same client\u2019s invoice.");
-      if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "That invoice cannot take a deposit.");
-      const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId }, select: { amountMinor: true } });
-      const balance = await balanceOfInvoice(uow.tx, inv.id);
-      const apply = pay.amountMinor < balance ? pay.amountMinor : balance;
-      const { on } = await locationDay2(uow, inv.locationId, uow.now);
-      await post(uow, { clientId: dep.clientId, kind: "deposit_released", amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: "Deposit applied" });
-      await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: "deposit_applied", amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: "Deposit applied" });
-      await casUpdate(uow, { model: "Deposit", id: dep.id, version: dep.version, from: ["paid"], to: "applied", actor, eventType: "deposit.applied", data: { appliedInvoiceId: inv.id, appliedAt: uow.now } });
-      const status = await syncInvoiceStatus(uow, actor, inv.id, "Deposit applied");
-      return { depositId: dep.id, invoiceId: inv.id, appliedMinor: apply.toString(), invoiceStatus: status };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function issueCreditNote(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS], tool: "credit.note", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const amount = minorText(args.amountMinor, "amount");
-    const result = await command(context.prisma, { name: "credit.note", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
-      if (!["posted", "partially_paid", "paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only a posted invoice can be credited.");
-      if (amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "A credit note cannot be more than the invoice total.");
-      const credited = (await uow.tx.creditNote.aggregate({ where: { invoiceId: inv.id }, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO2;
-      if (credited + amount > inv.totalMinor) throw new DomainError(Codes.GUARD_FAILED, "Credit notes cannot add up to more than the invoice total.");
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const ref = await nextReference(uow.tx, "CRN", uow.now);
-      const note = await uow.tx.creditNote.create({ data: { ref, invoiceId: inv.id, clientId: inv.clientId, amountMinor: amount, currencyCode: inv.currencyCode, reason, postedById: staff?.id ?? null, postedAt: uow.now } });
-      const { on } = await locationDay2(uow, inv.locationId, uow.now);
-      const balance = await balanceOfInvoice(uow.tx, inv.id);
-      await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "credit_note", amountMinor: -amount, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}`, memo: ref });
-      const excess = amount > balance ? amount - (balance > ZERO2 ? balance : ZERO2) : ZERO2;
-      if (excess > ZERO2) {
-        await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "adjustment", amountMinor: excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:invoice`, memo: `${ref}: already paid` });
-        await post(uow, { clientId: inv.clientId, kind: "adjustment", amountMinor: -excess, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}:excess:account`, memo: `${ref}: credit held on account` });
-      }
-      await syncInvoiceStatus(uow, actor, inv.id, ref);
-      auditCreate(uow, actor, "CreditNote", note.id, "credit.issued", { ref, amountMinor: amount.toString(), heldOnAccountMinor: excess.toString() }, { reason });
-      return { id: note.id, ref, heldOnAccountMinor: excess.toString() };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function runRefund(prisma, actor, refundId, key2) {
-  const start = await command(prisma, { name: "refund.start", actor, idempotencyKey: `${key2}:start`, params: { refundId } }, async (uow) => {
-    const r = await lockRow(uow.tx, "Refund", refundId);
-    if (r.status === "succeeded") return { skip: true, status: r.status };
-    if (!["requested", "approved", "processing", "unknown"].includes(r.status)) throw new DomainError(Codes.GUARD_FAILED, `This refund is ${r.status}.`);
-    if (r.status === "requested" || r.status === "approved") await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "processing", actor, eventType: "refund.processing" });
-    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { provider: true, providerRef: true } });
-    return { skip: false, id: r.id, amountMinor: r.amountMinor, reason: r.reason, key: r.providerIdempotencyKey, provider: pay.provider, providerRef: pay.providerRef };
-  });
-  if (start.value.skip) return { id: refundId, status: start.value.status, message: "Already refunded." };
-  const s = start.value;
-  const out = await adapterFor(s.provider).refund({ providerRef: s.providerRef, amountMinor: s.amountMinor, idempotencyKey: s.key, reason: s.reason });
-  const done = await command(prisma, { name: "refund.settle", actor, idempotencyKey: `${key2}:settle:${out.outcome}:${out.providerRef ?? ""}`, params: { refundId, outcome: out.outcome } }, async (uow) => {
-    const r = await lockRow(uow.tx, "Refund", refundId);
-    if (r.status === "succeeded") return { id: r.id, status: "succeeded" };
-    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { clientId: true, currencyCode: true, locationId: true } });
-    if (out.outcome === "succeeded") {
-      const locationId = pay.locationId ?? (await uow.tx.location.findFirstOrThrow({ select: { id: true } })).id;
-      const { on } = await locationDay2(uow, locationId, uow.now);
-      await post(uow, { clientId: pay.clientId, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: "refund", amountMinor: r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}`, memo: r.ref });
-      if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref);
-      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "succeeded", actor, eventType: "refund.succeeded", data: { providerRef: out.providerRef ?? "", processedAt: uow.now, message: out.message.slice(0, 200) } });
-    } else if (out.outcome === "failed") {
-      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "failed", actor, eventType: "refund.failed", data: { message: out.message.slice(0, 200) } });
-    } else if (r.status !== "unknown") {
-      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "unknown", actor, eventType: "refund.unknown", data: { message: out.message.slice(0, 200), providerRef: out.providerRef ?? "" } });
-    }
-    return { id: r.id, status: out.outcome, message: out.message };
-  });
-  return done.value;
-}
-async function requestRefund(_root, args, context) {
-  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.request", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const amount = minorText(args.amountMinor, "amount");
-    const made = await command(context.prisma, { name: "refund.request", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const pay = await lockRow(uow.tx, "Payment", args.paymentId);
-      if (pay.status !== "succeeded") throw new DomainError(Codes.GUARD_FAILED, "Only a payment that went through can be refunded.");
-      if (args.invoiceId) {
-        const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } });
-        if (!inv || inv.clientId !== pay.clientId) throw new DomainError(Codes.NOT_FOUND, "Invoice not found for this client.");
-      }
-      const settings = await billingSettings(uow);
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const ref = await nextReference(uow.tx, "REF", uow.now);
-      const needsApproval = amount > settings.refundApprovalThresholdMinor;
-      const refund = await uow.tx.refund.create({ data: { ref, paymentId: pay.id, invoiceId: args.invoiceId ?? null, amountMinor: amount, currencyCode: "USD", reason, status: "requested", providerIdempotencyKey: `vet-refund-${(0, import_node_crypto10.randomUUID)()}`, requestedById: staff?.id ?? null } });
-      let approvalId = null;
-      if (needsApproval) {
-        const req = await requestApproval(uow, actor, { action: "refund.issue", targetList: "Refund", targetId: refund.id, payload: { refundId: refund.id, amountMinor: amount.toString() }, requiredPermission: "canIssueRefunds", summary: `Refund ${ref}` });
-        approvalId = req.id;
-        await uow.tx.refund.update({ where: { id: refund.id }, data: { approvalId } });
-      }
-      auditCreate(uow, actor, "Refund", refund.id, "refund.requested", { ref, amountMinor: amount.toString(), needsApproval }, { reason });
-      return { id: refund.id, ref, needsApproval, approvalRequestId: approvalId };
-    });
-    if (made.replay || made.value.needsApproval) return { replay: made.replay, ...made.value, status: "requested" };
-    const out = await runRefund(context.prisma, actor, made.value.id, args.idempotencyKey);
-    return { replay: false, ...made.value, ...out };
-  });
-}
-async function issueApprovedRefund(_root, args, context) {
-  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.issue", humanOnly: true }, args, async (actor) => {
-    await command(context.prisma, { name: "refund.approve.use", actor, idempotencyKey: `${args.idempotencyKey}:use`, params: args }, async (uow) => {
-      const r = await lockRow(uow.tx, "Refund", args.refundId);
-      if (r.status !== "requested") return { skipped: true };
-      if (!r.approvalId) return { skipped: true };
-      const used = await consumeApproval(uow, { requestId: r.approvalId, action: "refund.issue", targetList: "Refund", targetId: r.id, payload: { refundId: r.id, amountMinor: r.amountMinor.toString() } });
-      await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: ["requested"], to: "approved", actor, eventType: "refund.approved", approverId: used.approverId });
-      return { skipped: false };
-    });
-    return runRefund(context.prisma, actor, args.refundId, args.idempotencyKey);
-  });
-}
-async function checkRefundStatus(_root, args, context) {
-  return gated(context, { permissions: ["canIssueRefunds", "canTakePayments"], tool: "refund.check", humanOnly: true }, args, async (actor) => runRefund(context.prisma, actor, args.refundId, args.idempotencyKey));
-}
-async function requestWriteOff(_root, args, context) {
-  return gated(context, { permissions: [...POSTERS, "canApproveWriteOff"], tool: "invoice.writeoff", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const result = await command(context.prisma, { name: "invoice.writeoff", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const inv = await lockRow(uow.tx, "Invoice", args.invoiceId);
-      if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only an invoice that still has a balance can be written off.");
-      const settings = await billingSettings(uow);
-      if (!settings.writeOffRequiresApproval && can(actor, "canApproveWriteOff")) return writeOff(uow, actor, inv.id, reason);
-      const req = await requestApproval(uow, actor, { action: "invoice.writeoff", targetList: "Invoice", targetId: inv.id, payload: { invoiceId: inv.id, reason }, requiredPermission: "canApproveWriteOff", summary: `Write off ${inv.ref}` });
-      return { id: inv.id, status: "pending_approval", approvalRequestId: req.id };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function writeOff(uow, actor, invoiceId, reason) {
-  const inv = await lockRow(uow.tx, "Invoice", invoiceId);
-  const balance = await balanceOfInvoice(uow.tx, inv.id);
-  if (balance <= ZERO2) throw new DomainError(Codes.GUARD_FAILED, "This invoice has no balance to write off.");
-  const { on } = await locationDay2(uow, inv.locationId, uow.now);
-  await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "write_off", amountMinor: -balance, currencyCode: inv.currencyCode, postedOn: on, entryKey: `writeoff:${inv.id}`, memo: reason });
-  await transition(uow, { model: "Invoice", id: inv.id, from: ["posted", "partially_paid"], to: "written_off", actor, eventType: "invoice.written_off", reason, metadata: { writtenOffMinor: balance.toString() } });
-  return { id: inv.id, status: "written_off", writtenOffMinor: balance.toString() };
-}
-registerApplier("invoice.writeoff", async (uow, actor, request) => writeOff(uow, actor, request.payload.invoiceId, request.payload.reason));
-async function closeArPeriod(_root, args, context) {
-  return gated(context, { permissions: ["canManagePayments", "canViewFinance"], tool: "period.close", humanOnly: true }, args, async (actor) => {
-    const result = await command(context.prisma, { name: "period.close", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const period = await lockRow(uow.tx, "ArPeriod", args.periodId);
-      const staff = await staffOf(uow, actor).catch(() => null);
-      const drafts = await uow.tx.invoice.count({ where: { status: "draft", createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
-      const pending2 = await uow.tx.payment.count({ where: { status: { in: ["pending", "unknown"] }, createdAt: { lte: new Date(period.endsOn.getTime() + 864e5) } } });
-      if (pending2) throw new DomainError(Codes.GUARD_FAILED, `${pending2} ${pending2 === 1 ? "payment is" : "payments are"} still waiting on the card processor. Check ${pending2 === 1 ? "its" : "their"} status first.`, { reason: "pending_payments" });
-      const row = await transition(uow, { model: "ArPeriod", id: period.id, from: ["open"], to: "closed", expectedVersion: args.expectedVersion, actor, eventType: "period.closed", data: { closedAt: uow.now, closedById: staff?.id ?? null }, metadata: { draftInvoices: drafts } });
-      return { id: row.id, status: row.status };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-async function reopenArPeriod(_root, args, context) {
-  return gated(context, { permissions: ["canManagePractice"], tool: "period.reopen", humanOnly: true }, args, async (actor) => {
-    const reason = text20(args.reason, "reason", 300);
-    const result = await command(context.prisma, { name: "period.reopen", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      const row = await transition(uow, { model: "ArPeriod", id: args.periodId, from: ["closed"], to: "open", expectedVersion: args.expectedVersion, actor, eventType: "period.reopened", reason, data: { closedAt: null, closedById: null } });
-      return { id: row.id, status: row.status };
-    });
-    return { replay: result.replay, ...result.value };
-  });
-}
-
 // features/keystone/mutations/insurance.ts
 init_errors();
 
@@ -14383,13 +15449,13 @@ var CLAIMERS = ["canPostInvoices", "canTakePayments", "canManagePayments"];
 async function addInsurancePolicy(_root, args, context) {
   return gated(context, { permissions: [...CLAIMERS, "canManagePractice"], tool: "insurance.policy.add", humanOnly: true }, args, async (actor) => {
     const policyNumber = text20(args.policyNumber, "policy number", 60);
-    const day4 = (v, name) => {
+    const day7 = (v, name) => {
       if (!v) return null;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) throw new DomainError(Codes.INVALID_INPUT, `Enter the ${name} as a date.`, { field: name });
       return v;
     };
-    const from = day4(args.effectiveFrom, "start date");
-    const to = day4(args.effectiveTo, "end date");
+    const from = day7(args.effectiveFrom, "start date");
+    const to = day7(args.effectiveTo, "end date");
     if (from && to && to < from) throw new DomainError(Codes.INVALID_INPUT, "The policy cannot end before it starts.", { field: "end date" });
     const rate2 = args.reimbursementRate ? String(args.reimbursementRate).trim() : null;
     if (rate2 && !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(rate2)) throw new DomainError(Codes.INVALID_INPUT, "Enter the reimbursement as a share between 0 and 1, such as 0.8.", { field: "reimbursement" });
@@ -14468,14 +15534,14 @@ async function buildClaimPacket(_root, args, context) {
       }
       const fields = Object.fromEntries(Object.entries(args.formFields ?? {}).slice(0, 20).map(([k, v]) => [k.slice(0, 60), String(v).slice(0, 300)]));
       const ref = await nextReference(uow.tx, "CLM", uow.now);
-      const money2 = (m) => formatMinor(m, inv.currencyCode);
+      const money4 = (m) => formatMinor(m, inv.currencyCode);
       const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Claim ${esc2(ref)}</title><style>body{font:14px/1.5 system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#111}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid #ddd;text-align:left}td.n,th.n{text-align:right}h1,h2{margin:16px 0 6px}</style></head><body>
 <h1>Insurance claim ${esc2(ref)}</h1>
 <p>${esc2(policy.insurer?.name ?? "")} \xB7 Policy ${esc2(policy.policyNumber)}</p>
 <h2>Pet and owner</h2><p>${esc2(policy.patient.name)} (${esc2(policy.patient.ref)}) \xB7 ${esc2(inv.client?.displayName ?? "")}</p>
 <h2>Invoice ${esc2(inv.ref)}</h2>
-<table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${inv.lines.map((l) => `<tr><td>${esc2(l.description)}</td><td class="n">${esc2(l.qty.toString().replace(/\.?0+$/, ""))}</td><td class="n">${esc2(money2(l.extendedMinor - l.discountMinor))}</td></tr>`).join("")}</tbody></table>
-<p>Subtotal ${esc2(money2(inv.subtotalMinor - inv.discountMinor))} \xB7 Tax ${esc2(money2(inv.taxMinor))} \xB7 <strong>Total ${esc2(money2(inv.totalMinor))}</strong></p>
+<table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${inv.lines.map((l) => `<tr><td>${esc2(l.description)}</td><td class="n">${esc2(l.qty.toString().replace(/\.?0+$/, ""))}</td><td class="n">${esc2(money4(l.extendedMinor - l.discountMinor))}</td></tr>`).join("")}</tbody></table>
+<p>Subtotal ${esc2(money4(inv.subtotalMinor - inv.discountMinor))} \xB7 Tax ${esc2(money4(inv.taxMinor))} \xB7 <strong>Total ${esc2(money4(inv.totalMinor))}</strong></p>
 ${Object.keys(fields).length ? `<h2>Claim details</h2><table><tbody>${Object.entries(fields).map(([k, v]) => `<tr><th>${esc2(k)}</th><td>${esc2(v)}</td></tr>`).join("")}</tbody></table>` : ""}
 <h2>Attached records</h2>${documents.length ? `<ul>${documents.map((d) => `<li>${esc2(d.title)}</li>`).join("")}</ul>` : "<p>No records attached.</p>"}
 </body></html>`;
@@ -14509,6 +15575,1403 @@ async function advanceClaim(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/wellness.ts
+var import_node_crypto13 = require("node:crypto");
+init_errors();
+init_ledger();
+var MANAGE = ["canTakePayments", "canManagePayments"];
+var PERIOD_TERM = (a) => termMonthsOf(a.termStartsOn.toISOString().slice(0, 10), a.termEndsOn.toISOString().slice(0, 10));
+var ZERO3 = 0n;
+var day5 = (d) => d.toISOString().slice(0, 10);
+var asDate2 = (s) => /* @__PURE__ */ new Date(`${s}T00:00:00Z`);
+async function savePlanVersion(_root, args, context) {
+  return gated(context, { permissions: ["canManagePractice"], tool: "wellness.save_plan", humanOnly: true }, args, async (actor) => {
+    const code = text20(args.code, "code", 40).toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (!code) throw new DomainError(Codes.INVALID_INPUT, "The plan code uses letters and numbers.", { field: "code" });
+    const price = minorText(args.monthlyPriceMinor, "monthly price");
+    if (!Number.isInteger(args.termMonths) || args.termMonths < 1 || args.termMonths > 24) throw new DomainError(Codes.INVALID_INPUT, "A term is 1 to 24 months.", { field: "termMonths" });
+    const entitlements = parseEntitlements(args.entitlements);
+    if (!entitlements.length) throw new DomainError(Codes.INVALID_INPUT, "List what the plan includes.", { field: "entitlements" });
+    const bps = args.otherServicesDiscountBps ?? 0;
+    if (!Number.isInteger(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "The discount is 0 to 100 percent.", { field: "otherServicesDiscountBps" });
+    const result = await command(context.prisma, { name: "wellness.save_plan", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await advisoryLock(uow.tx, `wellness-plan:${code}`);
+      const plan = await uow.tx.wellnessPlan.findUnique({ where: { code } }) ?? await uow.tx.wellnessPlan.create({ data: { code, name: text20(args.name, "name", 80), summary: text20(args.summary ?? "", "summary", 300, false), status: "active" } });
+      const last = await uow.tx.wellnessPlanVersion.findFirst({ where: { planId: plan.id }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
+      if (last) await uow.tx.wellnessPlanVersion.updateMany({ where: { planId: plan.id, status: "published" }, data: { status: "retired" } });
+      const version = await uow.tx.wellnessPlanVersion.create({
+        data: {
+          planId: plan.id,
+          versionNo: (last?.versionNo ?? 0) + 1,
+          label: text20(args.label, "label", 80),
+          status: "published",
+          monthlyPriceMinor: price,
+          termMonths: args.termMonths,
+          speciesCodes: args.speciesCodes?.length ? args.speciesCodes : void 0,
+          minAgeWeeks: args.minAgeWeeks ?? null,
+          maxAgeMonths: args.maxAgeMonths ?? null,
+          entitlements: entitlements.map((e) => ({ code: e.code, label: e.label, qty: e.qty, retailValueMinor: e.retailValueMinor.toString() })),
+          otherServicesDiscountBps: bps,
+          trueUpNote: text20(args.trueUpNote ?? "", "true-up note", 300, false),
+          disclosure: "",
+          publishedAt: uow.now
+        }
+      });
+      auditCreate(uow, actor, "WellnessPlanVersion", version.id, "wellness.plan_published", { code, versionNo: version.versionNo, monthlyPriceMinor: price.toString() });
+      return { id: version.id, planId: plan.id, versionNo: version.versionNo };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function grantsFor(uow, enrollmentId, termNo, entitlements) {
+  for (const e of parseEntitlements(entitlements)) {
+    await uow.tx.entitlementGrant.create({ data: { enrollmentId, termNo, code: e.code, label: e.label, qtyGranted: e.qty, retailValueMinor: e.retailValueMinor * BigInt(e.qty) } });
+  }
+}
+async function enrolPatient(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.enrol", humanOnly: true }, args, async (actor) => {
+    const method = pick(args.method, ["in_person", "portal", "phone_recorded"], "consent method");
+    if (args.affirmed !== true) throw new DomainError(Codes.CONSENT_REQUIRED, "The client must agree to the monthly charges and automatic renewal before a card is saved.", { field: "affirmed" });
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server, so a plan cannot be started.", { reason: "no_processor" });
+    const ctx = await context.prisma.$transaction(async (tx) => {
+      const patient = await tx.patient.findUnique({ where: { id: args.patientId }, select: { id: true, name: true, status: true, dateOfBirth: true, species: { select: { code: true } } } });
+      if (!patient) throw new DomainError(Codes.NOT_FOUND, "Patient not found.");
+      if (patient.status === "deceased") throw new DomainError(Codes.PATIENT_DECEASED, "This patient has died. A plan cannot be started.");
+      if (patient.status !== "active") throw new DomainError(Codes.GUARD_FAILED, `The patient is ${patient.status}; confirm the registration first.`);
+      const version = await tx.wellnessPlanVersion.findUnique({ where: { id: args.planVersionId }, include: { plan: true } });
+      if (!version || version.status !== "published" || version.plan?.status !== "active") throw new DomainError(Codes.GUARD_FAILED, "That plan is not open for new enrolments.");
+      const own = await tx.patientOwnership.findFirst({ where: { patientId: patient.id, effectiveTo: null, role: "primary" }, select: { clientId: true } });
+      if (!own?.clientId) throw new DomainError(Codes.GUARD_FAILED, "This patient has no client of record to bill.");
+      const signer = await tx.clientPerson.findUnique({ where: { id: args.signerId }, select: { id: true, clientId: true, canPay: true, firstName: true, lastName: true, contactPoints: { where: { kind: "email" }, select: { value: true }, take: 1 } } });
+      if (!signer || signer.clientId !== own.clientId) throw new DomainError(Codes.NOT_FOUND, "That person is not on this client.", { field: "signerId" });
+      if (!signer.canPay) throw new DomainError(Codes.CONSENT_REQUIRED, `${signer.firstName} ${signer.lastName} is not allowed to pay for this client.`, { field: "signerId" });
+      const species = version.speciesCodes;
+      if (species?.length && !species.includes(patient.species?.code ?? "")) throw new DomainError(Codes.GUARD_FAILED, `${version.plan.name} is not offered for this species.`);
+      return { patientName: patient.name, clientId: own.clientId, signerName: `${signer.firstName} ${signer.lastName}`.trim(), signerEmail: signer.contactPoints?.[0]?.value ?? "" };
+    });
+    const card = await saveCard({ idempotencyKey: `${args.idempotencyKey}:card`, name: ctx.signerName, email: ctx.signerEmail || void 0, paymentMethod: args.paymentMethodId || void 0, metadata: { client: ctx.clientId } });
+    if (!card.ok) throw new DomainError(Codes.GUARD_FAILED, card.message, { reason: "card_not_saved" });
+    const made = await command(context.prisma, { name: "wellness.enrol", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const patient = await lockRow(uow.tx, "Patient", args.patientId);
+      if (patient.status !== "active" || patient.deceasedAt) throw new DomainError(Codes.PATIENT_DECEASED, "This patient cannot be enrolled.");
+      const version = await uow.tx.wellnessPlanVersion.findUniqueOrThrow({ where: { id: args.planVersionId }, include: { plan: true } });
+      const client = await uow.tx.client.findUniqueOrThrow({ where: { id: ctx.clientId }, select: { primaryLocationId: true } });
+      const locationId = client.primaryLocationId ?? (await uow.tx.location.findFirstOrThrow({ orderBy: { createdAt: "asc" }, select: { id: true } })).id;
+      const { on, location } = await locationDay(uow, locationId, uow.now);
+      const age = ageOn(patient.dateOfBirth, on);
+      if (version.minAgeWeeks && age && age.weeks < version.minAgeWeeks) throw new DomainError(Codes.GUARD_FAILED, `${version.plan.name} starts at ${version.minAgeWeeks} weeks of age.`);
+      if (version.maxAgeMonths && age && age.months > version.maxAgeMonths) throw new DomainError(Codes.GUARD_FAILED, `${version.plan.name} is for patients up to ${version.maxAgeMonths} months old.`);
+      const live = await uow.tx.enrollment.findFirst({ where: { patientId: patient.id, planId: version.planId, status: { in: ["pending_payment", "active", "cancelling", "suspended"] } }, select: { ref: true } });
+      if (live) throw new DomainError(Codes.GUARD_FAILED, `This patient is already on ${version.plan.name} (${live.ref}).`);
+      const policy = await resolvePolicy(uow.tx, "auto_renewal", { locationId, on });
+      const practice = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { displayName: true } });
+      const disclosure = disclosureText({ planName: version.plan.name, monthlyPriceMinor: version.monthlyPriceMinor, termMonths: version.termMonths, renewalNoticeDays: policy.rules.renewalNoticeDays, practiceName: practice?.displayName || location.name, cancelNote: version.trueUpNote || void 0 });
+      const termEnds = addMonths(on, version.termMonths);
+      const ref = await nextReference(uow.tx, "WEL", uow.now);
+      const enrollment = await uow.tx.enrollment.create({
+        data: {
+          ref,
+          patientId: patient.id,
+          clientId: ctx.clientId,
+          locationId,
+          planId: version.planId,
+          planVersionId: version.id,
+          status: "pending_payment",
+          startedOn: asDate2(on),
+          termNo: 1,
+          termStartsOn: asDate2(on),
+          termEndsOn: asDate2(termEnds),
+          autoRenew: true,
+          cardLabel: card.label,
+          customerRef: card.customer,
+          paymentMethodRef: card.paymentMethod,
+          cardVersion: 1
+        }
+      });
+      const consent = await uow.tx.enrollmentConsent.create({
+        data: { enrollmentId: enrollment.id, signerId: args.signerId, disclosureText: disclosure, disclosureHash: disclosureHash(disclosure), terms: { monthlyPriceMinor: version.monthlyPriceMinor.toString(), termMonths: version.termMonths, renewalNoticeDays: policy.rules.renewalNoticeDays, policy: "US-CA/auto_renewal" }, method, affirmed: true, setupIntentRef: card.setupIntent, consentedAt: uow.now }
+      });
+      await uow.tx.enrollment.update({ where: { id: enrollment.id }, data: { consentId: consent.id } });
+      await grantsFor(uow, enrollment.id, 1, version.entitlements);
+      auditCreate(uow, actor, "Enrollment", enrollment.id, "wellness.enrolled", { ref, planVersionId: version.id, cardLabel: card.label, disclosureHash: disclosureHash(disclosure) });
+      return { id: enrollment.id, ref, periodKey: monthOf(on) };
+    });
+    if (made.replay) return { replay: true, ...made.value, status: (await context.prisma.enrollment.findUnique({ where: { id: made.value.id }, select: { status: true } }))?.status };
+    const charge = await chargeEnrollment(context.prisma, actor, { enrollmentId: made.value.id, periodKey: made.value.periodKey, runKey: args.idempotencyKey });
+    const status = (await context.prisma.enrollment.findUnique({ where: { id: made.value.id }, select: { status: true } }))?.status;
+    return { replay: false, ...made.value, status, firstCharge: charge.status, message: charge.message };
+  });
+}
+async function chargeEnrollment(prisma, actor, input) {
+  const stem = `${input.runKey}:${input.enrollmentId}:${input.periodKey}`;
+  let started;
+  try {
+    started = await command(prisma, { name: "wellness.charge.start", actor, idempotencyKey: `${stem}:start`, params: input }, async (uow) => {
+      await advisoryLock(uow.tx, `enrollment:${input.enrollmentId}`);
+      let e = await lockRow(uow.tx, "Enrollment", input.enrollmentId);
+      if (!["pending_payment", "active"].includes(e.status)) return { skip: `The plan is ${e.status.replaceAll("_", " ")}.` };
+      const patient = await uow.tx.patient.findUniqueOrThrow({ where: { id: e.patientId }, select: { deceasedAt: true, status: true } });
+      if (patient.deceasedAt || patient.status === "deceased") return { skip: "The patient has died." };
+      const prior = await uow.tx.planBillingAttempt.findMany({ where: { enrollmentId: e.id, periodKey: input.periodKey }, orderBy: { generation: "asc" } });
+      const live = prior.find((a) => ["succeeded", "processing", "unknown"].includes(a.status));
+      if (live) return { skip: live.status === "succeeded" ? "This month is already paid." : "The card processor has not given a final answer for this month. Check its status first." };
+      const lastFailed = prior[prior.length - 1];
+      if (!input.retryOfAttemptId) {
+        const failed = await uow.tx.planBillingAttempt.findMany({ where: { enrollmentId: e.id, status: "failed" }, select: { periodKey: true } });
+        for (const f of failed) {
+          const paid = await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, periodKey: f.periodKey, status: "succeeded" } });
+          if (!paid) return { skip: `The card was declined for ${f.periodKey}. Replace the card, then use Retry.` };
+        }
+      }
+      if (lastFailed && !input.retryOfAttemptId) return { skip: "The card was declined. Replace the card, then use Retry." };
+      if (input.retryOfAttemptId) {
+        if (!lastFailed || lastFailed.id !== input.retryOfAttemptId || lastFailed.status !== "failed") return { skip: "Only the latest declined charge can be retried." };
+        if (e.cardVersion <= (lastFailed.cardVersion ?? 0)) throw new DomainError(Codes.GUARD_FAILED, "Replace the card on file first. A declined charge is only retried with a new card.", { reason: "same_card" });
+      }
+      let months = PERIOD_TERM(e);
+      if (!months.includes(input.periodKey)) {
+        const lastMonth = months[months.length - 1];
+        if (input.periodKey < months[0]) return { skip: "This month is before the plan started." };
+        if (input.periodKey !== monthOf(addMonths(`${lastMonth}-01`, 1)) || e.status !== "active" || !e.autoRenew) return { skip: "This month is outside the plan term." };
+        const version2 = await uow.tx.wellnessPlanVersion.findUniqueOrThrow({ where: { id: e.planVersionId } });
+        const startsOn = day5(e.termEndsOn);
+        await uow.tx.enrollment.update({ where: { id: e.id }, data: { termNo: e.termNo + 1, termStartsOn: asDate2(startsOn), termEndsOn: asDate2(addMonths(startsOn, version2.termMonths)), version: { increment: 1 } } });
+        await grantsFor(uow, e.id, e.termNo + 1, version2.entitlements);
+        auditCreate(uow, actor, "Enrollment", e.id, "wellness.renewed", { termNo: e.termNo + 1 });
+        e = await lockRow(uow.tx, "Enrollment", input.enrollmentId);
+        months = PERIOD_TERM(e);
+      }
+      const version = await uow.tx.wellnessPlanVersion.findUniqueOrThrow({ where: { id: e.planVersionId }, include: { plan: true } });
+      const amount = version.monthlyPriceMinor;
+      if (!e.customerRef || !e.paymentMethodRef) return { skip: "There is no card on file." };
+      const generation = prior.length + 1;
+      const attempt = await uow.tx.planBillingAttempt.create({ data: { enrollmentId: e.id, periodKey: input.periodKey, generation, status: "processing", amountMinor: amount, cardVersion: e.cardVersion, termNo: e.termNo, runKey: input.runKey, startedAt: uow.now, retryNote: input.retryOfAttemptId ? `Card replaced (card version ${e.cardVersion}); retry of ${input.retryOfAttemptId}` : "" } });
+      const { on } = await locationDay(uow, e.locationId, uow.now);
+      let invoiceId = prior.find((a) => a.invoiceId)?.invoiceId ?? null;
+      if (!invoiceId) {
+        const description = `${version.plan.name}: ${periodLabel(input.periodKey)}`;
+        const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto13.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: e.clientId, locationId: e.locationId, status: "draft", currencyCode: "USD", note: "" } });
+        const line = await uow.tx.chargeLine.create({ data: { clientId: e.clientId, patientId: e.patientId, locationId: e.locationId, invoiceId: draft.id, description, qty: "1", unitPriceMinor: amount, extendedMinor: amount, discountMinor: ZERO3, taxMinor: ZERO3, taxCategory: "professional_service", sourceType: "plan_period", sourceId: `${e.id}:${input.periodKey}`, capturedAt: uow.now } });
+        const period = await periodFor(uow.tx, on);
+        const ref = await nextReference(uow.tx, "INV", uow.now);
+        await transition(uow, { model: "Invoice", id: draft.id, from: ["draft"], to: "posted", actor, eventType: "invoice.posted", data: { ref, postedAt: uow.now, postedOn: asDate2(on), periodId: period.id, subtotalMinor: amount, discountMinor: ZERO3, taxMinor: ZERO3, totalMinor: amount }, metadata: { plan: e.ref } });
+        await post(uow, { clientId: e.clientId, invoiceId: draft.id, kind: "invoice", amountMinor: amount, currencyCode: "USD", postedOn: on, entryKey: `invoice:${draft.id}:post`, memo: ref });
+        invoiceId = draft.id;
+        auditCreate(uow, actor, "ChargeLine", line.id, "charge.captured", { source: "plan_period", extendedMinor: amount.toString() });
+      }
+      const pay = await newPayment(uow, actor, { clientId: e.clientId, locationId: e.locationId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId }, reference: `${e.ref} ${input.periodKey}` });
+      const pa = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-plan-${attempt.id}`, amountMinor: amount, startedAt: uow.now } });
+      await uow.tx.planBillingAttempt.update({ where: { id: attempt.id }, data: { paymentId: pay.id, invoiceId } });
+      auditCreate(uow, actor, "PlanBillingAttempt", attempt.id, "wellness.charge_started", { enrollment: e.ref, periodKey: input.periodKey, generation, amountMinor: amount.toString() });
+      return { attemptId: attempt.id, paymentId: pay.id, paymentAttemptId: pa.id, key: pa.providerIdempotencyKey, amountMinor: amount.toString(), payRef: pay.ref, customer: e.customerRef, method: e.paymentMethodRef, enrollmentRef: e.ref, planName: version.plan.name };
+    });
+  } catch (error) {
+    if (isDomainError(error) && error.code === Codes.GUARD_FAILED) return { status: "skipped", message: error.message };
+    throw error;
+  }
+  const s = started.value;
+  if (s.skip) return { status: "skipped", message: s.skip };
+  if (started.replay) return statusOf(prisma, s.attemptId);
+  const outcome = await adapterFor("stripe").charge({
+    amountMinor: BigInt(s.amountMinor),
+    currencyCode: "USD",
+    idempotencyKey: s.key,
+    description: `${s.planName} ${s.enrollmentRef} ${input.periodKey}`,
+    metadata: { payment: s.paymentId, enrollment: input.enrollmentId, period: input.periodKey },
+    paymentMethod: s.method,
+    customer: s.customer,
+    offSession: true
+  });
+  await recordOutcome({ prisma, session: null }, actor, s.paymentId, s.paymentAttemptId, outcome, `${stem}:${s.attemptId}:result`);
+  return finishAttempt(prisma, actor, s.attemptId);
+}
+async function statusOf(prisma, attemptId) {
+  const a = await prisma.planBillingAttempt.findUniqueOrThrow({ where: { id: attemptId }, select: { id: true, status: true, message: true, amountMinor: true } });
+  return { status: a.status === "processing" ? "unknown" : a.status, attemptId: a.id, message: a.message || "", amountMinor: a.amountMinor.toString() };
+}
+async function finishAttempt(prisma, actor, attemptId) {
+  await command(prisma, { name: "wellness.charge.finish", actor, idempotencyKey: `finish:${attemptId}:${(0, import_node_crypto13.randomUUID)()}`, params: { attemptId } }, async (uow) => {
+    const a = await lockRow(uow.tx, "PlanBillingAttempt", attemptId);
+    if (a.status === "succeeded" || a.status === "failed") return { unchanged: true };
+    const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: a.paymentId }, select: { status: true } });
+    const attempt = await uow.tx.paymentAttempt.findFirst({ where: { paymentId: a.paymentId }, orderBy: { createdAt: "desc" }, select: { message: true } });
+    const next = pay.status === "succeeded" ? "succeeded" : pay.status === "failed" || pay.status === "voided" ? "failed" : "unknown";
+    if (next === a.status) return { unchanged: true };
+    await casUpdate(uow, { model: "PlanBillingAttempt", id: a.id, version: a.version, from: [a.status], to: next, actor, eventType: `wellness.charge_${next}`, data: { message: (attempt?.message ?? "").slice(0, 200), ...next === "unknown" ? {} : { finishedAt: uow.now } } });
+    if (next === "succeeded") {
+      const e = await lockRow(uow.tx, "Enrollment", a.enrollmentId);
+      if (e.status === "pending_payment") await casUpdate(uow, { model: "Enrollment", id: e.id, version: e.version, from: ["pending_payment"], to: "active", actor, eventType: "wellness.activated" });
+    }
+    return { status: next };
+  });
+  return statusOf(prisma, attemptId);
+}
+async function runPlanBilling(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.run_billing", humanOnly: true }, args, async (actor) => {
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server.", { reason: "no_processor" });
+    const location = args.locationId ? await context.prisma.location.findUnique({ where: { id: args.locationId }, select: { id: true, timeZone: true } }) : await context.prisma.location.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, timeZone: true } });
+    if (!location) throw new DomainError(Codes.NOT_FOUND, "Location not found.");
+    const periodKey = args.periodKey?.trim() || monthOf(localDate({ timeZone: location.timeZone }, /* @__PURE__ */ new Date()));
+    if (!PERIOD.test(periodKey)) throw new DomainError(Codes.INVALID_INPUT, "Choose the month as YYYY-MM.", { field: "periodKey" });
+    const due = await context.prisma.enrollment.findMany({
+      where: { status: { in: ["pending_payment", "active"] }, patient: { deceasedAt: null, status: { not: "deceased" } }, ...args.locationId ? { locationId: args.locationId } : {} },
+      orderBy: { ref: "asc" },
+      take: 500,
+      select: { id: true, ref: true }
+    });
+    const skipped = [];
+    for (const e of due) {
+      const out = await chargeEnrollment(context.prisma, actor, { enrollmentId: e.id, periodKey, runKey: args.idempotencyKey });
+      if (out.status === "skipped") skipped.push({ ref: e.ref, reason: out.message });
+    }
+    const done = await command(context.prisma, { name: "wellness.run_billing", actor, idempotencyKey: `${args.idempotencyKey}:run`, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const attempts = await uow.tx.planBillingAttempt.findMany({ where: { runKey: args.idempotencyKey }, select: { status: true, amountMinor: true } });
+      const succeeded = attempts.filter((a) => a.status === "succeeded");
+      const total = succeeded.reduce((n, a) => n + a.amountMinor, ZERO3);
+      const ref = await nextReference(uow.tx, "PBR", uow.now);
+      const run = await uow.tx.planBillingRun.create({
+        data: {
+          ref,
+          runKey: args.idempotencyKey,
+          locationId: location.id,
+          periodKey,
+          status: "completed",
+          attemptCount: attempts.length,
+          succeededCount: succeeded.length,
+          failedCount: attempts.filter((a) => a.status === "failed").length,
+          openCount: attempts.filter((a) => a.status === "unknown" || a.status === "processing").length,
+          skippedCount: skipped.length,
+          totalMinor: total,
+          summary: { skipped: skipped.slice(0, 50) },
+          startedById: staff?.id ?? null,
+          finishedAt: uow.now
+        }
+      });
+      auditCreate(uow, actor, "PlanBillingRun", run.id, "wellness.run_finished", { ref, periodKey, attempts: attempts.length, totalMinor: total.toString() });
+      return { id: run.id, ref, periodKey, attempts: attempts.length, succeeded: succeeded.length, failed: run.failedCount, open: run.openCount, skipped: skipped.length, totalMinor: total.toString() };
+    });
+    return { replay: done.replay, ...done.value };
+  });
+}
+async function retryPlanCharge(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.retry_charge", humanOnly: true }, args, async (actor) => {
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server.", { reason: "no_processor" });
+    const a = await context.prisma.planBillingAttempt.findUnique({ where: { id: args.attemptId }, select: { enrollmentId: true, periodKey: true, status: true } });
+    if (!a) throw new DomainError(Codes.NOT_FOUND, "Charge not found.");
+    if (a.status !== "failed") throw new DomainError(Codes.GUARD_FAILED, "Only a declined charge can be retried.");
+    const out = await chargeEnrollment(context.prisma, actor, { enrollmentId: a.enrollmentId, periodKey: a.periodKey, runKey: args.idempotencyKey, retryOfAttemptId: args.attemptId });
+    if (out.status === "skipped") throw new DomainError(Codes.GUARD_FAILED, out.message);
+    return { replay: false, id: out.attemptId, status: out.status, message: out.message };
+  });
+}
+async function checkPlanCharge(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.check_charge", humanOnly: true }, args, async (actor) => {
+    const a = await context.prisma.planBillingAttempt.findUnique({ where: { id: args.attemptId }, select: { id: true, paymentId: true, status: true } });
+    if (!a?.paymentId) throw new DomainError(Codes.NOT_FOUND, "Charge not found.");
+    if (a.status === "unknown" || a.status === "processing") await resolveUnknownPayment(context.prisma, actor, a.paymentId);
+    const out = await finishAttempt(context.prisma, actor, a.id);
+    return { replay: false, id: a.id, status: out.status, message: out.message };
+  });
+}
+async function replacePlanCard(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.replace_card", humanOnly: true }, args, async (actor) => {
+    if (args.affirmed !== true) throw new DomainError(Codes.CONSENT_REQUIRED, "The client must agree to the monthly charges on the new card.", { field: "affirmed" });
+    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server.", { reason: "no_processor" });
+    const e = await context.prisma.enrollment.findUnique({ where: { id: args.enrollmentId }, select: { id: true, clientId: true, status: true } });
+    if (!e) throw new DomainError(Codes.NOT_FOUND, "Plan not found.");
+    if (!["pending_payment", "active", "suspended"].includes(e.status)) throw new DomainError(Codes.GUARD_FAILED, "This plan has ended; a card cannot be added to it.");
+    const signer = await context.prisma.clientPerson.findUnique({ where: { id: args.signerId }, select: { clientId: true, canPay: true, firstName: true, lastName: true, contactPoints: { where: { kind: "email" }, select: { value: true }, take: 1 } } });
+    if (!signer || signer.clientId !== e.clientId || !signer.canPay) throw new DomainError(Codes.CONSENT_REQUIRED, "Choose a person who may pay for this client.", { field: "signerId" });
+    const card = await saveCard({ idempotencyKey: `${args.idempotencyKey}:card`, name: `${signer.firstName} ${signer.lastName}`.trim(), email: signer.contactPoints?.[0]?.value || void 0, paymentMethod: args.paymentMethodId || void 0, metadata: { client: e.clientId } });
+    if (!card.ok) throw new DomainError(Codes.GUARD_FAILED, card.message, { reason: "card_not_saved" });
+    const result = await command(context.prisma, { name: "wellness.replace_card", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await lockRow(uow.tx, "Enrollment", args.enrollmentId);
+      if (!["pending_payment", "active", "suspended"].includes(row.status)) throw new DomainError(Codes.GUARD_FAILED, "This plan has ended; a card cannot be added to it.");
+      await uow.tx.enrollment.update({ where: { id: row.id }, data: { customerRef: card.customer, paymentMethodRef: card.paymentMethod, cardLabel: card.label, cardVersion: row.cardVersion + 1, version: { increment: 1 } } });
+      auditCreate(uow, actor, "Enrollment", row.id, "wellness.card_replaced", { cardLabel: card.label, setupIntentSaved: true });
+      return { id: row.id, cardLabel: card.label, cardVersion: row.cardVersion + 1 };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function trueUpFor(tx, enrollmentId) {
+  const entries = await tx.entitlementEntry.findMany({ where: { enrollmentId }, select: { kind: true, valueMinor: true } });
+  const used = entries.reduce((n, e) => n + (e.kind === "debit" ? e.valueMinor : -e.valueMinor), ZERO3);
+  const paid = (await tx.planBillingAttempt.aggregate({ where: { enrollmentId, status: "succeeded" }, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO3;
+  return { used, paid, owed: used > paid ? used - paid : ZERO3 };
+}
+async function cancelEnrollment(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.cancel", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "wellness.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await advisoryLock(uow.tx, `enrollment:${args.enrollmentId}`);
+      const e = await lockRow(uow.tx, "Enrollment", args.enrollmentId);
+      if (args.waiveTrueUp === true && !(actor.kind === "user" && (await uow.tx.user.findUnique({ where: { id: actor.userId }, select: { role: { select: { canManagePayments: true, canManagePractice: true } } } }))?.role?.canManagePayments)) {
+        throw new DomainError(Codes.NOT_AUTHORIZED, "Only someone who manages payments can waive the amount owed.");
+      }
+      const open = await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, status: { in: ["processing", "unknown"] } } });
+      if (open) throw new DomainError(Codes.GUARD_FAILED, "A monthly charge has no final answer yet. Check its status before cancelling.", { reason: "charge_open" });
+      const declined = await uow.tx.planBillingAttempt.findMany({ where: { enrollmentId: e.id, status: "failed", invoiceId: { not: null } }, select: { periodKey: true, invoiceId: true } });
+      const credited = [];
+      for (const d of declined) {
+        if (credited.includes(d.invoiceId) || await uow.tx.planBillingAttempt.count({ where: { enrollmentId: e.id, periodKey: d.periodKey, status: "succeeded" } })) continue;
+        const inv = await lockRow(uow.tx, "Invoice", d.invoiceId);
+        if (!["posted", "partially_paid"].includes(inv.status)) continue;
+        const balance = await balanceOfInvoice(uow.tx, inv.id);
+        if (balance <= ZERO3) continue;
+        const ref = await nextReference(uow.tx, "CRN", uow.now);
+        const note = await uow.tx.creditNote.create({ data: { ref, invoiceId: inv.id, clientId: inv.clientId, amountMinor: balance, currencyCode: inv.currencyCode, reason: `Plan ${e.ref} cancelled after a declined month (${d.periodKey})`, postedAt: uow.now } });
+        const { on } = await locationDay(uow, inv.locationId, uow.now);
+        await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: "credit_note", amountMinor: -balance, currencyCode: inv.currencyCode, postedOn: on, entryKey: `credit:${note.id}`, memo: ref });
+        await syncInvoiceStatus(uow, actor, inv.id, ref);
+        auditCreate(uow, actor, "CreditNote", note.id, "credit.issued", { ref, amountMinor: balance.toString(), plan: e.ref, periodKey: d.periodKey }, { reason: "declined plan month closed on cancel" });
+        credited.push(inv.id);
+      }
+      const { used, paid, owed } = await trueUpFor(uow.tx, e.id);
+      let chargeId = null;
+      const waived = args.waiveTrueUp === true;
+      if (owed > ZERO3 && !waived) {
+        const line = await uow.tx.chargeLine.create({ data: { clientId: e.clientId, patientId: e.patientId, locationId: e.locationId, description: `Plan cancelled: care used above what was paid (${e.ref})`, qty: "1", unitPriceMinor: owed, extendedMinor: owed, discountMinor: ZERO3, taxMinor: ZERO3, taxCategory: "professional_service", sourceType: "plan_true_up", sourceId: e.id, capturedAt: uow.now } });
+        chargeId = line.id;
+      }
+      await transition(uow, {
+        model: "Enrollment",
+        id: e.id,
+        from: ["pending_payment", "active", "suspended", "cancelling"],
+        to: "cancelled",
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: "wellness.cancelled",
+        reason,
+        data: { cancelRequestedAt: uow.now, cancelReason: reason, endedAt: uow.now, autoRenew: false, trueUpMinor: waived ? ZERO3 : owed, trueUpWaived: waived && owed > ZERO3 }
+      });
+      return { id: e.id, status: "cancelled", invoicesCredited: credited.length, usedMinor: used.toString(), paidMinor: paid.toString(), owedMinor: (waived ? ZERO3 : owed).toString(), chargeId };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function useEntitlement(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE, "canCheckIn", "canWriteRecord"], tool: "wellness.use_entitlement", humanOnly: true }, args, async (actor) => {
+    const qty2 = args.qty ?? 1;
+    if (!Number.isInteger(qty2) || qty2 < 1 || qty2 > 50) throw new DomainError(Codes.INVALID_INPUT, "Use a whole number from 1 to 50.", { field: "qty" });
+    const result = await command(context.prisma, { name: "wellness.use_entitlement", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await advisoryLock(uow.tx, `enrollment:${args.enrollmentId}`);
+      const e = await lockRow(uow.tx, "Enrollment", args.enrollmentId);
+      if (e.status !== "active") throw new DomainError(Codes.GUARD_FAILED, e.status === "pending_payment" ? "The first month has not been paid, so nothing can be used yet." : `This plan is ${e.status.replaceAll("_", " ")}.`);
+      const patient = await uow.tx.patient.findUniqueOrThrow({ where: { id: e.patientId }, select: { deceasedAt: true } });
+      if (patient.deceasedAt) throw new DomainError(Codes.PATIENT_DECEASED, "The patient has died.");
+      const grant = await uow.tx.entitlementGrant.findFirst({ where: { enrollmentId: e.id, code: args.code, termNo: e.termNo } });
+      if (!grant) throw new DomainError(Codes.NOT_FOUND, "The plan does not include that.", { field: "code" });
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const unit2 = grant.qtyGranted.gte(1) ? grant.retailValueMinor / BigInt(grant.qtyGranted.floor().toString()) : ZERO3;
+      try {
+        const entry = await uow.tx.entitlementEntry.create({ data: { entryKey: `use:${args.idempotencyKey}`, grantId: grant.id, enrollmentId: e.id, kind: "debit", qty: qty2, valueMinor: unit2 * BigInt(qty2), memo: text20(args.memo ?? "", "memo", 200, false), byId: staff?.id ?? null, at: uow.now } });
+        auditCreate(uow, actor, "EntitlementEntry", entry.id, "wellness.entitlement_used", { code: args.code, qty: qty2, enrollment: e.ref });
+        return { id: entry.id, code: args.code, qty: qty2 };
+      } catch (error) {
+        if (/outside what was granted|check_violation|23514/.test(String(error?.message))) throw new DomainError(Codes.GUARD_FAILED, `All of "${grant.label}" for this term has been used.`, { reason: "entitlement_exhausted" });
+        throw error;
+      }
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function returnEntitlement(_root, args, context) {
+  return gated(context, { permissions: [...MANAGE], tool: "wellness.return_entitlement", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 200);
+    const result = await command(context.prisma, { name: "wellness.return_entitlement", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const orig = await uow.tx.entitlementEntry.findUnique({ where: { id: args.entryId } });
+      if (!orig || orig.kind !== "debit") throw new DomainError(Codes.NOT_FOUND, "That use was not found.");
+      await advisoryLock(uow.tx, `enrollment:${orig.enrollmentId}`);
+      const key2 = `return:${orig.id}`;
+      if (await uow.tx.entitlementEntry.findUnique({ where: { entryKey: key2 }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "That use was already put back.");
+      const staff = await staffOf(uow, actor).catch(() => null);
+      const entry = await uow.tx.entitlementEntry.create({ data: { entryKey: key2, grantId: orig.grantId, enrollmentId: orig.enrollmentId, kind: "credit", qty: orig.qty, valueMinor: orig.valueMinor, memo: reason, byId: staff?.id ?? null, at: uow.now } });
+      auditCreate(uow, actor, "EntitlementEntry", entry.id, "wellness.entitlement_returned", { of: orig.id }, { reason });
+      return { id: entry.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/diagnostics.ts
+init_errors();
+init_decimal();
+
+// features/keystone/domain/lab.ts
+var import_node_crypto14 = require("node:crypto");
+init_decimal();
+function ageClassOf(age) {
+  if (!age) return null;
+  if (age.months < 12) return "juvenile";
+  if (age.months >= 7 * 12) return "senior";
+  return "adult";
+}
+function pickRange(ranges, speciesId, ageClass, labId) {
+  const usable = ranges.filter((r) => r.speciesId === speciesId && (r.ageClass === "any" || r.ageClass === ageClass) && (r.labId === null || r.labId === labId));
+  usable.sort((a, b) => score(b, ageClass, labId) - score(a, ageClass, labId));
+  return usable[0] ?? null;
+}
+var score = (r, ageClass, labId) => (r.ageClass === ageClass ? 2 : 0) + (r.labId && r.labId === labId ? 1 : 0);
+function convertValue(value, conversion) {
+  const v = dec(value);
+  if (!conversion) return toScale(v, "qty");
+  const out = v.times(conversion.factor ? dec(conversion.factor) : 1).plus(conversion.offset ? dec(conversion.offset) : 0);
+  return toScale(out, "qty");
+}
+function flagFor(value, range) {
+  if (value === null || !range) return "normal";
+  const v = dec(value);
+  if (range.criticalLow !== null && v.lt(dec(range.criticalLow))) return "critical_low";
+  if (range.criticalHigh !== null && v.gt(dec(range.criticalHigh))) return "critical_high";
+  if (range.low !== null && v.lt(dec(range.low))) return "low";
+  if (range.high !== null && v.gt(dec(range.high))) return "high";
+  return "normal";
+}
+var SEVERITY = { normal: 0, low: 1, high: 1, abnormal: 1, critical_low: 2, critical_high: 2 };
+var worstFlag = (flags) => flags.reduce((w, f) => SEVERITY[f] > SEVERITY[w] ? f : w, "normal");
+var isAbnormal = (flag) => flag !== "normal";
+var reviewSlaHours = (flag, sla = {}) => isAbnormal(flag) ? sla.abnormalHours ?? 4 : sla.normalHours ?? 24;
+function resultHash(accession, status, lines) {
+  const body = [...lines].sort((a, b) => a.code.localeCompare(b.code)).map((l) => `${l.code}|${l.value}|${l.unit}`).join("\n");
+  return (0, import_node_crypto14.createHash)("sha256").update(`${accession}
+${status}
+${body}`).digest("hex");
+}
+var STATUS = { p: "partial", partial: "partial", i: "partial", f: "final", final: "final", c: "corrected", corrected: "corrected", r: "final" };
+var NUMERIC = /^[<>]?\s*-?\d+(\.\d+)?$/;
+function csvRows(text22) {
+  const rows = [];
+  let row = [];
+  let cell2 = "";
+  let quoted = false;
+  for (let i = 0; i < text22.length; i++) {
+    const ch = text22[i];
+    if (quoted) {
+      if (ch === '"' && text22[i + 1] === '"') {
+        cell2 += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell2 += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") {
+      row.push(cell2);
+      cell2 = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text22[i + 1] === "\n") i++;
+      row.push(cell2);
+      cell2 = "";
+      if (row.some((c) => c.trim())) rows.push(row);
+      row = [];
+    } else cell2 += ch;
+  }
+  row.push(cell2);
+  if (row.some((c) => c.trim())) rows.push(row);
+  return rows;
+}
+function parseLabFile(input) {
+  const text22 = input.replace(/^\uFEFF/, "").trim();
+  if (!text22) throw new Error("The file is empty.");
+  const reports = /* @__PURE__ */ new Map();
+  const add = (accession, status, line) => {
+    const r = reports.get(accession) ?? { accession, status, lines: [] };
+    if (status === "corrected" || status === "final" && r.status === "partial") r.status = status;
+    r.lines.push({ accession, ...line });
+    reports.set(accession, r);
+  };
+  if (text22.startsWith("MSH|")) {
+    let accession = "";
+    for (const seg of text22.split(/\r\n|\r|\n/)) {
+      const f = seg.split("|");
+      if (f[0] === "OBR") accession = (f[3] || f[2] || "").split("^")[0].trim();
+      if (f[0] === "OBX") {
+        if (!accession) throw new Error("A result line came before any accession number.");
+        const code = (f[3] ?? "").split("^")[0].trim();
+        const value = (f[5] ?? "").trim();
+        if (!code || !value) continue;
+        const status = STATUS[(f[11] ?? "F").trim().toLowerCase()] ?? "final";
+        const numeric = NUMERIC.test(value);
+        add(accession, status, { code, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: (f[6] ?? "").split("^")[0].trim() });
+      }
+    }
+  } else {
+    const rows = csvRows(text22);
+    const head = rows[0].map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ""));
+    const col = (...names) => head.findIndex((h) => names.includes(h));
+    const a = col("accession", "accessionid", "accessionnumber", "specimenid");
+    const c = col("code", "testcode", "analyte", "analytecode");
+    const v = col("value", "result", "resultvalue");
+    const u = col("unit", "units");
+    const s = col("status", "resultstatus");
+    if (a < 0 || c < 0 || v < 0) throw new Error("The file needs accession, code and value columns.");
+    for (const r of rows.slice(1)) {
+      const accession = (r[a] ?? "").trim();
+      const code = (r[c] ?? "").trim();
+      const value = (r[v] ?? "").trim();
+      if (!accession || !code || !value) continue;
+      const status = STATUS[(s >= 0 ? r[s] ?? "final" : "final").trim().toLowerCase()] ?? "final";
+      const numeric = NUMERIC.test(value);
+      add(accession, status, { code, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: u >= 0 ? (r[u] ?? "").trim() : "" });
+    }
+  }
+  if (!reports.size) throw new Error("No results were found in the file.");
+  return [...reports.values()];
+}
+
+// features/keystone/mutations/diagnostics.ts
+var ORDERERS = ["canOrder"];
+var REVIEWERS = ["canOrder", "canSignRecord"];
+var TECHS = ["canOrder", "canWriteRecord"];
+var COMMUNICATORS = ["canOrder", "canMessageClients", "canBook"];
+var RESULTS_READY_TEXT = "Your pet's test results are ready. The doctor will call you to go over them.";
+async function closeTasks(uow, kind, subjectType, subjectId, status = "done") {
+  await uow.tx.task.updateMany({ where: { kind, subjectType, subjectId, status: { in: ["open", "in_progress"] } }, data: { status, completedAt: uow.now, version: { increment: 1 } } });
+}
+async function orderLab(_root, args, context) {
+  return gated(context, { permissions: [...ORDERERS], tool: "lab.order", humanOnly: true }, args, async (actor) => {
+    if (!Array.isArray(args.testIds) || !args.testIds.length || args.testIds.length > 20) throw new DomainError(Codes.INVALID_INPUT, "Choose between 1 and 20 tests.", { field: "testIds" });
+    const result = await command(context.prisma, { name: "lab.order", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const vet = await staffOf(uow, actor);
+      const patient = await activePatient(uow, args.patientId);
+      const full = await uow.tx.patient.findUniqueOrThrow({ where: { id: patient.id }, select: { speciesId: true, name: true } });
+      const enc = args.encounterId ? await uow.tx.encounter.findUnique({ where: { id: args.encounterId }, select: { id: true, patientId: true, locationId: true, status: true } }) : null;
+      if (args.encounterId && (!enc || enc.patientId !== patient.id)) throw new DomainError(Codes.NOT_FOUND, "That visit is not for this patient.", { field: "encounterId" });
+      const locationId = enc?.locationId ?? args.locationId ?? vet.homeLocationId;
+      if (!locationId) throw new DomainError(Codes.INVALID_INPUT, "Say which location the order is for.", { field: "locationId" });
+      const lab = await uow.tx.laboratory.findUnique({ where: { id: args.labId }, select: { id: true, status: true, name: true, kind: true } });
+      if (!lab || lab.status !== "active") throw new DomainError(Codes.NOT_FOUND, "Laboratory not found or retired.", { field: "labId" });
+      const licence = await requireLicence(uow.tx, { staffMemberId: vet.id, locationId, action: "diagnose", at: uow.now });
+      const tests = await uow.tx.labTest.findMany({ where: { id: { in: args.testIds }, labId: lab.id, status: "active" }, include: { species: { select: { id: true } } } });
+      if (tests.length !== new Set(args.testIds).size) throw new DomainError(Codes.GUARD_FAILED, "Every test must be an active test of this laboratory.", { field: "testIds" });
+      for (const t of tests) {
+        if (t.species.length && !t.species.some((s) => s.id === full.speciesId)) throw new DomainError(Codes.GUARD_FAILED, `${t.name} is not offered for this species.`, { field: "testIds" });
+      }
+      const clientId = await clientOfPatient(uow, patient.id);
+      const ref = await nextReference(uow.tx, "LAB", uow.now);
+      const ordRef = await nextReference(uow.tx, "ORD", uow.now);
+      const clinicalOrder = await uow.tx.clinicalOrder.create({ data: { ref: ordRef, encounterId: enc?.id ?? null, patientId: patient.id, locationId, kind: "lab", description: tests.map((t) => t.name).join(", ").slice(0, 300), status: "ordered", orderedById: vet.id, licenseEvaluationId: licence.evaluationId, route: "n/a" } });
+      const order = await uow.tx.labOrder.create({ data: { ref, orderId: clinicalOrder.id, patientId: patient.id, encounterId: enc?.id ?? null, locationId, labId: lab.id, orderedById: vet.id, status: "ordered", tests: { connect: tests.map((t) => ({ id: t.id })) } } });
+      let first = null;
+      for (const t of tests) {
+        if (!t.feeItemId) continue;
+        const line = await createCharge(uow, actor, { patientId: patient.id, clientId, locationId, encounterId: enc?.id ?? null, feeItemId: t.feeItemId, qty: "1", sourceType: "lab_order", sourceId: `${order.id}:${t.id}`, description: `${lab.name}: ${t.name}`, performedById: vet.id });
+        first ??= line.id;
+      }
+      if (first) await uow.tx.labOrder.update({ where: { id: order.id }, data: { chargeLineId: first } });
+      auditCreate(uow, actor, "LabOrder", order.id, "lab.ordered", { ref, lab: lab.name, tests: tests.map((t) => t.code), patientId: patient.id });
+      return { id: order.id, ref, status: "ordered", tests: tests.map((t) => t.code) };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function collectSpecimen(_root, args, context) {
+  return gated(context, { permissions: [...TECHS], tool: "lab.collect", humanOnly: true }, args, async (actor) => {
+    const kind = pick(args.kind, ["whole_blood", "serum", "plasma", "urine", "feces", "tissue", "swab", "fluid", "other"], "specimen kind");
+    const result = await command(context.prisma, { name: "lab.collect", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const row = await transition(uow, { model: "LabOrder", id: args.labOrderId, from: ["ordered"], to: "specimen_collected", expectedVersion: args.expectedVersion, actor, eventType: "lab.collected" });
+      const specimen = await uow.tx.specimen.create({ data: { labOrderId: row.id, kind, collectedAt: uow.now, collectedById: staff.id, containerId: String(args.containerId ?? "").slice(0, 60) } });
+      return { id: row.id, status: row.status, specimenId: specimen.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function sendLabOrder(_root, args, context) {
+  return gated(context, { permissions: [...TECHS], tool: "lab.send", humanOnly: true }, args, async (actor) => {
+    const accession = text20(args.accessionId, "accession", 60);
+    const result = await command(context.prisma, { name: "lab.send", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const current = await lockRow(uow.tx, "LabOrder", args.labOrderId);
+      const lab = await uow.tx.laboratory.findUniqueOrThrow({ where: { id: current.labId }, select: { kind: true } });
+      if (lab.kind === "in_house") throw new DomainError(Codes.GUARD_FAILED, "An in-house test is run on site: enter its results instead.");
+      const row = await transition(uow, { model: "LabOrder", id: args.labOrderId, from: ["specimen_collected"], to: "sent", expectedVersion: args.expectedVersion, actor, eventType: "lab.sent", data: { accessionId: accession, sentAt: uow.now } });
+      return { id: row.id, status: row.status, accessionId: accession };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function cancelLabOrder(_root, args, context) {
+  return gated(context, { permissions: [...ORDERERS], tool: "lab.cancel", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 300);
+    const result = await command(context.prisma, { name: "lab.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "LabOrder", id: args.labOrderId, from: ["ordered", "specimen_collected"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "lab.cancelled", reason, data: { cancelReason: reason } });
+      const lines = await uow.tx.chargeLine.findMany({ where: { sourceType: "lab_order", sourceId: { startsWith: `${row.id}:` }, reversedAt: null }, select: { id: true, invoiceId: true, invoice: { select: { status: true } } } });
+      let credited = 0;
+      for (const l of lines) {
+        if (!l.invoiceId || l.invoice?.status === "draft") await uow.tx.chargeLine.update({ where: { id: l.id }, data: { reversedAt: uow.now, reversalReason: `Lab order cancelled: ${reason}`.slice(0, 300), invoiceId: null } });
+        else credited++;
+      }
+      if (credited) await uow.tx.task.create({ data: { kind: "follow_up", title: `Credit the client for cancelled lab order ${row.ref}`, detail: reason, subjectType: "LabOrder", subjectId: row.id, locationId: row.locationId, roleName: "finance", priority: "normal", status: "open", createdByUserId: actorUserId(actor) } });
+      return { id: row.id, status: row.status, chargesReversed: lines.length - credited, needsCreditNote: credited };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function ingestLabReport(uow, actor, input) {
+  const order = await uow.tx.labOrder.findFirst({ where: { labId: input.labId, accessionId: input.accessionId }, select: { id: true, ref: true, status: true, version: true, patientId: true, locationId: true, orderedById: true, encounterId: true, lab: { select: { code: true, kind: true } } } });
+  if (!order) return { outcome: "unmatched", accessionId: input.accessionId };
+  await uow.tx.$executeRawUnsafe(`SELECT 1 FROM "LabOrder" WHERE id = $1 FOR UPDATE`, order.id);
+  const fresh = await uow.tx.labOrder.findUniqueOrThrow({ where: { id: order.id }, select: { status: true, version: true } });
+  if (["cancelled", "ordered"].includes(fresh.status)) return { outcome: "refused", accessionId: input.accessionId, reason: `The order is ${fresh.status}.` };
+  if (fresh.status === "specimen_collected" && order.lab?.kind !== "in_house") return { outcome: "refused", accessionId: input.accessionId, reason: "The order has not been sent to the lab." };
+  const clean2 = input.lines.filter((l) => l.code && (l.value || l.text)).map((l) => ({ code: String(l.code).trim().slice(0, 40), value: l.value ? String(l.value).trim() : "", text: String(l.text ?? "").slice(0, 300), unit: String(l.unit ?? "").trim().slice(0, 20) }));
+  if (!clean2.length) return { outcome: "refused", accessionId: input.accessionId, reason: "The report has no results." };
+  const hash2 = resultHash(input.accessionId, input.status, clean2.map((l) => ({ code: l.code, value: l.value || l.text, unit: l.unit })));
+  const source = `lab:${order.lab?.code ?? input.labId}`;
+  if (await uow.tx.providerObservation.findFirst({ where: { source, contentHash: hash2 }, select: { id: true } })) return { outcome: "duplicate", accessionId: input.accessionId };
+  const latest = await uow.tx.labResult.findFirst({ where: { labOrderId: order.id, supersededBy: { none: {} } }, orderBy: { receivedAt: "desc" }, select: { id: true, status: true, contentHash: true } });
+  let status = input.status;
+  if (latest && status === "partial" && latest.status !== "partial") return { outcome: "stale", accessionId: input.accessionId, reason: "A fuller report is already on file." };
+  if (latest && latest.status !== "partial" && status === "final") status = "corrected";
+  if (status === "corrected" && (!latest || latest.status === "partial")) status = "final";
+  const supersedes = latest && (status === "corrected" || latest.status === "partial") ? latest : null;
+  const rowStatus = status;
+  if (supersedes && rowStatus !== "corrected" && supersedes.status !== "partial") return { outcome: "stale", accessionId: input.accessionId };
+  const patient = await uow.tx.patient.findUniqueOrThrow({ where: { id: order.patientId }, select: { speciesId: true, dateOfBirth: true } });
+  const { on } = await locationDay(uow, order.locationId, uow.now);
+  const ageClass = ageClassOf(ageOn(patient.dateOfBirth, on));
+  const maps = await uow.tx.labAnalyteMap.findMany({ where: { labId: input.labId, externalCode: { in: clean2.map((l) => l.code) } }, include: { analyte: { select: { id: true, code: true, canonicalUnit: true } } } });
+  const byCode = new Map(maps.map((m) => [m.externalCode, m]));
+  const analyteIds = maps.map((m) => m.analyteId).filter(Boolean);
+  const rangeRows = analyteIds.length ? await uow.tx.referenceRange.findMany({ where: { analyteId: { in: analyteIds }, speciesId: patient.speciesId }, select: { analyteId: true, speciesId: true, ageClass: true, labId: true, low: true, high: true, criticalLow: true, criticalHigh: true, unit: true } }) : [];
+  const unmapped = [];
+  const prepared = clean2.map((l) => {
+    const map = byCode.get(l.code);
+    if (!map?.analyte) unmapped.push(l.code);
+    let value = null;
+    let unit2 = l.unit;
+    if (l.value) {
+      value = map?.analyte ? convertValue(l.value, map.unitConversion) : toScale(dec(l.value), "qty");
+      if (map?.analyte) unit2 = map.analyte.canonicalUnit;
+    }
+    const ranges = rangeRows.filter((r) => r.analyteId === map?.analyteId).map((r) => ({ speciesId: r.speciesId, ageClass: r.ageClass, labId: r.labId, low: r.low?.toString() ?? null, high: r.high?.toString() ?? null, criticalLow: r.criticalLow?.toString() ?? null, criticalHigh: r.criticalHigh?.toString() ?? null, unit: r.unit }));
+    const range = value !== null && patient.speciesId ? pickRange(ranges, patient.speciesId, ageClass, input.labId) : null;
+    const flag = value !== null ? flagFor(value, range) : "normal";
+    return { map, l, value, unit: unit2, range, flag };
+  });
+  const worst = worstFlag(prepared.map((p) => p.flag));
+  const obs = await uow.tx.providerObservation.create({ data: { source, connectionId: input.labId, externalId: `${input.accessionId}:${hash2.slice(0, 16)}`, contentHash: hash2, payload: { accessionId: input.accessionId, status: rowStatus, lines: clean2 }, receivedAt: uow.now, processedAt: uow.now, status: "processed" } });
+  const result = await uow.tx.labResult.create({ data: { labOrderId: order.id, observationId: obs.id, status: rowStatus, supersedesId: supersedes?.id ?? null, worstFlag: worst, source: input.source, contentHash: hash2, receivedAt: uow.now } });
+  for (const p of prepared) {
+    await uow.tx.labResultValue.create({ data: { resultId: result.id, analyteId: p.map?.analyteId ?? null, externalCode: p.l.code, valueNumeric: p.value, valueText: p.l.text, unit: p.unit, refLow: p.range?.low ?? null, refHigh: p.range?.high ?? null, flag: p.flag } });
+  }
+  const to = rowStatus === "partial" ? "partial" : rowStatus;
+  const from = rowStatus === "corrected" ? ["final", "reviewed", "communicated", "corrected"] : rowStatus === "final" ? ["sent", "partial", "specimen_collected"] : ["sent", "partial"];
+  await transition(uow, { model: "LabOrder", id: order.id, from, to, expectedVersion: fresh.version, actor, eventType: `lab.${rowStatus}`, metadata: { resultId: result.id, worstFlag: worst, accessionId: input.accessionId } });
+  let taskId = null;
+  if (rowStatus !== "partial" || isAbnormal(worst)) {
+    if (supersedes) {
+      await closeTasks(uow, "result_review", "LabResult", supersedes.id, "cancelled");
+    }
+    const hours = reviewSlaHours(worst);
+    const task = await uow.tx.task.create({ data: {
+      kind: "result_review",
+      title: `${worst === "normal" ? "Review" : "Abnormal"} ${rowStatus === "corrected" ? "corrected " : ""}results for ${order.ref}`.slice(0, 200),
+      detail: rowStatus === "corrected" ? "A corrected result replaced an earlier one. Review it again." : "",
+      subjectType: "LabResult",
+      subjectId: result.id,
+      locationId: order.locationId,
+      assigneeId: order.orderedById,
+      priority: worst.startsWith("critical") ? "urgent" : isAbnormal(worst) ? "high" : "normal",
+      dueAt: new Date(uow.now.getTime() + hours * 36e5),
+      status: "open",
+      createdByAgentId: actorAgentId(actor),
+      createdByUserId: actorUserId(actor)
+    } });
+    taskId = task.id;
+  }
+  if (isAbnormal(worst) && order.patientId) {
+    const board = await uow.tx.whiteboardEntry.findFirst({ where: { patientId: order.patientId, status: { not: "discharged" } }, select: { id: true, flags: true } });
+    if (board) {
+      const flags = Array.isArray(board.flags) ? board.flags : [];
+      if (!flags.includes("result_abnormal")) await uow.tx.whiteboardEntry.update({ where: { id: board.id }, data: { flags: [...flags, "result_abnormal"], version: { increment: 1 } } });
+    }
+  }
+  auditCreate(uow, actor, "LabResult", result.id, `lab.result_${rowStatus}`, { orderRef: order.ref, worstFlag: worst, values: prepared.length, unmapped, supersedes: supersedes?.id ?? null, source: input.source });
+  return { outcome: "stored", accessionId: input.accessionId, resultId: result.id, status: rowStatus, worstFlag: worst, taskId, unmapped };
+}
+async function enterLabResult(_root, args, context) {
+  return gated(context, { permissions: [...TECHS], tool: "lab.result.enter", humanOnly: true }, args, async (actor) => {
+    const status = pick(args.status, ["partial", "final", "corrected"], "status");
+    if (!Array.isArray(args.lines) || args.lines.length > 200) throw new DomainError(Codes.INVALID_INPUT, "Give between 1 and 200 result lines.", { field: "lines" });
+    for (const l of args.lines) if (l.value && !/^-?\d{1,12}(\.\d{1,6})?$/.test(String(l.value).trim())) throw new DomainError(Codes.INVALID_INPUT, `"${String(l.value).slice(0, 20)}" is not a number. Put words in the text column.`, { field: "lines" });
+    const result = await command(context.prisma, { name: "lab.result.enter", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const out = await ingestLabReport(uow, actor, { labId: args.labId, accessionId: text20(args.accessionId, "accession", 60), status, lines: args.lines, source: "manual" });
+      if (out.outcome === "unmatched") throw new DomainError(Codes.NOT_FOUND, `No order with accession ${out.accessionId} at this laboratory.`, { field: "accessionId" });
+      if (out.outcome === "refused") throw new DomainError(Codes.GUARD_FAILED, out.reason);
+      return out;
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function importLabFile(_root, args, context) {
+  return gated(context, { permissions: [...TECHS, "canManageIntegrations"], tool: "lab.file.import", humanOnly: true }, args, async (actor) => {
+    if (String(args.fileText ?? "").length > 2e6) throw new DomainError(Codes.INVALID_INPUT, "The file is too large (2 MB at most).", { field: "fileText" });
+    let reports;
+    try {
+      reports = parseLabFile(String(args.fileText ?? ""));
+    } catch (error) {
+      throw new DomainError(Codes.INVALID_INPUT, error.message, { field: "fileText" });
+    }
+    const outcomes = [];
+    for (const report of reports) {
+      try {
+        const r = await command(context.prisma, { name: "lab.file.report", actor, idempotencyKey: `${args.idempotencyKey}:${report.accession}`.slice(0, 200), params: { labId: args.labId, report } }, (uow) => ingestLabReport(uow, actor, { labId: args.labId, accessionId: report.accession, status: report.status, lines: report.lines, source: "file_drop" }));
+        outcomes.push(r.value);
+      } catch (error) {
+        outcomes.push({ outcome: "failed", accessionId: report.accession, reason: error instanceof DomainError ? error.message : "The report could not be saved." });
+      }
+    }
+    const count = (o) => outcomes.filter((x) => x.outcome === o).length;
+    return { reports: reports.length, stored: count("stored"), duplicate: count("duplicate"), unmatched: count("unmatched"), refused: count("refused") + count("stale") + count("failed"), outcomes };
+  });
+}
+async function reviewLabResult(_root, args, context) {
+  return gated(context, { permissions: [...REVIEWERS], tool: "lab.review", humanOnly: true }, args, async (actor) => {
+    const interpretation = text20(args.interpretation, "interpretation", 4e3);
+    const result = await command(context.prisma, { name: "lab.review", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const vet = await staffOf(uow, actor);
+      const res = await uow.tx.labResult.findUnique({ where: { id: args.resultId }, include: { labOrder: { select: { id: true, ref: true, status: true, version: true, patientId: true, locationId: true } }, supersededBy: { select: { id: true } } } });
+      if (!res?.labOrder) throw new DomainError(Codes.NOT_FOUND, "Result not found.");
+      if (res.supersededBy.length) throw new DomainError(Codes.GUARD_FAILED, "A newer result has replaced this one. Review the newer one.");
+      if (res.status === "partial") throw new DomainError(Codes.GUARD_FAILED, "This is a partial report. Review it when the lab sends the final one.");
+      if (!["final", "corrected"].includes(res.labOrder.status)) throw new DomainError(Codes.INVALID_TRANSITION, `The order is ${res.labOrder.status.replaceAll("_", " ")}.`, { currentStatus: res.labOrder.status });
+      const licence = await requireLicence(uow.tx, { staffMemberId: vet.id, locationId: res.labOrder.locationId, action: "diagnose", at: uow.now });
+      await uow.tx.readAudit.create({ data: { actorKind: "user", actorId: actorUserId(actor) ?? "", actorLabel: vet.displayName, patientId: res.labOrder.patientId ?? "", resourceType: "LabResult", resourceId: res.id, purpose: "treatment", fields: ["values", "interpretation"] } });
+      const review = await uow.tx.resultReview.create({ data: { resultId: res.id, dvmId: vet.id, kind: "interpretation", interpretation, communicatedVia: "none", at: uow.now } });
+      await transition(uow, { model: "LabOrder", id: res.labOrder.id, from: ["final", "corrected"], to: "reviewed", actor, eventType: "lab.reviewed", metadata: { resultId: res.id, licenseEvaluationId: licence.evaluationId } });
+      await closeTasks(uow, "result_review", "LabResult", res.id);
+      const task = await uow.tx.task.create({ data: { kind: "call_back", title: `Tell the client about the results for ${res.labOrder.ref}`, detail: "The doctor has read the results. Call the client and record how they were told.", subjectType: "LabResult", subjectId: res.id, locationId: res.labOrder.locationId, roleName: "csr", priority: res.worstFlag === "normal" ? "normal" : "high", dueAt: new Date(uow.now.getTime() + 24 * 36e5), status: "open", createdByUserId: actorUserId(actor) } });
+      auditCreate(uow, actor, "ResultReview", review.id, "lab.review_recorded", { resultId: res.id, licenseEvaluationId: licence.evaluationId });
+      return { id: review.id, orderStatus: "reviewed", communicationTaskId: task.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function communicateLabResult(_root, args, context) {
+  return gated(context, { permissions: [...COMMUNICATORS], tool: "lab.communicate", humanOnly: true }, args, async (actor) => {
+    const via = pick(args.via, ["call", "message", "in_person", "portal"], "how the client was told");
+    const result = await command(context.prisma, { name: "lab.communicate", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const res = await uow.tx.labResult.findUnique({ where: { id: args.resultId }, include: { labOrder: { select: { id: true, status: true } } } });
+      if (!res?.labOrder) throw new DomainError(Codes.NOT_FOUND, "Result not found.");
+      if (res.labOrder.status !== "reviewed") throw new DomainError(Codes.INVALID_TRANSITION, "The doctor has to read the results before the client is told.", { currentStatus: res.labOrder.status });
+      const row = await uow.tx.resultReview.create({ data: { resultId: res.id, dvmId: staff.id, kind: "communication", interpretation: "", communicatedVia: via, at: uow.now } });
+      await transition(uow, { model: "LabOrder", id: res.labOrder.id, from: ["reviewed"], to: "communicated", actor, eventType: "lab.communicated", metadata: { resultId: res.id, via } });
+      await closeTasks(uow, "call_back", "LabResult", res.id);
+      return { id: row.id, orderStatus: "communicated" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function notifyResultsReady(_root, args, context) {
+  return gated(context, { permissions: [...COMMUNICATORS], scope: "results.notify", tool: "results.notify_ready" }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "results.notify_ready", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const order = await uow.tx.labOrder.findUnique({ where: { id: args.labOrderId }, select: { id: true, ref: true, status: true, patientId: true } });
+      if (!order?.patientId) throw new DomainError(Codes.NOT_FOUND, "Order not found.");
+      if (!["final", "corrected", "reviewed"].includes(order.status)) throw new DomainError(Codes.GUARD_FAILED, "The results are not in yet.");
+      const latest = await uow.tx.labResult.findFirst({ where: { labOrderId: order.id, supersededBy: { none: {} } }, select: { id: true } });
+      if (!latest) throw new DomainError(Codes.GUARD_FAILED, "The results are not in yet.");
+      const prior = await uow.tx.task.findFirst({ where: { kind: "call_back", subjectType: "LabResultNotice", subjectId: latest.id }, select: { id: true, status: true } });
+      if (prior) return { id: prior.id, status: prior.status, alreadyNotified: true };
+      const patient = await uow.tx.patient.findUniqueOrThrow({ where: { id: order.patientId }, select: { status: true, name: true } });
+      if (patient.status === "deceased") throw new DomainError(Codes.GUARD_FAILED, "This patient has died. Call the owner in person.");
+      const task = await uow.tx.task.create({ data: { kind: "call_back", title: `Results ready for ${patient.name} (${order.ref})`, detail: RESULTS_READY_TEXT, subjectType: "LabResultNotice", subjectId: latest.id, roleName: "csr", priority: "normal", status: "open", createdByAgentId: actorAgentId(actor), createdByUserId: actorUserId(actor) } });
+      auditCreate(uow, actor, "Task", task.id, "results.notice_left", { orderRef: order.ref });
+      return { id: task.id, status: "open", alreadyNotified: false };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function orderImaging(_root, args, context) {
+  return gated(context, { permissions: [...ORDERERS], tool: "imaging.order", humanOnly: true }, args, async (actor) => {
+    const modality = pick(args.modality, ["DX", "US", "CT", "MR", "ECG", "ENDO"], "modality");
+    const result = await command(context.prisma, { name: "imaging.order", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const vet = await staffOf(uow, actor);
+      const patient = await activePatient(uow, args.patientId);
+      const locationId = args.locationId ?? vet.homeLocationId;
+      if (!locationId) throw new DomainError(Codes.INVALID_INPUT, "Say which location the order is for.", { field: "locationId" });
+      await requireLicence(uow.tx, { staffMemberId: vet.id, locationId, action: "diagnose", at: uow.now });
+      const ref = await nextReference(uow.tx, "IMG", uow.now);
+      const ordRef = await nextReference(uow.tx, "ORD", uow.now);
+      const co = await uow.tx.clinicalOrder.create({ data: { ref: ordRef, encounterId: args.encounterId ?? null, patientId: patient.id, locationId, kind: "imaging", description: `${modality} ${String(args.region ?? "")}`.trim().slice(0, 300), status: "ordered", orderedById: vet.id, route: "n/a" } });
+      const row = await uow.tx.imagingOrder.create({ data: { ref, orderId: co.id, patientId: patient.id, encounterId: args.encounterId ?? null, locationId, orderedById: vet.id, modality, region: String(args.region ?? "").slice(0, 120), reason: String(args.reason ?? "").slice(0, 300), status: "ordered" } });
+      auditCreate(uow, actor, "ImagingOrder", row.id, "imaging.ordered", { ref, modality });
+      return { id: row.id, ref, status: "ordered" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function recordImagingStudy(_root, args, context) {
+  return gated(context, { permissions: [...TECHS], tool: "imaging.study", humanOnly: true }, args, async (actor) => {
+    const uid = text20(args.studyInstanceUid, "study UID", 64);
+    if (!/^[0-9]+(\.[0-9]+)*$/.test(uid)) throw new DomainError(Codes.INVALID_INPUT, "A study UID is numbers separated by dots.", { field: "studyInstanceUid" });
+    const result = await command(context.prisma, { name: "imaging.study", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "ImagingOrder", id: args.imagingOrderId, from: ["ordered"], to: "acquired", expectedVersion: args.expectedVersion, actor, eventType: "imaging.acquired" });
+      const study = await uow.tx.imagingStudy.create({ data: { orderId: row.id, studyInstanceUid: uid, modality: row.modality, acquiredAt: uow.now, images: Math.max(0, Math.min(1e5, Number(args.images ?? 0) | 0)) } });
+      return { id: row.id, studyId: study.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function addImagingReport(_root, args, context) {
+  return gated(context, { permissions: [...REVIEWERS], tool: "imaging.report", humanOnly: true }, args, async (actor) => {
+    const author = pick(args.author, ["in_house_dvm", "teleradiology"], "author");
+    const body = text20(args.text, "report", 2e4);
+    const result = await command(context.prisma, { name: "imaging.report", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const staff = await staffOf(uow, actor);
+      const order = await lockRow(uow.tx, "ImagingOrder", args.imagingOrderId);
+      if (author === "in_house_dvm") await requireLicence(uow.tx, { staffMemberId: staff.id, locationId: order.locationId, action: "diagnose", at: uow.now });
+      else text20(args.authorName ?? "", "reading radiologist", 120);
+      const study = await uow.tx.imagingStudy.findFirst({ where: { orderId: order.id }, select: { id: true } });
+      if (!study) throw new DomainError(Codes.GUARD_FAILED, "There is no study to report on yet.");
+      await transition(uow, { model: "ImagingOrder", id: order.id, from: ["acquired", "read"], to: "read", expectedVersion: args.expectedVersion, actor, eventType: "imaging.read" });
+      const row = await uow.tx.imagingReport.create({ data: { studyId: study.id, author, authorStaffId: author === "in_house_dvm" ? staff.id : null, authorName: author === "in_house_dvm" ? staff.displayName : String(args.authorName).slice(0, 120), text: body, reportedAt: uow.now } });
+      auditCreate(uow, actor, "ImagingReport", row.id, "imaging.reported", { orderRef: order.ref, author });
+      return { id: row.id, status: "read" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function communicateImaging(_root, args, context) {
+  return gated(context, { permissions: [...COMMUNICATORS], tool: "imaging.communicate", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "imaging.communicate", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "ImagingOrder", id: args.imagingOrderId, from: ["read"], to: "communicated", expectedVersion: args.expectedVersion, actor, eventType: "imaging.communicated" });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
+// features/keystone/mutations/agentsWider.ts
+init_errors();
+async function suggestCharges(_root, args, context) {
+  return gated(context, { permissions: ["canPostInvoices"], scope: "charges.suggest", tool: "charges.suggest" }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "charges.suggest", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const since = new Date(uow.now.getTime() - 14 * 864e5);
+      const visits = await uow.tx.encounter.findMany({
+        where: { status: { in: ["signed", "submitted"] }, updatedAt: { gte: since }, ...args.locationId ? { locationId: args.locationId } : {} },
+        select: { id: true, ref: true, patientId: true },
+        take: 200,
+        orderBy: { updatedAt: "desc" }
+      });
+      const made = [];
+      for (const v of visits) {
+        if (await uow.tx.chargeLine.findFirst({ where: { encounterId: v.id, reversedAt: null }, select: { id: true } })) continue;
+        const payload = { encounterId: v.id, note: "This closed visit has no charges. Open it and capture the charges." };
+        const hash2 = payloadHash(payload);
+        if (await uow.tx.proposal.findFirst({ where: { kind: "charge.add", targetId: v.id, payloadHash: hash2, status: "proposed" }, select: { id: true } })) continue;
+        const p = await uow.tx.proposal.create({ data: { kind: "charge.add", payload, payloadHash: hash2, status: "proposed", targetList: "Encounter", targetId: v.id, proposedByAgentId: actorAgentId(actor) } });
+        made.push(p.id);
+      }
+      auditCreate(uow, actor, "Proposal", made[0] ?? "none", "charges.suggested", { visits: visits.length, proposals: made.length });
+      return { visitsChecked: visits.length, proposals: made.length };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function clinicInsights(_root, _args, context) {
+  return gated(context, { permissions: ["canViewFinance"], scope: "insights.read", tool: "insights.read" }, {}, async () => {
+    const now = /* @__PURE__ */ new Date();
+    const p = context.prisma;
+    const [reviewsLate, abnormalOpen, recordsDue, recordsLate, unsignedOld] = await Promise.all([
+      p.task.count({ where: { kind: "result_review", status: { in: ["open", "in_progress"] }, dueAt: { lt: now } } }),
+      p.task.count({ where: { kind: "result_review", status: { in: ["open", "in_progress"] }, priority: { in: ["urgent", "high"] } } }),
+      p.recordsRequest.count({ where: { status: { in: ["received", "verifying_authority", "approved"] } } }),
+      p.recordsRequest.count({ where: { status: { in: ["received", "verifying_authority", "approved"] }, responseDueAt: { lt: now } } }),
+      p.task.count({ where: { kind: "record_unsigned", status: { in: ["open", "in_progress"] }, dueAt: { lt: now } } })
+    ]);
+    if (!context.prisma) throw new DomainError(Codes.NOT_FOUND, "No database.");
+    return { asOf: now.toISOString(), resultReviewsLate: reviewsLate, abnormalResultsWaiting: abnormalOpen, recordsRequestsOpen: recordsDue, recordsRequestsLate: recordsLate, unsignedRecordsLate: unsignedOld };
+  });
+}
+
+// features/keystone/mutations/recordsRelease.ts
+init_errors();
+init_readAudit();
+var PROCESSORS = ["canProcessRecordsRequests"];
+var THIRD_PARTY = /* @__PURE__ */ new Set(["authorised_person", "referral_with_authorisation", "insurer_with_authorisation", "court_order", "subpoena", "public_health"]);
+var SHARE_CHANNELS = ["email", "portal", "fax", "mail", "in_person"];
+function packetHashOf(documents, recipient, channel) {
+  return sha256(JSON.stringify({ docs: documents.map((d) => `${d.documentId}:${d.sha256}`).sort(), recipient: recipient.trim().toLowerCase(), channel }));
+}
+async function startRecordsVerification(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS], tool: "records.start_verification", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "records.start_verification", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "RecordsRequest", id: args.requestId, from: ["received"], to: "verifying_authority", expectedVersion: args.expectedVersion, actor, eventType: "records.verification_started" });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function verifyRecordsRequest(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS], tool: "records.verify", humanOnly: true }, args, async (actor) => {
+    const note = text20(args.note, "verification note", 1e3);
+    const result = await command(context.prisma, { name: "records.verify", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const current = await lockRow(uow.tx, "RecordsRequest", args.requestId);
+      if (THIRD_PARTY.has(current.basis) && !args.authorisationDocumentId && !["court_order", "subpoena", "public_health"].includes(current.basis)) {
+        throw new DomainError(Codes.GUARD_FAILED, "A third party needs the client's signed authorisation on file.", { field: "authorisationDocumentId" });
+      }
+      if (args.authorisationDocumentId && !await uow.tx.document.findUnique({ where: { id: args.authorisationDocumentId }, select: { id: true } })) throw new DomainError(Codes.NOT_FOUND, "Authorisation document not found.", { field: "authorisationDocumentId" });
+      const row = await transition(uow, {
+        model: "RecordsRequest",
+        id: args.requestId,
+        from: ["verifying_authority"],
+        to: "verifying_authority",
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: "records.verified",
+        data: { verifiedById: actorUserId(actor), verifiedAt: uow.now, verificationNote: note, ...args.authorisationDocumentId ? { authorisationDocumentId: args.authorisationDocumentId } : {} }
+      });
+      return { id: row.id, status: row.status, verifiedAt: uow.now };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function decideRecordsRequest(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS], tool: "records.decide", humanOnly: true }, args, async (actor) => {
+    const decision = pick(args.decision, ["approve", "deny"], "decision");
+    const reason = decision === "deny" ? text20(args.reason, "reason", 500) : String(args.reason ?? "").slice(0, 500);
+    const result = await command(context.prisma, { name: "records.decide", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const current = await lockRow(uow.tx, "RecordsRequest", args.requestId);
+      if (decision === "approve" && !current.verifiedAt) throw new DomainError(Codes.GUARD_FAILED, "Verify who is asking and on what basis before approving.");
+      const row = await transition(uow, {
+        model: "RecordsRequest",
+        id: args.requestId,
+        from: ["verifying_authority"],
+        to: decision === "approve" ? "approved" : "denied",
+        expectedVersion: args.expectedVersion,
+        actor,
+        eventType: `records.${decision === "approve" ? "approved" : "denied"}`,
+        reason,
+        data: { decisionReason: reason }
+      });
+      await uow.tx.task.updateMany({ where: { kind: "records_request", subjectType: "RecordsRequest", subjectId: row.id, status: { in: ["open", "in_progress"] } }, data: decision === "deny" ? { status: "done", completedAt: uow.now, version: { increment: 1 } } : { version: { increment: 1 } } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function withdrawRecordsRequest(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS], tool: "records.withdraw", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 500);
+    const result = await command(context.prisma, { name: "records.withdraw", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const row = await transition(uow, { model: "RecordsRequest", id: args.requestId, from: ["received", "verifying_authority", "approved"], to: "withdrawn", expectedVersion: args.expectedVersion, actor, eventType: "records.withdrawn", reason, data: { decisionReason: reason } });
+      await uow.tx.task.updateMany({ where: { kind: "records_request", subjectType: "RecordsRequest", subjectId: row.id, status: { in: ["open", "in_progress"] } }, data: { status: "cancelled", completedAt: uow.now, version: { increment: 1 } } });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function packetFor(uow, request, documentIds) {
+  if (!Array.isArray(documentIds) || !documentIds.length || documentIds.length > 200) throw new DomainError(Codes.INVALID_INPUT, "Choose between 1 and 200 documents.", { field: "documentIds" });
+  const unique = [...new Set(documentIds)];
+  const docs = await uow.tx.clinicalDocument.findMany({ where: { id: { in: unique }, patientId: request.patientId, status: { not: "void" } }, select: { id: true, title: true, sha256: true, documentId: true } });
+  if (docs.length !== unique.length) throw new DomainError(Codes.GUARD_FAILED, "Every document must belong to this patient.", { field: "documentIds" });
+  const missing = docs.find((d) => !d.sha256);
+  if (missing) throw new DomainError(Codes.GUARD_FAILED, `"${missing.title}" has not been rendered yet, so it has no fingerprint.`, { field: "documentIds" });
+  return docs.map((d) => ({ documentId: d.id, sha256: d.sha256, title: String(d.title).slice(0, 120) }));
+}
+async function releaseRecords(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS], scope: "records.send", tool: "records.release" }, args, async (actor) => {
+    const channel = pick(args.channel, SHARE_CHANNELS, "channel");
+    const recipient = text20(args.recipient, "recipient", 200);
+    const result = await command(context.prisma, { name: "records.release", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const request = await lockRow(uow.tx, "RecordsRequest", args.requestId);
+      if (request.status !== "approved") throw new DomainError(Codes.INVALID_TRANSITION, "Only an approved request can be released.", { currentStatus: request.status });
+      const thirdParty = THIRD_PARTY.has(request.basis);
+      let destination = recipient;
+      if (actor.kind === "agent") {
+        if (thirdParty) {
+          const documentsP = await packetFor(uow, request, args.documentIds);
+          const hashP = packetHashOf(documentsP, recipient, channel);
+          const payload = { requestId: request.id, packetHash: hashP, recipient, channel, documents: documentsP.length };
+          const prior = await uow.tx.proposal.findFirst({ where: { kind: "records.release", targetId: request.id, payloadHash: payloadHash(payload), status: "proposed" }, select: { id: true } });
+          const p = prior ?? await uow.tx.proposal.create({ data: { kind: "records.release", payload, payloadHash: payloadHash(payload), status: "proposed", targetList: "RecordsRequest", targetId: request.id, proposedByAgentId: actorAgentId(actor) } });
+          return { proposed: true, proposalId: p.id, packetHash: hashP, documents: documentsP.length };
+        }
+      }
+      if (!thirdParty || actor.kind === "agent" || args.contactPointId) {
+        if (request.basis === "client_of_record" || actor.kind === "agent") {
+          if (!args.contactPointId) throw new DomainError(Codes.GUARD_FAILED, "Pick the verified contact the records go to.", { field: "contactPointId" });
+          const cp = await uow.tx.contactPoint.findUnique({ where: { id: args.contactPointId }, select: { value: true, verifiedAt: true, status: true, person: { select: { clientId: true } } } });
+          if (!cp?.verifiedAt || cp.status !== "active" || cp.person?.clientId !== request.clientId) throw new DomainError(Codes.GUARD_FAILED, "Records go only to a verified contact of the client of record.", { field: "contactPointId" });
+          destination = cp.value;
+        }
+      }
+      const documents = await packetFor(uow, request, args.documentIds);
+      const hash2 = packetHashOf(documents, destination, channel);
+      if (thirdParty) {
+        if (!args.approvalRequestId) {
+          const approval = await requestApproval(uow, actor, { action: "records.release_third_party", targetList: "RecordsRequest", targetId: request.id, payload: { packetHash: hash2, recipient: destination, channel }, requiredPermission: "canApproveRecordsRelease", summary: `Release ${documents.length} document(s) to ${destination} (${request.basis.replaceAll("_", " ")})` });
+          return { proposed: true, approvalRequestId: approval.id, packetHash: hash2, documents: documents.length };
+        }
+        await consumeApproval(uow, { requestId: args.approvalRequestId, action: "records.release_third_party", targetList: "RecordsRequest", targetId: request.id, payload: { packetHash: hash2, recipient: destination, channel } });
+      }
+      const release = await uow.tx.recordsRelease.create({ data: { requestId: request.id, recipient: destination, channel, destination, documents, packetHash: hash2, releasedByUserId: actorUserId(actor), releasedByAgentId: actorAgentId(actor), at: uow.now } });
+      await transition(uow, { model: "RecordsRequest", id: request.id, from: ["approved"], to: "released", expectedVersion: args.expectedVersion, actor, eventType: "records.released", metadata: { releaseId: release.id, packetHash: hash2 } });
+      await writeReadAudit(
+        uow.tx,
+        { actorKind: actor.kind === "user" ? "user" : actor.kind === "agent" ? "agent" : "system", actorId: actor.kind === "user" ? actor.userId : actor.kind === "agent" ? actor.agentId : actor.name, actorLabel: actor.name ?? null },
+        documents.map((d) => ({ resourceType: "ClinicalDocument", resourceId: d.documentId, fields: /* @__PURE__ */ new Set(["body", "release"]) })).concat([{ resourceType: "Patient", resourceId: request.patientId, fields: /* @__PURE__ */ new Set(["records_release"]) }]),
+        "records_request",
+        release.id
+      );
+      await uow.tx.task.updateMany({ where: { kind: "records_request", subjectType: "RecordsRequest", subjectId: request.id, status: { in: ["open", "in_progress"] } }, data: { status: "done", completedAt: uow.now, version: { increment: 1 } } });
+      auditCreate(uow, actor, "RecordsRelease", release.id, "records.release_made", { packetHash: hash2, documents: documents.length, channel, basis: request.basis });
+      return { proposed: false, id: release.id, packetHash: hash2, documents: documents.length, status: "released" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function verifyReleasePacket(_root, args, context) {
+  return gated(context, { permissions: [...PROCESSORS, "canReadAudit"], tool: "records.verify_packet", humanOnly: true }, args, async () => {
+    const rel = await context.prisma.recordsRelease.findUnique({ where: { id: args.releaseId } });
+    if (!rel) throw new DomainError(Codes.NOT_FOUND, "Release not found.");
+    const docs = rel.documents ?? [];
+    return { id: rel.id, packetHash: rel.packetHash, matches: packetHashOf(docs, rel.destination || rel.recipient, rel.channel) === rel.packetHash, documents: docs.length, hashOfList: payloadHash(docs) };
+  });
+}
+
+// features/keystone/mutations/boarding.ts
+var import_node_crypto15 = require("node:crypto");
+init_errors();
+var BOARDERS = ["canManageBoarding", "canBook", "canCheckIn"];
+var GROOMERS = ["canGroom", "canManageBoarding", "canBook", "canCheckIn"];
+var HOLD_HOURS = 24;
+var MAX_NIGHTS = 60;
+var ZERO4 = 0n;
+var asDate3 = (s) => /* @__PURE__ */ new Date(`${s}T00:00:00Z`);
+var day6 = (d) => d.toISOString().slice(0, 10);
+function nightsBetween(checkIn, checkOut) {
+  const out = [];
+  for (let d = checkIn; d < checkOut; d = addDays2(d, 1)) out.push(d);
+  return out;
+}
+async function releaseLapsed(uow, runTypeId, nights) {
+  const lapsed = await uow.tx.boardingReservation.findMany({ where: { runTypeId, status: "requested", holdExpiresAt: { lte: uow.now }, checkInOn: { lte: asDate3(nights[nights.length - 1]) }, checkOutOn: { gt: asDate3(nights[0]) } }, select: { id: true, checkInOn: true, checkOutOn: true, version: true } });
+  for (const r of lapsed) {
+    const own = nightsBetween(day6(r.checkInOn), day6(r.checkOutOn));
+    await uow.tx.nightlyRunInventory.updateMany({ where: { runTypeId, night: { in: own.map(asDate3) }, sold: { gt: 0 } }, data: { sold: { decrement: 1 } } });
+    await uow.tx.boardingReservation.updateMany({ where: { id: r.id, status: "requested", version: r.version }, data: { status: "cancelled", cancelReason: "The hold ran out", version: { increment: 1 } } });
+  }
+  return lapsed.length;
+}
+async function lockNights(uow, runTypeId, nights) {
+  for (const n of [...nights].sort()) await advisoryLock(uow.tx, `boarding-night:${runTypeId}:${n}`);
+}
+async function takeNights(uow, runType, nights) {
+  await lockNights(uow, runType.id, nights);
+  await releaseLapsed(uow, runType.id, nights);
+  for (const n of nights) {
+    const row = await uow.tx.nightlyRunInventory.findFirst({ where: { runTypeId: runType.id, night: asDate3(n) }, select: { id: true, capacity: true } });
+    if (!row) await uow.tx.nightlyRunInventory.create({ data: { runTypeId: runType.id, locationId: runType.locationId, night: asDate3(n), capacity: runType.capacity, sold: 0 } });
+    else if (row.capacity !== runType.capacity) await uow.tx.nightlyRunInventory.update({ where: { id: row.id }, data: { capacity: runType.capacity } });
+  }
+  const taken = await uow.tx.nightlyRunInventory.updateMany({ where: { runTypeId: runType.id, night: { in: nights.map(asDate3) }, sold: { lt: runType.capacity } }, data: { sold: { increment: 1 } } });
+  if (taken.count !== nights.length) {
+    throw new DomainError(Codes.SLOT_TAKEN, "No run of that size is free for all of those nights.", { reason: "sold_out" });
+  }
+}
+async function giveBackNights(uow, runTypeId, nights) {
+  await lockNights(uow, runTypeId, nights);
+  await uow.tx.nightlyRunInventory.updateMany({ where: { runTypeId, night: { in: nights.map(asDate3) }, sold: { gt: 0 } }, data: { sold: { decrement: 1 } } });
+}
+var runCapacity = async (uow, runTypeId) => {
+  const rt = await uow.tx.runType.findUnique({ where: { id: runTypeId }, select: { id: true, locationId: true, active: true, speciesCodes: true, maxWeightKg: true, nightlyRateMinor: true, depositMinor: true, name: true } });
+  if (!rt) throw new DomainError(Codes.NOT_FOUND, "That run size was not found.");
+  return { ...rt, capacity: await uow.tx.run.count({ where: { runTypeId: rt.id, status: "available" } }) };
+};
+async function missingVaccines(uow, patientId, speciesCode, locationId, checkIn, checkOut) {
+  const policy = await resolvePolicy(uow.tx, "boarding", { locationId, on: checkIn });
+  const required = policy.rules.requiredVaccines[speciesCode] ?? [];
+  if (!required.length) return [];
+  const last = addDays2(checkOut, -1);
+  const grace = policy.rules.gracePeriodDays;
+  const given = await uow.tx.vaccineAdministration.findMany({ where: { patientId, reverses: null }, select: { id: true, dueNextOn: true, product: { select: { isRabies: true, antigens: true, name: true } } } });
+  const reversed = new Set((await uow.tx.vaccineAdministration.findMany({ where: { patientId, reversesId: { not: null } }, select: { reversesId: true } })).map((r) => r.reversesId));
+  const live = given.filter((g) => !reversed.has(g.id));
+  const covers = (name, g) => {
+    const text22 = `${g.product?.name ?? ""} ${JSON.stringify(g.product?.antigens ?? [])}`.toLowerCase();
+    if (name === "rabies") return g.product?.isRabies === true;
+    if (name === "dapp") return /cdv|dapp|dhpp/.test(text22);
+    if (name === "bordetella") return /bordetella|bronchiseptica/.test(text22);
+    if (name === "fvrcp") return /fvrcp|fpv/.test(text22);
+    return text22.includes(name.toLowerCase());
+  };
+  return required.filter((name) => !live.some((g) => covers(name, g) && day6(g.dueNextOn) >= addDays2(last, -grace)));
+}
+async function saveRunType(_root, args, context) {
+  return gated(context, { permissions: ["canManageBoarding", "canManagePractice"], tool: "boarding.save_run_type", humanOnly: true }, args, async (actor) => {
+    const rate2 = minorText(args.nightlyRateMinor, "nightly rate");
+    const deposit = args.depositMinor ? minorText(args.depositMinor, "deposit", true) : ZERO4;
+    if (!Number.isInteger(args.runs) || args.runs < 0 || args.runs > 100) throw new DomainError(Codes.INVALID_INPUT, "The number of runs is 0 to 100.", { field: "runs" });
+    const result = await command(context.prisma, { name: "boarding.save_run_type", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await locationDay(uow, args.locationId, uow.now);
+      const code = text20(args.code, "code", 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      const data = { code, name: text20(args.name, "name", 60), locationId: args.locationId, speciesCodes: args.speciesCodes?.length ? args.speciesCodes : void 0, maxWeightKg: args.maxWeightKg ?? null, nightlyRateMinor: rate2, depositMinor: deposit, active: true };
+      const rt = args.runTypeId ? await uow.tx.runType.update({ where: { id: args.runTypeId }, data }) : await uow.tx.runType.create({ data });
+      const have = await uow.tx.run.count({ where: { runTypeId: rt.id } });
+      for (let i = have; i < args.runs; i += 1) await uow.tx.run.create({ data: { label: `${rt.name} ${i + 1}`, runTypeId: rt.id, locationId: args.locationId, status: "available" } });
+      auditCreate(uow, actor, "RunType", rt.id, "boarding.run_type_saved", { code, runs: args.runs });
+      return { id: rt.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function setRunStatus(_root, args, context) {
+  return gated(context, { permissions: ["canManageBoarding", "canManagePractice"], tool: "boarding.set_run_status", humanOnly: true }, args, async (actor) => {
+    const status = pick(args.status, ["available", "out_of_service"], "status");
+    const result = await command(context.prisma, { name: "boarding.set_run_status", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const run = await lockRow(uow.tx, "Run", args.runId);
+      if (status === "out_of_service" && await uow.tx.runAssignment.count({ where: { runId: run.id, endsAt: null } })) throw new DomainError(Codes.GUARD_FAILED, "A pet is staying in this run. Move them first.");
+      const row = await transition(uow, { model: "Run", id: run.id, from: ["available", "out_of_service"], to: status, expectedVersion: args.expectedVersion, actor, eventType: "boarding.run_status" });
+      return { id: run.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function reserveBoarding(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.reserve", humanOnly: true }, args, async (actor) => {
+    const checkIn = dateOnly(args.checkInOn, "check-in day");
+    const checkOut = dateOnly(args.checkOutOn, "check-out day");
+    if (checkOut <= checkIn) throw new DomainError(Codes.INVALID_INPUT, "Check-out must be after check-in.", { field: "checkOutOn" });
+    const nights = nightsBetween(checkIn, checkOut);
+    if (nights.length > MAX_NIGHTS) throw new DomainError(Codes.INVALID_INPUT, `A stay is at most ${MAX_NIGHTS} nights.`, { field: "checkOutOn" });
+    const result = await command(context.prisma, { name: "boarding.reserve", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const patient = await activePatient(uow, args.patientId);
+      const clientId = await clientOfPatient(uow, patient.id);
+      const rt = await runCapacity(uow, args.runTypeId);
+      if (!rt.active || !rt.locationId) throw new DomainError(Codes.GUARD_FAILED, "That run size is not taking bookings.");
+      const { on } = await locationDay(uow, rt.locationId, uow.now);
+      if (checkIn < on) throw new DomainError(Codes.INVALID_INPUT, "Check-in cannot be in the past.", { field: "checkInOn" });
+      const species = rt.speciesCodes;
+      if (species?.length && !species.includes(patient.species?.code ?? "")) throw new DomainError(Codes.GUARD_FAILED, `${rt.name} is not for ${patient.species?.name?.toLowerCase() ?? "this species"}.`);
+      const missing = await missingVaccines(uow, patient.id, patient.species?.code ?? "", rt.locationId, checkIn, checkOut);
+      let override2 = "";
+      if (missing.length) {
+        override2 = (args.vaccineOverrideReason ?? "").trim();
+        if (override2.length < 8) throw new DomainError(Codes.GUARD_FAILED, `${patient.name} needs current ${missing.join(", ")} vaccination for the whole stay. Record the vaccine, or give the reason a veterinarian approved an exception.`, { reason: "vaccines_missing", missing });
+        const staff = await staffOf(uow, actor);
+        const role = actor.kind === "user" ? await uow.tx.user.findUnique({ where: { id: actor.userId }, select: { role: { select: { canManageBoarding: true, canManagePractice: true } } } }) : null;
+        if (!role?.role?.canManageBoarding && !role?.role?.canManagePractice) throw new DomainError(Codes.NOT_AUTHORIZED, "Only the boarding manager can accept a vaccine exception.");
+        auditCreate(uow, actor, "Patient", patient.id, "boarding.vaccine_override", { missing, staffId: staff.id }, { reason: override2 });
+      }
+      const dup = await uow.tx.boardingReservation.findFirst({ where: { patientId: patient.id, checkInOn: asDate3(checkIn), status: { in: ["requested", "confirmed", "checked_in"] } }, select: { ref: true } });
+      if (dup) throw new DomainError(Codes.GUARD_FAILED, `${patient.name} already has ${dup.ref} starting that day.`);
+      await takeNights(uow, rt, nights);
+      const ref = await nextReference(uow.tx, "BRD", uow.now);
+      const holdsUntil = new Date(uow.now.getTime() + HOLD_HOURS * 36e5);
+      const row = await uow.tx.boardingReservation.create({
+        data: { ref, patientId: patient.id, clientId, locationId: rt.locationId, runTypeId: rt.id, checkInOn: asDate3(checkIn), checkOutOn: asDate3(checkOut), status: "requested", holdExpiresAt: holdsUntil, depositMinor: rt.depositMinor, vaccineOverrideReason: override2, notes: text20(args.notes ?? "", "notes", 500, false) }
+      });
+      if (rt.depositMinor > ZERO4) await uow.tx.deposit.create({ data: { ref: await nextReference(uow.tx, "DEP", uow.now), clientId, reservationId: row.id, requestedMinor: rt.depositMinor, status: "requested" } });
+      auditCreate(uow, actor, "BoardingReservation", row.id, "boarding.requested", { ref, nights: nights.length, runType: rt.name });
+      return { id: row.id, ref, status: "requested", nights: nights.length, holdExpiresAt: holdsUntil.toISOString(), totalMinor: (rt.nightlyRateMinor * BigInt(nights.length)).toString() };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function confirmBoarding(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.confirm", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "boarding.confirm", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const r = await lockRow(uow.tx, "BoardingReservation", args.reservationId);
+      if (r.status === "requested" && r.holdExpiresAt && r.holdExpiresAt <= uow.now) {
+        await giveBackNights(uow, r.runTypeId, nightsBetween(day6(r.checkInOn), day6(r.checkOutOn)));
+        await transition(uow, { model: "BoardingReservation", id: r.id, from: ["requested"], to: "cancelled", actor, eventType: "boarding.hold_lapsed", data: { cancelReason: "The hold ran out" } });
+        throw new DomainError(Codes.GUARD_FAILED, "The hold on this request ran out. Make a new booking.", { reason: "hold_lapsed" });
+      }
+      const row = await transition(uow, { model: "BoardingReservation", id: r.id, from: ["requested"], to: "confirmed", expectedVersion: args.expectedVersion, actor, eventType: "boarding.confirmed", data: { holdExpiresAt: null } });
+      return { id: r.id, ref: r.ref, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function cancelBoarding(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.cancel", humanOnly: true }, args, async (actor) => {
+    const reason = text20(args.reason, "reason", 200);
+    const result = await command(context.prisma, { name: "boarding.cancel", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const r = await lockRow(uow.tx, "BoardingReservation", args.reservationId);
+      const row = await transition(uow, { model: "BoardingReservation", id: r.id, from: ["requested", "confirmed"], to: "cancelled", expectedVersion: args.expectedVersion, actor, eventType: "boarding.cancelled", reason, data: { cancelReason: reason } });
+      await giveBackNights(uow, r.runTypeId, nightsBetween(day6(r.checkInOn), day6(r.checkOutOn)));
+      return { id: r.id, ref: r.ref, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function checkInBoarding(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.check_in", humanOnly: true }, args, async (actor) => {
+    const contact = text20(args.emergencyContactName, "emergency contact", 80);
+    const phone = text20(args.emergencyContactPhone, "emergency phone", 30);
+    const limit = args.medicalLimitMinor ? minorText(args.medicalLimitMinor, "spending limit", true) : ZERO4;
+    const result = await command(context.prisma, { name: "boarding.check_in", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const r = await lockRow(uow.tx, "BoardingReservation", args.reservationId);
+      const patient = await activePatient(uow, r.patientId);
+      const { on } = await locationDay(uow, r.locationId, uow.now);
+      if (day6(r.checkInOn) > on) throw new DomainError(Codes.GUARD_FAILED, `This stay starts on ${day6(r.checkInOn)}.`);
+      const missing = await missingVaccines(uow, patient.id, patient.species?.code ?? "", r.locationId, on, day6(r.checkOutOn));
+      if (missing.length && !r.vaccineOverrideReason) throw new DomainError(Codes.GUARD_FAILED, `${patient.name} needs current ${missing.join(", ")} vaccination before check-in.`, { reason: "vaccines_missing", missing });
+      const busy = (await uow.tx.runAssignment.findMany({ where: { endsAt: null }, select: { runId: true } })).map((a) => a.runId).filter((x) => !!x);
+      const free = await uow.tx.run.findMany({ where: { runTypeId: r.runTypeId, status: "available", id: args.runId ? { equals: args.runId, notIn: busy } : { notIn: busy } }, orderBy: { label: "asc" }, take: 1, select: { id: true, label: true } });
+      if (!free.length) throw new DomainError(Codes.SLOT_TAKEN, args.runId ? "That run is not free." : "Every run of that size is in use right now.", { reason: "no_free_run" });
+      const run = free[0];
+      const row = await transition(uow, { model: "BoardingReservation", id: r.id, from: ["confirmed"], to: "checked_in", expectedVersion: args.expectedVersion, actor, eventType: "boarding.checked_in" });
+      const ref = await nextReference(uow.tx, "STY", uow.now);
+      const stay = await uow.tx.boardingStay.create({ data: { ref, reservationId: r.id, patientId: r.patientId, clientId: r.clientId, locationId: r.locationId, runId: run.id, status: "in_house", checkedInAt: uow.now } });
+      await uow.tx.runAssignment.create({ data: { stayId: stay.id, runId: run.id, startsAt: uow.now } });
+      await uow.tx.runCard.create({ data: { stayId: stay.id, reservationId: r.id, feeding: text20(args.feeding ?? "", "feeding", 500, false), handling: text20(args.handling ?? "", "handling", 500, false), medications: (args.medications ?? "").trim() ? [{ note: text20(args.medications, "medicines", 500) }] : [], emergencyContactName: contact, emergencyContactPhone: phone, medicalLimitMinor: limit } });
+      for (const item of (args.belongings ?? "").split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 30)) await uow.tx.belongingItem.create({ data: { stayId: stay.id, description: text20(item, "belonging", 120) } });
+      auditCreate(uow, actor, "BoardingStay", stay.id, "boarding.stay_started", { ref, run: run.label, reservation: r.ref });
+      return { id: stay.id, ref, run: run.label, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function moveBoardingRun(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.move_run", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "boarding.move_run", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const stay = await lockRow(uow.tx, "BoardingStay", args.stayId);
+      if (stay.status !== "in_house") throw new DomainError(Codes.GUARD_FAILED, "This pet has gone home.");
+      if (stay.runId === args.runId) return { id: stay.id, runId: stay.runId };
+      const run = await uow.tx.run.findUnique({ where: { id: args.runId }, select: { id: true, status: true, locationId: true, label: true } });
+      if (!run || run.status !== "available" || run.locationId !== stay.locationId) throw new DomainError(Codes.GUARD_FAILED, "That run is not available.");
+      await uow.tx.runAssignment.updateMany({ where: { stayId: stay.id, endsAt: null }, data: { endsAt: uow.now } });
+      await uow.tx.runAssignment.create({ data: { stayId: stay.id, runId: run.id, startsAt: uow.now } });
+      await uow.tx.boardingStay.update({ where: { id: stay.id }, data: { runId: run.id, version: { increment: 1 } } });
+      auditCreate(uow, actor, "BoardingStay", stay.id, "boarding.run_moved", { run: run.label });
+      return { id: stay.id, runId: run.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var CARE = ["fed", "walked", "medicated", "played", "cleaned", "observation"];
+async function logBoardingCare(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.log_care", humanOnly: true }, args, async (actor) => {
+    const kind = pick(args.kind, CARE, "kind of care");
+    const result = await command(context.prisma, { name: "boarding.log_care", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const stay = await lockRow(uow.tx, "BoardingStay", args.stayId);
+      if (stay.status !== "in_house") throw new DomainError(Codes.GUARD_FAILED, "This pet has gone home.");
+      const staff = await staffOf(uow, actor);
+      const note = text20(args.note ?? "", "note", 300, kind === "observation");
+      const row = await uow.tx.dailyCareLog.create({ data: { stayId: stay.id, kind, note, byId: staff.id, at: uow.now } });
+      return { id: row.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function returnBelonging(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.return_belonging", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "boarding.return_belonging", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const item = await lockRow(uow.tx, "BelongingItem", args.itemId);
+      if (item.returnedAt) return { id: item.id };
+      if (item.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "Reload and try again.");
+      await uow.tx.belongingItem.update({ where: { id: item.id }, data: { returnedAt: uow.now, version: { increment: 1 } } });
+      return { id: item.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function checkOutBoarding(_root, args, context) {
+  return gated(context, { permissions: [...BOARDERS], tool: "boarding.check_out", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "boarding.check_out", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const stay = await lockRow(uow.tx, "BoardingStay", args.stayId);
+      if (stay.status !== "in_house") throw new DomainError(Codes.GUARD_FAILED, "This pet has already gone home.");
+      if (stay.version !== args.expectedVersion) throw new DomainError(Codes.STALE_STATE, "Reload and try again.");
+      const left = await uow.tx.belongingItem.count({ where: { stayId: stay.id, returnedAt: null } });
+      if (left) throw new DomainError(Codes.GUARD_FAILED, `${left} ${left === 1 ? "belonging has" : "belongings have"} not been handed back yet.`, { reason: "belongings" });
+      const r = await lockRow(uow.tx, "BoardingReservation", stay.reservationId);
+      const rt = await uow.tx.runType.findUniqueOrThrow({ where: { id: r.runTypeId } });
+      const { on } = await locationDay(uow, stay.locationId, uow.now);
+      const startedOn = day6(stay.checkedInAt) < day6(r.checkInOn) ? day6(r.checkInOn) : day6(stay.checkedInAt);
+      const lastNight = on < day6(r.checkOutOn) ? on : day6(r.checkOutOn);
+      const stayed = startedOn >= lastNight ? [startedOn] : nightsBetween(startedOn, lastNight);
+      for (const night of stayed) {
+        await serviceCharge(uow, actor, { unitPriceMinor: rt.nightlyRateMinor, taxCategory: "boarding", description: `Boarding, ${rt.name}: night of ${night}`, patientId: stay.patientId, clientId: stay.clientId, locationId: stay.locationId, sourceType: "boarding_night", sourceId: `${stay.id}:${night}` });
+      }
+      const unused = nightsBetween(day6(r.checkInOn), day6(r.checkOutOn)).filter((n) => !stayed.includes(n) && n >= on);
+      if (unused.length) await giveBackNights(uow, rt.id, unused);
+      await uow.tx.runAssignment.updateMany({ where: { stayId: stay.id, endsAt: null }, data: { endsAt: uow.now } });
+      await transition(uow, { model: "BoardingStay", id: stay.id, from: ["in_house"], to: "checked_out", actor, eventType: "boarding.checked_out", data: { checkedOutAt: uow.now } });
+      await transition(uow, { model: "BoardingReservation", id: r.id, from: ["checked_in"], to: "checked_out", actor, eventType: "boarding.completed" });
+      const lines = await uow.tx.chargeLine.findMany({ where: { clientId: stay.clientId, invoiceId: null, reversedAt: null, sourceType: "boarding_night", sourceId: { startsWith: `${stay.id}:` } }, select: { id: true } });
+      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto15.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: "draft", currencyCode: "USD", note: "" } });
+      await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: draft.id } });
+      const posted = await postDraftInvoice(uow, actor, draft.id, void 0);
+      const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: "paid" }, select: { id: true } });
+      const applied = deposit ? await applyDepositTo(uow, actor, deposit.id, draft.id) : null;
+      await uow.tx.boardingStay.update({ where: { id: stay.id }, data: { invoiceId: draft.id, version: { increment: 1 } } });
+      return { id: stay.id, status: "checked_out", nights: stayed.length, invoiceId: draft.id, invoiceRef: posted.ref, totalMinor: posted.totalMinor, depositAppliedMinor: applied?.appliedMinor ?? "0" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var GROOM_SERVICES = ["bath_brush", "full_groom", "nail_trim", "de_shed", "dental_scale"];
+async function bookGroom(_root, args, context) {
+  return gated(context, { permissions: [...GROOMERS], tool: "groom.book", humanOnly: true }, args, async (actor) => {
+    const service = pick(args.service, GROOM_SERVICES, "service");
+    const startsAt = new Date(args.startsAt);
+    if (Number.isNaN(startsAt.getTime())) throw new DomainError(Codes.INVALID_INPUT, "Choose a start time.", { field: "startsAt" });
+    const result = await command(context.prisma, { name: "groom.book", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (startsAt < new Date(uow.now.getTime() - 5 * 6e4)) throw new DomainError(Codes.INVALID_INPUT, "That time has passed.", { field: "startsAt" });
+      const patient = await activePatient(uow, args.patientId);
+      const clientId = await clientOfPatient(uow, patient.id);
+      const groomer = await uow.tx.staffMember.findUnique({ where: { id: args.groomerId }, select: { id: true, kind: true, active: true, homeLocationId: true, displayName: true } });
+      if (!groomer || !groomer.active || groomer.kind !== "groomer") throw new DomainError(Codes.NOT_FOUND, "Choose a groomer.", { field: "groomerId" });
+      const locationId = groomer.homeLocationId ?? (await uow.tx.location.findFirstOrThrow({ orderBy: { createdAt: "asc" }, select: { id: true } })).id;
+      const item = await uow.tx.serviceItem.findFirst({ where: { code: `GROOM-${service.toUpperCase()}`, active: true } });
+      if (!item) throw new DomainError(Codes.GUARD_FAILED, "That service has no price yet.");
+      const ref = await nextReference(uow.tx, "GRM", uow.now);
+      const row = await uow.tx.groomAppointment.create({
+        data: { ref, patientId: patient.id, clientId, locationId, groomerId: groomer.id, startsAt, durationMinutes: item.minutes && item.minutes > 0 ? item.minutes : 60, service, priceMinor: item.priceMinor, status: "booked" }
+      });
+      auditCreate(uow, actor, "GroomAppointment", row.id, "groom.booked", { ref, service, groomer: groomer.displayName });
+      return { id: row.id, ref, status: "booked" };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var GROOM_NEXT = { booked: ["checked_in", "cancelled", "no_show"], checked_in: ["in_progress", "cancelled"], in_progress: ["ready"], ready: ["completed"] };
+async function advanceGroom(_root, args, context) {
+  return gated(context, { permissions: [...GROOMERS], tool: "groom.advance", humanOnly: true }, args, async (actor) => {
+    const to = pick(args.to, ["checked_in", "in_progress", "ready", "completed", "cancelled", "no_show"], "step");
+    const result = await command(context.prisma, { name: "groom.advance", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const g = await lockRow(uow.tx, "GroomAppointment", args.groomId);
+      if (!GROOM_NEXT[g.status]?.includes(to)) throw new DomainError(Codes.INVALID_TRANSITION, `A groom that is ${g.status.replaceAll("_", " ")} cannot go to ${to.replaceAll("_", " ")}.`);
+      if (["cancelled", "no_show"].includes(to)) text20(args.reason ?? "", "reason", 200);
+      if (["checked_in", "in_progress", "ready", "completed"].includes(to)) await activePatient(uow, g.patientId);
+      const data = {};
+      if (to === "cancelled" || to === "no_show") data.cancelReason = text20(args.reason ?? "", "reason", 200);
+      let chargeId = null;
+      if (to === "completed") {
+        const line = await serviceItemCharge(uow, actor, `GROOM-${String(g.service).toUpperCase()}`, { patientId: g.patientId, clientId: g.clientId, locationId: g.locationId, sourceType: "groom", sourceId: g.id });
+        chargeId = line.id;
+        const bps = 4e3;
+        data.commissionBps = bps;
+        data.commissionMinor = g.priceMinor * BigInt(bps) / 10000n;
+      }
+      const row = await transition(uow, { model: "GroomAppointment", id: g.id, from: Object.keys(GROOM_NEXT), to, expectedVersion: args.expectedVersion, actor, eventType: `groom.${to}`, data });
+      return { id: g.id, ref: g.ref, status: row.status, chargeId };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function saveGroomNote(_root, args, context) {
+  return gated(context, { permissions: [...GROOMERS], tool: "groom.save_note", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "groom.save_note", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      await advisoryLock(uow.tx, `groom-note:${args.patientId}`);
+      const patient = await activePatient(uow, args.patientId);
+      const staff = await staffOf(uow, actor);
+      const last = await uow.tx.groomNote.findFirst({ where: { patientId: patient.id }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+      const photo = (args.photoUrl ?? "").trim();
+      if (photo && !/^https:\/\//.test(photo)) throw new DomainError(Codes.INVALID_INPUT, "A photo link starts with https://", { field: "photoUrl" });
+      const note = await uow.tx.groomNote.create({ data: { patientId: patient.id, versionNo: (last?.versionNo ?? 0) + 1, blade: text20(args.blade ?? "", "blade", 40, false), style: text20(args.style ?? "", "style", 120, false), behaviour: text20(args.behaviour ?? "", "behaviour", 300, false), notes: text20(args.notes ?? "", "notes", 500, false), photoUrl: photo, byId: staff.id } });
+      if (args.groomId) await uow.tx.groomAppointment.updateMany({ where: { id: args.groomId, patientId: patient.id }, data: { noteVersionId: note.id } });
+      return { id: note.id, versionNo: note.versionNo };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/security/breadthLimit.ts
 var import_graphql3 = require("graphql");
 var API_NESTED_DEFAULT = 50;
@@ -14537,26 +17000,26 @@ function limitNestedLists(schema) {
 }
 
 // features/keystone/security/signInLimit.ts
-var import_node_crypto12 = require("node:crypto");
+var import_node_crypto17 = require("node:crypto");
 
 // features/keystone/security/internalIdentity.ts
-var import_node_crypto11 = require("node:crypto");
+var import_node_crypto16 = require("node:crypto");
 var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto11.timingSafeEqual)(leftBuffer, rightBuffer);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto16.timingSafeEqual)(leftBuffer, rightBuffer);
 }
 function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
   if (!loopback || secret2.length < 32) return null;
   const identity = String(headers["x-openfront-client-identity"] || "");
-  const timestamp21 = String(headers["x-openfront-client-timestamp"] || "");
+  const timestamp22 = String(headers["x-openfront-client-timestamp"] || "");
   const signature = String(headers["x-openfront-client-signature"] || "");
-  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp21) || !/^[a-f0-9]{64}$/.test(signature)) return null;
-  const age = Math.abs(now - Number(timestamp21) * 1e3);
+  if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp22) || !/^[a-f0-9]{64}$/.test(signature)) return null;
+  const age = Math.abs(now - Number(timestamp22) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto11.createHmac)("sha256", secret2).update(`${timestamp21}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto16.createHmac)("sha256", secret2).update(`${timestamp22}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -14583,7 +17046,7 @@ var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
 var SIGN_IN_KNOWN_DAYS = 90;
 var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
-var hash = (value) => (0, import_node_crypto12.createHash)("sha256").update(value).digest("hex");
+var hash = (value) => (0, import_node_crypto17.createHash)("sha256").update(value).digest("hex");
 var normalEmail = (email) => email.trim().toLowerCase();
 var UNKNOWN_ADDRESS = "unknown-address";
 var where = (address) => hash(address);
@@ -14604,7 +17067,7 @@ function clientAddress(req) {
 }
 async function countAttempt(prisma, key2) {
   const rows = await prisma.$queryRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto12.randomUUID)()}, ${key2}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto17.randomUUID)()}, ${key2}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
       "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
@@ -14646,7 +17109,7 @@ async function signInAttempt(prisma, email, address, sessionUserId = null) {
 async function rememberAddress(prisma, userId, address) {
   if (address === UNKNOWN_ADDRESS) return;
   await prisma.$executeRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto12.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto17.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
 }
 async function signInSucceeded(prisma, userId, address) {
@@ -14728,6 +17191,63 @@ function extendGraphqlSchema(baseSchema) {
         recordWeight(patientId: ID!, value: String!, unit: String!, method: String, bodyConditionScore: Int, appointmentId: ID, idempotencyKey: String!): JSON
         addPatientAlert(patientId: ID!, kind: String!, severity: String!, text: String!, idempotencyKey: String!): JSON
         recordConsent(contactPointId: ID!, purpose: String!, action: String!, method: String!, callRecordId: ID, keyword: String, idempotencyKey: String!): JSON
+        savePlanVersion(code: String!, name: String!, summary: String, label: String!, monthlyPriceMinor: String!, termMonths: Int!, speciesCodes: [String!], minAgeWeeks: Int, maxAgeMonths: Int, entitlements: JSON!, otherServicesDiscountBps: Int, trueUpNote: String, idempotencyKey: String!): JSON
+        enrolPatient(patientId: ID!, planVersionId: ID!, signerId: ID!, method: String!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        runPlanBilling(periodKey: String, locationId: ID, idempotencyKey: String!): JSON
+        retryPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
+        checkPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
+        replacePlanCard(enrollmentId: ID!, signerId: ID!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        cancelEnrollment(enrollmentId: ID!, reason: String!, waiveTrueUp: Boolean, expectedVersion: Int!, idempotencyKey: String!): JSON
+        useEntitlement(enrollmentId: ID!, code: String!, qty: Int, memo: String, idempotencyKey: String!): JSON
+        returnEntitlement(entryId: ID!, reason: String!, idempotencyKey: String!): JSON
+        saveRunType(runTypeId: ID, code: String!, name: String!, locationId: ID!, speciesCodes: [String!], maxWeightKg: Float, nightlyRateMinor: String!, depositMinor: String, runs: Int!, idempotencyKey: String!): JSON
+        setRunStatus(runId: ID!, status: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reserveBoarding(patientId: ID!, runTypeId: ID!, checkInOn: String!, checkOutOn: String!, notes: String, vaccineOverrideReason: String, idempotencyKey: String!): JSON
+        confirmBoarding(reservationId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelBoarding(reservationId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        checkInBoarding(reservationId: ID!, runId: ID, feeding: String, handling: String, medications: String, emergencyContactName: String!, emergencyContactPhone: String!, medicalLimitMinor: String, belongings: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        moveBoardingRun(stayId: ID!, runId: ID!, idempotencyKey: String!): JSON
+        logBoardingCare(stayId: ID!, kind: String!, note: String, idempotencyKey: String!): JSON
+        returnBelonging(itemId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        checkOutBoarding(stayId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        bookGroom(patientId: ID!, groomerId: ID!, startsAt: String!, service: String!, idempotencyKey: String!): JSON
+        advanceGroom(groomId: ID!, to: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        saveGroomNote(patientId: ID!, blade: String, style: String, behaviour: String, notes: String, photoUrl: String, groomId: ID, idempotencyKey: String!): JSON
+        signEuthanasiaConsent(patientId: ID!, signerId: ID, authority: String!, authorityNote: String, biteAttestation: String!, aftercare: String!, clientPresent: Boolean!, method: String!, signatureText: String!, witnessId: ID, idempotencyKey: String!): JSON
+        revokeEuthanasiaConsent(consentId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        recordEuthanasia(patientId: ID!, consentId: ID!, diedAt: String, causeNote: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        advanceAftercare(orderId: ID!, step: String!, place: String, crematory: String, manifestRef: String, crematoryRef: String, receivedBy: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addMemorialItem(orderId: ID!, kind: String!, description: String, idempotencyKey: String!): JSON
+        orderLab(patientId: ID!, labId: ID!, testIds: [ID!]!, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+        collectSpecimen(labOrderId: ID!, kind: String!, containerId: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        sendLabOrder(labOrderId: ID!, accessionId: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelLabOrder(labOrderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        enterLabResult(labId: ID!, accessionId: String!, status: String!, lines: JSON!, idempotencyKey: String!): JSON
+        importLabFile(labId: ID!, fileText: String!, idempotencyKey: String!): JSON
+        reviewLabResult(resultId: ID!, interpretation: String!, idempotencyKey: String!): JSON
+        communicateLabResult(resultId: ID!, via: String!, idempotencyKey: String!): JSON
+        notifyResultsReady(labOrderId: ID!, idempotencyKey: String!): JSON
+        orderImaging(patientId: ID!, modality: String!, region: String, reason: String, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+        recordImagingStudy(imagingOrderId: ID!, studyInstanceUid: String!, images: Int, expectedVersion: Int!, idempotencyKey: String!): JSON
+        addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+        decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+        withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        releaseRecords(requestId: ID!, documentIds: [ID!]!, recipient: String!, channel: String!, contactPointId: ID, approvalRequestId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+        draftRuleVersion(label: String!, effectiveFrom: String!, rules: JSON!, commissionRules: JSON, idempotencyKey: String!): JSON
+        requestRulePublication(ruleVersionId: ID!, idempotencyKey: String!): JSON
+        requestProductionAdjustment(creditId: ID!, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+        openPayPeriod(startsOn: String!, endsOn: String!, idempotencyKey: String!): JSON
+        calculatePayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
+        exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+        lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        verifyReleasePacket(releaseId: ID!): JSON
+        suggestCharges(locationId: ID, idempotencyKey: String!): JSON
+        clinicInsights: JSON
         recordPatientDeath(patientId: ID!, diedAt: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         bookAppointment(input: JSON!, idempotencyKey: String!): JSON
         cancelAppointment(appointmentId: ID!, reason: String!, expectedVersion: Int!, callRecordId: ID, idempotencyKey: String!): JSON
@@ -15025,7 +17545,64 @@ function extendGraphqlSchema(baseSchema) {
         printDispenseLabel: op(printDispenseLabel),
         requestExternalFill: op(requestExternalFill),
         decideExternalFill: op(decideExternalFill),
-        exportWrittenRx: op(exportWrittenRx)
+        exportWrittenRx: op(exportWrittenRx),
+        savePlanVersion: op(savePlanVersion),
+        enrolPatient: op(enrolPatient),
+        runPlanBilling: op(runPlanBilling),
+        retryPlanCharge: op(retryPlanCharge),
+        checkPlanCharge: op(checkPlanCharge),
+        replacePlanCard: op(replacePlanCard),
+        cancelEnrollment: op(cancelEnrollment),
+        useEntitlement: op(useEntitlement),
+        returnEntitlement: op(returnEntitlement),
+        saveRunType: op(saveRunType),
+        setRunStatus: op(setRunStatus),
+        reserveBoarding: op(reserveBoarding),
+        confirmBoarding: op(confirmBoarding),
+        cancelBoarding: op(cancelBoarding),
+        checkInBoarding: op(checkInBoarding),
+        moveBoardingRun: op(moveBoardingRun),
+        logBoardingCare: op(logBoardingCare),
+        returnBelonging: op(returnBelonging),
+        checkOutBoarding: op(checkOutBoarding),
+        bookGroom: op(bookGroom),
+        advanceGroom: op(advanceGroom),
+        saveGroomNote: op(saveGroomNote),
+        signEuthanasiaConsent: op(signEuthanasiaConsent),
+        revokeEuthanasiaConsent: op(revokeEuthanasiaConsent),
+        recordEuthanasia: op(recordEuthanasia),
+        advanceAftercare: op(advanceAftercare),
+        addMemorialItem: op(addMemorialItem),
+        orderLab: op(orderLab),
+        collectSpecimen: op(collectSpecimen),
+        sendLabOrder: op(sendLabOrder),
+        cancelLabOrder: op(cancelLabOrder),
+        enterLabResult: op(enterLabResult),
+        importLabFile: op(importLabFile),
+        reviewLabResult: op(reviewLabResult),
+        communicateLabResult: op(communicateLabResult),
+        notifyResultsReady: op(notifyResultsReady),
+        orderImaging: op(orderImaging),
+        recordImagingStudy: op(recordImagingStudy),
+        addImagingReport: op(addImagingReport),
+        communicateImaging: op(communicateImaging),
+        startRecordsVerification: op(startRecordsVerification),
+        verifyRecordsRequest: op(verifyRecordsRequest),
+        decideRecordsRequest: op(decideRecordsRequest),
+        withdrawRecordsRequest: op(withdrawRecordsRequest),
+        releaseRecords: op(releaseRecords),
+        draftRuleVersion: op(draftRuleVersion),
+        requestRulePublication: op(requestRulePublication),
+        requestProductionAdjustment: op(requestProductionAdjustment),
+        openPayPeriod: op(openPayPeriod),
+        calculatePayPeriod: op(calculatePayPeriod),
+        reopenPayPeriod: op(reopenPayPeriod),
+        requestPayPeriodApproval: op(requestPayPeriodApproval),
+        exportPayPeriod: op(exportPayPeriod),
+        lockPayPeriod: op(lockPayPeriod),
+        suggestCharges: op(suggestCharges),
+        clinicInsights: (root, args, context) => clinicInsights(root, args, context),
+        verifyReleasePacket: (root, args, context) => verifyReleasePacket(root, args, context)
       }
     }
   })));
@@ -15249,7 +17826,7 @@ var { withAuth } = (0, import_auth.createAuth)({
   `
 });
 var keystone_default = withAuth(
-  (0, import_core25.config)({
+  (0, import_core26.config)({
     db: {
       provider: "postgresql",
       url: databaseURL,

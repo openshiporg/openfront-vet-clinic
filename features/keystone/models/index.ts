@@ -12,6 +12,7 @@ import * as pharmacy from './pharmacy'
 import { INVENTORY_LISTS } from './inventory'
 import { BILLING_LISTS } from './billing'
 import { WELLNESS_LISTS } from './wellness'
+import { PHASE6_LISTS } from './phase6'
 import { BOARDING_LISTS } from './boarding'
 import { END_OF_LIFE_LISTS } from './endOfLife'
 import * as record from './record'
@@ -57,6 +58,8 @@ export const models = {
   ...BILLING_LISTS,
   // Phase 5: wellness plans, boarding, grooming and end of life
   ...WELLNESS_LISTS,
+  // Phase 6: diagnostics, production and pay, exports, campaigns
+  ...PHASE6_LISTS,
   ...BOARDING_LISTS,
   ...END_OF_LIFE_LISTS,
   // Phase 2: the medical record, orders and treatment, preventive care, incumbent import

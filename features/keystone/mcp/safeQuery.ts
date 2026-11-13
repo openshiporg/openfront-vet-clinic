@@ -109,6 +109,8 @@ export function buildListRead(
   const operation = typeof input.operation === 'string' ? input.operation : ''
   const entry = NAME.test(operation) ? allowlist.get(operation) : undefined
   if (!entry) throw new QueryInputError('operation must be one of the list queries from listModels (for example "patients" or "clients")')
+  const where = input.where ?? {}
+  if (typeof where !== 'object' || Array.isArray(where) || JSON.stringify(where).length > 4000) throw new QueryInputError('where must be a small filter object')
   const selection = parseSelection(input.fields)
   const take = parseTake(input.limit)
   const skip = parseSkip(input.offset)
@@ -120,5 +122,5 @@ export function buildListRead(
     const errors = validate(schema, document)
     if (errors.length) throw new QueryInputError(`fields: ${errors.map(e => e.message).join('; ').slice(0, 400)}`)
   }
-  return { query, variables: { where: input.where ?? {}, take, skip }, operation: entry.operation }
+  return { query, variables: { where, take, skip }, operation: entry.operation }
 }

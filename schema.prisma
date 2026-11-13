@@ -51,9 +51,15 @@ model User {
   from_PatientAlert_createdBy         PatientAlert[]         @relation("PatientAlert_createdBy")
   from_PatientOwnership_recordedBy    PatientOwnership[]     @relation("PatientOwnership_recordedBy")
   from_RecordsRelease_releasedByUser  RecordsRelease[]       @relation("RecordsRelease_releasedByUser")
+  from_RecordsRequest_verifiedBy      RecordsRequest[]       @relation("RecordsRequest_verifiedBy")
   from_Appointment_bookedByUser       Appointment[]          @relation("Appointment_bookedByUser")
   from_SegmentTransition_by           SegmentTransition[]    @relation("SegmentTransition_by")
   from_TriageAssessment_actorUser     TriageAssessment[]     @relation("TriageAssessment_actorUser")
+  from_ProductionCredit_requestedBy   ProductionCredit[]     @relation("ProductionCredit_requestedBy")
+  from_ProductionCredit_approvedBy    ProductionCredit[]     @relation("ProductionCredit_approvedBy")
+  from_PayPeriod_approvedBy           PayPeriod[]            @relation("PayPeriod_approvedBy")
+  from_PayrollExportBatch_exportedBy  PayrollExportBatch[]   @relation("PayrollExportBatch_exportedBy")
+  from_ExportJob_requestedBy          ExportJob[]            @relation("ExportJob_requestedBy")
   from_SoapSectionRevision_authorUser SoapSectionRevision[]  @relation("SoapSectionRevision_authorUser")
   from_ImportBatch_startedBy          ImportBatch[]          @relation("ImportBatch_startedBy")
   from_Proposal_proposedByUser        Proposal[]             @relation("Proposal_proposedByUser")
@@ -400,6 +406,7 @@ model Document {
   from_PatientOwnership_evidence              PatientOwnership[]     @relation("PatientOwnership_evidence")
   from_PetInsurancePolicy_clientAuthorisation PetInsurancePolicy[]   @relation("PetInsurancePolicy_clientAuthorisation")
   from_RecordsRequest_authorisationDocument   RecordsRequest[]       @relation("RecordsRequest_authorisationDocument")
+  from_LabResult_reportDocument               LabResult[]            @relation("LabResult_reportDocument")
   from_ClinicalAttachment_document            ClinicalAttachment[]   @relation("ClinicalAttachment_document")
   from_ClinicalDocument_document              ClinicalDocument[]     @relation("ClinicalDocument_document")
   from_ScribeSession_audioDocument            ScribeSession[]        @relation("ScribeSession_audioDocument")
@@ -424,21 +431,23 @@ model ExternalId {
 }
 
 model IntegrationConnection {
-  id                String    @id @default(cuid())
-  name              String    @default("")
-  area              String
-  providerKey       String    @default("")
-  mode              String
-  location          Location? @relation("IntegrationConnection_location", fields: [locationId], references: [id])
-  locationId        String?   @map("location")
-  secretRef         String    @default("")
-  capabilityProfile Json?
-  status            String    @default("active")
-  lastHealthAt      DateTime?
-  lastError         String    @default("")
-  version           Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
+  id                          String         @id @default(cuid())
+  name                        String         @default("")
+  area                        String
+  providerKey                 String         @default("")
+  mode                        String
+  location                    Location?      @relation("IntegrationConnection_location", fields: [locationId], references: [id])
+  locationId                  String?        @map("location")
+  secretRef                   String         @default("")
+  capabilityProfile           Json?
+  status                      String         @default("active")
+  lastHealthAt                DateTime?
+  lastError                   String         @default("")
+  version                     Int            @default(0)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @default(now()) @updatedAt
+  from_Laboratory_integration Laboratory[]   @relation("Laboratory_integration")
+  from_ImagingStudy_pacs      ImagingStudy[] @relation("ImagingStudy_pacs")
 
   @@index([locationId])
 }
@@ -460,17 +469,18 @@ model Notification {
 }
 
 model ProviderObservation {
-  id           String    @id @default(cuid())
-  source       String    @default("")
-  connectionId String    @default("")
-  externalId   String    @default("")
-  contentHash  String    @default("")
-  payload      Json?
-  receivedAt   DateTime? @default(now())
-  processedAt  DateTime?
-  status       String    @default("received")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now()) @updatedAt
+  id                         String      @id @default(cuid())
+  source                     String      @default("")
+  connectionId               String      @default("")
+  externalId                 String      @default("")
+  contentHash                String      @default("")
+  payload                    Json?
+  receivedAt                 DateTime?   @default(now())
+  processedAt                DateTime?
+  status                     String      @default("received")
+  createdAt                  DateTime    @default(now())
+  updatedAt                  DateTime    @default(now()) @updatedAt
+  from_LabResult_observation LabResult[] @relation("LabResult_observation")
 
   @@unique([source, connectionId, externalId], map: "ProviderObservation_source_external_key")
   @@unique([source, contentHash], map: "ProviderObservation_source_hash_key")
@@ -654,6 +664,9 @@ model Location {
   from_Payment_location               Payment[]               @relation("Payment_location")
   from_Enrollment_location            Enrollment[]            @relation("Enrollment_location")
   from_PlanBillingRun_location        PlanBillingRun[]        @relation("PlanBillingRun_location")
+  from_LabOrder_location              LabOrder[]              @relation("LabOrder_location")
+  from_ImagingOrder_location          ImagingOrder[]          @relation("ImagingOrder_location")
+  from_ProductionCredit_location      ProductionCredit[]      @relation("ProductionCredit_location")
   from_RunType_location               RunType[]               @relation("RunType_location")
   from_Run_location                   Run[]                   @relation("Run_location")
   from_NightlyRunInventory_location   NightlyRunInventory[]   @relation("NightlyRunInventory_location")
@@ -799,6 +812,13 @@ model StaffMember {
   from_Refund_requestedBy                   Refund[]                @relation("Refund_requestedBy")
   from_EntitlementEntry_by                  EntitlementEntry[]      @relation("EntitlementEntry_by")
   from_PlanBillingRun_startedBy             PlanBillingRun[]        @relation("PlanBillingRun_startedBy")
+  from_LabOrder_orderedBy                   LabOrder[]              @relation("LabOrder_orderedBy")
+  from_Specimen_collectedBy                 Specimen[]              @relation("Specimen_collectedBy")
+  from_ResultReview_dvm                     ResultReview[]          @relation("ResultReview_dvm")
+  from_ImagingOrder_orderedBy               ImagingOrder[]          @relation("ImagingOrder_orderedBy")
+  from_ImagingReport_authorStaff            ImagingReport[]         @relation("ImagingReport_authorStaff")
+  from_ProductionCredit_staff               ProductionCredit[]      @relation("ProductionCredit_staff")
+  from_Commission_staff                     Commission[]            @relation("Commission_staff")
   from_DailyCareLog_by                      DailyCareLog[]          @relation("DailyCareLog_by")
   from_GroomAppointment_groomer             GroomAppointment[]      @relation("GroomAppointment_groomer")
   from_GroomNote_by                         GroomNote[]             @relation("GroomNote_by")
@@ -1320,6 +1340,8 @@ model Patient {
   from_ChargeLine_patient            ChargeLine[]            @relation("ChargeLine_patient")
   from_InsuranceClaimPacket_patient  InsuranceClaimPacket[]  @relation("InsuranceClaimPacket_patient")
   from_Enrollment_patient            Enrollment[]            @relation("Enrollment_patient")
+  from_LabOrder_patient              LabOrder[]              @relation("LabOrder_patient")
+  from_ImagingOrder_patient          ImagingOrder[]          @relation("ImagingOrder_patient")
   from_BoardingReservation_patient   BoardingReservation[]   @relation("BoardingReservation_patient")
   from_BoardingStay_patient          BoardingStay[]          @relation("BoardingStay_patient")
   from_GroomAppointment_patient      GroomAppointment[]      @relation("GroomAppointment_patient")
@@ -1434,6 +1456,8 @@ model RecordsRelease {
   releasedByUserId                         String?                @map("releasedByUser")
   releasedByAgent                          AgentIdentity?         @relation("RecordsRelease_releasedByAgent", fields: [releasedByAgentId], references: [id])
   releasedByAgentId                        String?                @map("releasedByAgent")
+  packetHash                               String                 @default("")
+  destination                              String                 @default("")
   at                                       DateTime
   from_InsuranceClaimPacket_recordsRelease InsuranceClaimPacket[] @relation("InsuranceClaimPacket_recordsRelease")
   from_Referral_recordsRelease             Referral[]             @relation("Referral_recordsRelease")
@@ -1468,6 +1492,11 @@ model RecordsRequest {
   callRecordId            String?          @map("callRecord")
   createdByAgent          AgentIdentity?   @relation("RecordsRequest_createdByAgent", fields: [createdByAgentId], references: [id])
   createdByAgentId        String?          @map("createdByAgent")
+  verifiedBy              User?            @relation("RecordsRequest_verifiedBy", fields: [verifiedById], references: [id])
+  verifiedById            String?          @map("verifiedBy")
+  verifiedAt              DateTime?
+  verificationNote        String           @default("")
+  decisionReason          String           @default("")
   releases                RecordsRelease[] @relation("RecordsRelease_request")
   version                 Int              @default(0)
   createdAt               DateTime         @default(now())
@@ -1480,6 +1509,7 @@ model RecordsRequest {
   @@index([policyVersionId])
   @@index([callRecordId])
   @@index([createdByAgentId])
+  @@index([verifiedById])
 }
 
 model ReferralHospital {
@@ -1566,6 +1596,8 @@ model Species {
   from_ColourMarking_species    ColourMarking[]    @relation("ColourMarking_species")
   from_Patient_species          Patient[]          @relation("Patient_species")
   from_AppointmentType_species  AppointmentType[]  @relation("AppointmentType_species")
+  from_LabTest_species          LabTest[]          @relation("LabTest_species")
+  from_ReferenceRange_species   ReferenceRange[]   @relation("ReferenceRange_species")
   from_DiagnosisCode_species    DiagnosisCode[]    @relation("DiagnosisCode_species")
   from_RecordTemplate_species   RecordTemplate[]   @relation("RecordTemplate_species")
   from_VaccineProduct_species   VaccineProduct[]   @relation("VaccineProduct_species")
@@ -2086,16 +2118,17 @@ model KnowledgeBaseEntry {
 }
 
 model MessageTemplate {
-  id              String   @id @default(cuid())
-  code            String   @default("")
-  purpose         String   @default("care")
-  channel         String   @default("sms")
-  locale          String   @default("en-US")
-  body            String   @default("")
-  templateVersion Int?     @default(1)
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+  id                     String     @id @default(cuid())
+  code                   String     @default("")
+  purpose                String     @default("care")
+  channel                String     @default("sms")
+  locale                 String     @default("en-US")
+  body                   String     @default("")
+  templateVersion        Int?       @default(1)
+  active                 Boolean    @default(true)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @default(now()) @updatedAt
+  from_Campaign_template Campaign[] @relation("Campaign_template")
 
   @@unique([code, channel, locale, templateVersion], map: "MessageTemplate_code_channel_locale_version_key")
 }
@@ -3138,6 +3171,7 @@ model FeeItem {
   updatedAt                 DateTime            @default(now()) @updatedAt
   from_EstimateLine_feeItem EstimateLine[]      @relation("EstimateLine_feeItem")
   from_ChargeLine_feeItem   ChargeLine[]        @relation("ChargeLine_feeItem")
+  from_LabTest_feeItem      LabTest[]           @relation("LabTest_feeItem")
 
   @@index([versionId])
   @@index([code])
@@ -3465,6 +3499,7 @@ model Invoice {
   from_InsuranceClaimPacket_invoice InsuranceClaimPacket[] @relation("InsuranceClaimPacket_invoice")
   from_Enrollment_trueUpInvoice     Enrollment[]           @relation("Enrollment_trueUpInvoice")
   from_PlanBillingAttempt_invoice   PlanBillingAttempt[]   @relation("PlanBillingAttempt_invoice")
+  from_ProductionCredit_invoice     ProductionCredit[]     @relation("ProductionCredit_invoice")
   from_BoardingStay_invoice         BoardingStay[]         @relation("BoardingStay_invoice")
   from_GroomAppointment_invoice     GroomAppointment[]     @relation("GroomAppointment_invoice")
 
@@ -3510,6 +3545,9 @@ model ChargeLine {
   updatedAt                          DateTime             @default(now()) @updatedAt
   from_EntitlementEntry_chargeLine   EntitlementEntry[]   @relation("EntitlementEntry_chargeLine")
   from_PlanBillingAttempt_chargeLine PlanBillingAttempt[] @relation("PlanBillingAttempt_chargeLine")
+  from_LabOrder_chargeLine           LabOrder[]           @relation("LabOrder_chargeLine")
+  from_ProductionCredit_chargeLine   ProductionCredit[]   @relation("ProductionCredit_chargeLine")
+  from_Commission_chargeLine         Commission[]         @relation("Commission_chargeLine")
   from_MemorialItem_chargeLine       MemorialItem[]       @relation("MemorialItem_chargeLine")
 
   @@index([invoiceId])
@@ -3956,6 +3994,433 @@ model PlanBillingAttempt {
   @@index([runKey])
 }
 
+model Laboratory {
+  id                      String                 @id @default(cuid())
+  code                    String                 @unique @default("")
+  name                    String                 @default("")
+  kind                    String
+  intake                  String
+  integration             IntegrationConnection? @relation("Laboratory_integration", fields: [integrationId], references: [id])
+  integrationId           String?                @map("integration")
+  accountNumber           String                 @default("")
+  status                  String                 @default("active")
+  tests                   LabTest[]              @relation("LabTest_lab")
+  version                 Int                    @default(0)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @default(now()) @updatedAt
+  from_LabAnalyteMap_lab  LabAnalyteMap[]        @relation("LabAnalyteMap_lab")
+  from_ReferenceRange_lab ReferenceRange[]       @relation("ReferenceRange_lab")
+  from_LabOrder_lab       LabOrder[]             @relation("LabOrder_lab")
+
+  @@index([integrationId])
+}
+
+model Analyte {
+  id                          String           @id @default(cuid())
+  code                        String           @unique @default("")
+  name                        String           @default("")
+  canonicalUnit               String           @default("")
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @default(now()) @updatedAt
+  from_LabAnalyteMap_analyte  LabAnalyteMap[]  @relation("LabAnalyteMap_analyte")
+  from_ReferenceRange_analyte ReferenceRange[] @relation("ReferenceRange_analyte")
+  from_LabResultValue_analyte LabResultValue[] @relation("LabResultValue_analyte")
+}
+
+model LabTest {
+  id                   String      @id @default(cuid())
+  lab                  Laboratory? @relation("LabTest_lab", fields: [labId], references: [id])
+  labId                String?     @map("lab")
+  code                 String      @default("")
+  name                 String      @default("")
+  species              Species[]   @relation("LabTest_species")
+  specimenRequirements Json?
+  feeItem              FeeItem?    @relation("LabTest_feeItem", fields: [feeItemId], references: [id])
+  feeItemId            String?     @map("feeItem")
+  turnaroundHours      Int         @default(24)
+  status               String      @default("active")
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @default(now()) @updatedAt
+  from_LabOrder_tests  LabOrder[]  @relation("LabOrder_tests")
+
+  @@index([labId])
+  @@index([feeItemId])
+}
+
+model LabAnalyteMap {
+  id             String      @id @default(cuid())
+  lab            Laboratory? @relation("LabAnalyteMap_lab", fields: [labId], references: [id])
+  labId          String?     @map("lab")
+  externalCode   String      @default("")
+  analyte        Analyte?    @relation("LabAnalyteMap_analyte", fields: [analyteId], references: [id])
+  analyteId      String?     @map("analyte")
+  unitConversion Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @default(now()) @updatedAt
+
+  @@index([labId])
+  @@index([analyteId])
+}
+
+model ReferenceRange {
+  id           String      @id @default(cuid())
+  analyte      Analyte?    @relation("ReferenceRange_analyte", fields: [analyteId], references: [id])
+  analyteId    String?     @map("analyte")
+  species      Species?    @relation("ReferenceRange_species", fields: [speciesId], references: [id])
+  speciesId    String?     @map("species")
+  ageClass     String
+  lab          Laboratory? @relation("ReferenceRange_lab", fields: [labId], references: [id])
+  labId        String?     @map("lab")
+  low          Decimal?    @postgresql.Decimal(18, 6)
+  high         Decimal?    @postgresql.Decimal(18, 6)
+  criticalLow  Decimal?    @postgresql.Decimal(18, 6)
+  criticalHigh Decimal?    @postgresql.Decimal(18, 6)
+  unit         String      @default("")
+  source       String      @default("")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+
+  @@index([analyteId])
+  @@index([speciesId])
+  @@index([labId])
+}
+
+model LabOrder {
+  id           String         @id @default(cuid())
+  ref          String         @unique @default("")
+  order        ClinicalOrder? @relation("LabOrder_order", fields: [orderId], references: [id])
+  orderId      String?        @map("order")
+  patient      Patient?       @relation("LabOrder_patient", fields: [patientId], references: [id])
+  patientId    String?        @map("patient")
+  encounter    Encounter?     @relation("LabOrder_encounter", fields: [encounterId], references: [id])
+  encounterId  String?        @map("encounter")
+  location     Location?      @relation("LabOrder_location", fields: [locationId], references: [id])
+  locationId   String?        @map("location")
+  lab          Laboratory?    @relation("LabOrder_lab", fields: [labId], references: [id])
+  labId        String?        @map("lab")
+  tests        LabTest[]      @relation("LabOrder_tests")
+  orderedBy    StaffMember?   @relation("LabOrder_orderedBy", fields: [orderedById], references: [id])
+  orderedById  String?        @map("orderedBy")
+  accessionId  String?
+  status       String         @default("ordered")
+  chargeLine   ChargeLine?    @relation("LabOrder_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId String?        @map("chargeLine")
+  cancelReason String         @default("")
+  sentAt       DateTime?
+  specimens    Specimen[]     @relation("Specimen_labOrder")
+  results      LabResult[]    @relation("LabResult_labOrder")
+  version      Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([locationId])
+  @@index([labId])
+  @@index([orderedById])
+  @@index([chargeLineId])
+}
+
+model Specimen {
+  id            String       @id @default(cuid())
+  labOrder      LabOrder?    @relation("Specimen_labOrder", fields: [labOrderId], references: [id])
+  labOrderId    String?      @map("labOrder")
+  kind          String
+  collectedAt   DateTime
+  collectedBy   StaffMember? @relation("Specimen_collectedBy", fields: [collectedById], references: [id])
+  collectedById String?      @map("collectedBy")
+  containerId   String       @default("")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@index([labOrderId])
+  @@index([collectedById])
+}
+
+model LabResult {
+  id               String               @id @default(cuid())
+  labOrder         LabOrder?            @relation("LabResult_labOrder", fields: [labOrderId], references: [id])
+  labOrderId       String?              @map("labOrder")
+  observation      ProviderObservation? @relation("LabResult_observation", fields: [observationId], references: [id])
+  observationId    String?              @map("observation")
+  status           String
+  supersedes       LabResult?           @relation("LabResult_supersedes", fields: [supersedesId], references: [id])
+  supersedesId     String?              @map("supersedes")
+  supersededBy     LabResult[]          @relation("LabResult_supersedes")
+  reportDocument   Document?            @relation("LabResult_reportDocument", fields: [reportDocumentId], references: [id])
+  reportDocumentId String?              @map("reportDocument")
+  worstFlag        String
+  source           String
+  contentHash      String               @default("")
+  receivedAt       DateTime
+  values           LabResultValue[]     @relation("LabResultValue_result")
+  reviews          ResultReview[]       @relation("ResultReview_result")
+  createdAt        DateTime?            @default(now())
+
+  @@index([labOrderId])
+  @@index([observationId])
+  @@index([supersedesId])
+  @@index([reportDocumentId])
+  @@index([contentHash])
+}
+
+model LabResultValue {
+  id           String     @id @default(cuid())
+  result       LabResult? @relation("LabResultValue_result", fields: [resultId], references: [id])
+  resultId     String?    @map("result")
+  analyte      Analyte?   @relation("LabResultValue_analyte", fields: [analyteId], references: [id])
+  analyteId    String?    @map("analyte")
+  externalCode String     @default("")
+  valueNumeric Decimal?   @postgresql.Decimal(18, 6)
+  valueText    String     @default("")
+  unit         String     @default("")
+  refLow       Decimal?   @postgresql.Decimal(18, 6)
+  refHigh      Decimal?   @postgresql.Decimal(18, 6)
+  flag         String
+  createdAt    DateTime?  @default(now())
+
+  @@index([resultId])
+  @@index([analyteId])
+}
+
+model ResultReview {
+  id              String       @id @default(cuid())
+  result          LabResult?   @relation("ResultReview_result", fields: [resultId], references: [id])
+  resultId        String?      @map("result")
+  dvm             StaffMember? @relation("ResultReview_dvm", fields: [dvmId], references: [id])
+  dvmId           String?      @map("dvm")
+  kind            String
+  interpretation  String       @default("")
+  communicatedVia String
+  at              DateTime
+  createdAt       DateTime?    @default(now())
+
+  @@index([resultId])
+  @@index([dvmId])
+}
+
+model ImagingOrder {
+  id          String         @id @default(cuid())
+  ref         String         @unique @default("")
+  order       ClinicalOrder? @relation("ImagingOrder_order", fields: [orderId], references: [id])
+  orderId     String?        @map("order")
+  patient     Patient?       @relation("ImagingOrder_patient", fields: [patientId], references: [id])
+  patientId   String?        @map("patient")
+  encounter   Encounter?     @relation("ImagingOrder_encounter", fields: [encounterId], references: [id])
+  encounterId String?        @map("encounter")
+  location    Location?      @relation("ImagingOrder_location", fields: [locationId], references: [id])
+  locationId  String?        @map("location")
+  orderedBy   StaffMember?   @relation("ImagingOrder_orderedBy", fields: [orderedById], references: [id])
+  orderedById String?        @map("orderedBy")
+  modality    String
+  region      String         @default("")
+  reason      String         @default("")
+  status      String         @default("ordered")
+  studies     ImagingStudy[] @relation("ImagingStudy_order")
+  version     Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([patientId])
+  @@index([encounterId])
+  @@index([locationId])
+  @@index([orderedById])
+}
+
+model ImagingStudy {
+  id               String                 @id @default(cuid())
+  order            ImagingOrder?          @relation("ImagingStudy_order", fields: [orderId], references: [id])
+  orderId          String?                @map("order")
+  studyInstanceUid String                 @unique @default("")
+  modality         String
+  pacs             IntegrationConnection? @relation("ImagingStudy_pacs", fields: [pacsId], references: [id])
+  pacsId           String?                @map("pacs")
+  acquiredAt       DateTime?
+  images           Int                    @default(0)
+  reports          ImagingReport[]        @relation("ImagingReport_study")
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([pacsId])
+}
+
+model ImagingReport {
+  id            String        @id @default(cuid())
+  study         ImagingStudy? @relation("ImagingReport_study", fields: [studyId], references: [id])
+  studyId       String?       @map("study")
+  author        String
+  authorStaff   StaffMember?  @relation("ImagingReport_authorStaff", fields: [authorStaffId], references: [id])
+  authorStaffId String?       @map("authorStaff")
+  authorName    String        @default("")
+  text          String        @default("")
+  reportedAt    DateTime
+  createdAt     DateTime?     @default(now())
+
+  @@index([studyId])
+  @@index([authorStaffId])
+}
+
+model ProductionRuleVersion {
+  id                                String             @id @default(cuid())
+  versionNo                         Int
+  label                             String             @default("")
+  rules                             Json?
+  commissionRules                   Json?
+  effectiveFrom                     DateTime           @postgresql.Date
+  status                            String             @default("draft")
+  publishedAt                       DateTime?
+  ruleHash                          String             @default("")
+  version                           Int                @default(0)
+  createdAt                         DateTime           @default(now())
+  updatedAt                         DateTime           @default(now()) @updatedAt
+  from_ProductionCredit_ruleVersion ProductionCredit[] @relation("ProductionCredit_ruleVersion")
+  from_Commission_ruleVersion       Commission[]       @relation("Commission_ruleVersion")
+}
+
+model ProductionCredit {
+  id                            String                 @id @default(cuid())
+  staff                         StaffMember?           @relation("ProductionCredit_staff", fields: [staffId], references: [id])
+  staffId                       String?                @map("staff")
+  chargeLine                    ChargeLine?            @relation("ProductionCredit_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId                  String?                @map("chargeLine")
+  invoice                       Invoice?               @relation("ProductionCredit_invoice", fields: [invoiceId], references: [id])
+  invoiceId                     String?                @map("invoice")
+  ruleVersion                   ProductionRuleVersion? @relation("ProductionCredit_ruleVersion", fields: [ruleVersionId], references: [id])
+  ruleVersionId                 String?                @map("ruleVersion")
+  location                      Location?              @relation("ProductionCredit_location", fields: [locationId], references: [id])
+  locationId                    String?                @map("location")
+  category                      String                 @default("")
+  basis                         String
+  kind                          String
+  adjusts                       ProductionCredit?      @relation("ProductionCredit_adjusts", fields: [adjustsId], references: [id])
+  adjustsId                     String?                @map("adjusts")
+  baseMinor                     BigInt
+  bps                           Int
+  amountMinor                   BigInt
+  reason                        String                 @default("")
+  requestedBy                   User?                  @relation("ProductionCredit_requestedBy", fields: [requestedById], references: [id])
+  requestedById                 String?                @map("requestedBy")
+  approvedBy                    User?                  @relation("ProductionCredit_approvedBy", fields: [approvedById], references: [id])
+  approvedById                  String?                @map("approvedBy")
+  creditedOn                    DateTime               @postgresql.Date
+  period                        PayPeriod?             @relation("ProductionCredit_period", fields: [periodId], references: [id])
+  periodId                      String?                @map("period")
+  entryKey                      String                 @unique @default("")
+  createdAt                     DateTime?              @default(now())
+  from_ProductionCredit_adjusts ProductionCredit[]     @relation("ProductionCredit_adjusts")
+
+  @@index([staffId])
+  @@index([chargeLineId])
+  @@index([invoiceId])
+  @@index([ruleVersionId])
+  @@index([locationId])
+  @@index([adjustsId])
+  @@index([requestedById])
+  @@index([approvedById])
+  @@index([periodId])
+}
+
+model Commission {
+  id            String                 @id @default(cuid())
+  staff         StaffMember?           @relation("Commission_staff", fields: [staffId], references: [id])
+  staffId       String?                @map("staff")
+  chargeLine    ChargeLine?            @relation("Commission_chargeLine", fields: [chargeLineId], references: [id])
+  chargeLineId  String?                @map("chargeLine")
+  ruleVersion   ProductionRuleVersion? @relation("Commission_ruleVersion", fields: [ruleVersionId], references: [id])
+  ruleVersionId String?                @map("ruleVersion")
+  sourceType    String                 @default("")
+  sourceId      String                 @default("")
+  baseMinor     BigInt
+  bps           Int
+  amountMinor   BigInt
+  earnedOn      DateTime               @postgresql.Date
+  period        PayPeriod?             @relation("Commission_period", fields: [periodId], references: [id])
+  periodId      String?                @map("period")
+  entryKey      String                 @unique @default("")
+  createdAt     DateTime?              @default(now())
+
+  @@index([staffId])
+  @@index([chargeLineId])
+  @@index([ruleVersionId])
+  @@index([periodId])
+}
+
+model PayPeriod {
+  id           String               @id @default(cuid())
+  ref          String               @unique @default("")
+  startsOn     DateTime             @postgresql.Date
+  endsOn       DateTime             @postgresql.Date
+  status       String               @default("open")
+  totals       Json?
+  totalsHash   String               @default("")
+  calculatedAt DateTime?
+  approvedBy   User?                @relation("PayPeriod_approvedBy", fields: [approvedById], references: [id])
+  approvedById String?              @map("approvedBy")
+  approvedAt   DateTime?
+  lockedAt     DateTime?
+  credits      ProductionCredit[]   @relation("ProductionCredit_period")
+  commissions  Commission[]         @relation("Commission_period")
+  exports      PayrollExportBatch[] @relation("PayrollExportBatch_period")
+  version      Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @default(now()) @updatedAt
+
+  @@index([approvedById])
+}
+
+model PayrollExportBatch {
+  id           String     @id @default(cuid())
+  ref          String     @unique @default("")
+  period       PayPeriod? @relation("PayrollExportBatch_period", fields: [periodId], references: [id])
+  periodId     String?    @map("period")
+  format       String
+  rows         Int        @default(0)
+  contentHash  String     @default("")
+  csv          String     @default("")
+  exportedBy   User?      @relation("PayrollExportBatch_exportedBy", fields: [exportedById], references: [id])
+  exportedById String?    @map("exportedBy")
+  exportedAt   DateTime
+  createdAt    DateTime?  @default(now())
+
+  @@index([periodId])
+  @@index([exportedById])
+}
+
+model ExportJob {
+  id            String   @id @default(cuid())
+  ref           String   @unique @default("")
+  kind          String
+  status        String   @default("built")
+  rows          Int      @default(0)
+  contentHash   String   @default("")
+  requestedBy   User?    @relation("ExportJob_requestedBy", fields: [requestedById], references: [id])
+  requestedById String?  @map("requestedBy")
+  at            DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  @@index([requestedById])
+}
+
+model Campaign {
+  id            String           @id @default(cuid())
+  name          String           @default("")
+  purpose       String
+  template      MessageTemplate? @relation("Campaign_template", fields: [templateId], references: [id])
+  templateId    String?          @map("template")
+  audience      Json?
+  status        String           @default("draft")
+  outboundVoice Boolean          @default(false)
+  version       Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @default(now()) @updatedAt
+
+  @@index([templateId])
+}
+
 model ServiceItem {
   id          String   @id @default(cuid())
   code        String   @unique @default("")
@@ -4388,6 +4853,8 @@ model Encounter {
   from_Estimate_encounter              Estimate[]              @relation("Estimate_encounter")
   from_Invoice_encounter               Invoice[]               @relation("Invoice_encounter")
   from_ChargeLine_encounter            ChargeLine[]            @relation("ChargeLine_encounter")
+  from_LabOrder_encounter              LabOrder[]              @relation("LabOrder_encounter")
+  from_ImagingOrder_encounter          ImagingOrder[]          @relation("ImagingOrder_encounter")
   from_Problem_encounter               Problem[]               @relation("Problem_encounter")
   from_ClinicalAttachment_encounter    ClinicalAttachment[]    @relation("ClinicalAttachment_encounter")
   from_ClinicalDocument_encounter      ClinicalDocument[]      @relation("ClinicalDocument_encounter")
@@ -4786,6 +5253,8 @@ model ClinicalOrder {
   createdAt                      DateTime              @default(now())
   updatedAt                      DateTime              @default(now()) @updatedAt
   from_TreatmentPlanItem_order   TreatmentPlanItem[]   @relation("TreatmentPlanItem_order")
+  from_LabOrder_order            LabOrder[]            @relation("LabOrder_order")
+  from_ImagingOrder_order        ImagingOrder[]        @relation("ImagingOrder_order")
   from_TreatmentSheetOrder_order TreatmentSheetOrder[] @relation("TreatmentSheetOrder_order")
 
   @@index([encounterId])

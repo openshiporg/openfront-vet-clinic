@@ -151,7 +151,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
               description: 'Field names to return, nested with braces (e.g., "id name species { name }"). No arguments or aliases; at most 4 levels.'
             },
             limit: { type: 'integer', minimum: 1, maximum: MAX_TAKE, description: `Rows to return (default 25, at most ${MAX_TAKE})` },
-            offset: { type: 'integer', minimum: 0, description: 'Rows to skip, for paging' }
+            offset: { type: 'integer', minimum: 0, description: 'Rows to skip, for paging' },
+            where: { type: 'object', description: 'Optional filter in the list\'s own where syntax (e.g. {"status":{"equals":"open"}}). Runs as you: a field you may not read cannot be filtered on.' }
           },
           required: ['operation', 'fields'],
           additionalProperties: false
@@ -305,7 +306,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tra
         
         if (name === 'queryData') {
           // F3: allowlisted list query, rebuilt selection, capped rows; runs as the caller.
-          const built = buildListRead(LIST_READS, { operation: args?.operation, fields: args?.fields, limit: args?.limit, offset: args?.offset }, schema);
+          const built = buildListRead(LIST_READS, { operation: args?.operation, fields: args?.fields, limit: args?.limit, offset: args?.offset, where: args?.where }, schema);
           const result = await executeGraphQL(built.query, graphqlEndpoint, auth, built.variables);
           
           return new Response(JSON.stringify({

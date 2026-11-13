@@ -132,3 +132,41 @@ export const RECEPTION_TOOLS: DomainTool[] = [
 ]
 
 registerDomainTools(RECEPTION_TOOLS)
+
+/**
+ * Wider agent set (Phase 6). Each runs the same command a person would, under a scope grant. None of them signs, sends a result,
+ * prescribes or moves money: the lab notifier leaves a call-back task, the records tool sends only to the client of record at a verified
+ * contact (anything else becomes a proposal), charge suggestions are proposals, and insights are counts.
+ */
+export const WIDER_TOOLS: DomainTool[] = [
+  {
+    name: 'results_notify_ready',
+    description: 'Tell staff a lab order has results waiting so a call-back task is left for the client ("results are ready, the doctor will call"). It never sees or carries a result value.',
+    inputSchema: shape({ labOrderId: id('Lab order id'), idempotencyKey }, ['labOrderId', 'idempotencyKey']),
+    document: 'mutation ResultsNotify($labOrderId: ID!, $idempotencyKey: String!) { notifyResultsReady(labOrderId: $labOrderId, idempotencyKey: $idempotencyKey) }',
+    field: 'notifyResultsReady', writes: true,
+  },
+  {
+    name: 'records_send',
+    description: 'Send an approved records request to the client of record at a contact the clinic has verified. Any other recipient becomes a proposal for staff.',
+    inputSchema: shape({ requestId: id('Records request id'), documentIds: { type: 'array', items: { type: 'string', maxLength: 64 }, minItems: 1, maxItems: 200 } as object, recipient: str('Recipient name', 200), channel: { type: 'string', enum: ['email', 'portal', 'fax', 'mail', 'in_person'] }, contactPointId: id('Verified contact point id'), expectedVersion: { type: 'integer', minimum: 0 } as object, idempotencyKey }, ['requestId', 'documentIds', 'recipient', 'channel', 'expectedVersion', 'idempotencyKey']),
+    document: 'mutation RecordsSend($requestId: ID!, $documentIds: [ID!]!, $recipient: String!, $channel: String!, $contactPointId: ID, $expectedVersion: Int!, $idempotencyKey: String!) { releaseRecords(requestId: $requestId, documentIds: $documentIds, recipient: $recipient, channel: $channel, contactPointId: $contactPointId, expectedVersion: $expectedVersion, idempotencyKey: $idempotencyKey) }',
+    field: 'releaseRecords', writes: true,
+  },
+  {
+    name: 'charges_suggest',
+    description: 'Look for closed visits with no charges and leave a proposal for each. It adds no charge.',
+    inputSchema: shape({ locationId: id('Location id'), idempotencyKey }, ['idempotencyKey']),
+    document: 'mutation ChargesSuggest($locationId: ID, $idempotencyKey: String!) { suggestCharges(locationId: $locationId, idempotencyKey: $idempotencyKey) }',
+    field: 'suggestCharges', writes: true,
+  },
+  {
+    name: 'insights_read',
+    description: 'Counts of what is late right now: result reviews, records requests, unsigned records. No names or values.',
+    inputSchema: shape({}, []),
+    document: 'mutation InsightsRead { clinicInsights }',
+    field: 'clinicInsights', writes: false,
+  },
+]
+
+registerDomainTools(WIDER_TOOLS)

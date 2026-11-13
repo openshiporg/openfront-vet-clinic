@@ -1,3 +1,4 @@
+import { deriveProduction } from './production'
 import { randomUUID } from 'node:crypto'
 import { command } from '../lib/command'
 import { auditCreate, casUpdate, lockRow, transition } from '../lib/cas'
@@ -232,6 +233,8 @@ export async function postDraftInvoice(uow: UnitOfWork, actor: Actor, invoiceId:
   const row = await transition<Record<string, unknown>>(uow, { model: 'Invoice', id: inv.id, from: ['draft'], to: 'posted', expectedVersion, actor, eventType: 'invoice.posted', data: { ref, postedAt: uow.now, postedOn: new Date(`${postedOn}T00:00:00Z`), periodId: period.id, subtotalMinor: subtotal, discountMinor: discount, taxMinor: tax, totalMinor: total }, metadata: { totalMinor: total.toString() } })
   if (total > ZERO) await post(uow, { clientId: inv.clientId, invoiceId: inv.id, kind: 'invoice', amountMinor: total, currencyCode: inv.currencyCode, postedOn, entryKey: `invoice:${inv.id}:post`, memo: ref })
   else await transition(uow, { model: 'Invoice', id: inv.id, from: ['posted'], to: 'paid', actor, eventType: 'invoice.paid' })
+  // Production and commission are derived here, in the same transaction, once per line (the DB key makes a repeat a no-op).
+  await deriveProduction(uow, inv.id)
   return { id: inv.id, ref, status: row.status, totalMinor: total.toString() }
 }
 

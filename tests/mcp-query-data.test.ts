@@ -26,6 +26,14 @@ describe('MCP queryData (F3)', () => {
     expect(built.variables).toEqual({ where: {}, take: 25, skip: 0 })
   })
 
+  it('passes a where filter through as a variable (P5 r2 b), never into the document', () => {
+    const built = read({ operation: 'patients', fields: 'id', where: { status: { equals: 'active' } } })
+    expect(built.variables.where).toEqual({ status: { equals: 'active' } })
+    expect(built.query).not.toContain('active')
+    expect(() => read({ operation: 'patients', fields: 'id', where: [] as never })).toThrow(QueryInputError)
+    expect(() => read({ operation: 'patients', fields: 'id', where: { x: 'y'.repeat(5000) } })).toThrow(QueryInputError)
+  })
+
   it.each([
     ['a second root field smuggled through fields', { operation: 'patients', fields: 'id } encounters { id' }],
     ['a closing brace then a new operation', { operation: 'patients', fields: 'id } } query X { users { email' }],

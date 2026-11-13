@@ -306,7 +306,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     const other = await prisma.document.create({ data: { title: 'Surgery notes', kind: 'clinical_summary', storageKey: 'k/surg', sha256: 'b'.repeat(64) } as never })
     const policy = await prisma.petInsurancePolicy.create({ data: { patientId, insurerId: policyPayer?.id ?? null, policyNumber: 'PET-44821', directPayEligible: false } as never })
     const req = await prisma.recordsRequest.create({ data: { ref: uniqueKey('RR').slice(0, 20), patientId, clientId, requesterKind: 'insurer', requesterName: 'Pet insurer', channel: 'csr', basis: 'insurer_with_authorisation', status: 'released' } as never })
-    const rel = await prisma.recordsRelease.create({ data: { requestId: req.id, recipient: 'Pet insurer', channel: 'mail', documents: [{ documentId: doc.id, sha256: doc.sha256, title: doc.title }], at: new Date() } as never })
+    const rel = await prisma.recordsRelease.create({ data: { requestId: req.id, recipient: 'Pet insurer', channel: 'mail', documents: [{ documentId: doc.id, sha256: doc.sha256, title: doc.title }], packetHash: 'h'.repeat(64), at: new Date() } as never })
     const inv = await postedInvoice(1)
     const built = (await buildClaimPacket(null, { invoiceId: inv.id, policyId: policy.id, recordsReleaseId: rel.id, submitter: 'client', idempotencyKey: key() }, ctx)) as { id: string; documents: number }
     expect(built.documents).toBe(1)

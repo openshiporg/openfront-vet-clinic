@@ -35,6 +35,8 @@ export const AUDITED_TYPES = new Set<string>([
   'SoapSection', 'SoapSectionRevision', 'VitalsObservation', 'PhysicalExamFinding', 'Problem', 'Diagnosis', 'ClinicalAttachment', 'ScribeSession',
   'ClinicalOrder', 'DoseCalculation', 'Administration', 'HospitalStay', 'CageAssignment', 'TreatmentSheetOrder', 'TreatmentTask', 'MonitoringReading',
   'SurgeryReport', 'DentalChart', 'DischargeInstruction', 'VaccineAdministration', 'PatientReminder', 'ReminderSatisfaction', 'AdverseEventReport',
+  // Phase 6: diagnostics and pay
+  'Specimen', 'LabResultValue', 'ResultReview', 'ImagingOrder', 'ImagingStudy', 'ImagingReport', 'ProductionCredit', 'Commission', 'PayPeriod', 'PayrollExportBatch', 'ExportJob',
 ])
 
 type Ref = { resourceType: string; resourceId: string | null; fields: Set<string> }

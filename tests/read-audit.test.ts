@@ -26,6 +26,9 @@ const NOT_CLINICAL: Record<string, string> = {
   ReferringVet: 'directory of referring clinics and vets',
   TriageProtocol: 'the published phone-triage protocol, no client data',
   TriageProtocolVersion: 'versions of the triage protocol questions and scripts',
+  Laboratory: 'directory of reference and in-house laboratories',
+  LabTest: 'catalogue of tests a laboratory offers, no patient data',
+  LabAnalyteMap: 'mapping of a laboratory code to an analyte, no patient data',
 }
 
 describe('read audit contract', () => {

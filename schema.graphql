@@ -5220,6 +5220,7 @@ type RecordsRelease {
   documents: JSON
   releasedByUser: User
   releasedByAgent: AgentIdentity
+  destination: String
   at: DateTime
 }
 
@@ -5237,6 +5238,7 @@ input RecordsReleaseWhereInput {
   channel: StringFilter
   releasedByUser: UserWhereInput
   releasedByAgent: AgentIdentityWhereInput
+  destination: StringFilter
   at: DateTimeFilter
 }
 
@@ -5244,6 +5246,7 @@ input RecordsReleaseOrderByInput {
   id: OrderDirection
   recipient: OrderDirection
   channel: OrderDirection
+  destination: OrderDirection
   at: OrderDirection
 }
 
@@ -5254,6 +5257,7 @@ input RecordsReleaseUpdateInput {
   documents: JSON
   releasedByUser: UserRelateToOneForUpdateInput
   releasedByAgent: AgentIdentityRelateToOneForUpdateInput
+  destination: String
   at: DateTime
 }
 
@@ -5275,6 +5279,7 @@ input RecordsReleaseCreateInput {
   documents: JSON
   releasedByUser: UserRelateToOneForCreateInput
   releasedByAgent: AgentIdentityRelateToOneForCreateInput
+  destination: String
   at: DateTime
 }
 
@@ -5301,6 +5306,10 @@ type RecordsRequest {
   policyVersion: PolicyVersion
   callRecord: CallRecord
   createdByAgent: AgentIdentity
+  verifiedBy: User
+  verifiedAt: DateTime
+  verificationNote: String
+  decisionReason: String
   releases(where: RecordsReleaseWhereInput! = {}, orderBy: [RecordsReleaseOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: RecordsReleaseWhereUniqueInput): [RecordsRelease!]
   releasesCount(where: RecordsReleaseWhereInput! = {}): Int
   version: Int
@@ -5334,6 +5343,10 @@ input RecordsRequestWhereInput {
   policyVersion: PolicyVersionWhereInput
   callRecord: CallRecordWhereInput
   createdByAgent: AgentIdentityWhereInput
+  verifiedBy: UserWhereInput
+  verifiedAt: DateTimeNullableFilter
+  verificationNote: StringFilter
+  decisionReason: StringFilter
   releases: RecordsReleaseManyRelationFilter
   version: IntFilter
   createdAt: DateTimeFilter
@@ -5357,6 +5370,9 @@ input RecordsRequestOrderByInput {
   scope: OrderDirection
   status: OrderDirection
   responseDueAt: OrderDirection
+  verifiedAt: OrderDirection
+  verificationNote: OrderDirection
+  decisionReason: OrderDirection
   version: OrderDirection
   createdAt: OrderDirection
   updatedAt: OrderDirection
@@ -5379,6 +5395,10 @@ input RecordsRequestUpdateInput {
   policyVersion: PolicyVersionRelateToOneForUpdateInput
   callRecord: CallRecordRelateToOneForUpdateInput
   createdByAgent: AgentIdentityRelateToOneForUpdateInput
+  verifiedBy: UserRelateToOneForUpdateInput
+  verifiedAt: DateTime
+  verificationNote: String
+  decisionReason: String
   releases: RecordsReleaseRelateToManyForUpdateInput
   version: Int
   createdAt: DateTime
@@ -5414,6 +5434,10 @@ input RecordsRequestCreateInput {
   policyVersion: PolicyVersionRelateToOneForCreateInput
   callRecord: CallRecordRelateToOneForCreateInput
   createdByAgent: AgentIdentityRelateToOneForCreateInput
+  verifiedBy: UserRelateToOneForCreateInput
+  verifiedAt: DateTime
+  verificationNote: String
+  decisionReason: String
   releases: RecordsReleaseRelateToManyForCreateInput
   version: Int
   createdAt: DateTime
@@ -15347,6 +15371,1897 @@ input PlanBillingAttemptCreateInput {
   updatedAt: DateTime
 }
 
+type Laboratory {
+  id: ID!
+  code: String
+  name: String
+  kind: String
+  intake: String
+  integration: IntegrationConnection
+  accountNumber: String
+  status: String
+  tests(where: LabTestWhereInput! = {}, orderBy: [LabTestOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LabTestWhereUniqueInput): [LabTest!]
+  testsCount(where: LabTestWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LaboratoryWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input LaboratoryWhereInput {
+  AND: [LaboratoryWhereInput!]
+  OR: [LaboratoryWhereInput!]
+  NOT: [LaboratoryWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  kind: StringFilter
+  intake: StringFilter
+  integration: IntegrationConnectionWhereInput
+  accountNumber: StringFilter
+  status: StringFilter
+  tests: LabTestManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input LabTestManyRelationFilter {
+  every: LabTestWhereInput
+  some: LabTestWhereInput
+  none: LabTestWhereInput
+}
+
+input LaboratoryOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  kind: OrderDirection
+  intake: OrderDirection
+  accountNumber: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LaboratoryUpdateInput {
+  code: String
+  name: String
+  kind: String
+  intake: String
+  integration: IntegrationConnectionRelateToOneForUpdateInput
+  accountNumber: String
+  status: String
+  tests: LabTestRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input IntegrationConnectionRelateToOneForUpdateInput {
+  create: IntegrationConnectionCreateInput
+  connect: IntegrationConnectionWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LabTestRelateToManyForUpdateInput {
+  disconnect: [LabTestWhereUniqueInput!]
+  set: [LabTestWhereUniqueInput!]
+  create: [LabTestCreateInput!]
+  connect: [LabTestWhereUniqueInput!]
+}
+
+input LaboratoryUpdateArgs {
+  where: LaboratoryWhereUniqueInput!
+  data: LaboratoryUpdateInput!
+}
+
+input LaboratoryCreateInput {
+  code: String
+  name: String
+  kind: String
+  intake: String
+  integration: IntegrationConnectionRelateToOneForCreateInput
+  accountNumber: String
+  status: String
+  tests: LabTestRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input IntegrationConnectionRelateToOneForCreateInput {
+  create: IntegrationConnectionCreateInput
+  connect: IntegrationConnectionWhereUniqueInput
+}
+
+input LabTestRelateToManyForCreateInput {
+  create: [LabTestCreateInput!]
+  connect: [LabTestWhereUniqueInput!]
+}
+
+type Analyte {
+  id: ID!
+  code: String
+  name: String
+  canonicalUnit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AnalyteWhereUniqueInput {
+  id: ID
+  code: String
+}
+
+input AnalyteWhereInput {
+  AND: [AnalyteWhereInput!]
+  OR: [AnalyteWhereInput!]
+  NOT: [AnalyteWhereInput!]
+  id: IDFilter
+  code: StringFilter
+  name: StringFilter
+  canonicalUnit: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input AnalyteOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  canonicalUnit: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input AnalyteUpdateInput {
+  code: String
+  name: String
+  canonicalUnit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AnalyteUpdateArgs {
+  where: AnalyteWhereUniqueInput!
+  data: AnalyteUpdateInput!
+}
+
+input AnalyteCreateInput {
+  code: String
+  name: String
+  canonicalUnit: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type LabTest {
+  id: ID!
+  lab: Laboratory
+  code: String
+  name: String
+  species(where: SpeciesWhereInput! = {}, orderBy: [SpeciesOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SpeciesWhereUniqueInput): [Species!]
+  speciesCount(where: SpeciesWhereInput! = {}): Int
+  specimenRequirements: JSON
+  feeItem: FeeItem
+  turnaroundHours: Int
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LabTestWhereUniqueInput {
+  id: ID
+}
+
+input LabTestWhereInput {
+  AND: [LabTestWhereInput!]
+  OR: [LabTestWhereInput!]
+  NOT: [LabTestWhereInput!]
+  id: IDFilter
+  lab: LaboratoryWhereInput
+  code: StringFilter
+  name: StringFilter
+  species: SpeciesManyRelationFilter
+  feeItem: FeeItemWhereInput
+  turnaroundHours: IntFilter
+  status: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input LabTestOrderByInput {
+  id: OrderDirection
+  code: OrderDirection
+  name: OrderDirection
+  turnaroundHours: OrderDirection
+  status: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LabTestUpdateInput {
+  lab: LaboratoryRelateToOneForUpdateInput
+  code: String
+  name: String
+  species: SpeciesRelateToManyForUpdateInput
+  specimenRequirements: JSON
+  feeItem: FeeItemRelateToOneForUpdateInput
+  turnaroundHours: Int
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LaboratoryRelateToOneForUpdateInput {
+  create: LaboratoryCreateInput
+  connect: LaboratoryWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LabTestUpdateArgs {
+  where: LabTestWhereUniqueInput!
+  data: LabTestUpdateInput!
+}
+
+input LabTestCreateInput {
+  lab: LaboratoryRelateToOneForCreateInput
+  code: String
+  name: String
+  species: SpeciesRelateToManyForCreateInput
+  specimenRequirements: JSON
+  feeItem: FeeItemRelateToOneForCreateInput
+  turnaroundHours: Int
+  status: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LaboratoryRelateToOneForCreateInput {
+  create: LaboratoryCreateInput
+  connect: LaboratoryWhereUniqueInput
+}
+
+type LabAnalyteMap {
+  id: ID!
+  lab: Laboratory
+  externalCode: String
+  analyte: Analyte
+  unitConversion: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LabAnalyteMapWhereUniqueInput {
+  id: ID
+}
+
+input LabAnalyteMapWhereInput {
+  AND: [LabAnalyteMapWhereInput!]
+  OR: [LabAnalyteMapWhereInput!]
+  NOT: [LabAnalyteMapWhereInput!]
+  id: IDFilter
+  lab: LaboratoryWhereInput
+  externalCode: StringFilter
+  analyte: AnalyteWhereInput
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input LabAnalyteMapOrderByInput {
+  id: OrderDirection
+  externalCode: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LabAnalyteMapUpdateInput {
+  lab: LaboratoryRelateToOneForUpdateInput
+  externalCode: String
+  analyte: AnalyteRelateToOneForUpdateInput
+  unitConversion: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AnalyteRelateToOneForUpdateInput {
+  create: AnalyteCreateInput
+  connect: AnalyteWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LabAnalyteMapUpdateArgs {
+  where: LabAnalyteMapWhereUniqueInput!
+  data: LabAnalyteMapUpdateInput!
+}
+
+input LabAnalyteMapCreateInput {
+  lab: LaboratoryRelateToOneForCreateInput
+  externalCode: String
+  analyte: AnalyteRelateToOneForCreateInput
+  unitConversion: JSON
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input AnalyteRelateToOneForCreateInput {
+  create: AnalyteCreateInput
+  connect: AnalyteWhereUniqueInput
+}
+
+type ReferenceRange {
+  id: ID!
+  analyte: Analyte
+  species: Species
+  ageClass: String
+  lab: Laboratory
+  low: Decimal
+  high: Decimal
+  criticalLow: Decimal
+  criticalHigh: Decimal
+  unit: String
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ReferenceRangeWhereUniqueInput {
+  id: ID
+}
+
+input ReferenceRangeWhereInput {
+  AND: [ReferenceRangeWhereInput!]
+  OR: [ReferenceRangeWhereInput!]
+  NOT: [ReferenceRangeWhereInput!]
+  id: IDFilter
+  analyte: AnalyteWhereInput
+  species: SpeciesWhereInput
+  ageClass: StringFilter
+  lab: LaboratoryWhereInput
+  low: DecimalNullableFilter
+  high: DecimalNullableFilter
+  criticalLow: DecimalNullableFilter
+  criticalHigh: DecimalNullableFilter
+  unit: StringFilter
+  source: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ReferenceRangeOrderByInput {
+  id: OrderDirection
+  ageClass: OrderDirection
+  low: OrderDirection
+  high: OrderDirection
+  criticalLow: OrderDirection
+  criticalHigh: OrderDirection
+  unit: OrderDirection
+  source: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ReferenceRangeUpdateInput {
+  analyte: AnalyteRelateToOneForUpdateInput
+  species: SpeciesRelateToOneForUpdateInput
+  ageClass: String
+  lab: LaboratoryRelateToOneForUpdateInput
+  low: Decimal
+  high: Decimal
+  criticalLow: Decimal
+  criticalHigh: Decimal
+  unit: String
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ReferenceRangeUpdateArgs {
+  where: ReferenceRangeWhereUniqueInput!
+  data: ReferenceRangeUpdateInput!
+}
+
+input ReferenceRangeCreateInput {
+  analyte: AnalyteRelateToOneForCreateInput
+  species: SpeciesRelateToOneForCreateInput
+  ageClass: String
+  lab: LaboratoryRelateToOneForCreateInput
+  low: Decimal
+  high: Decimal
+  criticalLow: Decimal
+  criticalHigh: Decimal
+  unit: String
+  source: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type LabOrder {
+  id: ID!
+  ref: String
+  order: ClinicalOrder
+  patient: Patient
+  encounter: Encounter
+  location: Location
+  lab: Laboratory
+  tests(where: LabTestWhereInput! = {}, orderBy: [LabTestOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LabTestWhereUniqueInput): [LabTest!]
+  testsCount(where: LabTestWhereInput! = {}): Int
+  orderedBy: StaffMember
+  accessionId: String
+  status: String
+  chargeLine: ChargeLine
+  cancelReason: String
+  sentAt: DateTime
+  specimens(where: SpecimenWhereInput! = {}, orderBy: [SpecimenOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: SpecimenWhereUniqueInput): [Specimen!]
+  specimensCount(where: SpecimenWhereInput! = {}): Int
+  results(where: LabResultWhereInput! = {}, orderBy: [LabResultOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LabResultWhereUniqueInput): [LabResult!]
+  resultsCount(where: LabResultWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LabOrderWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input LabOrderWhereInput {
+  AND: [LabOrderWhereInput!]
+  OR: [LabOrderWhereInput!]
+  NOT: [LabOrderWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  order: ClinicalOrderWhereInput
+  patient: PatientWhereInput
+  encounter: EncounterWhereInput
+  location: LocationWhereInput
+  lab: LaboratoryWhereInput
+  tests: LabTestManyRelationFilter
+  orderedBy: StaffMemberWhereInput
+  accessionId: StringNullableFilter
+  status: StringFilter
+  chargeLine: ChargeLineWhereInput
+  cancelReason: StringFilter
+  sentAt: DateTimeNullableFilter
+  specimens: SpecimenManyRelationFilter
+  results: LabResultManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input SpecimenManyRelationFilter {
+  every: SpecimenWhereInput
+  some: SpecimenWhereInput
+  none: SpecimenWhereInput
+}
+
+input LabResultManyRelationFilter {
+  every: LabResultWhereInput
+  some: LabResultWhereInput
+  none: LabResultWhereInput
+}
+
+input LabOrderOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  accessionId: OrderDirection
+  status: OrderDirection
+  cancelReason: OrderDirection
+  sentAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input LabOrderUpdateInput {
+  ref: String
+  order: ClinicalOrderRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  encounter: EncounterRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  lab: LaboratoryRelateToOneForUpdateInput
+  tests: LabTestRelateToManyForUpdateInput
+  orderedBy: StaffMemberRelateToOneForUpdateInput
+  accessionId: String
+  status: String
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  cancelReason: String
+  sentAt: DateTime
+  specimens: SpecimenRelateToManyForUpdateInput
+  results: LabResultRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SpecimenRelateToManyForUpdateInput {
+  disconnect: [SpecimenWhereUniqueInput!]
+  set: [SpecimenWhereUniqueInput!]
+  create: [SpecimenCreateInput!]
+  connect: [SpecimenWhereUniqueInput!]
+}
+
+input LabResultRelateToManyForUpdateInput {
+  disconnect: [LabResultWhereUniqueInput!]
+  set: [LabResultWhereUniqueInput!]
+  create: [LabResultCreateInput!]
+  connect: [LabResultWhereUniqueInput!]
+}
+
+input LabOrderUpdateArgs {
+  where: LabOrderWhereUniqueInput!
+  data: LabOrderUpdateInput!
+}
+
+input LabOrderCreateInput {
+  ref: String
+  order: ClinicalOrderRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  encounter: EncounterRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  lab: LaboratoryRelateToOneForCreateInput
+  tests: LabTestRelateToManyForCreateInput
+  orderedBy: StaffMemberRelateToOneForCreateInput
+  accessionId: String
+  status: String
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  cancelReason: String
+  sentAt: DateTime
+  specimens: SpecimenRelateToManyForCreateInput
+  results: LabResultRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SpecimenRelateToManyForCreateInput {
+  create: [SpecimenCreateInput!]
+  connect: [SpecimenWhereUniqueInput!]
+}
+
+input LabResultRelateToManyForCreateInput {
+  create: [LabResultCreateInput!]
+  connect: [LabResultWhereUniqueInput!]
+}
+
+type Specimen {
+  id: ID!
+  labOrder: LabOrder
+  kind: String
+  collectedAt: DateTime
+  collectedBy: StaffMember
+  containerId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input SpecimenWhereUniqueInput {
+  id: ID
+}
+
+input SpecimenWhereInput {
+  AND: [SpecimenWhereInput!]
+  OR: [SpecimenWhereInput!]
+  NOT: [SpecimenWhereInput!]
+  id: IDFilter
+  labOrder: LabOrderWhereInput
+  kind: StringFilter
+  collectedAt: DateTimeFilter
+  collectedBy: StaffMemberWhereInput
+  containerId: StringFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input SpecimenOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  collectedAt: OrderDirection
+  containerId: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input SpecimenUpdateInput {
+  labOrder: LabOrderRelateToOneForUpdateInput
+  kind: String
+  collectedAt: DateTime
+  collectedBy: StaffMemberRelateToOneForUpdateInput
+  containerId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LabOrderRelateToOneForUpdateInput {
+  create: LabOrderCreateInput
+  connect: LabOrderWhereUniqueInput
+  disconnect: Boolean
+}
+
+input SpecimenUpdateArgs {
+  where: SpecimenWhereUniqueInput!
+  data: SpecimenUpdateInput!
+}
+
+input SpecimenCreateInput {
+  labOrder: LabOrderRelateToOneForCreateInput
+  kind: String
+  collectedAt: DateTime
+  collectedBy: StaffMemberRelateToOneForCreateInput
+  containerId: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input LabOrderRelateToOneForCreateInput {
+  create: LabOrderCreateInput
+  connect: LabOrderWhereUniqueInput
+}
+
+type LabResult {
+  id: ID!
+  labOrder: LabOrder
+  observation: ProviderObservation
+  status: String
+  supersedes: LabResult
+  supersededBy(where: LabResultWhereInput! = {}, orderBy: [LabResultOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LabResultWhereUniqueInput): [LabResult!]
+  supersededByCount(where: LabResultWhereInput! = {}): Int
+  reportDocument: Document
+  worstFlag: String
+  source: String
+  receivedAt: DateTime
+  values(where: LabResultValueWhereInput! = {}, orderBy: [LabResultValueOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: LabResultValueWhereUniqueInput): [LabResultValue!]
+  valuesCount(where: LabResultValueWhereInput! = {}): Int
+  reviews(where: ResultReviewWhereInput! = {}, orderBy: [ResultReviewOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ResultReviewWhereUniqueInput): [ResultReview!]
+  reviewsCount(where: ResultReviewWhereInput! = {}): Int
+  createdAt: DateTime
+}
+
+input LabResultWhereUniqueInput {
+  id: ID
+}
+
+input LabResultWhereInput {
+  AND: [LabResultWhereInput!]
+  OR: [LabResultWhereInput!]
+  NOT: [LabResultWhereInput!]
+  id: IDFilter
+  labOrder: LabOrderWhereInput
+  observation: ProviderObservationWhereInput
+  status: StringFilter
+  supersedes: LabResultWhereInput
+  supersededBy: LabResultManyRelationFilter
+  reportDocument: DocumentWhereInput
+  worstFlag: StringFilter
+  source: StringFilter
+  receivedAt: DateTimeFilter
+  values: LabResultValueManyRelationFilter
+  reviews: ResultReviewManyRelationFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input LabResultValueManyRelationFilter {
+  every: LabResultValueWhereInput
+  some: LabResultValueWhereInput
+  none: LabResultValueWhereInput
+}
+
+input ResultReviewManyRelationFilter {
+  every: ResultReviewWhereInput
+  some: ResultReviewWhereInput
+  none: ResultReviewWhereInput
+}
+
+input LabResultOrderByInput {
+  id: OrderDirection
+  status: OrderDirection
+  worstFlag: OrderDirection
+  source: OrderDirection
+  receivedAt: OrderDirection
+  createdAt: OrderDirection
+}
+
+input LabResultUpdateInput {
+  labOrder: LabOrderRelateToOneForUpdateInput
+  observation: ProviderObservationRelateToOneForUpdateInput
+  status: String
+  supersedes: LabResultRelateToOneForUpdateInput
+  supersededBy: LabResultRelateToManyForUpdateInput
+  reportDocument: DocumentRelateToOneForUpdateInput
+  worstFlag: String
+  source: String
+  receivedAt: DateTime
+  values: LabResultValueRelateToManyForUpdateInput
+  reviews: ResultReviewRelateToManyForUpdateInput
+  createdAt: DateTime
+}
+
+input ProviderObservationRelateToOneForUpdateInput {
+  create: ProviderObservationCreateInput
+  connect: ProviderObservationWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LabResultRelateToOneForUpdateInput {
+  create: LabResultCreateInput
+  connect: LabResultWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LabResultValueRelateToManyForUpdateInput {
+  disconnect: [LabResultValueWhereUniqueInput!]
+  set: [LabResultValueWhereUniqueInput!]
+  create: [LabResultValueCreateInput!]
+  connect: [LabResultValueWhereUniqueInput!]
+}
+
+input ResultReviewRelateToManyForUpdateInput {
+  disconnect: [ResultReviewWhereUniqueInput!]
+  set: [ResultReviewWhereUniqueInput!]
+  create: [ResultReviewCreateInput!]
+  connect: [ResultReviewWhereUniqueInput!]
+}
+
+input LabResultUpdateArgs {
+  where: LabResultWhereUniqueInput!
+  data: LabResultUpdateInput!
+}
+
+input LabResultCreateInput {
+  labOrder: LabOrderRelateToOneForCreateInput
+  observation: ProviderObservationRelateToOneForCreateInput
+  status: String
+  supersedes: LabResultRelateToOneForCreateInput
+  supersededBy: LabResultRelateToManyForCreateInput
+  reportDocument: DocumentRelateToOneForCreateInput
+  worstFlag: String
+  source: String
+  receivedAt: DateTime
+  values: LabResultValueRelateToManyForCreateInput
+  reviews: ResultReviewRelateToManyForCreateInput
+  createdAt: DateTime
+}
+
+input ProviderObservationRelateToOneForCreateInput {
+  create: ProviderObservationCreateInput
+  connect: ProviderObservationWhereUniqueInput
+}
+
+input LabResultRelateToOneForCreateInput {
+  create: LabResultCreateInput
+  connect: LabResultWhereUniqueInput
+}
+
+input LabResultValueRelateToManyForCreateInput {
+  create: [LabResultValueCreateInput!]
+  connect: [LabResultValueWhereUniqueInput!]
+}
+
+input ResultReviewRelateToManyForCreateInput {
+  create: [ResultReviewCreateInput!]
+  connect: [ResultReviewWhereUniqueInput!]
+}
+
+type LabResultValue {
+  id: ID!
+  result: LabResult
+  analyte: Analyte
+  externalCode: String
+  valueNumeric: Decimal
+  valueText: String
+  unit: String
+  refLow: Decimal
+  refHigh: Decimal
+  flag: String
+  createdAt: DateTime
+}
+
+input LabResultValueWhereUniqueInput {
+  id: ID
+}
+
+input LabResultValueWhereInput {
+  AND: [LabResultValueWhereInput!]
+  OR: [LabResultValueWhereInput!]
+  NOT: [LabResultValueWhereInput!]
+  id: IDFilter
+  result: LabResultWhereInput
+  analyte: AnalyteWhereInput
+  externalCode: StringFilter
+  valueNumeric: DecimalNullableFilter
+  valueText: StringFilter
+  unit: StringFilter
+  refLow: DecimalNullableFilter
+  refHigh: DecimalNullableFilter
+  flag: StringFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input LabResultValueOrderByInput {
+  id: OrderDirection
+  externalCode: OrderDirection
+  valueNumeric: OrderDirection
+  valueText: OrderDirection
+  unit: OrderDirection
+  refLow: OrderDirection
+  refHigh: OrderDirection
+  flag: OrderDirection
+  createdAt: OrderDirection
+}
+
+input LabResultValueUpdateInput {
+  result: LabResultRelateToOneForUpdateInput
+  analyte: AnalyteRelateToOneForUpdateInput
+  externalCode: String
+  valueNumeric: Decimal
+  valueText: String
+  unit: String
+  refLow: Decimal
+  refHigh: Decimal
+  flag: String
+  createdAt: DateTime
+}
+
+input LabResultValueUpdateArgs {
+  where: LabResultValueWhereUniqueInput!
+  data: LabResultValueUpdateInput!
+}
+
+input LabResultValueCreateInput {
+  result: LabResultRelateToOneForCreateInput
+  analyte: AnalyteRelateToOneForCreateInput
+  externalCode: String
+  valueNumeric: Decimal
+  valueText: String
+  unit: String
+  refLow: Decimal
+  refHigh: Decimal
+  flag: String
+  createdAt: DateTime
+}
+
+type ResultReview {
+  id: ID!
+  result: LabResult
+  dvm: StaffMember
+  kind: String
+  interpretation: String
+  communicatedVia: String
+  at: DateTime
+  createdAt: DateTime
+}
+
+input ResultReviewWhereUniqueInput {
+  id: ID
+}
+
+input ResultReviewWhereInput {
+  AND: [ResultReviewWhereInput!]
+  OR: [ResultReviewWhereInput!]
+  NOT: [ResultReviewWhereInput!]
+  id: IDFilter
+  result: LabResultWhereInput
+  dvm: StaffMemberWhereInput
+  kind: StringFilter
+  interpretation: StringFilter
+  communicatedVia: StringFilter
+  at: DateTimeFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input ResultReviewOrderByInput {
+  id: OrderDirection
+  kind: OrderDirection
+  interpretation: OrderDirection
+  communicatedVia: OrderDirection
+  at: OrderDirection
+  createdAt: OrderDirection
+}
+
+input ResultReviewUpdateInput {
+  result: LabResultRelateToOneForUpdateInput
+  dvm: StaffMemberRelateToOneForUpdateInput
+  kind: String
+  interpretation: String
+  communicatedVia: String
+  at: DateTime
+  createdAt: DateTime
+}
+
+input ResultReviewUpdateArgs {
+  where: ResultReviewWhereUniqueInput!
+  data: ResultReviewUpdateInput!
+}
+
+input ResultReviewCreateInput {
+  result: LabResultRelateToOneForCreateInput
+  dvm: StaffMemberRelateToOneForCreateInput
+  kind: String
+  interpretation: String
+  communicatedVia: String
+  at: DateTime
+  createdAt: DateTime
+}
+
+type ImagingOrder {
+  id: ID!
+  ref: String
+  order: ClinicalOrder
+  patient: Patient
+  encounter: Encounter
+  location: Location
+  orderedBy: StaffMember
+  modality: String
+  region: String
+  reason: String
+  status: String
+  studies(where: ImagingStudyWhereInput! = {}, orderBy: [ImagingStudyOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ImagingStudyWhereUniqueInput): [ImagingStudy!]
+  studiesCount(where: ImagingStudyWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingOrderWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input ImagingOrderWhereInput {
+  AND: [ImagingOrderWhereInput!]
+  OR: [ImagingOrderWhereInput!]
+  NOT: [ImagingOrderWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  order: ClinicalOrderWhereInput
+  patient: PatientWhereInput
+  encounter: EncounterWhereInput
+  location: LocationWhereInput
+  orderedBy: StaffMemberWhereInput
+  modality: StringFilter
+  region: StringFilter
+  reason: StringFilter
+  status: StringFilter
+  studies: ImagingStudyManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ImagingStudyManyRelationFilter {
+  every: ImagingStudyWhereInput
+  some: ImagingStudyWhereInput
+  none: ImagingStudyWhereInput
+}
+
+input ImagingOrderOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  modality: OrderDirection
+  region: OrderDirection
+  reason: OrderDirection
+  status: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ImagingOrderUpdateInput {
+  ref: String
+  order: ClinicalOrderRelateToOneForUpdateInput
+  patient: PatientRelateToOneForUpdateInput
+  encounter: EncounterRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  orderedBy: StaffMemberRelateToOneForUpdateInput
+  modality: String
+  region: String
+  reason: String
+  status: String
+  studies: ImagingStudyRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingStudyRelateToManyForUpdateInput {
+  disconnect: [ImagingStudyWhereUniqueInput!]
+  set: [ImagingStudyWhereUniqueInput!]
+  create: [ImagingStudyCreateInput!]
+  connect: [ImagingStudyWhereUniqueInput!]
+}
+
+input ImagingOrderUpdateArgs {
+  where: ImagingOrderWhereUniqueInput!
+  data: ImagingOrderUpdateInput!
+}
+
+input ImagingOrderCreateInput {
+  ref: String
+  order: ClinicalOrderRelateToOneForCreateInput
+  patient: PatientRelateToOneForCreateInput
+  encounter: EncounterRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  orderedBy: StaffMemberRelateToOneForCreateInput
+  modality: String
+  region: String
+  reason: String
+  status: String
+  studies: ImagingStudyRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingStudyRelateToManyForCreateInput {
+  create: [ImagingStudyCreateInput!]
+  connect: [ImagingStudyWhereUniqueInput!]
+}
+
+type ImagingStudy {
+  id: ID!
+  order: ImagingOrder
+  studyInstanceUid: String
+  modality: String
+  pacs: IntegrationConnection
+  acquiredAt: DateTime
+  images: Int
+  reports(where: ImagingReportWhereInput! = {}, orderBy: [ImagingReportOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ImagingReportWhereUniqueInput): [ImagingReport!]
+  reportsCount(where: ImagingReportWhereInput! = {}): Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingStudyWhereUniqueInput {
+  id: ID
+  studyInstanceUid: String
+}
+
+input ImagingStudyWhereInput {
+  AND: [ImagingStudyWhereInput!]
+  OR: [ImagingStudyWhereInput!]
+  NOT: [ImagingStudyWhereInput!]
+  id: IDFilter
+  order: ImagingOrderWhereInput
+  studyInstanceUid: StringFilter
+  modality: StringFilter
+  pacs: IntegrationConnectionWhereInput
+  acquiredAt: DateTimeNullableFilter
+  images: IntFilter
+  reports: ImagingReportManyRelationFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ImagingReportManyRelationFilter {
+  every: ImagingReportWhereInput
+  some: ImagingReportWhereInput
+  none: ImagingReportWhereInput
+}
+
+input ImagingStudyOrderByInput {
+  id: OrderDirection
+  studyInstanceUid: OrderDirection
+  modality: OrderDirection
+  acquiredAt: OrderDirection
+  images: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ImagingStudyUpdateInput {
+  order: ImagingOrderRelateToOneForUpdateInput
+  studyInstanceUid: String
+  modality: String
+  pacs: IntegrationConnectionRelateToOneForUpdateInput
+  acquiredAt: DateTime
+  images: Int
+  reports: ImagingReportRelateToManyForUpdateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingOrderRelateToOneForUpdateInput {
+  create: ImagingOrderCreateInput
+  connect: ImagingOrderWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ImagingReportRelateToManyForUpdateInput {
+  disconnect: [ImagingReportWhereUniqueInput!]
+  set: [ImagingReportWhereUniqueInput!]
+  create: [ImagingReportCreateInput!]
+  connect: [ImagingReportWhereUniqueInput!]
+}
+
+input ImagingStudyUpdateArgs {
+  where: ImagingStudyWhereUniqueInput!
+  data: ImagingStudyUpdateInput!
+}
+
+input ImagingStudyCreateInput {
+  order: ImagingOrderRelateToOneForCreateInput
+  studyInstanceUid: String
+  modality: String
+  pacs: IntegrationConnectionRelateToOneForCreateInput
+  acquiredAt: DateTime
+  images: Int
+  reports: ImagingReportRelateToManyForCreateInput
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ImagingOrderRelateToOneForCreateInput {
+  create: ImagingOrderCreateInput
+  connect: ImagingOrderWhereUniqueInput
+}
+
+input ImagingReportRelateToManyForCreateInput {
+  create: [ImagingReportCreateInput!]
+  connect: [ImagingReportWhereUniqueInput!]
+}
+
+type ImagingReport {
+  id: ID!
+  study: ImagingStudy
+  author: String
+  authorStaff: StaffMember
+  authorName: String
+  text: String
+  reportedAt: DateTime
+  createdAt: DateTime
+}
+
+input ImagingReportWhereUniqueInput {
+  id: ID
+}
+
+input ImagingReportWhereInput {
+  AND: [ImagingReportWhereInput!]
+  OR: [ImagingReportWhereInput!]
+  NOT: [ImagingReportWhereInput!]
+  id: IDFilter
+  study: ImagingStudyWhereInput
+  author: StringFilter
+  authorStaff: StaffMemberWhereInput
+  authorName: StringFilter
+  text: StringFilter
+  reportedAt: DateTimeFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input ImagingReportOrderByInput {
+  id: OrderDirection
+  author: OrderDirection
+  authorName: OrderDirection
+  text: OrderDirection
+  reportedAt: OrderDirection
+  createdAt: OrderDirection
+}
+
+input ImagingReportUpdateInput {
+  study: ImagingStudyRelateToOneForUpdateInput
+  author: String
+  authorStaff: StaffMemberRelateToOneForUpdateInput
+  authorName: String
+  text: String
+  reportedAt: DateTime
+  createdAt: DateTime
+}
+
+input ImagingStudyRelateToOneForUpdateInput {
+  create: ImagingStudyCreateInput
+  connect: ImagingStudyWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ImagingReportUpdateArgs {
+  where: ImagingReportWhereUniqueInput!
+  data: ImagingReportUpdateInput!
+}
+
+input ImagingReportCreateInput {
+  study: ImagingStudyRelateToOneForCreateInput
+  author: String
+  authorStaff: StaffMemberRelateToOneForCreateInput
+  authorName: String
+  text: String
+  reportedAt: DateTime
+  createdAt: DateTime
+}
+
+input ImagingStudyRelateToOneForCreateInput {
+  create: ImagingStudyCreateInput
+  connect: ImagingStudyWhereUniqueInput
+}
+
+type ProductionRuleVersion {
+  id: ID!
+  versionNo: Int
+  label: String
+  rules: JSON
+  commissionRules: JSON
+  effectiveFrom: CalendarDay
+  status: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProductionRuleVersionWhereUniqueInput {
+  id: ID
+}
+
+input ProductionRuleVersionWhereInput {
+  AND: [ProductionRuleVersionWhereInput!]
+  OR: [ProductionRuleVersionWhereInput!]
+  NOT: [ProductionRuleVersionWhereInput!]
+  id: IDFilter
+  versionNo: IntFilter
+  label: StringFilter
+  effectiveFrom: CalendarDayFilter
+  status: StringFilter
+  publishedAt: DateTimeNullableFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProductionRuleVersionOrderByInput {
+  id: OrderDirection
+  versionNo: OrderDirection
+  label: OrderDirection
+  effectiveFrom: OrderDirection
+  status: OrderDirection
+  publishedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ProductionRuleVersionUpdateInput {
+  versionNo: Int
+  label: String
+  rules: JSON
+  commissionRules: JSON
+  effectiveFrom: CalendarDay
+  status: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProductionRuleVersionUpdateArgs {
+  where: ProductionRuleVersionWhereUniqueInput!
+  data: ProductionRuleVersionUpdateInput!
+}
+
+input ProductionRuleVersionCreateInput {
+  versionNo: Int
+  label: String
+  rules: JSON
+  commissionRules: JSON
+  effectiveFrom: CalendarDay
+  status: String
+  publishedAt: DateTime
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ProductionCredit {
+  id: ID!
+  staff: StaffMember
+  chargeLine: ChargeLine
+  invoice: Invoice
+  ruleVersion: ProductionRuleVersion
+  location: Location
+  category: String
+  basis: String
+  kind: String
+  adjusts: ProductionCredit
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  reason: String
+  requestedBy: User
+  approvedBy: User
+  creditedOn: CalendarDay
+  period: PayPeriod
+  createdAt: DateTime
+}
+
+input ProductionCreditWhereUniqueInput {
+  id: ID
+}
+
+input ProductionCreditWhereInput {
+  AND: [ProductionCreditWhereInput!]
+  OR: [ProductionCreditWhereInput!]
+  NOT: [ProductionCreditWhereInput!]
+  id: IDFilter
+  staff: StaffMemberWhereInput
+  chargeLine: ChargeLineWhereInput
+  invoice: InvoiceWhereInput
+  ruleVersion: ProductionRuleVersionWhereInput
+  location: LocationWhereInput
+  category: StringFilter
+  basis: StringFilter
+  kind: StringFilter
+  adjusts: ProductionCreditWhereInput
+  baseMinor: BigIntFilter
+  bps: IntFilter
+  amountMinor: BigIntFilter
+  reason: StringFilter
+  requestedBy: UserWhereInput
+  approvedBy: UserWhereInput
+  creditedOn: CalendarDayFilter
+  period: PayPeriodWhereInput
+  createdAt: DateTimeNullableFilter
+}
+
+input ProductionCreditOrderByInput {
+  id: OrderDirection
+  category: OrderDirection
+  basis: OrderDirection
+  kind: OrderDirection
+  baseMinor: OrderDirection
+  bps: OrderDirection
+  amountMinor: OrderDirection
+  reason: OrderDirection
+  creditedOn: OrderDirection
+  createdAt: OrderDirection
+}
+
+input ProductionCreditUpdateInput {
+  staff: StaffMemberRelateToOneForUpdateInput
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  invoice: InvoiceRelateToOneForUpdateInput
+  ruleVersion: ProductionRuleVersionRelateToOneForUpdateInput
+  location: LocationRelateToOneForUpdateInput
+  category: String
+  basis: String
+  kind: String
+  adjusts: ProductionCreditRelateToOneForUpdateInput
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  reason: String
+  requestedBy: UserRelateToOneForUpdateInput
+  approvedBy: UserRelateToOneForUpdateInput
+  creditedOn: CalendarDay
+  period: PayPeriodRelateToOneForUpdateInput
+  createdAt: DateTime
+}
+
+input ProductionRuleVersionRelateToOneForUpdateInput {
+  create: ProductionRuleVersionCreateInput
+  connect: ProductionRuleVersionWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ProductionCreditRelateToOneForUpdateInput {
+  create: ProductionCreditCreateInput
+  connect: ProductionCreditWhereUniqueInput
+  disconnect: Boolean
+}
+
+input PayPeriodRelateToOneForUpdateInput {
+  create: PayPeriodCreateInput
+  connect: PayPeriodWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ProductionCreditUpdateArgs {
+  where: ProductionCreditWhereUniqueInput!
+  data: ProductionCreditUpdateInput!
+}
+
+input ProductionCreditCreateInput {
+  staff: StaffMemberRelateToOneForCreateInput
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  invoice: InvoiceRelateToOneForCreateInput
+  ruleVersion: ProductionRuleVersionRelateToOneForCreateInput
+  location: LocationRelateToOneForCreateInput
+  category: String
+  basis: String
+  kind: String
+  adjusts: ProductionCreditRelateToOneForCreateInput
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  reason: String
+  requestedBy: UserRelateToOneForCreateInput
+  approvedBy: UserRelateToOneForCreateInput
+  creditedOn: CalendarDay
+  period: PayPeriodRelateToOneForCreateInput
+  createdAt: DateTime
+}
+
+input ProductionRuleVersionRelateToOneForCreateInput {
+  create: ProductionRuleVersionCreateInput
+  connect: ProductionRuleVersionWhereUniqueInput
+}
+
+input ProductionCreditRelateToOneForCreateInput {
+  create: ProductionCreditCreateInput
+  connect: ProductionCreditWhereUniqueInput
+}
+
+input PayPeriodRelateToOneForCreateInput {
+  create: PayPeriodCreateInput
+  connect: PayPeriodWhereUniqueInput
+}
+
+type Commission {
+  id: ID!
+  staff: StaffMember
+  chargeLine: ChargeLine
+  ruleVersion: ProductionRuleVersion
+  sourceType: String
+  sourceId: String
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  earnedOn: CalendarDay
+  period: PayPeriod
+  createdAt: DateTime
+}
+
+input CommissionWhereUniqueInput {
+  id: ID
+}
+
+input CommissionWhereInput {
+  AND: [CommissionWhereInput!]
+  OR: [CommissionWhereInput!]
+  NOT: [CommissionWhereInput!]
+  id: IDFilter
+  staff: StaffMemberWhereInput
+  chargeLine: ChargeLineWhereInput
+  ruleVersion: ProductionRuleVersionWhereInput
+  sourceType: StringFilter
+  sourceId: StringFilter
+  baseMinor: BigIntFilter
+  bps: IntFilter
+  amountMinor: BigIntFilter
+  earnedOn: CalendarDayFilter
+  period: PayPeriodWhereInput
+  createdAt: DateTimeNullableFilter
+}
+
+input CommissionOrderByInput {
+  id: OrderDirection
+  sourceType: OrderDirection
+  sourceId: OrderDirection
+  baseMinor: OrderDirection
+  bps: OrderDirection
+  amountMinor: OrderDirection
+  earnedOn: OrderDirection
+  createdAt: OrderDirection
+}
+
+input CommissionUpdateInput {
+  staff: StaffMemberRelateToOneForUpdateInput
+  chargeLine: ChargeLineRelateToOneForUpdateInput
+  ruleVersion: ProductionRuleVersionRelateToOneForUpdateInput
+  sourceType: String
+  sourceId: String
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  earnedOn: CalendarDay
+  period: PayPeriodRelateToOneForUpdateInput
+  createdAt: DateTime
+}
+
+input CommissionUpdateArgs {
+  where: CommissionWhereUniqueInput!
+  data: CommissionUpdateInput!
+}
+
+input CommissionCreateInput {
+  staff: StaffMemberRelateToOneForCreateInput
+  chargeLine: ChargeLineRelateToOneForCreateInput
+  ruleVersion: ProductionRuleVersionRelateToOneForCreateInput
+  sourceType: String
+  sourceId: String
+  baseMinor: BigInt
+  bps: Int
+  amountMinor: BigInt
+  earnedOn: CalendarDay
+  period: PayPeriodRelateToOneForCreateInput
+  createdAt: DateTime
+}
+
+type PayPeriod {
+  id: ID!
+  ref: String
+  startsOn: CalendarDay
+  endsOn: CalendarDay
+  status: String
+  totals: JSON
+  calculatedAt: DateTime
+  approvedBy: User
+  approvedAt: DateTime
+  lockedAt: DateTime
+  credits(where: ProductionCreditWhereInput! = {}, orderBy: [ProductionCreditOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: ProductionCreditWhereUniqueInput): [ProductionCredit!]
+  creditsCount(where: ProductionCreditWhereInput! = {}): Int
+  commissions(where: CommissionWhereInput! = {}, orderBy: [CommissionOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: CommissionWhereUniqueInput): [Commission!]
+  commissionsCount(where: CommissionWhereInput! = {}): Int
+  exports(where: PayrollExportBatchWhereInput! = {}, orderBy: [PayrollExportBatchOrderByInput!]! = [], take: Int! = 50, skip: Int! = 0, cursor: PayrollExportBatchWhereUniqueInput): [PayrollExportBatch!]
+  exportsCount(where: PayrollExportBatchWhereInput! = {}): Int
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input PayPeriodWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input PayPeriodWhereInput {
+  AND: [PayPeriodWhereInput!]
+  OR: [PayPeriodWhereInput!]
+  NOT: [PayPeriodWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  startsOn: CalendarDayFilter
+  endsOn: CalendarDayFilter
+  status: StringFilter
+  calculatedAt: DateTimeNullableFilter
+  approvedBy: UserWhereInput
+  approvedAt: DateTimeNullableFilter
+  lockedAt: DateTimeNullableFilter
+  credits: ProductionCreditManyRelationFilter
+  commissions: CommissionManyRelationFilter
+  exports: PayrollExportBatchManyRelationFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ProductionCreditManyRelationFilter {
+  every: ProductionCreditWhereInput
+  some: ProductionCreditWhereInput
+  none: ProductionCreditWhereInput
+}
+
+input CommissionManyRelationFilter {
+  every: CommissionWhereInput
+  some: CommissionWhereInput
+  none: CommissionWhereInput
+}
+
+input PayrollExportBatchManyRelationFilter {
+  every: PayrollExportBatchWhereInput
+  some: PayrollExportBatchWhereInput
+  none: PayrollExportBatchWhereInput
+}
+
+input PayPeriodOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  startsOn: OrderDirection
+  endsOn: OrderDirection
+  status: OrderDirection
+  calculatedAt: OrderDirection
+  approvedAt: OrderDirection
+  lockedAt: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input PayPeriodUpdateInput {
+  ref: String
+  startsOn: CalendarDay
+  endsOn: CalendarDay
+  status: String
+  totals: JSON
+  calculatedAt: DateTime
+  approvedBy: UserRelateToOneForUpdateInput
+  approvedAt: DateTime
+  lockedAt: DateTime
+  credits: ProductionCreditRelateToManyForUpdateInput
+  commissions: CommissionRelateToManyForUpdateInput
+  exports: PayrollExportBatchRelateToManyForUpdateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProductionCreditRelateToManyForUpdateInput {
+  disconnect: [ProductionCreditWhereUniqueInput!]
+  set: [ProductionCreditWhereUniqueInput!]
+  create: [ProductionCreditCreateInput!]
+  connect: [ProductionCreditWhereUniqueInput!]
+}
+
+input CommissionRelateToManyForUpdateInput {
+  disconnect: [CommissionWhereUniqueInput!]
+  set: [CommissionWhereUniqueInput!]
+  create: [CommissionCreateInput!]
+  connect: [CommissionWhereUniqueInput!]
+}
+
+input PayrollExportBatchRelateToManyForUpdateInput {
+  disconnect: [PayrollExportBatchWhereUniqueInput!]
+  set: [PayrollExportBatchWhereUniqueInput!]
+  create: [PayrollExportBatchCreateInput!]
+  connect: [PayrollExportBatchWhereUniqueInput!]
+}
+
+input PayPeriodUpdateArgs {
+  where: PayPeriodWhereUniqueInput!
+  data: PayPeriodUpdateInput!
+}
+
+input PayPeriodCreateInput {
+  ref: String
+  startsOn: CalendarDay
+  endsOn: CalendarDay
+  status: String
+  totals: JSON
+  calculatedAt: DateTime
+  approvedBy: UserRelateToOneForCreateInput
+  approvedAt: DateTime
+  lockedAt: DateTime
+  credits: ProductionCreditRelateToManyForCreateInput
+  commissions: CommissionRelateToManyForCreateInput
+  exports: PayrollExportBatchRelateToManyForCreateInput
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ProductionCreditRelateToManyForCreateInput {
+  create: [ProductionCreditCreateInput!]
+  connect: [ProductionCreditWhereUniqueInput!]
+}
+
+input CommissionRelateToManyForCreateInput {
+  create: [CommissionCreateInput!]
+  connect: [CommissionWhereUniqueInput!]
+}
+
+input PayrollExportBatchRelateToManyForCreateInput {
+  create: [PayrollExportBatchCreateInput!]
+  connect: [PayrollExportBatchWhereUniqueInput!]
+}
+
+type PayrollExportBatch {
+  id: ID!
+  ref: String
+  period: PayPeriod
+  format: String
+  rows: Int
+  csv: String
+  exportedBy: User
+  exportedAt: DateTime
+  createdAt: DateTime
+}
+
+input PayrollExportBatchWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input PayrollExportBatchWhereInput {
+  AND: [PayrollExportBatchWhereInput!]
+  OR: [PayrollExportBatchWhereInput!]
+  NOT: [PayrollExportBatchWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  period: PayPeriodWhereInput
+  format: StringFilter
+  rows: IntFilter
+  csv: StringFilter
+  exportedBy: UserWhereInput
+  exportedAt: DateTimeFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input PayrollExportBatchOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  format: OrderDirection
+  rows: OrderDirection
+  csv: OrderDirection
+  exportedAt: OrderDirection
+  createdAt: OrderDirection
+}
+
+input PayrollExportBatchUpdateInput {
+  ref: String
+  period: PayPeriodRelateToOneForUpdateInput
+  format: String
+  rows: Int
+  csv: String
+  exportedBy: UserRelateToOneForUpdateInput
+  exportedAt: DateTime
+  createdAt: DateTime
+}
+
+input PayrollExportBatchUpdateArgs {
+  where: PayrollExportBatchWhereUniqueInput!
+  data: PayrollExportBatchUpdateInput!
+}
+
+input PayrollExportBatchCreateInput {
+  ref: String
+  period: PayPeriodRelateToOneForCreateInput
+  format: String
+  rows: Int
+  csv: String
+  exportedBy: UserRelateToOneForCreateInput
+  exportedAt: DateTime
+  createdAt: DateTime
+}
+
+type ExportJob {
+  id: ID!
+  ref: String
+  kind: String
+  status: String
+  rows: Int
+  requestedBy: User
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExportJobWhereUniqueInput {
+  id: ID
+  ref: String
+}
+
+input ExportJobWhereInput {
+  AND: [ExportJobWhereInput!]
+  OR: [ExportJobWhereInput!]
+  NOT: [ExportJobWhereInput!]
+  id: IDFilter
+  ref: StringFilter
+  kind: StringFilter
+  status: StringFilter
+  rows: IntFilter
+  requestedBy: UserWhereInput
+  at: DateTimeFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input ExportJobOrderByInput {
+  id: OrderDirection
+  ref: OrderDirection
+  kind: OrderDirection
+  status: OrderDirection
+  rows: OrderDirection
+  at: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input ExportJobUpdateInput {
+  ref: String
+  kind: String
+  status: String
+  rows: Int
+  requestedBy: UserRelateToOneForUpdateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input ExportJobUpdateArgs {
+  where: ExportJobWhereUniqueInput!
+  data: ExportJobUpdateInput!
+}
+
+input ExportJobCreateInput {
+  ref: String
+  kind: String
+  status: String
+  rows: Int
+  requestedBy: UserRelateToOneForCreateInput
+  at: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type Campaign {
+  id: ID!
+  name: String
+  purpose: String
+  template: MessageTemplate
+  audience: JSON
+  status: String
+  outboundVoice: Boolean
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CampaignWhereUniqueInput {
+  id: ID
+}
+
+input CampaignWhereInput {
+  AND: [CampaignWhereInput!]
+  OR: [CampaignWhereInput!]
+  NOT: [CampaignWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  purpose: StringFilter
+  template: MessageTemplateWhereInput
+  status: StringFilter
+  outboundVoice: BooleanFilter
+  version: IntFilter
+  createdAt: DateTimeFilter
+  updatedAt: DateTimeFilter
+}
+
+input CampaignOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  purpose: OrderDirection
+  status: OrderDirection
+  outboundVoice: OrderDirection
+  version: OrderDirection
+  createdAt: OrderDirection
+  updatedAt: OrderDirection
+}
+
+input CampaignUpdateInput {
+  name: String
+  purpose: String
+  template: MessageTemplateRelateToOneForUpdateInput
+  audience: JSON
+  status: String
+  outboundVoice: Boolean
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input MessageTemplateRelateToOneForUpdateInput {
+  create: MessageTemplateCreateInput
+  connect: MessageTemplateWhereUniqueInput
+  disconnect: Boolean
+}
+
+input CampaignUpdateArgs {
+  where: CampaignWhereUniqueInput!
+  data: CampaignUpdateInput!
+}
+
+input CampaignCreateInput {
+  name: String
+  purpose: String
+  template: MessageTemplateRelateToOneForCreateInput
+  audience: JSON
+  status: String
+  outboundVoice: Boolean
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input MessageTemplateRelateToOneForCreateInput {
+  create: MessageTemplateCreateInput
+  connect: MessageTemplateWhereUniqueInput
+}
+
 type ServiceItem {
   id: ID!
   code: String
@@ -22614,6 +24529,126 @@ type Mutation {
   updatePlanBillingAttempts(data: [PlanBillingAttemptUpdateArgs!]!): [PlanBillingAttempt]
   deletePlanBillingAttempt(where: PlanBillingAttemptWhereUniqueInput!): PlanBillingAttempt
   deletePlanBillingAttempts(where: [PlanBillingAttemptWhereUniqueInput!]!): [PlanBillingAttempt]
+  createLaboratory(data: LaboratoryCreateInput!): Laboratory
+  createLaboratories(data: [LaboratoryCreateInput!]!): [Laboratory]
+  updateLaboratory(where: LaboratoryWhereUniqueInput!, data: LaboratoryUpdateInput!): Laboratory
+  updateLaboratories(data: [LaboratoryUpdateArgs!]!): [Laboratory]
+  deleteLaboratory(where: LaboratoryWhereUniqueInput!): Laboratory
+  deleteLaboratories(where: [LaboratoryWhereUniqueInput!]!): [Laboratory]
+  createAnalyte(data: AnalyteCreateInput!): Analyte
+  createAnalytes(data: [AnalyteCreateInput!]!): [Analyte]
+  updateAnalyte(where: AnalyteWhereUniqueInput!, data: AnalyteUpdateInput!): Analyte
+  updateAnalytes(data: [AnalyteUpdateArgs!]!): [Analyte]
+  deleteAnalyte(where: AnalyteWhereUniqueInput!): Analyte
+  deleteAnalytes(where: [AnalyteWhereUniqueInput!]!): [Analyte]
+  createLabTest(data: LabTestCreateInput!): LabTest
+  createLabTests(data: [LabTestCreateInput!]!): [LabTest]
+  updateLabTest(where: LabTestWhereUniqueInput!, data: LabTestUpdateInput!): LabTest
+  updateLabTests(data: [LabTestUpdateArgs!]!): [LabTest]
+  deleteLabTest(where: LabTestWhereUniqueInput!): LabTest
+  deleteLabTests(where: [LabTestWhereUniqueInput!]!): [LabTest]
+  createLabAnalyteMap(data: LabAnalyteMapCreateInput!): LabAnalyteMap
+  createLabAnalyteMaps(data: [LabAnalyteMapCreateInput!]!): [LabAnalyteMap]
+  updateLabAnalyteMap(where: LabAnalyteMapWhereUniqueInput!, data: LabAnalyteMapUpdateInput!): LabAnalyteMap
+  updateLabAnalyteMaps(data: [LabAnalyteMapUpdateArgs!]!): [LabAnalyteMap]
+  deleteLabAnalyteMap(where: LabAnalyteMapWhereUniqueInput!): LabAnalyteMap
+  deleteLabAnalyteMaps(where: [LabAnalyteMapWhereUniqueInput!]!): [LabAnalyteMap]
+  createReferenceRange(data: ReferenceRangeCreateInput!): ReferenceRange
+  createReferenceRanges(data: [ReferenceRangeCreateInput!]!): [ReferenceRange]
+  updateReferenceRange(where: ReferenceRangeWhereUniqueInput!, data: ReferenceRangeUpdateInput!): ReferenceRange
+  updateReferenceRanges(data: [ReferenceRangeUpdateArgs!]!): [ReferenceRange]
+  deleteReferenceRange(where: ReferenceRangeWhereUniqueInput!): ReferenceRange
+  deleteReferenceRanges(where: [ReferenceRangeWhereUniqueInput!]!): [ReferenceRange]
+  createLabOrder(data: LabOrderCreateInput!): LabOrder
+  createLabOrders(data: [LabOrderCreateInput!]!): [LabOrder]
+  updateLabOrder(where: LabOrderWhereUniqueInput!, data: LabOrderUpdateInput!): LabOrder
+  updateLabOrders(data: [LabOrderUpdateArgs!]!): [LabOrder]
+  deleteLabOrder(where: LabOrderWhereUniqueInput!): LabOrder
+  deleteLabOrders(where: [LabOrderWhereUniqueInput!]!): [LabOrder]
+  createSpecimen(data: SpecimenCreateInput!): Specimen
+  createSpecimenList(data: [SpecimenCreateInput!]!): [Specimen]
+  updateSpecimen(where: SpecimenWhereUniqueInput!, data: SpecimenUpdateInput!): Specimen
+  updateSpecimenList(data: [SpecimenUpdateArgs!]!): [Specimen]
+  deleteSpecimen(where: SpecimenWhereUniqueInput!): Specimen
+  deleteSpecimenList(where: [SpecimenWhereUniqueInput!]!): [Specimen]
+  createLabResult(data: LabResultCreateInput!): LabResult
+  createLabResults(data: [LabResultCreateInput!]!): [LabResult]
+  updateLabResult(where: LabResultWhereUniqueInput!, data: LabResultUpdateInput!): LabResult
+  updateLabResults(data: [LabResultUpdateArgs!]!): [LabResult]
+  deleteLabResult(where: LabResultWhereUniqueInput!): LabResult
+  deleteLabResults(where: [LabResultWhereUniqueInput!]!): [LabResult]
+  createLabResultValue(data: LabResultValueCreateInput!): LabResultValue
+  createLabResultValues(data: [LabResultValueCreateInput!]!): [LabResultValue]
+  updateLabResultValue(where: LabResultValueWhereUniqueInput!, data: LabResultValueUpdateInput!): LabResultValue
+  updateLabResultValues(data: [LabResultValueUpdateArgs!]!): [LabResultValue]
+  deleteLabResultValue(where: LabResultValueWhereUniqueInput!): LabResultValue
+  deleteLabResultValues(where: [LabResultValueWhereUniqueInput!]!): [LabResultValue]
+  createResultReview(data: ResultReviewCreateInput!): ResultReview
+  createResultReviews(data: [ResultReviewCreateInput!]!): [ResultReview]
+  updateResultReview(where: ResultReviewWhereUniqueInput!, data: ResultReviewUpdateInput!): ResultReview
+  updateResultReviews(data: [ResultReviewUpdateArgs!]!): [ResultReview]
+  deleteResultReview(where: ResultReviewWhereUniqueInput!): ResultReview
+  deleteResultReviews(where: [ResultReviewWhereUniqueInput!]!): [ResultReview]
+  createImagingOrder(data: ImagingOrderCreateInput!): ImagingOrder
+  createImagingOrders(data: [ImagingOrderCreateInput!]!): [ImagingOrder]
+  updateImagingOrder(where: ImagingOrderWhereUniqueInput!, data: ImagingOrderUpdateInput!): ImagingOrder
+  updateImagingOrders(data: [ImagingOrderUpdateArgs!]!): [ImagingOrder]
+  deleteImagingOrder(where: ImagingOrderWhereUniqueInput!): ImagingOrder
+  deleteImagingOrders(where: [ImagingOrderWhereUniqueInput!]!): [ImagingOrder]
+  createImagingStudy(data: ImagingStudyCreateInput!): ImagingStudy
+  createImagingStudies(data: [ImagingStudyCreateInput!]!): [ImagingStudy]
+  updateImagingStudy(where: ImagingStudyWhereUniqueInput!, data: ImagingStudyUpdateInput!): ImagingStudy
+  updateImagingStudies(data: [ImagingStudyUpdateArgs!]!): [ImagingStudy]
+  deleteImagingStudy(where: ImagingStudyWhereUniqueInput!): ImagingStudy
+  deleteImagingStudies(where: [ImagingStudyWhereUniqueInput!]!): [ImagingStudy]
+  createImagingReport(data: ImagingReportCreateInput!): ImagingReport
+  createImagingReports(data: [ImagingReportCreateInput!]!): [ImagingReport]
+  updateImagingReport(where: ImagingReportWhereUniqueInput!, data: ImagingReportUpdateInput!): ImagingReport
+  updateImagingReports(data: [ImagingReportUpdateArgs!]!): [ImagingReport]
+  deleteImagingReport(where: ImagingReportWhereUniqueInput!): ImagingReport
+  deleteImagingReports(where: [ImagingReportWhereUniqueInput!]!): [ImagingReport]
+  createProductionRuleVersion(data: ProductionRuleVersionCreateInput!): ProductionRuleVersion
+  createProductionRuleVersions(data: [ProductionRuleVersionCreateInput!]!): [ProductionRuleVersion]
+  updateProductionRuleVersion(where: ProductionRuleVersionWhereUniqueInput!, data: ProductionRuleVersionUpdateInput!): ProductionRuleVersion
+  updateProductionRuleVersions(data: [ProductionRuleVersionUpdateArgs!]!): [ProductionRuleVersion]
+  deleteProductionRuleVersion(where: ProductionRuleVersionWhereUniqueInput!): ProductionRuleVersion
+  deleteProductionRuleVersions(where: [ProductionRuleVersionWhereUniqueInput!]!): [ProductionRuleVersion]
+  createProductionCredit(data: ProductionCreditCreateInput!): ProductionCredit
+  createProductionCredits(data: [ProductionCreditCreateInput!]!): [ProductionCredit]
+  updateProductionCredit(where: ProductionCreditWhereUniqueInput!, data: ProductionCreditUpdateInput!): ProductionCredit
+  updateProductionCredits(data: [ProductionCreditUpdateArgs!]!): [ProductionCredit]
+  deleteProductionCredit(where: ProductionCreditWhereUniqueInput!): ProductionCredit
+  deleteProductionCredits(where: [ProductionCreditWhereUniqueInput!]!): [ProductionCredit]
+  createCommission(data: CommissionCreateInput!): Commission
+  createCommissions(data: [CommissionCreateInput!]!): [Commission]
+  updateCommission(where: CommissionWhereUniqueInput!, data: CommissionUpdateInput!): Commission
+  updateCommissions(data: [CommissionUpdateArgs!]!): [Commission]
+  deleteCommission(where: CommissionWhereUniqueInput!): Commission
+  deleteCommissions(where: [CommissionWhereUniqueInput!]!): [Commission]
+  createPayPeriod(data: PayPeriodCreateInput!): PayPeriod
+  createPayPeriods(data: [PayPeriodCreateInput!]!): [PayPeriod]
+  updatePayPeriod(where: PayPeriodWhereUniqueInput!, data: PayPeriodUpdateInput!): PayPeriod
+  updatePayPeriods(data: [PayPeriodUpdateArgs!]!): [PayPeriod]
+  deletePayPeriod(where: PayPeriodWhereUniqueInput!): PayPeriod
+  deletePayPeriods(where: [PayPeriodWhereUniqueInput!]!): [PayPeriod]
+  createPayrollExportBatch(data: PayrollExportBatchCreateInput!): PayrollExportBatch
+  createPayrollExportBatches(data: [PayrollExportBatchCreateInput!]!): [PayrollExportBatch]
+  updatePayrollExportBatch(where: PayrollExportBatchWhereUniqueInput!, data: PayrollExportBatchUpdateInput!): PayrollExportBatch
+  updatePayrollExportBatches(data: [PayrollExportBatchUpdateArgs!]!): [PayrollExportBatch]
+  deletePayrollExportBatch(where: PayrollExportBatchWhereUniqueInput!): PayrollExportBatch
+  deletePayrollExportBatches(where: [PayrollExportBatchWhereUniqueInput!]!): [PayrollExportBatch]
+  createExportJob(data: ExportJobCreateInput!): ExportJob
+  createExportJobs(data: [ExportJobCreateInput!]!): [ExportJob]
+  updateExportJob(where: ExportJobWhereUniqueInput!, data: ExportJobUpdateInput!): ExportJob
+  updateExportJobs(data: [ExportJobUpdateArgs!]!): [ExportJob]
+  deleteExportJob(where: ExportJobWhereUniqueInput!): ExportJob
+  deleteExportJobs(where: [ExportJobWhereUniqueInput!]!): [ExportJob]
+  createCampaign(data: CampaignCreateInput!): Campaign
+  createCampaigns(data: [CampaignCreateInput!]!): [Campaign]
+  updateCampaign(where: CampaignWhereUniqueInput!, data: CampaignUpdateInput!): Campaign
+  updateCampaigns(data: [CampaignUpdateArgs!]!): [Campaign]
+  deleteCampaign(where: CampaignWhereUniqueInput!): Campaign
+  deleteCampaigns(where: [CampaignWhereUniqueInput!]!): [Campaign]
   createServiceItem(data: ServiceItemCreateInput!): ServiceItem
   createServiceItems(data: [ServiceItemCreateInput!]!): [ServiceItem]
   updateServiceItem(where: ServiceItemWhereUniqueInput!, data: ServiceItemUpdateInput!): ServiceItem
@@ -23043,6 +25078,36 @@ type Mutation {
   recordEuthanasia(patientId: ID!, consentId: ID!, diedAt: String, causeNote: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
   advanceAftercare(orderId: ID!, step: String!, place: String, crematory: String, manifestRef: String, crematoryRef: String, receivedBy: String, tagNumber: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
   addMemorialItem(orderId: ID!, kind: String!, description: String, idempotencyKey: String!): JSON
+  orderLab(patientId: ID!, labId: ID!, testIds: [ID!]!, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+  collectSpecimen(labOrderId: ID!, kind: String!, containerId: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  sendLabOrder(labOrderId: ID!, accessionId: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  cancelLabOrder(labOrderId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  enterLabResult(labId: ID!, accessionId: String!, status: String!, lines: JSON!, idempotencyKey: String!): JSON
+  importLabFile(labId: ID!, fileText: String!, idempotencyKey: String!): JSON
+  reviewLabResult(resultId: ID!, interpretation: String!, idempotencyKey: String!): JSON
+  communicateLabResult(resultId: ID!, via: String!, idempotencyKey: String!): JSON
+  notifyResultsReady(labOrderId: ID!, idempotencyKey: String!): JSON
+  orderImaging(patientId: ID!, modality: String!, region: String, reason: String, encounterId: ID, locationId: ID, idempotencyKey: String!): JSON
+  recordImagingStudy(imagingOrderId: ID!, studyInstanceUid: String!, images: Int, expectedVersion: Int!, idempotencyKey: String!): JSON
+  addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+  decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
+  withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  releaseRecords(requestId: ID!, documentIds: [ID!]!, recipient: String!, channel: String!, contactPointId: ID, approvalRequestId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
+  draftRuleVersion(label: String!, effectiveFrom: String!, rules: JSON!, commissionRules: JSON, idempotencyKey: String!): JSON
+  requestRulePublication(ruleVersionId: ID!, idempotencyKey: String!): JSON
+  requestProductionAdjustment(creditId: ID!, amountMinor: String!, reason: String!, idempotencyKey: String!): JSON
+  openPayPeriod(startsOn: String!, endsOn: String!, idempotencyKey: String!): JSON
+  calculatePayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
+  exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+  lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  verifyReleasePacket(releaseId: ID!): JSON
+  suggestCharges(locationId: ID, idempotencyKey: String!): JSON
+  clinicInsights: JSON
   recordPatientDeath(patientId: ID!, diedAt: String, expectedVersion: Int!, idempotencyKey: String!): JSON
   bookAppointment(input: JSON!, idempotencyKey: String!): JSON
   cancelAppointment(appointmentId: ID!, reason: String!, expectedVersion: Int!, callRecordId: ID, idempotencyKey: String!): JSON
@@ -23659,6 +25724,66 @@ type Query {
   planBillingAttempt(where: PlanBillingAttemptWhereUniqueInput!): PlanBillingAttempt
   planBillingAttempts(where: PlanBillingAttemptWhereInput! = {}, orderBy: [PlanBillingAttemptOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PlanBillingAttemptWhereUniqueInput): [PlanBillingAttempt!]
   planBillingAttemptsCount(where: PlanBillingAttemptWhereInput! = {}): Int
+  laboratory(where: LaboratoryWhereUniqueInput!): Laboratory
+  laboratories(where: LaboratoryWhereInput! = {}, orderBy: [LaboratoryOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LaboratoryWhereUniqueInput): [Laboratory!]
+  laboratoriesCount(where: LaboratoryWhereInput! = {}): Int
+  analyte(where: AnalyteWhereUniqueInput!): Analyte
+  analytes(where: AnalyteWhereInput! = {}, orderBy: [AnalyteOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: AnalyteWhereUniqueInput): [Analyte!]
+  analytesCount(where: AnalyteWhereInput! = {}): Int
+  labTest(where: LabTestWhereUniqueInput!): LabTest
+  labTests(where: LabTestWhereInput! = {}, orderBy: [LabTestOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LabTestWhereUniqueInput): [LabTest!]
+  labTestsCount(where: LabTestWhereInput! = {}): Int
+  labAnalyteMap(where: LabAnalyteMapWhereUniqueInput!): LabAnalyteMap
+  labAnalyteMaps(where: LabAnalyteMapWhereInput! = {}, orderBy: [LabAnalyteMapOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LabAnalyteMapWhereUniqueInput): [LabAnalyteMap!]
+  labAnalyteMapsCount(where: LabAnalyteMapWhereInput! = {}): Int
+  referenceRange(where: ReferenceRangeWhereUniqueInput!): ReferenceRange
+  referenceRanges(where: ReferenceRangeWhereInput! = {}, orderBy: [ReferenceRangeOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ReferenceRangeWhereUniqueInput): [ReferenceRange!]
+  referenceRangesCount(where: ReferenceRangeWhereInput! = {}): Int
+  labOrder(where: LabOrderWhereUniqueInput!): LabOrder
+  labOrders(where: LabOrderWhereInput! = {}, orderBy: [LabOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LabOrderWhereUniqueInput): [LabOrder!]
+  labOrdersCount(where: LabOrderWhereInput! = {}): Int
+  specimen(where: SpecimenWhereUniqueInput!): Specimen
+  specimenList(where: SpecimenWhereInput! = {}, orderBy: [SpecimenOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: SpecimenWhereUniqueInput): [Specimen!]
+  specimenListCount(where: SpecimenWhereInput! = {}): Int
+  labResult(where: LabResultWhereUniqueInput!): LabResult
+  labResults(where: LabResultWhereInput! = {}, orderBy: [LabResultOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LabResultWhereUniqueInput): [LabResult!]
+  labResultsCount(where: LabResultWhereInput! = {}): Int
+  labResultValue(where: LabResultValueWhereUniqueInput!): LabResultValue
+  labResultValues(where: LabResultValueWhereInput! = {}, orderBy: [LabResultValueOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: LabResultValueWhereUniqueInput): [LabResultValue!]
+  labResultValuesCount(where: LabResultValueWhereInput! = {}): Int
+  resultReview(where: ResultReviewWhereUniqueInput!): ResultReview
+  resultReviews(where: ResultReviewWhereInput! = {}, orderBy: [ResultReviewOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ResultReviewWhereUniqueInput): [ResultReview!]
+  resultReviewsCount(where: ResultReviewWhereInput! = {}): Int
+  imagingOrder(where: ImagingOrderWhereUniqueInput!): ImagingOrder
+  imagingOrders(where: ImagingOrderWhereInput! = {}, orderBy: [ImagingOrderOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImagingOrderWhereUniqueInput): [ImagingOrder!]
+  imagingOrdersCount(where: ImagingOrderWhereInput! = {}): Int
+  imagingStudy(where: ImagingStudyWhereUniqueInput!): ImagingStudy
+  imagingStudies(where: ImagingStudyWhereInput! = {}, orderBy: [ImagingStudyOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImagingStudyWhereUniqueInput): [ImagingStudy!]
+  imagingStudiesCount(where: ImagingStudyWhereInput! = {}): Int
+  imagingReport(where: ImagingReportWhereUniqueInput!): ImagingReport
+  imagingReports(where: ImagingReportWhereInput! = {}, orderBy: [ImagingReportOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ImagingReportWhereUniqueInput): [ImagingReport!]
+  imagingReportsCount(where: ImagingReportWhereInput! = {}): Int
+  productionRuleVersion(where: ProductionRuleVersionWhereUniqueInput!): ProductionRuleVersion
+  productionRuleVersions(where: ProductionRuleVersionWhereInput! = {}, orderBy: [ProductionRuleVersionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProductionRuleVersionWhereUniqueInput): [ProductionRuleVersion!]
+  productionRuleVersionsCount(where: ProductionRuleVersionWhereInput! = {}): Int
+  productionCredit(where: ProductionCreditWhereUniqueInput!): ProductionCredit
+  productionCredits(where: ProductionCreditWhereInput! = {}, orderBy: [ProductionCreditOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ProductionCreditWhereUniqueInput): [ProductionCredit!]
+  productionCreditsCount(where: ProductionCreditWhereInput! = {}): Int
+  commission(where: CommissionWhereUniqueInput!): Commission
+  commissions(where: CommissionWhereInput! = {}, orderBy: [CommissionOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CommissionWhereUniqueInput): [Commission!]
+  commissionsCount(where: CommissionWhereInput! = {}): Int
+  payPeriod(where: PayPeriodWhereUniqueInput!): PayPeriod
+  payPeriods(where: PayPeriodWhereInput! = {}, orderBy: [PayPeriodOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PayPeriodWhereUniqueInput): [PayPeriod!]
+  payPeriodsCount(where: PayPeriodWhereInput! = {}): Int
+  payrollExportBatch(where: PayrollExportBatchWhereUniqueInput!): PayrollExportBatch
+  payrollExportBatches(where: PayrollExportBatchWhereInput! = {}, orderBy: [PayrollExportBatchOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: PayrollExportBatchWhereUniqueInput): [PayrollExportBatch!]
+  payrollExportBatchesCount(where: PayrollExportBatchWhereInput! = {}): Int
+  exportJob(where: ExportJobWhereUniqueInput!): ExportJob
+  exportJobs(where: ExportJobWhereInput! = {}, orderBy: [ExportJobOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ExportJobWhereUniqueInput): [ExportJob!]
+  exportJobsCount(where: ExportJobWhereInput! = {}): Int
+  campaign(where: CampaignWhereUniqueInput!): Campaign
+  campaigns(where: CampaignWhereInput! = {}, orderBy: [CampaignOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: CampaignWhereUniqueInput): [Campaign!]
+  campaignsCount(where: CampaignWhereInput! = {}): Int
   serviceItem(where: ServiceItemWhereUniqueInput!): ServiceItem
   serviceItems(where: ServiceItemWhereInput! = {}, orderBy: [ServiceItemOrderByInput!]! = [], take: Int! = 500, skip: Int! = 0, cursor: ServiceItemWhereUniqueInput): [ServiceItem!]
   serviceItemsCount(where: ServiceItemWhereInput! = {}): Int

@@ -389,6 +389,11 @@ export const RecordsRequest = list({
     policyVersion: relationship({ ref: 'PolicyVersion', ...readOnly }),
     callRecord: relationship({ ref: 'CallRecord', ...readOnly }),
     createdByAgent: relationship({ ref: 'AgentIdentity', ...readOnly }),
+    /** Phase 6: who checked the requester's right to the records, and what they found. */
+    verifiedBy: relationship({ ref: 'User', ...readOnly }),
+    verifiedAt: timestamp({ ...readOnly }),
+    verificationNote: systemText(),
+    decisionReason: systemText(),
     releases: relationship({ ref: 'RecordsRelease.request', many: true, ...readOnly }),
     version: versionField(),
     ...trackingFields,
@@ -405,6 +410,9 @@ export const RecordsRelease = list({
     documents: json({ ...readOnly, ui: { ...readOnly.ui, description: '[{documentId, sha256, title}]' } }),
     releasedByUser: relationship({ ref: 'User', ...readOnly }),
     releasedByAgent: relationship({ ref: 'AgentIdentity', ...readOnly }),
+    /** Phase 6: hash over the sorted document hashes, recipient and channel; the verified destination it went to. */
+    packetHash: hiddenHash(),
+    destination: systemText(),
     at: timestamp({ ...readOnly, validation: { isRequired: true } }),
   },
 })

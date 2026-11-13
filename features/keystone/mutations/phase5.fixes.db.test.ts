@@ -87,6 +87,10 @@ describe.skipIf(!hasTestDatabase)('Phase 5 r1 fixes (database)', () => {
       const bare = (periodKey: string, generation: number, retryNote = '') => prisma.planBillingAttempt.create({ data: { enrollmentId: e.id, periodKey, generation, status: 'processing', amountMinor: 4900n, cardVersion: 1, termNo: 1, runKey: 'x', startedAt: new Date(), retryNote } as never })
       await expect(bare(nextMonth(2), 1)).rejects.toSatisfy(x => /declined/i.test(pgError(x)))
       await expect(bare(first.periodKey, 2)).rejects.toSatisfy(x => /declined/i.test(pgError(x)))
+      // P5 r2 backlog (a): a note alone is not enough. The same card (version 1) is refused even with a retry note; a replaced card (version 2) with a note passes.
+      await expect(bare(first.periodKey, 2, 'Client says it is fine now')).rejects.toSatisfy(x => /declined|card/i.test(pgError(x)))
+      await expect(prisma.planBillingAttempt.create({ data: { enrollmentId: e.id, periodKey: first.periodKey, generation: 2, status: 'processing', amountMinor: 4900n, cardVersion: 2, termNo: 1, runKey: 'y', startedAt: new Date(), retryNote: 'New card on file' } as never })).resolves.toBeTruthy()
+      await prisma.planBillingAttempt.updateMany({ where: { enrollmentId: e.id, generation: 2 }, data: { status: 'failed' } })
       // Cancel: the open invoice is credited out, history untouched.
       const inv = await prisma.invoice.findUniqueOrThrow({ where: { id: first.invoiceId! } })
       expect(inv.status).toBe('posted')
