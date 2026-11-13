@@ -21,6 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return createYoga({
+    // No GraphiQL or Sandbox page: GET for text/html is refused (406); queries go by POST.
+    graphiql: false,
     graphqlEndpoint: "/api/graphql",
     schema: keystoneContext.graphql.schema,
     context: ({ req, res }: { req: any; res: any }) => {
