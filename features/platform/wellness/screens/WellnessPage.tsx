@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { q } from '../../lib/server';
+import { cardPublishableKey } from '@/features/integrations/payment';
 import { calendarDay, money, label } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Tabs } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
@@ -40,6 +41,7 @@ export default async function WellnessPage({ searchParams }: { searchParams?: Pr
 }
 
 async function Members() {
+  const publishableKey = cardPublishableKey();
   const d = await q<{ enrollments: Enr[]; patients: { id: string; name: string; ownerships: { client: { displayName: string } | null }[] }[]; versions: Version[]; people: { id: string; firstName: string; lastName: string; client: { displayName: string } | null }[] }>(`{
     enrollments(orderBy: { createdAt: desc }, take: 40) { id ref status version startedOn termStartsOn termEndsOn cardLabel trueUpMinor patient { name } client { displayName } plan { name } planVersion { monthlyPriceMinor } }
     patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ownerships(where: { effectiveTo: null, role: { equals: "primary" } }, take: 1) { client { displayName } } }
@@ -55,8 +57,7 @@ async function Members() {
           { name: 'signerId', label: 'Who is signing', options: [{ value: '', label: 'Choose the signer' }, ...d.people.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName} · ${p.client?.displayName ?? ''}` }))] },
           { name: 'method', label: 'How it was signed', options: METHODS, defaultValue: 'in_person' },
           { name: 'affirmed', label: 'Read the renewal terms aloud and the signer agrees', options: [{ value: 'false', label: 'Not yet' }, { value: 'true', label: 'Yes, agreed' }], defaultValue: 'false' },
-          { name: 'paymentMethodId', label: 'Card token (Stripe payment method id)', placeholder: 'pm_…' },
-        ]} />
+        ]} card={{ publishableKey, label: 'The signer\u2019s card' }} />
         <Meta>The plan renews every term until the client cancels. The renewal terms and cancellation steps are shown to the signer and saved with their agreement.</Meta>
       </Section>
       <Section title="Members" aside={<Link className="inline-flex h-11 items-center px-2 text-sm underline sm:h-8" href="/dashboard/platform/wellness/export?kind=renewals" prefetch={false}>Export renewal notices</Link>}>
@@ -71,8 +72,7 @@ async function Members() {
                 <CommandForm op="useEntitlement" build="phase5" submit="Use included care" fixed={{ enrollmentId: e.id }} paths={[PATH]} fields={[{ name: 'code', label: 'Item code', placeholder: 'EXAM', width: 'sm' }, { name: 'qty', label: 'How many', defaultValue: '1', width: 'sm' }]} />
                 <CommandForm op="replacePlanCard" build="phase5" submit="Replace card" fixed={{ enrollmentId: e.id, affirmed: 'true' }} paths={[PATH]} fields={[
                   { name: 'signerId', label: 'Who is signing', options: [{ value: '', label: 'Choose the signer' }, ...d.people.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))] },
-                  { name: 'paymentMethodId', label: 'New card token (Stripe payment method id)', placeholder: 'pm_…' },
-                ]} />
+                ]} card={{ publishableKey, label: 'New card' }} />
                 <ActionButton op="cancelEnrollment" vars={{ enrollmentId: e.id, expectedVersion: e.version }} ask="Why is this plan being cancelled?" confirm="Cancel this plan? Care used above what was paid is charged once." paths={[PATH]}>Cancel plan</ActionButton>
               </div>
             ) : null}

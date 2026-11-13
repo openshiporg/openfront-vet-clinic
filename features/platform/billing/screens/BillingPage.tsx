@@ -1,4 +1,7 @@
-import { q, practiceTimeZone } from '../../lib/server';
+import { headers } from 'next/headers';
+import { q, practiceTimeZone, myPermissions } from '../../lib/server';
+import { cardPublishableKey } from '@/features/integrations/payment';
+import { PayLinkButton } from '../../components/PayLinkButton';
 import { todayIn } from '../../lib/clinic';
 import { calendarDay, money, label } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Tabs, Stat } from '../../components/ui';
@@ -65,6 +68,10 @@ async function Invoices() {
     patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name ownerships(where: { effectiveTo: null, role: { equals: "primary" } }, take: 1) { client { displayName } } }
     feeItems(where: { active: { equals: true }, version: { status: { equals: "published" } } }, orderBy: { name: asc }, take: 300) { id name priceMinor }
   }`);
+  const perms = await myPermissions(['canTakePayments', 'canManagePayments'] as const);
+  const takes = perms.canTakePayments || perms.canManagePayments;
+  const publishableKey = cardPublishableKey();
+  const origin = await siteOrigin();
   const byClient = new Map<string, { name: string; lines: typeof d.chargeLines }>();
   for (const c of d.chargeLines) if (c.client) { const g = byClient.get(c.client.id) ?? { name: c.client.displayName, lines: [] }; g.lines.push(c); byClient.set(c.client.id, g); }
   return (
@@ -116,7 +123,12 @@ async function Invoices() {
                 <CommandForm className="mt-2" op="recordPayment" build="billing" submit="Record payment" fixed={{ invoiceId: i.id, clientId: i.client?.id ?? '' }} paths={[PATH]} fields={[
                   { name: 'method', label: 'Paid by', options: METHODS.filter(m => m.value !== 'insurer_direct'), defaultValue: 'cash' }, { name: 'amount', label: 'Amount (dollars)', defaultValue: (Number(i.balanceMinor) / 100).toFixed(2), width: 'sm' }, { name: 'reference', label: 'Check or reference no.', width: 'sm' },
                 ]} />
-                <CommandForm className="mt-2" op="takeCardPayment" build="billing" submit="Charge card on file" fixed={{ invoiceId: i.id, clientId: i.client?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Amount (dollars)', defaultValue: (Number(i.balanceMinor) / 100).toFixed(2), width: 'sm' }]} />
+                {takes ? (
+                  <>
+                    <CommandForm className="mt-2" op="takeCardPayment" build="billing" submit="Charge card" card={{ publishableKey, label: 'Card (typed by the client, or read to you)' }} fixed={{ invoiceId: i.id, clientId: i.client?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Amount (dollars)', defaultValue: (Number(i.balanceMinor) / 100).toFixed(2), width: 'sm' }]} />
+                    <PayLinkButton className="mt-2" invoiceId={i.id} origin={origin} />
+                  </>
+                ) : null}
               </>
             ) : null}
             {['posted', 'partially_paid', 'paid'].includes(i.status) ? (
@@ -246,7 +258,7 @@ async function Payments() {
             <Row>
               <div className="min-w-0 flex-1"><span className="font-medium">{money(p.amountMinor, p.currencyCode)}</span> · {p.client?.displayName}<Meta>{p.ref} · {label(p.method)}{p.forInvoice ? ` · ${p.forInvoice.ref}` : ''}{BigInt(p.refundedMinor) > 0n ? ` · refunded ${money(p.refundedMinor, p.currencyCode)}` : ''}</Meta></div>
               <Status value={p.status} />
-              {['unknown', 'pending'].includes(p.status) || (p.status === 'failed' && p.method === 'card_on_file') ? <ActionButton op="checkPaymentStatus" vars={{ paymentId: p.id }} paths={[PATH]}>Check status</ActionButton> : null}
+              {['unknown', 'pending'].includes(p.status) || (p.status === 'failed' && ['card_on_file', 'payment_link'].includes(p.method)) ? <ActionButton op="checkPaymentStatus" vars={{ paymentId: p.id }} paths={[PATH]}>Check status</ActionButton> : null}
             </Row>
             {p.status === 'succeeded' ? <CommandForm className="mt-2" op="requestRefund" build="billing" submit="Refund" fixed={{ paymentId: p.id, invoiceId: p.forInvoice?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Refund (dollars)', width: 'sm' }, { name: 'reason', label: 'Reason' }]} /> : null}
           </div>
@@ -397,4 +409,13 @@ async function Claims() {
       </Section>
     </>
   );
+}
+
+/** This server's own address, for payment links: the configured app URL, else the address the page was asked for. */
+async function siteOrigin() {
+  const configured = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+  if (/^https?:\/\//.test(configured)) return configured;
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost';
+  return `${h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')}://${host}`;
 }

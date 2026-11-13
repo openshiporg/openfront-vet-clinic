@@ -4,13 +4,13 @@ import { command } from '../lib/command'
 import { auditCreate, casUpdate, lockRow, transition } from '../lib/cas'
 import { consumeApproval, requestApproval } from '../lib/approval'
 import { registerApplier } from '../lib/approvalAppliers'
-import { actorUserId, can, type Actor } from '../lib/actor'
+import { actorUserId, can, systemActor, type Actor } from '../lib/actor'
 import { DomainError, Codes, isDomainError } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
 import { balanceOfInvoice, paymentTotals, post } from '../lib/ledger'
 import { activeFeeVersion, feeItemFor, priceCharge, taxRulesFor } from '../lib/pricing'
 import { adjustBps } from '../domain/billing'
-import { adapterFor, cardConfigured, type ChargeResult } from '../../integrations/payment'
+import { adapterFor, cardConfigured, PAYMENT_METHOD_ID, type ChargeResult } from '../../integrations/payment'
 import { PAYMENT_METHODS } from '../models/billing'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
@@ -345,25 +345,54 @@ export async function recordPayment(_root: unknown, args: { clientId: string; in
   })
 }
 
-/** Record the intent, commit, call the card processor with an idempotency key, record the answer. */
+/** Record the intent, commit, call the card processor with an idempotency key, record the answer. The card is the one typed into Stripe's form. */
 export async function takeCardPayment(_root: unknown, args: { clientId: string; invoiceId?: string | null; depositId?: string | null; amountMinor: string; paymentMethodId?: string | null; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: [...TAKERS], tool: 'payment.card', humanOnly: true }, args, async actor => {
     const amount = minorText(args.amountMinor, 'amount')
-    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, 'Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.', { reason: 'no_processor' })
-    const started = await command(context.prisma, { name: 'payment.card.start', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
-      // One card payment in flight per invoice or deposit: lock the target, then refuse while an earlier card payment is pending or unknown.
-      if (args.invoiceId) await lockRow(uow.tx, 'Invoice', args.invoiceId)
-      else if (args.depositId) await lockRow(uow.tx, 'Deposit', args.depositId)
-      const open = await uow.tx.payment.findFirst({ where: { method: 'card_on_file', status: { in: ['pending', 'unknown'] }, ...(args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? '' }) }, select: { ref: true } })
-      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: 'card_in_flight' })
-      const pay = await newPayment(uow, actor, { clientId: args.clientId, method: 'card_on_file', provider: 'stripe', amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } })
-      const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: 'processing', providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } })
-      return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode }
-    })
-    if (started.replay) return { replay: true, ...(await settleFromState(context, actor, started.value.paymentId)) }
-    const outcome = await adapterFor('stripe').charge({ amountMinor: amount, currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod: args.paymentMethodId ?? undefined })
-    return { replay: false, ...(await recordOutcome(context, actor, started.value.paymentId, started.value.attemptId, outcome, `${args.idempotencyKey}:result`)) }
+    return chargeCard(context.prisma, actor, { clientId: args.clientId, invoiceId: args.invoiceId, depositId: args.depositId, amount, paymentMethodId: args.paymentMethodId, idempotencyKey: args.idempotencyKey, method: 'card_on_file', params: args })
   })
+}
+
+/**
+ * The client pays the balance of one posted invoice from a payment link (no sign-in; the link is the permission, checked by the caller).
+ * Same path as a staff card payment: one open card payment per invoice, an idempotency key on the processor call, `unknown` when the answer is lost.
+ */
+export async function payInvoiceByLink(prisma: any, args: { invoiceId: string; paymentMethodId: string; idempotencyKey: string }) {
+  const inv = await prisma.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } })
+  if (!inv?.clientId) throw new DomainError(Codes.NOT_FOUND, 'This payment link is not valid.')
+  return chargeCard(prisma, systemActor('payment-link'), { clientId: inv.clientId, invoiceId: args.invoiceId, amount: 'balance', paymentMethodId: args.paymentMethodId, idempotencyKey: `link:${args.invoiceId}:${args.idempotencyKey}`, method: 'payment_link', params: { invoiceId: args.invoiceId, paymentMethodId: args.paymentMethodId } })
+}
+
+/** Failed link payments allowed per invoice per hour, so a link cannot be used to try card after card. */
+const LINK_FAILURES_PER_HOUR = 5
+const CARD_METHODS = ['card_on_file', 'payment_link']
+
+async function chargeCard(prisma: any, actor: Actor, a: { clientId: string; invoiceId?: string | null; depositId?: string | null; amount: bigint | 'balance'; paymentMethodId?: string | null; idempotencyKey: string; method: 'card_on_file' | 'payment_link'; params: unknown }) {
+  if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, 'Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.', { reason: 'no_processor' })
+  const paymentMethod = String(a.paymentMethodId ?? '')
+  if (!PAYMENT_METHOD_ID.test(paymentMethod)) throw new DomainError(Codes.INVALID_INPUT, 'Enter the card in the card form.', { field: 'paymentMethodId' })
+  const started = await command(prisma, { name: 'payment.card.start', actor, idempotencyKey: a.idempotencyKey, params: a.params }, async uow => {
+    // One card payment in flight per invoice or deposit: lock the target, then refuse while an earlier card payment is pending or unknown.
+    if (a.invoiceId) await lockRow(uow.tx, 'Invoice', a.invoiceId)
+    else if (a.depositId) await lockRow(uow.tx, 'Deposit', a.depositId)
+    const target = a.invoiceId ? { forInvoiceId: a.invoiceId } : { forDepositId: a.depositId ?? '' }
+    const open = await uow.tx.payment.findFirst({ where: { method: { in: CARD_METHODS }, status: { in: ['pending', 'unknown'] }, ...target }, select: { ref: true } })
+    if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: 'card_in_flight' })
+    if (a.method === 'payment_link') {
+      const failures = await uow.tx.payment.count({ where: { method: 'payment_link', status: 'failed', createdAt: { gte: new Date(uow.now.getTime() - 3_600_000) }, ...target } })
+      if (failures >= LINK_FAILURES_PER_HOUR) throw new DomainError(Codes.GUARD_FAILED, 'Too many cards were declined for this invoice. Try again in an hour, or call the practice.', { reason: 'too_many_declines' })
+    }
+    const amount = a.amount === 'balance' ? await balanceOfInvoice(uow.tx, a.invoiceId!) : a.amount
+    if (amount <= ZERO) throw new DomainError(Codes.GUARD_FAILED, 'That invoice is already paid.')
+    const pay = await newPayment(uow, actor, { clientId: a.clientId, method: a.method, provider: 'stripe', amountMinor: amount, target: { invoiceId: a.invoiceId, depositId: a.depositId } })
+    const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: 'processing', providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } })
+    return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode, amountMinor: amount.toString() }
+  })
+  if (started.replay) return { replay: true, ...(await settleFromState({ prisma, session: null }, actor, started.value.paymentId)) }
+  const outcome = await adapterFor('stripe').charge({ amountMinor: BigInt(started.value.amountMinor), currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod })
+  const recorded = await recordOutcome({ prisma, session: null }, actor, started.value.paymentId, started.value.attemptId, outcome, `${a.idempotencyKey}:result`)
+  // 3-D Secure: the cardholder's browser finishes it with this secret (never stored), then "Check status" reads the answer.
+  return { replay: false, ...recorded, ...(recorded.status === 'pending' && outcome.clientSecret ? { clientSecret: outcome.clientSecret } : {}) }
 }
 
 async function settleFromState(context: Ctx, actor: Actor, paymentId: string) {

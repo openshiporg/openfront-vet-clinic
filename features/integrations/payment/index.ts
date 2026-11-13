@@ -3,7 +3,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 /*
  * Payment adapters (INTEGRATIONS). One interface, three providers:
  *   manual   cash, check, ACH, insurer and financing payments someone recorded by hand;
- *   stripe   Stripe in TEST mode only (a live key is refused), card payments over the REST API;
+ *   stripe   Stripe card payments over the REST API. The mode follows the key: a test key takes test cards, a live key takes real money.
+ *            The card itself is typed into Stripe's own form (Stripe Elements) in the browser; this app only ever sees the payment method id;
  *   terminal a card reader: the interface exists and takes manual tender only until a reader is attached.
  * Every call that moves money carries an idempotency key. Asking again with the same key can never
  * charge or refund twice, which is how an `unknown` result is resolved. Nothing here runs inside a
@@ -14,7 +15,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 export type Outcome = 'succeeded' | 'failed' | 'requires_action' | 'processing' | 'unknown'
 
 export type ChargeInput = { amountMinor: bigint; currencyCode: string; idempotencyKey: string; description: string; metadata: Record<string, string>; paymentMethod?: string; customer?: string; offSession?: boolean }
-export type ChargeResult = { outcome: Outcome; providerRef: string | null; message: string }
+export type ChargeResult = { outcome: Outcome; providerRef: string | null; message: string; /** Only for `requires_action`: lets the cardholder's browser finish 3-D Secure. Never stored. */ clientSecret?: string }
 export type RefundInput = { providerRef: string; amountMinor: bigint; idempotencyKey: string; reason: string }
 export type RefundResult = { outcome: 'succeeded' | 'failed' | 'unknown'; providerRef: string | null; message: string }
 export type WebhookEvent = { id: string; type: string; objectRef: string; outcome: 'succeeded' | 'failed' | 'refunded' | 'ignored' }
@@ -32,12 +33,27 @@ export interface PaymentAdapter {
 
 const STRIPE = 'https://api.stripe.com/v1'
 
+const SECRET = /^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/
+const PUBLISHABLE = /^pk_(test|live)_[A-Za-z0-9_]+$/
+
 function stripeKey() {
   const key = process.env.STRIPE_SECRET_KEY ?? ''
-  if (!key) throw new Error('Card payments are not set up on this server yet.')
-  if (!key.startsWith('sk_test_') && !key.startsWith('rk_test_')) throw new Error('Only Stripe test keys are accepted here.')
+  if (!SECRET.test(key)) throw new Error('Card payments are not set up on this server yet.')
   return key
 }
+
+/** `test` or `live`, from the secret key; null when there is no usable key. */
+export const cardMode = (): 'test' | 'live' | null => (SECRET.exec(process.env.STRIPE_SECRET_KEY ?? '')?.[2] as 'test' | 'live' | undefined) ?? null
+
+/** The key the browser's card form uses. Only handed out when it is the same mode as the secret key, so a test form never fronts a live account. */
+export function cardPublishableKey(): string | null {
+  const key = (process.env.STRIPE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_STRIPE_KEY ?? '').trim()
+  const m = PUBLISHABLE.exec(key)
+  return m && m[1] === cardMode() ? key : null
+}
+
+/** A payment method id made by Stripe.js from a card typed into Stripe's form. */
+export const PAYMENT_METHOD_ID = /^pm_[A-Za-z0-9_]{1,200}$/
 
 const form = (data: Record<string, string>) => new URLSearchParams(data).toString()
 
@@ -71,7 +87,7 @@ function intentResult(status: number, j: Record<string, any>): ChargeResult {
   }
   switch (j.status) {
     case 'succeeded': return { outcome: 'succeeded', providerRef: j.id, message: 'Paid.' }
-    case 'requires_action': case 'requires_confirmation': return { outcome: 'requires_action', providerRef: j.id, message: 'The bank needs the cardholder to confirm.' }
+    case 'requires_action': case 'requires_confirmation': return { outcome: 'requires_action', providerRef: j.id, message: 'The bank needs the cardholder to confirm.', ...(typeof j.client_secret === 'string' ? { clientSecret: j.client_secret } : {}) }
     case 'processing': case 'requires_capture': return { outcome: 'processing', providerRef: j.id, message: 'The bank is still processing this payment.' }
     case 'canceled': return { outcome: 'failed', providerRef: j.id, message: 'The payment was cancelled.' }
     case 'requires_payment_method': return { outcome: 'failed', providerRef: j.id, message: String(j.last_payment_error?.message ?? 'The card was declined.') }
@@ -100,10 +116,12 @@ async function findIntent(input: ChargeInput): Promise<ChargeResult> {
 export const stripeAdapter: PaymentAdapter = {
   key: 'stripe',
   async charge(input) {
+    // There is no default card: the card is the one the cardholder typed into Stripe's form, or one they saved for a plan.
+    if (!input.paymentMethod) return { outcome: 'failed', providerRef: null, message: 'No card was entered.' }
     try {
       const { status, json } = await stripeCall('/payment_intents', 'POST', {
         amount: input.amountMinor.toString(), currency: input.currencyCode.toLowerCase(), confirm: 'true',
-        payment_method: input.paymentMethod || 'pm_card_visa',
+        payment_method: input.paymentMethod,
         ...(input.customer ? { customer: input.customer } : {}),
         ...(input.offSession ? { off_session: 'true' } : {}),
         'automatic_payment_methods[enabled]': 'true', 'automatic_payment_methods[allow_redirects]': 'never',
@@ -181,21 +199,22 @@ export const terminalAdapter: PaymentAdapter = {
 
 const ADAPTERS: Record<string, PaymentAdapter> = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter }
 export const adapterFor = (key: string): PaymentAdapter => ADAPTERS[key] ?? manualAdapter
-export const cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? '')
+export const cardConfigured = () => cardMode() !== null
 
 export type SavedCard = { ok: true; customer: string; paymentMethod: string; setupIntent: string; label: string } | { ok: false; message: string }
 
 /**
  * Keep a card for later plan payments: a customer and a confirmed SetupIntent (off-session use), so the card is
- * checked and the cardholder's agreement is held by the processor. Stripe TEST only; card numbers never touch this app.
+ * checked and the cardholder's agreement is held by the processor. The card is typed into Stripe's form; card numbers never touch this app.
  */
 export async function saveCard(input: { idempotencyKey: string; name: string; email?: string; paymentMethod?: string; metadata?: Record<string, string> }): Promise<SavedCard> {
+  if (!input.paymentMethod || !PAYMENT_METHOD_ID.test(input.paymentMethod)) return { ok: false, message: 'Enter the card in the card form first.' }
   try {
     const meta = Object.fromEntries(Object.entries(input.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]))
     const cus = await stripeCall('/customers', 'POST', { name: input.name.slice(0, 120), ...(input.email ? { email: input.email } : {}), ...meta }, `${input.idempotencyKey}:customer`)
     if (cus.status >= 400 || !cus.json.id) return { ok: false, message: 'The card processor could not start saving the card.' }
     const seti = await stripeCall('/setup_intents', 'POST', {
-      customer: cus.json.id, payment_method: input.paymentMethod || 'pm_card_visa', confirm: 'true', usage: 'off_session',
+      customer: cus.json.id, payment_method: input.paymentMethod, confirm: 'true', usage: 'off_session',
       'automatic_payment_methods[enabled]': 'true', 'automatic_payment_methods[allow_redirects]': 'never', ...meta,
     }, `${input.idempotencyKey}:setup`)
     if (seti.status >= 400) return { ok: false, message: String(seti.json.error?.message ?? 'The card was not accepted.') }

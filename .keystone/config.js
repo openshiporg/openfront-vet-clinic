@@ -14,9 +14,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key2 of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key2) && key2 !== except)
-        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
+    for (let key3 of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key3) && key3 !== except)
+        __defProp(to, key3, { get: () => from[key3], enumerable: !(desc = __getOwnPropDesc(from, key3)) || desc.enumerable });
   }
   return to;
 };
@@ -140,17 +140,17 @@ __export(ledger_exports, {
   post: () => post
 });
 async function balanceOfInvoice(db, invoiceId) {
-  const key2 = db;
-  let batch = pending.get(key2);
+  const key3 = db;
+  let batch = pending.get(key3);
   if (!batch) {
     const ids = /* @__PURE__ */ new Set();
     const made = { ids, done: Promise.resolve().then(() => new Promise((r) => setTimeout(r, 0))).then(async () => {
-      pending.delete(key2);
+      pending.delete(key3);
       const list24 = [...ids];
       const rows = await db.$queryRaw`SELECT "invoice" AS id, COALESCE(SUM("amountMinor"), 0) AS s FROM "ClientLedgerEntry" WHERE "invoice" = ANY(${list24}::text[]) GROUP BY "invoice"`;
       return new Map(rows.map((r) => [r.id, big(r.s)]));
     }) };
-    pending.set(key2, made);
+    pending.set(key3, made);
     batch = made;
   }
   batch.ids.add(invoiceId);
@@ -341,10 +341,10 @@ function collectReads(input) {
     const fields = fieldsIn(set, fragments, actualType);
     if (actualType && AUDITED_TYPES.has(actualType)) {
       const id2 = typeof obj.id === "string" ? obj.id : null;
-      const key2 = `${actualType}:${id2 ?? "?"}`;
-      const ref = refs.get(key2) ?? { resourceType: actualType, resourceId: id2, fields: /* @__PURE__ */ new Set() };
+      const key3 = `${actualType}:${id2 ?? "?"}`;
+      const ref = refs.get(key3) ?? { resourceType: actualType, resourceId: id2, fields: /* @__PURE__ */ new Set() };
       for (const f of fields) if (!f.selectionSet && f.name.value !== "__typename") ref.fields.add(f.name.value);
-      refs.set(key2, ref);
+      refs.set(key3, ref);
     }
     for (const f of fields) {
       if (!f.selectionSet) continue;
@@ -577,7 +577,7 @@ var import_fields3 = require("@keystone-6/core/fields");
 var import_fields = require("@keystone-6/core/fields");
 var registry = /* @__PURE__ */ new Map();
 function registerListAccess(lists) {
-  for (const [key2, list24] of Object.entries(lists)) registry.set(key2, list24.access);
+  for (const [key3, list24] of Object.entries(lists)) registry.set(key3, list24.access);
 }
 var call = async (fn, args) => typeof fn === "function" ? await fn(args) : fn;
 async function canReadWholeList(listKey, args) {
@@ -2753,7 +2753,7 @@ function canonicalize(value) {
     const decimalLike = value;
     if (typeof decimalLike.isFinite === "function" && typeof decimalLike.isNaN === "function") return plain(decimalLike.toString());
     return Object.fromEntries(
-      Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key2, entry]) => [key2, canonicalize(entry)])
+      Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key3, entry]) => [key3, canonicalize(entry)])
     );
   }
   throw new Error(`Canonical JSON cannot hold a ${typeof value}`);
@@ -2766,13 +2766,13 @@ var DEVELOPMENT_SECRET2 = "this secret should only be used in testing";
 function keyedPayloadHash(value, purpose) {
   const secret2 = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_SECRET2);
   if (secret2.length < 16) throw new Error("SESSION_SECRET must be set to hash protected content");
-  const key2 = (0, import_node_crypto2.createHmac)("sha256", secret2).update(`vc-keyed-hash\0${purpose}`, "utf8").digest();
-  return (0, import_node_crypto2.createHmac)("sha256", key2).update(canonicalJson(value), "utf8").digest("hex");
+  const key3 = (0, import_node_crypto2.createHmac)("sha256", secret2).update(`vc-keyed-hash\0${purpose}`, "utf8").digest();
+  return (0, import_node_crypto2.createHmac)("sha256", key3).update(canonicalJson(value), "utf8").digest("hex");
 }
 
 // features/keystone/lib/db.ts
-async function advisoryLock(tx, key2) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key2}, 0))`;
+async function advisoryLock(tx, key3) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key3}, 0))`;
 }
 var MODEL_NAME = /^[A-Z][A-Za-z0-9]*$/;
 function tableName(model) {
@@ -2795,11 +2795,11 @@ init_decimal();
 var import_node_crypto3 = require("node:crypto");
 async function nextReference(tx, prefix, now = /* @__PURE__ */ new Date(), width = 6) {
   if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
-  const key2 = `${prefix}-${now.getUTCFullYear()}`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
+  const key3 = `${prefix}-${now.getUTCFullYear()}`;
+  await advisoryLock(tx, `sequence:${key3}`);
+  const row = await tx.sequence.upsert({ where: { key: key3 }, create: { key: key3, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
   const value = row.nextValue - 1;
-  return `${key2}-${String(value).padStart(width, "0")}`;
+  return `${key3}-${String(value).padStart(width, "0")}`;
 }
 var CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function publicCode(prefix, groups = 2) {
@@ -2810,26 +2810,26 @@ function publicCode(prefix, groups = 2) {
 }
 async function nextSerial(tx, prefix, width = 6) {
   if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
-  const key2 = `${prefix}-serial`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
+  const key3 = `${prefix}-serial`;
+  await advisoryLock(tx, `sequence:${key3}`);
+  const row = await tx.sequence.upsert({ where: { key: key3 }, create: { key: key3, nextValue: 2 }, update: { nextValue: { increment: 1 } } });
   return `${prefix}-${String(row.nextValue - 1).padStart(width, "0")}`;
 }
 async function reserveReferences(tx, prefix, n, now = /* @__PURE__ */ new Date(), width = 6) {
   if (!/^[A-Z]{2,5}$/.test(prefix)) throw new Error("Reference prefix must be 2-5 capital letters");
   if (n <= 0) return [];
-  const key2 = `${prefix}-${now.getUTCFullYear()}`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
+  const key3 = `${prefix}-${now.getUTCFullYear()}`;
+  await advisoryLock(tx, `sequence:${key3}`);
+  const row = await tx.sequence.upsert({ where: { key: key3 }, create: { key: key3, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
   const first = row.nextValue - n;
-  return Array.from({ length: n }, (_, i) => `${key2}-${String(first + i).padStart(width, "0")}`);
+  return Array.from({ length: n }, (_, i) => `${key3}-${String(first + i).padStart(width, "0")}`);
 }
 async function reserveSerials(tx, prefix, n, width = 6) {
   if (!/^[A-Z]{1,5}$/.test(prefix)) throw new Error("Serial prefix must be 1-5 capital letters");
   if (n <= 0) return [];
-  const key2 = `${prefix}-serial`;
-  await advisoryLock(tx, `sequence:${key2}`);
-  const row = await tx.sequence.upsert({ where: { key: key2 }, create: { key: key2, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
+  const key3 = `${prefix}-serial`;
+  await advisoryLock(tx, `sequence:${key3}`);
+  const row = await tx.sequence.upsert({ where: { key: key3 }, create: { key: key3, nextValue: n + 1 }, update: { nextValue: { increment: n } } });
   const first = row.nextValue - n;
   return Array.from({ length: n }, (_, i) => `${prefix}-${String(first + i).padStart(width, "0")}`);
 }
@@ -5924,7 +5924,7 @@ async function updateActiveUser(_root, { data }, context) {
   const session = context.session;
   if (!isSignedIn({ session })) throw new Error("Not authenticated");
   const allowed = /* @__PURE__ */ new Set(["email", "name", "password", "onboardingStatus"]);
-  if (Object.keys(data || {}).some((key2) => !allowed.has(key2))) throw new Error("Unsupported profile field");
+  if (Object.keys(data || {}).some((key3) => !allowed.has(key3))) throw new Error("Unsupported profile field");
   return context.db.User.updateOne({ where: { id: session.itemId }, data });
 }
 var updateActiveUser_default = updateActiveUser;
@@ -5941,6 +5941,7 @@ function actorFromSession(session) {
   const granted = new Set(role ? permissionNames.filter((name) => role[name] === true) : []);
   return { kind: "user", userId: session.itemId, name: session.data.name, permissions: granted };
 }
+var systemActor = (name) => ({ kind: "system", name });
 function can(actor, permission) {
   return actor.kind === "user" && actor.permissions.has(permission);
 }
@@ -5958,9 +5959,9 @@ var actorAgentId = (actor) => actor.kind === "agent" ? actor.agentId : null;
 // features/keystone/lib/idempotency.ts
 init_errors();
 var IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/;
-function assertIdempotencyKey(key2) {
-  if (typeof key2 !== "string" || !key2.trim()) throw new DomainError(Codes.IDEMPOTENCY_KEY_REQUIRED, "An idempotency key is required.");
-  if (!IDEMPOTENCY_KEY.test(key2)) throw new DomainError(Codes.INVALID_INPUT, "The idempotency key must be 8 to 200 letters, digits or . _ : -");
+function assertIdempotencyKey(key3) {
+  if (typeof key3 !== "string" || !key3.trim()) throw new DomainError(Codes.IDEMPOTENCY_KEY_REQUIRED, "An idempotency key is required.");
+  if (!IDEMPOTENCY_KEY.test(key3)) throw new DomainError(Codes.INVALID_INPUT, "The idempotency key must be 8 to 200 letters, digits or . _ : -");
 }
 async function claimReceipt(tx, input) {
   assertIdempotencyKey(input.key);
@@ -6186,7 +6187,7 @@ var op = (fn) => async (root, args, context) => {
     if (raw instanceof import_graphql.GraphQLError && raw.extensions?.code !== "KS_PRISMA_ERROR") throw raw;
     const error = prismaToDomain(raw) ?? raw;
     if (isDomainError(error)) {
-      const details = Object.fromEntries(Object.entries(error.details).filter(([key2]) => SAFE_DETAIL_KEYS.has(key2)));
+      const details = Object.fromEntries(Object.entries(error.details).filter(([key3]) => SAFE_DETAIL_KEYS.has(key3)));
       throw new import_graphql.GraphQLError(error.message, { extensions: { code: error.code, ...details } });
     }
     const message = typeof error?.message === "string" ? error.message : "";
@@ -7710,14 +7711,14 @@ function key() {
 }
 function signSlot(claims, now = Date.now()) {
   const body = Buffer.from(JSON.stringify({ ...claims, exp: now + SLOT_TTL_MS })).toString("base64url");
-  const mac = (0, import_node_crypto6.createHmac)("sha256", key()).update(body).digest("base64url");
-  return `${body}.${mac}`;
+  const mac2 = (0, import_node_crypto6.createHmac)("sha256", key()).update(body).digest("base64url");
+  return `${body}.${mac2}`;
 }
 function verifySlot(token, now = Date.now()) {
-  const [body, mac] = String(token ?? "").split(".");
-  if (!body || !mac) throw new DomainError(Codes.SLOT_TOKEN_INVALID, "That time slot is not valid. Search availability again.");
+  const [body, mac2] = String(token ?? "").split(".");
+  if (!body || !mac2) throw new DomainError(Codes.SLOT_TOKEN_INVALID, "That time slot is not valid. Search availability again.");
   const expected = (0, import_node_crypto6.createHmac)("sha256", key()).update(body).digest();
-  const given = Buffer.from(mac, "base64url");
+  const given = Buffer.from(mac2, "base64url");
   if (given.length !== expected.length || !(0, import_node_crypto6.timingSafeEqual)(given, expected)) throw new DomainError(Codes.SLOT_TOKEN_INVALID, "That time slot is not valid. Search availability again.");
   const claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
   if (!(claims.exp > now)) throw new DomainError(Codes.SLOT_TOKEN_INVALID, "That time slot offer has expired. Search availability again.");
@@ -7997,11 +7998,11 @@ async function seedInventory(uow, actor, count) {
   const lots = [...DRUG_LOTS.map((l) => ({ id: l.id, drugId: l.drug, vaccineId: null })), ...VACCINE_LOTS.filter((l) => l.location === "seed_loc_main").map((l) => ({ id: l.id, drugId: null, vaccineId: l.vaccine }))];
   const itemFor = /* @__PURE__ */ new Map();
   for (const l of lots) {
-    const key2 = l.drugId ?? l.vaccineId;
-    if (itemFor.has(key2)) continue;
+    const key3 = l.drugId ?? l.vaccineId;
+    if (itemFor.has(key3)) continue;
     const name = l.drugId ? (await tx.drugProduct.findUniqueOrThrow({ where: { id: l.drugId }, select: { displayName: true } })).displayName : (await tx.vaccineProduct.findUniqueOrThrow({ where: { id: l.vaccineId }, select: { name: true } })).name;
     const item = await tx.item.create({ data: { ref: await nextReference(tx, "ITM", now), name, kind: l.drugId ? "drug" : "vaccine", drugId: l.drugId, vaccineId: l.vaccineId, baseUnit: l.drugId ? "unit" : "dose", coldChain: !!l.vaccineId, active: true } });
-    itemFor.set(key2, item.id);
+    itemFor.set(key3, item.id);
   }
   count("items", itemFor.size);
   let moves = 0;
@@ -8259,13 +8260,14 @@ async function seedLabs(uow, actor, count) {
   if (await tx.laboratory.findFirst({ select: { id: true } })) return;
   const species = new Set((await tx.species.findMany({ select: { id: true } })).map((s) => s.id));
   await tx.laboratory.createMany({ data: LABS.map((l) => ({ ...l, status: "active" })) });
-  const analytes = /* @__PURE__ */ new Map();
-  for (const a of ANALYTES) analytes.set(a.code, (await tx.analyte.create({ data: { code: a.code, name: a.name, canonicalUnit: a.unit } })).id);
+  await tx.analyte.createMany({ data: ANALYTES.map((a) => ({ id: `seed_analyte_${a.code.toLowerCase()}`, code: a.code, name: a.name, canonicalUnit: a.unit })) });
+  const analytes = new Map(ANALYTES.map((a) => [a.code, `seed_analyte_${a.code.toLowerCase()}`]));
   const fees = new Map((await tx.feeItem.findMany({ where: { code: { startsWith: "LAB-" }, version: { status: "published" } }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
   const dogCat = ["seed_sp_canine", "seed_sp_feline"].filter((id2) => species.has(id2));
-  for (const [labId, code, name, fee, hours] of TESTS) {
-    await tx.labTest.create({ data: { labId, code, name, feeItemId: fees.get(fee) ?? null, turnaroundHours: hours, status: "active", species: { connect: dogCat.map((id2) => ({ id: id2 })) } } });
-  }
+  const testId = (lab, code) => `${lab}_${code.toLowerCase()}`;
+  await tx.labTest.createMany({ data: TESTS.map(([labId, code, name, fee, hours]) => ({ id: testId(labId, code), labId, code, name, feeItemId: fees.get(fee) ?? null, turnaroundHours: hours, status: "active" })) });
+  const pairs = TESTS.flatMap(([labId, code]) => dogCat.map((sp) => [testId(labId, code), sp]));
+  if (pairs.length) await tx.$executeRawUnsafe(`INSERT INTO "_LabTest_species" ("A", "B") VALUES ${pairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}`, ...pairs.flat());
   const maps = [
     ...ANALYTES.map((a) => ({ labId: "seed_lab_inhouse", externalCode: a.code, analyteId: analytes.get(a.code), unitConversion: void 0 })),
     ...ANALYTES.map((a) => ({ labId: "seed_lab_reference", externalCode: REF_MAPS[a.code].ext, analyteId: analytes.get(a.code), unitConversion: REF_MAPS[a.code].factor ? { factor: REF_MAPS[a.code].factor } : void 0 }))
@@ -8920,7 +8922,7 @@ function validatePracticeControls(input) {
   const out = {};
   const keys = Object.keys(input ?? {});
   if (!keys.length) throw new DomainError(Codes.INVALID_INPUT, "Nothing to change.");
-  for (const key2 of keys) if (!CONTROL_KEYS.includes(key2)) throw new DomainError(Codes.INVALID_INPUT, `${key2} is not a practice control.`, { field: key2 });
+  for (const key3 of keys) if (!CONTROL_KEYS.includes(key3)) throw new DomainError(Codes.INVALID_INPUT, `${key3} is not a practice control.`, { field: key3 });
   if (input.refundApprovalThresholdMinor !== void 0) {
     const text22 = String(input.refundApprovalThresholdMinor);
     if (!/^\d{1,12}$/.test(text22)) throw new DomainError(Codes.INVALID_INPUT, "refundApprovalThresholdMinor must be whole cents, as text.", { field: "refundApprovalThresholdMinor" });
@@ -9306,7 +9308,7 @@ function addDays2(date, days2) {
   d.setUTCDate(d.getUTCDate() + days2);
   return d.toISOString().slice(0, 10);
 }
-var periodLabel = (key2) => (/* @__PURE__ */ new Date(`${key2}-01T12:00:00Z`)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+var periodLabel = (key3) => (/* @__PURE__ */ new Date(`${key3}-01T12:00:00Z`)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 var dollars = (minor2) => `$${(minor2 / 100n).toLocaleString("en-US")}.${String(minor2 % 100n).padStart(2, "0")}`;
 function disclosureText(input) {
   const price = dollars(input.monthlyPriceMinor);
@@ -9471,20 +9473,20 @@ async function deriveProduction(uow, invoiceId) {
     const category = line.feeItem?.productionCategory || line.feeItem?.category || "";
     const rule2 = category ? rules2[category] : void 0;
     if (rule2) {
-      const key2 = sha256(`credit:${line.id}:${line.performedById}:${version.id}`);
-      const exists = await uow.tx.productionCredit.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+      const key3 = sha256(`credit:${line.id}:${line.performedById}:${version.id}`);
+      const exists = await uow.tx.productionCredit.findUnique({ where: { entryKey: key3 }, select: { id: true } });
       if (!exists) {
-        await uow.tx.productionCredit.create({ data: { staffId: line.performedById, chargeLineId: line.id, invoiceId: inv.id, ruleVersionId: version.id, locationId: inv.locationId, category, basis: rule2.basis, kind: "credit", baseMinor: base, bps: rule2.bps, amountMinor: bpsOf(base, rule2.bps), creditedOn: inv.postedOn, entryKey: key2 } });
+        await uow.tx.productionCredit.create({ data: { staffId: line.performedById, chargeLineId: line.id, invoiceId: inv.id, ruleVersionId: version.id, locationId: inv.locationId, category, basis: rule2.basis, kind: "credit", baseMinor: base, bps: rule2.bps, amountMinor: bpsOf(base, rule2.bps), creditedOn: inv.postedOn, entryKey: key3 } });
         credits++;
       }
     }
     const source = GROOM_SOURCES.has(line.sourceType) ? "groom" : line.sourceType;
     const crule = commissionRules[source];
     if (crule) {
-      const key2 = sha256(`commission:${line.id}:${line.performedById}:${version.id}`);
-      const exists = await uow.tx.commission.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+      const key3 = sha256(`commission:${line.id}:${line.performedById}:${version.id}`);
+      const exists = await uow.tx.commission.findUnique({ where: { entryKey: key3 }, select: { id: true } });
       if (!exists) {
-        await uow.tx.commission.create({ data: { staffId: line.performedById, chargeLineId: line.id, ruleVersionId: version.id, sourceType: source, sourceId: line.sourceId, baseMinor: base, bps: crule.bps, amountMinor: bpsOf(base, crule.bps), earnedOn: inv.postedOn, entryKey: key2 } });
+        await uow.tx.commission.create({ data: { staffId: line.performedById, chargeLineId: line.id, ruleVersionId: version.id, sourceType: source, sourceId: line.sourceId, baseMinor: base, bps: crule.bps, amountMinor: bpsOf(base, crule.bps), earnedOn: inv.postedOn, entryKey: key3 } });
         commissions++;
       }
     }
@@ -9552,12 +9554,12 @@ registerApplier("production.adjust", async (uow, actor, request) => {
   const approver = actorUserId(actor);
   const credit = await lockRow(uow.tx, "ProductionCredit", request.targetId);
   const amount = BigInt(request.payload.amountMinor);
-  const key2 = sha256(`adjust:${request.id}`);
-  const existing = await uow.tx.productionCredit.findUnique({ where: { entryKey: key2 }, select: { id: true } });
+  const key3 = sha256(`adjust:${request.id}`);
+  const existing = await uow.tx.productionCredit.findUnique({ where: { entryKey: key3 }, select: { id: true } });
   if (existing) return { id: existing.id };
   const prior = await uow.tx.productionCredit.aggregate({ where: { adjustsId: credit.id }, _sum: { amountMinor: true } });
   if (BigInt(credit.amountMinor) + (prior._sum.amountMinor ?? 0n) + amount < 0n) throw new DomainError(Codes.GUARD_FAILED, "An adjustment cannot take more than the credit is worth. Other adjustments to this credit were approved first.");
-  const row = await uow.tx.productionCredit.create({ data: { staffId: credit.staffId, ruleVersionId: credit.ruleVersionId, locationId: credit.locationId, invoiceId: credit.invoiceId, category: credit.category, basis: credit.basis, kind: "adjustment", adjustsId: credit.id, baseMinor: 0n, bps: 0, amountMinor: amount, reason: String(request.payload.reason), requestedById: request.payload.requestedBy, approvedById: approver, creditedOn: /* @__PURE__ */ new Date(`${(await uow.tx.$queryRaw`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS d`)[0].d}T00:00:00Z`), entryKey: key2 } });
+  const row = await uow.tx.productionCredit.create({ data: { staffId: credit.staffId, ruleVersionId: credit.ruleVersionId, locationId: credit.locationId, invoiceId: credit.invoiceId, category: credit.category, basis: credit.basis, kind: "adjustment", adjustsId: credit.id, baseMinor: 0n, bps: 0, amountMinor: amount, reason: String(request.payload.reason), requestedById: request.payload.requestedBy, approvedById: approver, creditedOn: /* @__PURE__ */ new Date(`${(await uow.tx.$queryRaw`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS d`)[0].d}T00:00:00Z`), entryKey: key3 } });
   auditCreate(uow, actor, "ProductionCredit", row.id, "production.adjusted", { adjusts: credit.id, amountMinor: amount.toString() });
   return { id: row.id };
 });
@@ -9658,12 +9660,14 @@ init_billing();
 // features/integrations/payment/index.ts
 var import_node_crypto9 = require("node:crypto");
 var STRIPE = "https://api.stripe.com/v1";
+var SECRET = /^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/;
 function stripeKey() {
-  const key2 = process.env.STRIPE_SECRET_KEY ?? "";
-  if (!key2) throw new Error("Card payments are not set up on this server yet.");
-  if (!key2.startsWith("sk_test_") && !key2.startsWith("rk_test_")) throw new Error("Only Stripe test keys are accepted here.");
-  return key2;
+  const key3 = process.env.STRIPE_SECRET_KEY ?? "";
+  if (!SECRET.test(key3)) throw new Error("Card payments are not set up on this server yet.");
+  return key3;
 }
+var cardMode = () => SECRET.exec(process.env.STRIPE_SECRET_KEY ?? "")?.[2] ?? null;
+var PAYMENT_METHOD_ID = /^pm_[A-Za-z0-9_]{1,200}$/;
 var form = (data) => new URLSearchParams(data).toString();
 async function stripeCall(path, method, body, idempotencyKey) {
   const res = await fetch(`${STRIPE}${path}`, {
@@ -9694,7 +9698,7 @@ function intentResult(status, j) {
       return { outcome: "succeeded", providerRef: j.id, message: "Paid." };
     case "requires_action":
     case "requires_confirmation":
-      return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm." };
+      return { outcome: "requires_action", providerRef: j.id, message: "The bank needs the cardholder to confirm.", ...typeof j.client_secret === "string" ? { clientSecret: j.client_secret } : {} };
     case "processing":
     case "requires_capture":
       return { outcome: "processing", providerRef: j.id, message: "The bank is still processing this payment." };
@@ -9724,12 +9728,13 @@ async function findIntent(input) {
 var stripeAdapter = {
   key: "stripe",
   async charge(input) {
+    if (!input.paymentMethod) return { outcome: "failed", providerRef: null, message: "No card was entered." };
     try {
       const { status, json: json20 } = await stripeCall("/payment_intents", "POST", {
         amount: input.amountMinor.toString(),
         currency: input.currencyCode.toLowerCase(),
         confirm: "true",
-        payment_method: input.paymentMethod || "pm_card_visa",
+        payment_method: input.paymentMethod,
         ...input.customer ? { customer: input.customer } : {},
         ...input.offSession ? { off_session: "true" } : {},
         "automatic_payment_methods[enabled]": "true",
@@ -9816,16 +9821,17 @@ var terminalAdapter = {
   readEvent: (raw, headers) => stripeAdapter.readEvent(raw, headers)
 };
 var ADAPTERS = { stripe: stripeAdapter, manual: manualAdapter, terminal: terminalAdapter };
-var adapterFor = (key2) => ADAPTERS[key2] ?? manualAdapter;
-var cardConfigured = () => /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY ?? "");
+var adapterFor = (key3) => ADAPTERS[key3] ?? manualAdapter;
+var cardConfigured = () => cardMode() !== null;
 async function saveCard(input) {
+  if (!input.paymentMethod || !PAYMENT_METHOD_ID.test(input.paymentMethod)) return { ok: false, message: "Enter the card in the card form first." };
   try {
     const meta4 = Object.fromEntries(Object.entries(input.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]));
     const cus = await stripeCall("/customers", "POST", { name: input.name.slice(0, 120), ...input.email ? { email: input.email } : {}, ...meta4 }, `${input.idempotencyKey}:customer`);
     if (cus.status >= 400 || !cus.json.id) return { ok: false, message: "The card processor could not start saving the card." };
     const seti = await stripeCall("/setup_intents", "POST", {
       customer: cus.json.id,
-      payment_method: input.paymentMethod || "pm_card_visa",
+      payment_method: input.paymentMethod,
       confirm: "true",
       usage: "off_session",
       "automatic_payment_methods[enabled]": "true",
@@ -10160,27 +10166,47 @@ async function recordPayment(_root, args, context) {
 async function takeCardPayment(_root, args, context) {
   return gated(context, { permissions: [...TAKERS], tool: "payment.card", humanOnly: true }, args, async (actor) => {
     const amount = minorText(args.amountMinor, "amount");
-    if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
-    const started = await command(context.prisma, { name: "payment.card.start", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      if (args.invoiceId) await lockRow(uow.tx, "Invoice", args.invoiceId);
-      else if (args.depositId) await lockRow(uow.tx, "Deposit", args.depositId);
-      const open = await uow.tx.payment.findFirst({ where: { method: "card_on_file", status: { in: ["pending", "unknown"] }, ...args.invoiceId ? { forInvoiceId: args.invoiceId } : { forDepositId: args.depositId ?? "" } }, select: { ref: true } });
-      if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: "card_in_flight" });
-      const pay = await newPayment(uow, actor, { clientId: args.clientId, method: "card_on_file", provider: "stripe", amountMinor: amount, target: { invoiceId: args.invoiceId, depositId: args.depositId } });
-      const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
-      return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode };
-    });
-    if (started.replay) return { replay: true, ...await settleFromState(context, actor, started.value.paymentId) };
-    const outcome = await adapterFor("stripe").charge({ amountMinor: amount, currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod: args.paymentMethodId ?? void 0 });
-    return { replay: false, ...await recordOutcome(context, actor, started.value.paymentId, started.value.attemptId, outcome, `${args.idempotencyKey}:result`) };
+    return chargeCard(context.prisma, actor, { clientId: args.clientId, invoiceId: args.invoiceId, depositId: args.depositId, amount, paymentMethodId: args.paymentMethodId, idempotencyKey: args.idempotencyKey, method: "card_on_file", params: args });
   });
+}
+async function payInvoiceByLink(prisma, args) {
+  const inv = await prisma.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } });
+  if (!inv?.clientId) throw new DomainError(Codes.NOT_FOUND, "This payment link is not valid.");
+  return chargeCard(prisma, systemActor("payment-link"), { clientId: inv.clientId, invoiceId: args.invoiceId, amount: "balance", paymentMethodId: args.paymentMethodId, idempotencyKey: `link:${args.invoiceId}:${args.idempotencyKey}`, method: "payment_link", params: { invoiceId: args.invoiceId, paymentMethodId: args.paymentMethodId } });
+}
+var LINK_FAILURES_PER_HOUR = 5;
+var CARD_METHODS = ["card_on_file", "payment_link"];
+async function chargeCard(prisma, actor, a) {
+  if (!cardConfigured()) throw new DomainError(Codes.FEATURE_DISABLED, "Card payments are not set up on this server. Record the card payment by hand, or ask the practice owner to connect the card processor.", { reason: "no_processor" });
+  const paymentMethod = String(a.paymentMethodId ?? "");
+  if (!PAYMENT_METHOD_ID.test(paymentMethod)) throw new DomainError(Codes.INVALID_INPUT, "Enter the card in the card form.", { field: "paymentMethodId" });
+  const started = await command(prisma, { name: "payment.card.start", actor, idempotencyKey: a.idempotencyKey, params: a.params }, async (uow) => {
+    if (a.invoiceId) await lockRow(uow.tx, "Invoice", a.invoiceId);
+    else if (a.depositId) await lockRow(uow.tx, "Deposit", a.depositId);
+    const target = a.invoiceId ? { forInvoiceId: a.invoiceId } : { forDepositId: a.depositId ?? "" };
+    const open = await uow.tx.payment.findFirst({ where: { method: { in: CARD_METHODS }, status: { in: ["pending", "unknown"] }, ...target }, select: { ref: true } });
+    if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: "card_in_flight" });
+    if (a.method === "payment_link") {
+      const failures = await uow.tx.payment.count({ where: { method: "payment_link", status: "failed", createdAt: { gte: new Date(uow.now.getTime() - 36e5) }, ...target } });
+      if (failures >= LINK_FAILURES_PER_HOUR) throw new DomainError(Codes.GUARD_FAILED, "Too many cards were declined for this invoice. Try again in an hour, or call the practice.", { reason: "too_many_declines" });
+    }
+    const amount = a.amount === "balance" ? await balanceOfInvoice(uow.tx, a.invoiceId) : a.amount;
+    if (amount <= ZERO2) throw new DomainError(Codes.GUARD_FAILED, "That invoice is already paid.");
+    const pay = await newPayment(uow, actor, { clientId: a.clientId, method: a.method, provider: "stripe", amountMinor: amount, target: { invoiceId: a.invoiceId, depositId: a.depositId } });
+    const attempt = await uow.tx.paymentAttempt.create({ data: { paymentId: pay.id, status: "processing", providerIdempotencyKey: `vet-pay-${pay.id}`, amountMinor: amount, startedAt: uow.now } });
+    return { paymentId: pay.id, ref: pay.ref, attemptId: attempt.id, key: attempt.providerIdempotencyKey, currencyCode: pay.currencyCode, amountMinor: amount.toString() };
+  });
+  if (started.replay) return { replay: true, ...await settleFromState({ prisma, session: null }, actor, started.value.paymentId) };
+  const outcome = await adapterFor("stripe").charge({ amountMinor: BigInt(started.value.amountMinor), currencyCode: started.value.currencyCode, idempotencyKey: started.value.key, description: `Payment ${started.value.ref}`, metadata: { payment: started.value.paymentId }, paymentMethod });
+  const recorded = await recordOutcome({ prisma, session: null }, actor, started.value.paymentId, started.value.attemptId, outcome, `${a.idempotencyKey}:result`);
+  return { replay: false, ...recorded, ...recorded.status === "pending" && outcome.clientSecret ? { clientSecret: outcome.clientSecret } : {} };
 }
 async function settleFromState(context, actor, paymentId) {
   const p = await context.prisma.payment.findUnique({ where: { id: paymentId }, select: { id: true, ref: true, status: true } });
   return { id: p.id, ref: p.ref, status: p.status };
 }
-async function recordOutcome(context, actor, paymentId, attemptId, outcome, key2) {
-  const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key2, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
+async function recordOutcome(context, actor, paymentId, attemptId, outcome, key3) {
+  const done = await command(context.prisma, { name: "payment.card.result", actor, idempotencyKey: key3, params: { paymentId, attemptId, outcome: outcome.outcome, providerRef: outcome.providerRef } }, async (uow) => {
     let pay = await lockRow(uow.tx, "Payment", paymentId);
     if (pay.status === "succeeded") return { id: pay.id, ref: pay.ref, status: "succeeded", message: "Paid." };
     const open = outcome.outcome === "requires_action" || outcome.outcome === "processing";
@@ -10268,8 +10294,8 @@ async function issueCreditNote(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
-async function runRefund(prisma, actor, refundId, key2) {
-  const start = await command(prisma, { name: "refund.start", actor, idempotencyKey: `${key2}:start`, params: { refundId } }, async (uow) => {
+async function runRefund(prisma, actor, refundId, key3) {
+  const start = await command(prisma, { name: "refund.start", actor, idempotencyKey: `${key3}:start`, params: { refundId } }, async (uow) => {
     const r = await lockRow(uow.tx, "Refund", refundId);
     if (r.status === "succeeded") return { skip: true, status: r.status };
     if (!["requested", "approved", "processing", "unknown"].includes(r.status)) throw new DomainError(Codes.GUARD_FAILED, `This refund is ${r.status}.`);
@@ -10280,7 +10306,7 @@ async function runRefund(prisma, actor, refundId, key2) {
   if (start.value.skip) return { id: refundId, status: start.value.status, message: "Already refunded." };
   const s = start.value;
   const out = await adapterFor(s.provider).refund({ providerRef: s.providerRef, amountMinor: s.amountMinor, idempotencyKey: s.key, reason: s.reason });
-  const settle = (outcome) => command(prisma, { name: "refund.settle", actor, idempotencyKey: `${key2}:settle:${outcome.outcome}:${outcome.providerRef ?? ""}`, params: { refundId, outcome: outcome.outcome } }, async (uow) => {
+  const settle = (outcome) => command(prisma, { name: "refund.settle", actor, idempotencyKey: `${key3}:settle:${outcome.outcome}:${outcome.providerRef ?? ""}`, params: { refundId, outcome: outcome.outcome } }, async (uow) => {
     const r = await lockRow(uow.tx, "Refund", refundId);
     if (r.status === "succeeded") return { id: r.id, status: "succeeded" };
     const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: r.paymentId }, select: { clientId: true, currencyCode: true, locationId: true } });
@@ -10308,7 +10334,7 @@ async function runRefund(prisma, actor, refundId, key2) {
     if (!isDomainError(error) && !/check_violation|cannot go below zero|database rule/i.test(String(error?.message))) throw error;
     const why = isDomainError(error) ? error.message : String(error.message);
     const message = `${out.outcome === "succeeded" ? "The processor made this refund, but the books refused the entry" : "The books refused this refund"}: ${why}`.slice(0, 200);
-    const done = await command(prisma, { name: "refund.settle_refused", actor, idempotencyKey: `${key2}:refused`, params: { refundId } }, async (uow) => {
+    const done = await command(prisma, { name: "refund.settle_refused", actor, idempotencyKey: `${key3}:refused`, params: { refundId } }, async (uow) => {
       const r = await lockRow(uow.tx, "Refund", refundId);
       if (r.status === "succeeded" || r.status === "failed") return { id: r.id, status: r.status, message };
       await casUpdate(uow, { model: "Refund", id: r.id, version: r.version, from: [r.status], to: "failed", actor, eventType: "refund.failed", data: { message, providerRef: out.providerRef ?? "" } });
@@ -10930,7 +10956,7 @@ async function searchAvailability(_root, args, context) {
 }
 async function lockSlot(uow, claims, timeZone) {
   const keys = [`resource:${claims.resourceId}`, `provider-day:${claims.providerId}:${localDate({ timeZone }, claims.start)}`].sort();
-  for (const key2 of keys) await advisoryLock(uow.tx, key2);
+  for (const key3 of keys) await advisoryLock(uow.tx, key3);
 }
 async function agentBookingChecks(uow, input, category) {
   if (!input.callRecordId) throw new DomainError(Codes.GUARD_FAILED, "An AI booking belongs to a call.", { field: "callRecordId" });
@@ -12561,14 +12587,14 @@ function calculateDose(input) {
     if (range) {
       const conc = product.concentration != null ? dec(product.concentration) : null;
       const rate2 = rateInRangeBasis(total, input.doseUnit, range, weightKg, input.species, conc && conc.gt(0) ? conc : null, numeratorUnit(product.concentrationUnit));
-      const shown = `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer}`;
+      const shown2 = `${doseAmount.toString()} ${input.doseUnit}/${input.dosePer}`;
       if (!rate2) {
-        warnings.push({ code: "range_unconvertible", severity: "block", message: `${shown} cannot be compared with the formulary range (${range.unit}/${range.per}); enter the dose in ${range.unit}/${range.per}.` });
+        warnings.push({ code: "range_unconvertible", severity: "block", message: `${shown2} cannot be compared with the formulary range (${range.unit}/${range.per}); enter the dose in ${range.unit}/${range.per}.` });
       } else {
         const asRange = `${toScale(rate2, 4).replace(/\.?0+$/, "")} ${range.unit}/${range.per}`;
         const same = range.unit === input.doseUnit && range.per === input.dosePer;
-        if (range.max && rate2.gt(range.max)) warnings.push({ code: "above_range", severity: "block", message: `${shown}${same ? "" : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` });
-        if (range.min && rate2.lt(range.min)) warnings.push({ code: "below_range", severity: "block", message: `${shown}${same ? "" : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` });
+        if (range.max && rate2.gt(range.max)) warnings.push({ code: "above_range", severity: "block", message: `${shown2}${same ? "" : ` (${asRange})`} is above the formulary maximum for a ${input.species} (${range.max} ${range.unit}/${range.per}).` });
+        if (range.min && rate2.lt(range.min)) warnings.push({ code: "below_range", severity: "block", message: `${shown2}${same ? "" : ` (${asRange})`} is below the formulary minimum for a ${input.species} (${range.min} ${range.unit}/${range.per}).` });
       }
       const manual = input.manualOverrideQty != null && input.manualOverrideQty !== "" ? dec(input.manualOverrideQty) : null;
       if (manual && manual.gt(0)) {
@@ -13935,11 +13961,11 @@ async function saveDentalChart(_root, args, context) {
     for (const [tooth, entry] of Object.entries(args.teeth)) {
       if (!triadan.test(tooth)) throw new DomainError(Codes.INVALID_INPUT, `${tooth} is not a Triadan tooth number.`, { field: "teeth" });
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth} must have findings and procedures.`, { field: "teeth" });
-      for (const key2 of ["findings", "procedures"]) {
-        const list24 = entry[key2];
+      for (const key3 of ["findings", "procedures"]) {
+        const list24 = entry[key3];
         if (list24 === void 0) continue;
-        if (!Array.isArray(list24) || list24.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key2} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
-        if (list24.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key2} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
+        if (!Array.isArray(list24) || list24.length > DENTAL_MAX_ITEMS) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: ${key3} must be a list of at most ${DENTAL_MAX_ITEMS} entries.`, { field: "teeth" });
+        if (list24.some((item) => typeof item !== "string" || item.length > DENTAL_MAX_LENGTH)) throw new DomainError(Codes.INVALID_INPUT, `Tooth ${tooth}: each of ${key3} must be text of at most ${DENTAL_MAX_LENGTH} characters.`, { field: "teeth" });
       }
     }
     const result = await command(context.prisma, { name: "dental.chart", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
@@ -14475,9 +14501,9 @@ function ezyvetApiSource(config2) {
   };
 }
 var override = {};
-function pimsSource(key2 = "manual-csv") {
-  if (override[key2]) return override[key2];
-  if (key2 === "ezyvet-api") {
+function pimsSource(key3 = "manual-csv") {
+  if (override[key3]) return override[key3];
+  if (key3 === "ezyvet-api") {
     const env = process.env;
     if (!env.EZYVET_CLIENT_ID || !env.EZYVET_CLIENT_SECRET || !env.EZYVET_PARTNER_ID || !env.EZYVET_SITE_UID) throw new Error("The ezyVet API is not connected. Add the ezyVet partner credentials, or upload a CSV export.");
     return ezyvetApiSource({ baseUrl: env.EZYVET_API_URL || "https://api.ezyvet.com", partnerId: env.EZYVET_PARTNER_ID, clientId: env.EZYVET_CLIENT_ID, clientSecret: env.EZYVET_CLIENT_SECRET, siteUid: env.EZYVET_SITE_UID });
@@ -14571,10 +14597,10 @@ async function previewImport(_root, args, context) {
     const seen = /* @__PURE__ */ new Set();
     const results = parsed.rows.map((r) => {
       const errors = validateRow(args.entity, r.values, species);
-      const key2 = rowKey(args.entity, r.values);
-      if (key2 && seen.has(key2)) errors.push("Duplicate of an earlier row in this file.");
-      seen.add(key2);
-      return { rowNumber: r.rowNumber, externalId: key2 || `row-${r.rowNumber}`, errors, values: r.values };
+      const key3 = rowKey(args.entity, r.values);
+      if (key3 && seen.has(key3)) errors.push("Duplicate of an earlier row in this file.");
+      seen.add(key3);
+      return { rowNumber: r.rowNumber, externalId: key3 || `row-${r.rowNumber}`, errors, values: r.values };
     });
     const result = await command(context.prisma, { name: "import.preview", actor, idempotencyKey: args.idempotencyKey, params: { system: args.system, entity: args.entity, locationId: args.locationId, fileHash, mapping: parsed.mapping } }, async (uow) => {
       const location = await uow.tx.location.findUnique({ where: { id: args.locationId }, select: { id: true } });
@@ -14598,12 +14624,12 @@ async function mapExternal(uow, system, recordType, recordId, value) {
 }
 async function applyRow(uow, actor, batch, row, rowNumber) {
   const sys2 = `${batch.system}:${batch.entity}`;
-  const key2 = rowKey(batch.entity, row);
-  const base = { rowNumber, externalId: key2, errors: [] };
+  const key3 = rowKey(batch.entity, row);
+  const base = { rowNumber, externalId: key3, errors: [] };
   const species = await speciesList(uow.tx);
   const errors = validateRow(batch.entity, row, species);
   if (errors.length) return { ...base, result: "failed", errors };
-  const existing = await findMapped(uow, sys2, RECORD_TYPE[batch.entity], key2);
+  const existing = await findMapped(uow, sys2, RECORD_TYPE[batch.entity], key3);
   if (existing) return { ...base, result: "skipped_existing", recordType: RECORD_TYPE[batch.entity], recordId: existing.recordId };
   const patientFor = async (ext) => {
     const m = await findMapped(uow, `${batch.system}:patients`, "Patient", ext);
@@ -14626,7 +14652,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       if (!normalised.length) return { ...base, result: "failed", errors: ["No valid phone or email."] };
       const dupe = await uow.tx.contactPoint.findFirst({ where: { valueHash: { in: normalised.map((c) => contactHash(c.value)) }, status: "active" }, select: { person: { select: { client: { select: { id: true, ref: true } } } } } });
       if (dupe?.person?.client) {
-        await mapExternal(uow, sys2, "Client", dupe.person.client.id, key2);
+        await mapExternal(uow, sys2, "Client", dupe.person.client.id, key3);
         return { ...base, result: "skipped_existing", recordType: "Client", recordId: dupe.person.client.id, errors: [`Matched existing client ${dupe.person.client.ref} by contact.`] };
       }
       const ref = await nextSerial(uow.tx, "C");
@@ -14640,7 +14666,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
         await uow.tx.consentRecord.create({ data: { contactPointId: cp.id, purpose: "transactional", action: "grant", method: "import", capturedByUserId: actorUserId(actor), at: uow.now } });
         if (row.marketingConsent && truthy(row.marketingConsent)) await uow.tx.consentRecord.create({ data: { contactPointId: cp.id, purpose: "marketing", action: "grant", method: "import", capturedByUserId: actorUserId(actor), at: uow.now } });
       }
-      await mapExternal(uow, sys2, "Client", client.id, key2);
+      await mapExternal(uow, sys2, "Client", client.id, key3);
       auditCreate(uow, actor, "Client", client.id, "client.imported", { ref, batch: batch.ref, rowNumber });
       return { ...base, result: "created", recordType: "Client", recordId: client.id };
     }
@@ -14664,7 +14690,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const patient = await uow.tx.patient.create({ data: { ref, name: row.name.trim(), kind: "individual", speciesId: speciesRow.id, breedId: breed?.id ?? null, sex, reproductiveStatus, dateOfBirth: dob ? /* @__PURE__ */ new Date(`${dob}T00:00:00Z`) : null, dobEstimated: false, status: deceased ? "deceased" : "active", deceasedAt: deceased ? uow.now : null, codeStatus: "unspecified" } });
       await uow.tx.patientOwnership.create({ data: { patientId: patient.id, clientId: owner.recordId, role: "primary", effectiveFrom: uow.now, basis: "import", recordedById: actorUserId(actor) } });
       if (chip) await uow.tx.microchip.create({ data: { patientId: patient.id, number: chip, standard: microchipStandard(chip), active: true } });
-      await mapExternal(uow, sys2, "Patient", patient.id, key2);
+      await mapExternal(uow, sys2, "Patient", patient.id, key3);
       auditCreate(uow, actor, "Patient", patient.id, "patient.imported", { ref, batch: batch.ref, rowNumber, deceased });
       return { ...base, result: "created", recordType: "Patient", recordId: patient.id };
     }
@@ -14673,7 +14699,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const unit2 = (row.unit || "kg").toLowerCase().replace("lbs", "lb");
       const on = importDate(row.date);
       const w = await uow.tx.weightMeasurement.create({ data: { patientId, value: toScale(row.weight, "wt"), unit: unit2, valueKg: toScale(toKg(dec(row.weight), unit2), "wt"), method: "carried_over", measuredAt: /* @__PURE__ */ new Date(`${on}T12:00:00Z`) } });
-      await mapExternal(uow, sys2, "WeightMeasurement", w.id, key2);
+      await mapExternal(uow, sys2, "WeightMeasurement", w.id, key3);
       return { ...base, result: "created", recordType: "WeightMeasurement", recordId: w.id };
     }
     case "vaccinations":
@@ -14686,7 +14712,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const dueOn = batch.entity === "reminders" ? importDate(row.dueOn) : row.dueOn ? importDate(row.dueOn) : addMonths2(importDate(row.givenOn), product?.licensedDoiMonths ?? 12);
       const reminder = await uow.tx.patientReminder.upsert({
         where: { patientId_typeId_dueOn: { patientId, typeId: type.id, dueOn: /* @__PURE__ */ new Date(`${dueOn}T00:00:00Z`) } },
-        create: { patientId, locationId: batch.locationId, typeId: type.id, dueOn: /* @__PURE__ */ new Date(`${dueOn}T00:00:00Z`), status: "scheduled", source: "import", sourceKey: `${sys2}:${key2}` },
+        create: { patientId, locationId: batch.locationId, typeId: type.id, dueOn: /* @__PURE__ */ new Date(`${dueOn}T00:00:00Z`), status: "scheduled", source: "import", sourceKey: `${sys2}:${key3}` },
         update: {}
       });
       if (batch.entity === "vaccinations") {
@@ -14694,11 +14720,11 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
         const note = `Imported from ${batch.system}: ${label} given ${givenOn}${row.lotNumber ? `, lot ${row.lotNumber}` : ""}${row.tagNumber ? `, tag ${row.tagNumber}` : ""}.`;
         const older = await uow.tx.patientReminder.findMany({ where: { patientId, typeId: type.id, status: { in: ["scheduled", "due", "overdue", "lapsed"] }, dueOn: { lte: /* @__PURE__ */ new Date(`${givenOn}T00:00:00Z`) }, id: { not: reminder.id } }, select: { id: true } });
         for (const o of older) {
-          await uow.tx.reminderSatisfaction.create({ data: { reminderId: o.id, sourceKey: `${sys2}:${key2}`, note, at: uow.now } });
+          await uow.tx.reminderSatisfaction.create({ data: { reminderId: o.id, sourceKey: `${sys2}:${key3}`, note, at: uow.now } });
           await uow.tx.patientReminder.update({ where: { id: o.id }, data: { status: "satisfied", version: { increment: 1 } } });
         }
       }
-      await mapExternal(uow, sys2, "PatientReminder", reminder.id, key2);
+      await mapExternal(uow, sys2, "PatientReminder", reminder.id, key3);
       return { ...base, result: "created", recordType: "PatientReminder", recordId: reminder.id };
     }
     case "balances": {
@@ -14716,7 +14742,7 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       if (opening) return { ...base, result: "failed", errors: [`This client already has an opening balance from ${batch.system} (as of ${opening.postedOn.toISOString().slice(0, 10)}). A second one is not imported; correct the account with a credit note or a refund instead.`] };
       const { post: post2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
       const posted = await post2(uow, { clientId: mapped.recordId, kind: "adjustment", amountMinor: signed, postedOn: importDate(row.asOf), entryKey, memo: `Opening balance from ${batch.system} (${batch.ref})` });
-      await mapExternal(uow, sys2, "ClientLedgerEntry", posted.id, key2);
+      await mapExternal(uow, sys2, "ClientLedgerEntry", posted.id, key3);
       auditCreate(uow, actor, "ClientLedgerEntry", posted.id, "balance.imported", { batch: batch.ref, rowNumber, amountMinor: signed.toString() });
       return { ...base, result: "created", recordType: "ClientLedgerEntry", recordId: posted.id };
     }
@@ -14726,14 +14752,14 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       const ref = await nextReference(uow.tx, "ENC", uow.now);
       const startedAt = /* @__PURE__ */ new Date(`${on}T12:00:00Z`);
       const body = row.notes.trim();
-      const content = { importedFrom: batch.system, externalId: key2, date: on, vet: row.vet ?? "", reason: row.reason ?? "", notes: body, batch: batch.ref };
+      const content = { importedFrom: batch.system, externalId: key3, date: on, vet: row.vet ?? "", reason: row.reason ?? "", notes: body, batch: batch.ref };
       const hash2 = signedContentHash(toJsonValue(content));
-      const enc = await uow.tx.encounter.create({ data: { ref, patientId, locationId: batch.locationId, kind: "records_import", vcprQualifying: false, status: "open", reason: (row.reason ?? "").slice(0, 300), startedAt, importedFrom: `${batch.system}:${key2}` } });
+      const enc = await uow.tx.encounter.create({ data: { ref, patientId, locationId: batch.locationId, kind: "records_import", vcprQualifying: false, status: "open", reason: (row.reason ?? "").slice(0, 300), startedAt, importedFrom: `${batch.system}:${key3}` } });
       const section = await uow.tx.soapSection.create({ data: { encounterId: enc.id, kind: "history", ordinal: 1, body, source: "import" } });
       await uow.tx.soapSectionRevision.create({ data: { sectionId: section.id, revisionNumber: 1, body, source: "import", authorUserId: actorUserId(actor), at: uow.now, contentHash: revisionHash({ kind: "history", ordinal: 1, body, structured: null, source: "import", author: `import:${batch.system}` }) } });
       await uow.tx.soapSection.update({ where: { id: section.id }, data: { lockedAt: uow.now } });
       await uow.tx.$executeRawUnsafe(`UPDATE "Encounter" SET status = 'signed', "signedAt" = $2, "contentHash" = $3, "signedContent" = $4::jsonb, "submittedAt" = $2, version = version + 1 WHERE id = $1`, enc.id, uow.now, hash2, JSON.stringify({ ...content, signer: { source: batch.system, name: row.vet ?? "" } }));
-      await mapExternal(uow, sys2, "Encounter", enc.id, key2);
+      await mapExternal(uow, sys2, "Encounter", enc.id, key3);
       auditCreate(uow, actor, "Encounter", enc.id, "encounter.imported", { ref, batch: batch.ref, rowNumber, contentHash: hash2 });
       return { ...base, result: "created", recordType: "Encounter", recordId: enc.id };
     }
@@ -15644,6 +15670,71 @@ async function discardFeeDraft(_root, args, context) {
   });
 }
 
+// features/keystone/mutations/payLinks.ts
+init_errors();
+init_ledger();
+
+// features/keystone/lib/payLink.ts
+var import_node_crypto13 = require("node:crypto");
+var DEVELOPMENT_SECRET4 = "this secret should only be used in testing";
+var PAY_LINK_DAYS = 30;
+function key2() {
+  const secret2 = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : DEVELOPMENT_SECRET4);
+  if (secret2.length < 16) throw new Error("SESSION_SECRET is required to sign payment links");
+  return (0, import_node_crypto13.createHmac)("sha256", secret2).update("vc-invoice-pay-link", "utf8").digest();
+}
+var mac = (body) => (0, import_node_crypto13.createHmac)("sha256", key2()).update(body, "utf8").digest("base64url");
+function signPayLink(invoiceId, now = Date.now()) {
+  const body = `${invoiceId}.${Math.floor(now / 1e3) + PAY_LINK_DAYS * 86400}`;
+  return `${body}.${mac(body)}`;
+}
+function verifyPayLink(token, now = Date.now()) {
+  const parts = String(token ?? "").split(".");
+  if (parts.length !== 3 || !/^[a-z0-9]{10,40}$/.test(parts[0]) || !/^\d{9,11}$/.test(parts[1])) return null;
+  const body = `${parts[0]}.${parts[1]}`;
+  const given = Buffer.from(parts[2], "base64url");
+  const expected = Buffer.from(mac(body), "base64url");
+  if (given.length !== expected.length || !(0, import_node_crypto13.timingSafeEqual)(given, expected)) return null;
+  if (Number(parts[1]) * 1e3 <= now) return null;
+  return parts[0];
+}
+
+// features/keystone/mutations/payLinks.ts
+var TAKERS2 = ["canTakePayments", "canManagePayments"];
+var KEY = /^[A-Za-z0-9-]{16,64}$/;
+var invalid = () => new DomainError(Codes.NOT_FOUND, "This payment link is not valid or has expired. Ask the practice for a new one.");
+async function invoicePayLink(_root, args, context) {
+  return gated(context, { permissions: [...TAKERS2], tool: "payment.link", humanOnly: true }, args, async () => {
+    const inv = await context.prisma.invoice.findUnique({ where: { id: String(args.invoiceId) }, select: { id: true, status: true } });
+    if (!inv) throw new DomainError(Codes.NOT_FOUND, "Invoice not found.");
+    if (!["posted", "partially_paid"].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, "Only a posted invoice with a balance can be paid by link.");
+    return signPayLink(inv.id);
+  });
+}
+async function payLink(_root, args, context) {
+  const invoiceId = verifyPayLink(String(args.token ?? ""));
+  if (!invoiceId) return null;
+  const inv = await context.prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, ref: true, status: true, totalMinor: true, currencyCode: true, postedOn: true } });
+  if (!inv) return null;
+  const practice = await context.prisma.practiceSettings.findUnique({ where: { id: 1 }, select: { displayName: true } });
+  const balance = ["posted", "partially_paid"].includes(inv.status) ? await balanceOfInvoice(context.prisma, inv.id) : 0n;
+  return { practice: practice?.displayName ?? null, ref: inv.ref, status: inv.status, postedOn: inv.postedOn ? inv.postedOn.toISOString().slice(0, 10) : null, totalMinor: String(inv.totalMinor), balanceMinor: String(balance), currencyCode: inv.currencyCode };
+}
+var shown = (r) => ({ id: r.id, ref: r.ref, status: r.status, message: r.message ?? null, ...r.clientSecret ? { clientSecret: r.clientSecret } : {} });
+async function payByLink(_root, args, context) {
+  const invoiceId = verifyPayLink(String(args.token ?? ""));
+  if (!invoiceId) throw invalid();
+  if (!KEY.test(String(args.idempotencyKey ?? ""))) throw new DomainError(Codes.INVALID_INPUT, "Reload the page and try again.");
+  return shown(await payInvoiceByLink(context.prisma, { invoiceId, paymentMethodId: String(args.paymentMethodId ?? ""), idempotencyKey: args.idempotencyKey }));
+}
+async function checkLinkPayment(_root, args, context) {
+  const invoiceId = verifyPayLink(String(args.token ?? ""));
+  if (!invoiceId) throw invalid();
+  const pay = await context.prisma.payment.findUnique({ where: { id: String(args.paymentId ?? "") }, select: { forInvoiceId: true, method: true } });
+  if (!pay || pay.forInvoiceId !== invoiceId || pay.method !== "payment_link") throw new DomainError(Codes.NOT_FOUND, "Payment not found.");
+  return shown(await resolveUnknownPayment(context.prisma, systemActor("payment-link"), String(args.paymentId)));
+}
+
 // features/keystone/mutations/insurance.ts
 init_errors();
 
@@ -15798,7 +15889,7 @@ async function advanceClaim(_root, args, context) {
 }
 
 // features/keystone/mutations/wellness.ts
-var import_node_crypto13 = require("node:crypto");
+var import_node_crypto14 = require("node:crypto");
 init_errors();
 init_ledger();
 var MANAGE = ["canTakePayments", "canManagePayments"];
@@ -15972,7 +16063,7 @@ async function chargeEnrollment(prisma, actor, input) {
       let invoiceId = prior.find((a) => a.invoiceId)?.invoiceId ?? null;
       if (!invoiceId) {
         const description = `${version.plan.name}: ${periodLabel(input.periodKey)}`;
-        const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto13.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: e.clientId, locationId: e.locationId, status: "draft", currencyCode: "USD", note: "" } });
+        const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto14.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: e.clientId, locationId: e.locationId, status: "draft", currencyCode: "USD", note: "" } });
         const line = await uow.tx.chargeLine.create({ data: { clientId: e.clientId, patientId: e.patientId, locationId: e.locationId, invoiceId: draft.id, description, qty: "1", unitPriceMinor: amount, extendedMinor: amount, discountMinor: ZERO3, taxMinor: ZERO3, taxCategory: "professional_service", sourceType: "plan_period", sourceId: `${e.id}:${input.periodKey}`, capturedAt: uow.now } });
         const period = await periodFor(uow.tx, on);
         const ref = await nextReference(uow.tx, "INV", uow.now);
@@ -16012,7 +16103,7 @@ async function statusOf(prisma, attemptId) {
   return { status: a.status === "processing" ? "unknown" : a.status, attemptId: a.id, message: a.message || "", amountMinor: a.amountMinor.toString() };
 }
 async function finishAttempt(prisma, actor, attemptId) {
-  await command(prisma, { name: "wellness.charge.finish", actor, idempotencyKey: `finish:${attemptId}:${(0, import_node_crypto13.randomUUID)()}`, params: { attemptId } }, async (uow) => {
+  await command(prisma, { name: "wellness.charge.finish", actor, idempotencyKey: `finish:${attemptId}:${(0, import_node_crypto14.randomUUID)()}`, params: { attemptId } }, async (uow) => {
     const a = await lockRow(uow.tx, "PlanBillingAttempt", attemptId);
     if (a.status === "succeeded" || a.status === "failed") return { unchanged: true };
     const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: a.paymentId }, select: { status: true } });
@@ -16206,10 +16297,10 @@ async function returnEntitlement(_root, args, context) {
       const orig = await uow.tx.entitlementEntry.findUnique({ where: { id: args.entryId } });
       if (!orig || orig.kind !== "debit") throw new DomainError(Codes.NOT_FOUND, "That use was not found.");
       await advisoryLock(uow.tx, `enrollment:${orig.enrollmentId}`);
-      const key2 = `return:${orig.id}`;
-      if (await uow.tx.entitlementEntry.findUnique({ where: { entryKey: key2 }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "That use was already put back.");
+      const key3 = `return:${orig.id}`;
+      if (await uow.tx.entitlementEntry.findUnique({ where: { entryKey: key3 }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, "That use was already put back.");
       const staff = await staffOf(uow, actor).catch(() => null);
-      const entry = await uow.tx.entitlementEntry.create({ data: { entryKey: key2, grantId: orig.grantId, enrollmentId: orig.enrollmentId, kind: "credit", qty: orig.qty, valueMinor: orig.valueMinor, memo: reason, byId: staff?.id ?? null, at: uow.now } });
+      const entry = await uow.tx.entitlementEntry.create({ data: { entryKey: key3, grantId: orig.grantId, enrollmentId: orig.enrollmentId, kind: "credit", qty: orig.qty, valueMinor: orig.valueMinor, memo: reason, byId: staff?.id ?? null, at: uow.now } });
       auditCreate(uow, actor, "EntitlementEntry", entry.id, "wellness.entitlement_returned", { of: orig.id }, { reason });
       return { id: entry.id };
     });
@@ -16222,7 +16313,7 @@ init_errors();
 init_decimal();
 
 // features/keystone/domain/lab.ts
-var import_node_crypto14 = require("node:crypto");
+var import_node_crypto15 = require("node:crypto");
 init_decimal();
 function ageClassOf(age) {
   if (!age) return null;
@@ -16257,7 +16348,7 @@ var isAbnormal = (flag) => flag !== "normal";
 var reviewSlaHours = (flag, sla = {}) => isAbnormal(flag) ? sla.abnormalHours ?? 4 : sla.normalHours ?? 24;
 function resultHash(accession, status, lines) {
   const body = [...lines].sort((a, b) => a.code.localeCompare(b.code)).map((l) => `${l.code}|${l.value}|${l.unit}`).join("\n");
-  return (0, import_node_crypto14.createHash)("sha256").update(`${accession}
+  return (0, import_node_crypto15.createHash)("sha256").update(`${accession}
 ${status}
 ${body}`).digest("hex");
 }
@@ -16859,7 +16950,7 @@ async function verifyReleasePacket(_root, args, context) {
 }
 
 // features/keystone/mutations/boarding.ts
-var import_node_crypto15 = require("node:crypto");
+var import_node_crypto16 = require("node:crypto");
 init_errors();
 var BOARDERS = ["canManageBoarding", "canBook", "canCheckIn"];
 var GROOMERS = ["canGroom", "canManageBoarding", "canBook", "canCheckIn"];
@@ -17119,7 +17210,7 @@ async function checkOutBoarding(_root, args, context) {
       await transition(uow, { model: "BoardingStay", id: stay.id, from: ["in_house"], to: "checked_out", actor, eventType: "boarding.checked_out", data: { checkedOutAt: uow.now } });
       await transition(uow, { model: "BoardingReservation", id: r.id, from: ["checked_in"], to: "checked_out", actor, eventType: "boarding.completed" });
       const lines = await uow.tx.chargeLine.findMany({ where: { clientId: stay.clientId, invoiceId: null, reversedAt: null, sourceType: "boarding_night", sourceId: { startsWith: `${stay.id}:` } }, select: { id: true } });
-      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto15.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: "draft", currencyCode: "USD", note: "" } });
+      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto16.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: "draft", currencyCode: "USD", note: "" } });
       await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: draft.id } });
       const posted = await postDraftInvoice(uow, actor, draft.id, void 0);
       const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: "paid" }, select: { id: true } });
@@ -17225,15 +17316,15 @@ function limitNestedLists(schema) {
 }
 
 // features/keystone/security/signInLimit.ts
-var import_node_crypto17 = require("node:crypto");
+var import_node_crypto18 = require("node:crypto");
 
 // features/keystone/security/internalIdentity.ts
-var import_node_crypto16 = require("node:crypto");
+var import_node_crypto17 = require("node:crypto");
 var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto16.timingSafeEqual)(leftBuffer, rightBuffer);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto17.timingSafeEqual)(leftBuffer, rightBuffer);
 }
 function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
@@ -17244,7 +17335,7 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp22) || !/^[a-f0-9]{64}$/.test(signature)) return null;
   const age = Math.abs(now - Number(timestamp22) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto16.createHmac)("sha256", secret2).update(`${timestamp22}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto17.createHmac)("sha256", secret2).update(`${timestamp22}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -17271,7 +17362,7 @@ var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
 var SIGN_IN_KNOWN_DAYS = 90;
 var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
-var hash = (value) => (0, import_node_crypto17.createHash)("sha256").update(value).digest("hex");
+var hash = (value) => (0, import_node_crypto18.createHash)("sha256").update(value).digest("hex");
 var normalEmail = (email) => email.trim().toLowerCase();
 var UNKNOWN_ADDRESS = "unknown-address";
 var where = (address) => hash(address);
@@ -17290,9 +17381,9 @@ function clientAddress(req) {
   if (header) return hash(normalizeAddress(header));
   return socket && !/^(?:127\.|::1$|::ffff:127\.)/.test(socket) ? hash(normalizeAddress(socket)) : UNKNOWN_ADDRESS;
 }
-async function countAttempt(prisma, key2) {
+async function countAttempt(prisma, key3) {
   const rows = await prisma.$queryRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto17.randomUUID)()}, ${key2}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto18.randomUUID)()}, ${key3}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
       "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
@@ -17334,7 +17425,7 @@ async function signInAttempt(prisma, email, address, sessionUserId = null) {
 async function rememberAddress(prisma, userId, address) {
   if (address === UNKNOWN_ADDRESS) return;
   await prisma.$executeRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto17.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto18.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
 }
 async function signInSucceeded(prisma, userId, address) {
@@ -17400,6 +17491,8 @@ function extendGraphqlSchema(baseSchema) {
         lookupKnowledge(question: String!, locationId: ID): JSON
         receptionContext(callRecordId: ID, clientId: ID): JSON
         previewDose(patientId: ID!, drugId: ID!, doseAmount: String!, doseUnit: String!, dosePer: String!, weightId: ID, context: String, manualOverrideQty: String, overrideReason: String): JSON
+        invoicePayLink(invoiceId: ID!): String
+        payLink(token: String!): JSON
       }
       input UserUpdateProfileInput { name: String, email: String, password: String, onboardingStatus: String }
       type Mutation {
@@ -17422,6 +17515,8 @@ function extendGraphqlSchema(baseSchema) {
         retryPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
         checkPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
         replacePlanCard(enrollmentId: ID!, signerId: ID!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        payByLink(token: String!, paymentMethodId: String!, idempotencyKey: String!): JSON
+        checkLinkPayment(token: String!, paymentId: ID!): JSON
         cancelEnrollment(enrollmentId: ID!, reason: String!, waiveTrueUp: Boolean, expectedVersion: Int!, idempotencyKey: String!): JSON
         useEntitlement(enrollmentId: ID!, code: String!, qty: Int, memo: String, idempotencyKey: String!): JSON
         returnEntitlement(entryId: ID!, reason: String!, idempotencyKey: String!): JSON
@@ -17624,7 +17719,9 @@ function extendGraphqlSchema(baseSchema) {
         triageQuestions: op(triageQuestions),
         lookupKnowledge: op(lookupKnowledge),
         receptionContext: op(receptionContext),
-        previewDose: op(previewDose)
+        previewDose: op(previewDose),
+        invoicePayLink: op(invoicePayLink),
+        payLink: op(payLink)
       },
       Mutation: {
         updateActiveUser: updateActiveUser_default,
@@ -17781,6 +17878,8 @@ function extendGraphqlSchema(baseSchema) {
         retryPlanCharge: op(retryPlanCharge),
         checkPlanCharge: op(checkPlanCharge),
         replacePlanCard: op(replacePlanCard),
+        payByLink: op(payByLink),
+        checkLinkPayment: op(checkLinkPayment),
         cancelEnrollment: op(cancelEnrollment),
         useEntitlement: op(useEntitlement),
         returnEntitlement: op(returnEntitlement),
@@ -17967,11 +18066,11 @@ function throwing(result) {
   if (!result || typeof result.then !== "function") return rethrowKeystonePrismaError(result);
   const settled = () => result.then(rethrowKeystonePrismaError);
   return new Proxy(result, {
-    get(target, key2) {
-      if (key2 === "then") return (ok, fail) => settled().then(ok, fail);
-      if (key2 === "catch") return (fail) => settled().catch(fail);
-      if (key2 === "finally") return (done) => settled().finally(done);
-      const value = Reflect.get(target, key2, target);
+    get(target, key3) {
+      if (key3 === "then") return (ok, fail) => settled().then(ok, fail);
+      if (key3 === "catch") return (fail) => settled().catch(fail);
+      if (key3 === "finally") return (done) => settled().finally(done);
+      const value = Reflect.get(target, key3, target);
       return typeof value === "function" ? value.bind(target) : value;
     }
   });
@@ -17980,8 +18079,8 @@ function throwingDelegate(delegate) {
   const cached = delegates.get(delegate);
   if (cached) return cached;
   const wrapped = new Proxy(delegate, {
-    get(target, key2) {
-      const value = Reflect.get(target, key2, target);
+    get(target, key3) {
+      const value = Reflect.get(target, key3, target);
       return typeof value === "function" ? (...args) => throwing(value.apply(target, args)) : value;
     }
   });
@@ -17992,18 +18091,18 @@ function throwKeystonePrismaErrors(client) {
   const cached = clients.get(client);
   if (cached) return cached;
   const wrapped = new Proxy(client, {
-    get(target, key2) {
-      const value = Reflect.get(target, key2, target);
-      if (key2 === "$transaction" && typeof value === "function") {
+    get(target, key3) {
+      const value = Reflect.get(target, key3, target);
+      if (key3 === "$transaction" && typeof value === "function") {
         return (work, ...options) => {
           if (typeof work === "function") return value.call(target, (tx) => work(throwKeystonePrismaErrors(tx)), ...options);
           return Promise.resolve(value.call(target, work, ...options)).then((results) => Array.isArray(results) ? results.map(rethrowKeystonePrismaError) : results);
         };
       }
-      if (key2 === "$extends" && typeof value === "function") return (...args) => throwKeystonePrismaErrors(value.apply(target, args));
-      if (typeof key2 === "string" && RAW_METHOD.test(key2) && typeof value === "function") return (...args) => throwing(value.apply(target, args));
+      if (key3 === "$extends" && typeof value === "function") return (...args) => throwKeystonePrismaErrors(value.apply(target, args));
+      if (typeof key3 === "string" && RAW_METHOD.test(key3) && typeof value === "function") return (...args) => throwing(value.apply(target, args));
       if (typeof value === "function") return value.bind(target);
-      if (typeof key2 === "string" && !key2.startsWith("$") && value && typeof value === "object" && typeof value.findFirst === "function") return throwingDelegate(value);
+      if (typeof key3 === "string" && !key3.startsWith("$") && value && typeof value === "object" && typeof value.findFirst === "function") return throwingDelegate(value);
       return value;
     }
   });

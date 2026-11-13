@@ -24,6 +24,7 @@ import * as register from './register'
 import * as fees from './fees'
 import * as estimates from './estimates'
 import * as billing from './billing'
+import * as payLinks from './payLinks'
 import * as insurance from './insurance'
 import * as wellness from './wellness'
 import * as diagnostics from './diagnostics'
@@ -55,6 +56,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         lookupKnowledge(question: String!, locationId: ID): JSON
         receptionContext(callRecordId: ID, clientId: ID): JSON
         previewDose(patientId: ID!, drugId: ID!, doseAmount: String!, doseUnit: String!, dosePer: String!, weightId: ID, context: String, manualOverrideQty: String, overrideReason: String): JSON
+        invoicePayLink(invoiceId: ID!): String
+        payLink(token: String!): JSON
       }
       input UserUpdateProfileInput { name: String, email: String, password: String, onboardingStatus: String }
       type Mutation {
@@ -77,6 +80,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         retryPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
         checkPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
         replacePlanCard(enrollmentId: ID!, signerId: ID!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+        payByLink(token: String!, paymentMethodId: String!, idempotencyKey: String!): JSON
+        checkLinkPayment(token: String!, paymentId: ID!): JSON
         cancelEnrollment(enrollmentId: ID!, reason: String!, waiveTrueUp: Boolean, expectedVersion: Int!, idempotencyKey: String!): JSON
         useEntitlement(enrollmentId: ID!, code: String!, qty: Int, memo: String, idempotencyKey: String!): JSON
         returnEntitlement(entryId: ID!, reason: String!, idempotencyKey: String!): JSON
@@ -280,6 +285,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         lookupKnowledge: op(reception.lookupKnowledge),
         receptionContext: op(reception.receptionContext),
         previewDose: op(treatment.previewDose),
+        invoicePayLink: op(payLinks.invoicePayLink),
+        payLink: op(payLinks.payLink),
       },
       Mutation: {
         updateActiveUser,
@@ -436,6 +443,8 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         retryPlanCharge: op(wellness.retryPlanCharge),
         checkPlanCharge: op(wellness.checkPlanCharge),
         replacePlanCard: op(wellness.replacePlanCard),
+        payByLink: op(payLinks.payByLink),
+        checkLinkPayment: op(payLinks.checkLinkPayment),
         cancelEnrollment: op(wellness.cancelEnrollment),
         useEntitlement: op(wellness.useEntitlement),
         returnEntitlement: op(wellness.returnEntitlement),

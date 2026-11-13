@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { label } from '../lib/format';
 import { runCommand } from '../actions/commands';
 import { pillClass } from './ActionButton';
+import { CardField, type CardHandle } from './CardField';
 
 /*
  * A small form that runs one named command. Fields are plain strings; `build` turns them into the
@@ -15,7 +16,7 @@ import { pillClass } from './ActionButton';
 
 export type Field = { name: string; label: string; placeholder?: string; defaultValue?: string; options?: { value: string; label: string }[]; hint?: string; width?: 'sm' | 'md' | 'lg' | 'full'; multiline?: number };
 
-export function CommandForm({ op, fields, fixed = {}, build, submit, paths, confirm, className }: {
+export function CommandForm({ op, fields, fixed = {}, build, submit, paths, confirm, className, card }: {
   op: string;
   fields: Field[];
   /** Values the person does not type (ids, scope keys). */
@@ -25,12 +26,15 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
   paths?: string[];
   confirm?: string;
   className?: string;
+  /** A card typed into Stripe's form; its payment method id is sent as `paymentMethodId`. */
+  card?: { publishableKey: string | null; label?: string };
 }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
   const [error, setError] = React.useState('');
   const [done, setDone] = React.useState('');
   const key = React.useRef<{ key: string; body: string } | null>(null);
+  const cardHandle = React.useRef<CardHandle | null>(null);
   const [values, setValues] = React.useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.name, f.defaultValue ?? ''])));
   return (
     <form
@@ -47,13 +51,31 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
           setError(err instanceof Error ? err.message : 'Check the fields.');
           return;
         }
-        const body = JSON.stringify(variables);
-        if (key.current?.body !== body) key.current = { key: `${op}:${crypto.randomUUID()}`, body };
-        const idempotencyKey = key.current.key;
         start(async () => {
+          if (card) {
+            const made = cardHandle.current ? await cardHandle.current.create() : { error: 'Card payments are not set up on this server.' };
+            if ('error' in made) { setError(made.error); return; }
+            variables = { ...variables, paymentMethodId: made.id };
+          }
+          const body = JSON.stringify(variables);
+          if (key.current?.body !== body) key.current = { key: `${op}:${crypto.randomUUID()}`, body };
+          const idempotencyKey = key.current.key;
           const r = await runCommand(op, variables, idempotencyKey, paths);
-          if (!r.ok) setError(r.error);
-          else { key.current = null; setDone(summaryOf(r.data)); router.refresh(); }
+          if (!r.ok) { setError(r.error); return; }
+          let data = r.data as Record<string, unknown> | null;
+          // The bank wants the cardholder to confirm (3-D Secure): show its check, then read the answer from the processor.
+          if (card && data && typeof data.clientSecret === 'string' && typeof data.id === 'string') {
+            const confirmed = await cardHandle.current?.confirm(data.clientSecret);
+            if (confirmed?.error) setError(confirmed.error);
+            const checked = await runCommand('checkPaymentStatus', { paymentId: data.id }, `checkPaymentStatus:${crypto.randomUUID()}`, paths);
+            if (checked.ok) data = checked.data as Record<string, unknown>;
+          }
+          key.current = null;
+          if (card && data?.status === 'succeeded') cardHandle.current?.reset();
+          // A decline is a result, not a success: say why in red, and the next try needs the card typed again (a new card).
+          if (card && data?.status === 'failed') { cardHandle.current?.reset(); setError(`${String(data.ref ?? '')} declined: ${String(data.message ?? 'The card was declined.')}`); router.refresh(); return; }
+          setDone(summaryOf(data));
+          router.refresh();
         });
       }}
     >
@@ -72,6 +94,7 @@ export function CommandForm({ op, fields, fixed = {}, build, submit, paths, conf
           {f.hint ? <span className="text-[11px]">{f.hint}</span> : null}
         </label>
       ))}
+      {card ? <CardField publishableKey={card.publishableKey} handleRef={cardHandle} label={card.label} /> : null}
       <button type="submit" disabled={pending} className={cn(pillClass, 'border')}>{pending ? 'Working' : submit}</button>
       {error ? <span role="alert" className="w-full break-words text-xs text-red-600">{error}</span> : null}
       {done ? <span className="w-full break-words text-xs text-emerald-700">{done}</span> : null}

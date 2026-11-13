@@ -55,7 +55,7 @@ export async function corrections(subjects: { type: string; ids: string[] }[]) {
 }
 
 /** The role permissions the dashboard screens check to decide which buttons to show (one fixed query). */
-const SCREEN_PERMISSIONS = ['canOrder', 'canWriteRecord', 'canSignRecord', 'canMessageClients', 'canBook', 'canProcessRecordsRequests', 'canViewFinance', 'canManagePayments'] as const
+const SCREEN_PERMISSIONS = ['canOrder', 'canWriteRecord', 'canSignRecord', 'canMessageClients', 'canBook', 'canProcessRecordsRequests', 'canViewFinance', 'canManagePayments', 'canTakePayments'] as const
 type ScreenPermission = typeof SCREEN_PERMISSIONS[number]
 
 /**
@@ -65,7 +65,7 @@ type ScreenPermission = typeof SCREEN_PERMISSIONS[number]
 export async function myPermissions<K extends ScreenPermission>(names: readonly K[]): Promise<Record<K, boolean>> {
   let role: Record<string, boolean | null> | null = null
   try {
-    const r = await keystoneClient<{ authenticatedItem: { role: Record<string, boolean | null> | null } | null }>(`{ authenticatedItem { ... on User { role { canOrder canWriteRecord canSignRecord canMessageClients canBook canProcessRecordsRequests canViewFinance canManagePayments } } } }`)
+    const r = await keystoneClient<{ authenticatedItem: { role: Record<string, boolean | null> | null } | null }>(`{ authenticatedItem { ... on User { role { canOrder canWriteRecord canSignRecord canMessageClients canBook canProcessRecordsRequests canViewFinance canManagePayments canTakePayments } } } }`)
     role = r.success ? r.data.authenticatedItem?.role ?? null : null
   } catch { role = null }
   return Object.fromEntries(names.map(n => [n, role?.[n] === true])) as Record<K, boolean>

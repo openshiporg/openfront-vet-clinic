@@ -8,7 +8,7 @@ import { systemActor } from '../lib/actor'
 import { stripeAdapter } from '../../integrations/payment'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
 import { acceptEstimate, attachOrderToPlan, createEstimate, presentEstimate, recordOverageApproval } from './estimates'
-import { addFeeCharge, applyDeposit, applyPaymentEvent, checkPaymentStatus, closeArPeriod, draftInvoice, postInvoice, recordPayment, requestRefund, takeCardPayment } from './billing'
+import { addFeeCharge, applyDeposit, applyPaymentEvent, checkPaymentStatus, closeArPeriod, draftInvoice, payInvoiceByLink, postInvoice, recordPayment, requestRefund, takeCardPayment } from './billing'
 import { buildClaimPacket } from './insurance'
 import { fakeStripe } from '../../../tests/helpers/fakeStripe'
 
@@ -94,7 +94,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     const inv = await postedInvoice(1)
     const charge = vi.spyOn(stripeAdapter, 'charge').mockResolvedValue({ outcome: 'unknown', providerRef: null, message: 'No answer' })
     const resolve = vi.spyOn(stripeAdapter, 'resolve').mockResolvedValue({ outcome: 'succeeded', providerRef: 'pi_123', message: 'Paid' })
-    const res = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string; status: string }
+    const res = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)) as { id: string; status: string }
     expect(res.status).toBe('unknown')
     expect(await balanceOfInvoice(prisma, inv.id)).toBe(inv.total)
     const first = await checkPaymentStatus(null, { paymentId: res.id }, ctx)
@@ -114,10 +114,10 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     const inv = await postedInvoice(1)
     const charge = vi.spyOn(stripeAdapter, 'charge').mockResolvedValue({ outcome: 'unknown', providerRef: null, message: 'No answer' })
     vi.spyOn(stripeAdapter, 'resolve').mockResolvedValue({ outcome: 'succeeded', providerRef: 'pi_b1', message: 'Paid' })
-    const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string; status: string }
+    const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)) as { id: string; status: string }
     expect(first.status).toBe('unknown')
-    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
-    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: '100', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+    await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: '100', paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
     expect(charge).toHaveBeenCalledTimes(1)
     // The database refuses a second open card payment on the invoice even if the application did not.
     await expect(prisma.$executeRawUnsafe(`INSERT INTO "Payment" (id, ref, "client", method, provider, "amountMinor", status, "forInvoice", "updatedAt") VALUES ('raw_open_card', 'RAW-OPEN', '${clientId}', 'card_on_file', 'stripe', 100, 'pending', '${inv.id}', now())`)).rejects.toBeTruthy()
@@ -125,7 +125,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     await checkPaymentStatus(null, { paymentId: first.id }, ctx)
     expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
     const inv2 = await postedInvoice(1)
-    const both = await Promise.allSettled([1, 2].map(() => takeCardPayment(null, { clientId, invoiceId: inv2.id, amountMinor: String(inv2.total), idempotencyKey: key() }, ctx)))
+    const both = await Promise.allSettled([1, 2].map(() => takeCardPayment(null, { clientId, invoiceId: inv2.id, amountMinor: String(inv2.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)))
     expect(both.filter(r => r.status === 'fulfilled')).toHaveLength(1)
     expect(await prisma.payment.count({ where: { forInvoiceId: inv2.id, method: 'card_on_file' } })).toBe(1)
     expect(charge).toHaveBeenCalledTimes(2)
@@ -161,7 +161,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
       stripe.prune(); stripe.hide('pi_fake_1')
       for (let i = 0; i < 3; i += 1) expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('unknown')
       expect((await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })).status).toBe('unknown')
-      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
       expect(stripe.posts()).toBe(1)
       expect(stripe.captured).toBeLessThanOrEqual(Number(inv.total))
     } finally { stripe.restore() }
@@ -193,7 +193,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     try {
       const inv = await postedInvoice(1)
       stripe.loseNextReply()
-      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string }
+      const first = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)) as { id: string }
       // What the old Check status left behind on live (PAY-2026-000006): failed, no reference.
       await prisma.payment.update({ where: { id: first.id }, data: { status: 'failed' } })
       expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('pending')
@@ -222,7 +222,7 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
     const inv = await postedInvoice(1)
     vi.spyOn(stripeAdapter, 'charge').mockResolvedValue({ outcome: 'unknown', providerRef: 'pi_evt_1', message: 'No answer' })
-    const res = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)) as { id: string }
+    const res = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)) as { id: string }
     await prisma.payment.update({ where: { id: res.id }, data: { providerRef: 'pi_evt_1' } })
     const event = { provider: 'stripe', id: 'evt_dup_1', type: 'payment_intent.succeeded', objectRef: 'pi_evt_1', outcome: 'succeeded' }
     const a = await applyPaymentEvent(prisma, systemActor('payment-webhook'), event)
@@ -314,5 +314,68 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     expect(row.packetBody).toContain('Visit summary')
     expect(row.packetBody).not.toContain('Surgery notes')
     await expect(prisma.insuranceClaimPacket.create({ data: { ref: uniqueKey('CLM').slice(0, 20), policyId: policy.id, patientId, invoiceId: inv.id, recordsReleaseId: rel.id, documents: [{ documentId: other.id, sha256: other.sha256, title: other.title }], submitter: 'client', status: 'draft' } as never })).rejects.toSatisfy(x => /claim packet|released/i.test(pgError(x)))
+  })
+
+  /* PAYMENTS ARE REAL: the card is the one typed into Stripe's form; a live key takes the same path; a client pays by link. */
+  it('a staff card payment needs a card from the card form: no default card, nothing charged without one', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe()
+    try {
+      const inv = await postedInvoice(1)
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), idempotencyKey: key() }, ctx)).rejects.toThrow(/card form/i)
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: '4242424242424242', idempotencyKey: key() }, ctx)).rejects.toThrow(/card form/i)
+      expect(stripe.calls).toEqual([])
+      expect(await prisma.payment.count({ where: { forInvoiceId: inv.id } })).toBe(0)
+    } finally { stripe.restore() }
+  })
+
+  it('a live key takes a card payment on the same path as a test key', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_unit'
+    const stripe = fakeStripe()
+    try {
+      const inv = await postedInvoice(1)
+      const r = (await takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: String(inv.total), paymentMethodId: 'pm_1LiveTyped', idempotencyKey: key() }, ctx)) as { status: string }
+      expect(r.status).toBe('succeeded')
+      expect(stripe.calls).toEqual(['POST /payment_intents pm=pm_1LiveTyped'])
+      expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
+    } finally { stripe.restore() }
+  })
+
+  it('a client pays an invoice by link: the balance is charged once, a second card waits for the first, and a repeat press replays', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe()
+    try {
+      const inv = await postedInvoice(2)
+      await recordPayment(null, { clientId, invoiceId: inv.id, method: 'cash', amountMinor: '600', idempotencyKey: key() }, ctx)
+      stripe.loseNextReply()
+      const attempt = uniqueKey('link')
+      const first = (await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: attempt })) as { id: string; status: string }
+      expect(first.status).toBe('unknown')
+      // The same press again replays; a different card is refused while the first has no answer; staff cannot charge it either.
+      expect(((await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: attempt })) as { id: string }).id).toBe(first.id)
+      await expect(payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_mastercard', idempotencyKey: uniqueKey('link') })).rejects.toThrow(/Check status/)
+      await expect(takeCardPayment(null, { clientId, invoiceId: inv.id, amountMinor: '100', paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)).rejects.toThrow(/Check status/)
+      // The database refuses a second open link payment on the invoice even if the application did not.
+      await expect(prisma.$executeRawUnsafe(`INSERT INTO "Payment" (id, ref, "client", method, provider, "amountMinor", status, "forInvoice", "updatedAt") VALUES ('raw_open_link', 'RAW-LINK', '${clientId}', 'payment_link', 'stripe', 100, 'pending', '${inv.id}', now())`)).rejects.toBeTruthy()
+      expect(((await checkPaymentStatus(null, { paymentId: first.id }, ctx)) as { status: string }).status).toBe('succeeded')
+      const pay = await prisma.payment.findUniqueOrThrow({ where: { id: first.id } })
+      expect(pay).toMatchObject({ method: 'payment_link', provider: 'stripe', amountMinor: inv.total - 600n, providerRef: 'pi_fake_1' })
+      expect(stripe.posts()).toBe(1)
+      expect(stripe.captured).toBe(Number(inv.total - 600n))
+      expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
+      await expect(payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: uniqueKey('link') })).rejects.toThrow(/already paid/i)
+    } finally { stripe.restore() }
+  })
+
+  it('a link cannot be used to try card after card: five declines in an hour stop it', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    const stripe = fakeStripe({ status: () => 'requires_payment_method' })
+    try {
+      const inv = await postedInvoice(1)
+      for (let i = 0; i < 5; i += 1) expect(((await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: `pm_card_${i}`, idempotencyKey: uniqueKey('link') })) as { status: string }).status).toBe('failed')
+      await expect(payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: uniqueKey('link') })).rejects.toThrow(/Too many cards/)
+      expect(stripe.posts()).toBe(5)
+      expect(await balanceOfInvoice(prisma, inv.id)).toBe(inv.total)
+    } finally { stripe.restore() }
   })
 })

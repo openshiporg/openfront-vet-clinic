@@ -25057,6 +25057,8 @@ type Mutation {
   retryPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
   checkPlanCharge(attemptId: ID!, idempotencyKey: String!): JSON
   replacePlanCard(enrollmentId: ID!, signerId: ID!, affirmed: Boolean!, paymentMethodId: String, idempotencyKey: String!): JSON
+  payByLink(token: String!, paymentMethodId: String!, idempotencyKey: String!): JSON
+  checkLinkPayment(token: String!, paymentId: ID!): JSON
   cancelEnrollment(enrollmentId: ID!, reason: String!, waiveTrueUp: Boolean, expectedVersion: Int!, idempotencyKey: String!): JSON
   useEntitlement(enrollmentId: ID!, code: String!, qty: Int, memo: String, idempotencyKey: String!): JSON
   returnEntitlement(entryId: ID!, reason: String!, idempotencyKey: String!): JSON
@@ -25992,6 +25994,8 @@ type Query {
   lookupKnowledge(question: String!, locationId: ID): JSON
   receptionContext(callRecordId: ID, clientId: ID): JSON
   previewDose(patientId: ID!, drugId: ID!, doseAmount: String!, doseUnit: String!, dosePer: String!, weightId: ID, context: String, manualOverrideQty: String, overrideReason: String): JSON
+  invoicePayLink(invoiceId: ID!): String
+  payLink(token: String!): JSON
 }
 
 union AuthenticatedItem = User

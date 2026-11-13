@@ -31,7 +31,7 @@ describe('stripeAdapter.resolve', () => {
   })
 
   it('a pruned key after a lost reply, with the intent missing from search and the recent list, is unknown with no new charge', async () => {
-    const i = input()
+    const i = input({ paymentMethod: 'pm_card_visa' })
     stripe.loseNextReply()
     await stripeAdapter.charge(i)
     stripe.prune(); stripe.hide('pi_fake_1')
@@ -62,7 +62,7 @@ describe('stripeAdapter.resolve', () => {
 
   it('only a decline or a cancel is failed', async () => {
     stripe.restore(); stripe = fakeStripe({ status: () => 'requires_payment_method' })
-    const i = input()
+    const i = input({ paymentMethod: 'pm_card_chargeDeclined' })
     expect((await stripeAdapter.charge(i)).outcome).toBe('failed')
     stripe.setStatus('pi_fake_1', 'canceled')
     expect((await stripeAdapter.resolve({ ...i, providerRef: 'pi_fake_1' })).outcome).toBe('failed')

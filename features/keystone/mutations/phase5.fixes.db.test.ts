@@ -47,7 +47,7 @@ describe.skipIf(!hasTestDatabase)('Phase 5 r1 fixes (database)', () => {
     return p.id
   }
   const enrol = (patientId: string, extra: Record<string, unknown> = {}) =>
-    enrolPatient(null, { patientId, planVersionId: versionId, signerId, method: 'in_person', affirmed: true, idempotencyKey: key(), ...extra } as never, ctx) as Promise<{ id: string; status: string; ref: string; firstCharge: string }>
+    enrolPatient(null, { patientId, planVersionId: versionId, signerId, method: 'in_person', affirmed: true, paymentMethodId: 'pm_card_visa', idempotencyKey: key(), ...extra } as never, ctx) as Promise<{ id: string; status: string; ref: string; firstCharge: string }>
 
   beforeAll(async () => {
     prisma = testPrisma(10)
@@ -114,7 +114,7 @@ describe.skipIf(!hasTestDatabase)('Phase 5 r1 fixes (database)', () => {
       const pid = await newPatient('Retry Rosa')
       const e = await enrol(pid)
       const failed = await prisma.planBillingAttempt.findFirstOrThrow({ where: { enrollmentId: e.id } })
-      await replacePlanCard(null, { enrollmentId: e.id, signerId, affirmed: true, idempotencyKey: key() }, ctx)
+      await replacePlanCard(null, { enrollmentId: e.id, signerId, affirmed: true, paymentMethodId: 'pm_card_visa', idempotencyKey: key() }, ctx)
       decline = false
       const r = (await retryPlanCharge(null, { attemptId: failed.id, idempotencyKey: key() }, ctx)) as { status: string }
       expect(r.status).toBe('succeeded')
