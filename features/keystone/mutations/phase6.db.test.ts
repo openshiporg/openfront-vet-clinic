@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { hasTestDatabase, resetDatabase, testPrisma, uniqueKey } from '../../../tests/helpers/db'
 import { permissionNames } from '../access'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
+import { loadInHouseLabCatalog, mapLabCode, saveLaboratory, saveLabTest } from './labSetup'
 import { cancelLabOrder, collectSpecimen, communicateLabResult, enterLabResult, importLabFile, notifyResultsReady, orderLab, reviewLabResult, sendLabOrder } from './diagnostics'
 import { decideRecordsRequest, releaseRecords, startRecordsVerification, verifyRecordsRequest } from './recordsRelease'
 import { calculatePayPeriod, draftRuleVersion, exportPayPeriod, lockPayPeriod, openPayPeriod, requestPayPeriodApproval, requestProductionAdjustment, requestRulePublication } from './production'
@@ -49,6 +50,7 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     const owner = { session: sessionFor(boot.id, ALL), prisma }
     await loadPracticeSetup(null, { idempotencyKey: uniqueKey('practice') }, owner)
     await loadClinicSetup(null, { idempotencyKey: uniqueKey('clinic') }, owner)
+    await loadInHouseLabCatalog(null, { idempotencyKey: uniqueKey('labs') }, owner)
     ctx = { session: sessionFor('seed_user_marsh', ALL), prisma }
     const other = await prisma.user.create({ data: { name: 'second', email: `${uniqueKey('two')}@cedarcreekvet.com`, password: 'x'.repeat(60) } })
     second = { session: sessionFor(other.id, ALL), prisma }
@@ -392,5 +394,41 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     const c = (await cancelCampaign(null, { campaignId: reminder.id, expectedVersion: 1, idempotencyKey: key() }, ctx)) as { status: string }
     expect(c.status).toBe('cancelled')
     expect(await prisma.commsMessage.count()).toBe(before)
+  }, 120_000)
+
+  it('lab set-up: a practice adds its own lab, test, price and result code; the catalog only adds what is missing; front desk cannot', async () => {
+    // The clinic load no longer brings a fictional reference lab; the in-house catalog came from its own step.
+    expect(await prisma.laboratory.count({ where: { code: 'REFLAB' } })).toBe(0)
+    const inHouse = await prisma.laboratory.findUniqueOrThrow({ where: { code: 'INHOUSE' }, include: { tests: true } })
+    expect(inHouse.tests.map(t => t.code).sort()).toEqual(['GLU', 'PCVTP'])
+    const k = key()
+    const lab = (await saveLaboratory(null, { code: 'idexx', name: 'IDEXX Reference Laboratories', kind: 'reference', intake: 'file_drop', accountNumber: 'A-1', idempotencyKey: k }, ctx)) as { id: string }
+    expect((await saveLaboratory(null, { code: 'idexx', name: 'IDEXX Reference Laboratories', kind: 'reference', intake: 'file_drop', accountNumber: 'A-1', idempotencyKey: k }, ctx) as { replay: boolean }).replay).toBe(true)
+    await expect(saveLaboratory(null, { code: 'IDEXX', name: 'Again', kind: 'reference', intake: 'manual', idempotencyKey: key() }, ctx)).rejects.toThrow(/already exists/)
+    const fee = await prisma.feeItem.findFirstOrThrow({ where: { code: 'LAB-T4', version: { status: 'published' } } })
+    const t = (await saveLabTest(null, { labId: lab.id, code: 'tt4', name: 'Total T4', feeItemId: fee.id, turnaroundHours: 48, speciesCodes: ['canine', 'feline'], idempotencyKey: key() }, ctx)) as { id: string }
+    await expect(saveLabTest(null, { labId: lab.id, code: 'TT4', name: 'dup', turnaroundHours: 1, idempotencyKey: key() }, ctx)).rejects.toThrow(/already has a test TT4/)
+    await mapLabCode(null, { labId: lab.id, externalCode: 'TT4', analyteCode: 'T4', factor: '12.87', idempotencyKey: key() }, ctx)
+    await mapLabCode(null, { labId: lab.id, externalCode: 'TT4', analyteCode: 'T4', factor: '1', idempotencyKey: key() }, ctx)
+    const maps = await prisma.labAnalyteMap.findMany({ where: { labId: lab.id, externalCode: 'TT4' } })
+    expect(maps).toHaveLength(1)
+    expect(maps[0].unitConversion).toBeNull()
+    await expect(mapLabCode(null, { labId: lab.id, externalCode: 'X1', analyteCode: 'NEWONE', idempotencyKey: key() }, ctx)).rejects.toThrow(/analyte name is required/)
+    // The new test is orderable and charges its fee.
+    const o = (await orderLab(null, { patientId, labId: lab.id, testIds: [t.id], idempotencyKey: key() }, ctx)) as { id: string }
+    expect((await prisma.labOrder.findUniqueOrThrow({ where: { id: o.id } })).chargeLineId).not.toBeNull()
+    // Retire the test: it stays on the order, and can no longer be ordered.
+    await saveLabTest(null, { testId: t.id, labId: lab.id, name: 'Total T4', feeItemId: fee.id, turnaroundHours: 48, status: 'retired', idempotencyKey: key() }, ctx)
+    await expect(orderLab(null, { patientId, labId: lab.id, testIds: [t.id], idempotencyKey: key() }, ctx)).rejects.toThrow(/active test/)
+    // A practice that changed the in-house glucose test keeps its change when the catalog is loaded again.
+    const glu = inHouse.tests.find(x => x.code === 'GLU')!
+    await saveLabTest(null, { testId: glu.id, labId: inHouse.id, name: 'Glucose (our meter)', turnaroundHours: 0, idempotencyKey: key() }, ctx)
+    const again = (await loadInHouseLabCatalog(null, { idempotencyKey: key() }, ctx)) as { created: Record<string, number> }
+    expect(Object.values(again.created).every(n => n === 0)).toBe(true)
+    expect((await prisma.labTest.findUniqueOrThrow({ where: { id: glu.id } })).name).toBe('Glucose (our meter)')
+    // Front desk (no practice or integrations permission) cannot set up labs.
+    const csr = { session: sessionFor('seed_user_csr_x', ['canAccessDashboard', 'canBook', 'canTakePayments']), prisma }
+    await expect(saveLaboratory(null, { code: 'NOPE', name: 'x', kind: 'reference', intake: 'manual', idempotencyKey: key() }, csr)).rejects.toThrow(/permission/)
+    await expect(loadInHouseLabCatalog(null, { idempotencyKey: key() }, csr)).rejects.toThrow(/permission/)
   }, 120_000)
 })

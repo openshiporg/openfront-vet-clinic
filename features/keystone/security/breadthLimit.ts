@@ -62,6 +62,8 @@ export function limitNestedLists<S extends GraphQLSchema>(schema: S): S {
 export const API_ROOT_FIELD_CAPS: Record<string, number> = {
   authenticateUserWithPassword: 1,
   verifyAuditChain: 2,
+  // Admin meta (the dashboard's list and field config) is built from the in-memory schema, not the database: once per request.
+  keystone: 1,
 }
 export const API_MAX_SELECTION_FIELDS = 60
 /**
@@ -147,7 +149,7 @@ function fieldDef(schema: GraphQLSchema, parent: Composite, on: string | null, n
   return undefined
 }
 
-export type Breadth = { fields: number; rows: number; widest: number; calls: number; introspection: number; aliases: number; capped?: { field: string; count: number; cap: number } | null }
+export type Breadth = { fields: number; rows: number; widest: number; calls: number; introspection: number; aliases: number; capped?: { field: string; count: number; cap: number } | null; metaRepeat?: string | null }
 
 /** The schema default of a list field's `take` argument: what Keystone returns when no `take` is given. */
 function schemaTakeDefault(def: GraphQLField<unknown, unknown>, fallback: number): number {
@@ -164,7 +166,7 @@ function schemaTakeDefault(def: GraphQLField<unknown, unknown>, fallback: number
  * Fragments, inline fragments and union members (`authenticatedItem { ... on User { … } }`) are all walked.
  */
 export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, operationName: string | null | undefined, variables: Vars): Breadth {
-  const empty = { fields: 0, rows: 0, widest: 0, calls: 0, introspection: 0, aliases: 0, capped: null }
+  const empty = { fields: 0, rows: 0, widest: 0, calls: 0, introspection: 0, aliases: 0, capped: null, metaRepeat: null }
   const fragments = new Map(document.definitions.filter((d): d is FragmentDefinitionNode => d.kind === Kind.FRAGMENT_DEFINITION).map(d => [d.name.value, d]))
   const operations = document.definitions.filter((d): d is OperationDefinitionNode => d.kind === Kind.OPERATION_DEFINITION)
   const operation = operationName ? operations.find(o => o.name?.value === operationName) : operations[0]
@@ -179,6 +181,32 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
   let introspection = 0
   let aliases = 0
   let capped: Breadth['capped'] = null
+  let metaRepeat: string | null = null
+  /**
+   * The `keystone { adminMeta { lists { fields … } } }` subtree reads the schema config in memory: its lists are not database rows,
+   * so they are not charged as rows or lookups. The work is bounded instead by allowing one `keystone` per request and no field
+   * repeated (aliased) anywhere inside it, so the most it can do is one full admin meta, which is what the dashboard asks for.
+   */
+  const walkMeta = (set: SelectionSetNode, parent: Composite, underAllLists = false) => {
+    const all: { field: FieldNode; on: string | null }[] = []
+    collect(set, fragments, new Set(), null, all)
+    const fields = all.filter(f => !f.field.name.value.startsWith('__'))
+    widest = Math.max(widest, fields.length)
+    const seen = new Set<string>()
+    for (const { field: f, on } of fields) {
+      if (++visited > API_MAX_VISITED) { rows = Infinity; return }
+      const key = `${on ?? ''}.${f.name.value}`
+      if (seen.has(key)) { metaRepeat ??= `repeats ${f.name.value}`; return }
+      seen.add(key)
+      // itemView(id) loads that item to decide each field's mode: one database read per list, so only under list(key:), never all lists.
+      if (underAllLists && f.name.value === 'itemView' && f.arguments?.length) { metaRepeat ??= 'asks for itemView(id) on every list'; return }
+      const def = fieldDef(schema, parent, on, f.name.value)
+      if (!def) continue
+      const named = getNamedType(def.type)
+      if (f.selectionSet && isComposite(named)) walkMeta(f.selectionSet, named, underAllLists || (named.name === 'KeystoneAdminUIListMeta' && isListType(getNullableType(def.type))))
+      if (metaRepeat || rows === Infinity) return
+    }
+  }
   const walk = (set: SelectionSetNode, parent: Composite, multiplier: number, root: boolean): number => {
     const all: { field: FieldNode; on: string | null }[] = []
     collect(set, fragments, new Set(), null, all)
@@ -199,6 +227,13 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
       const def = fieldDef(schema, parent, on, f.name.value)
       if (!def) continue
       const named = getNamedType(def.type)
+      if (root && isQuery && f.name.value === 'keystone' && named.name === 'KeystoneMeta') {
+        rows += 1
+        calls += 1
+        if (f.selectionSet && isComposite(named)) walkMeta(f.selectionSet, named)
+        if (rows === Infinity) return fields.length
+        continue
+      }
       const list = isListType(getNullableType(def.type))
       const counter = !list && !root && /Count$/.test(f.name.value) && def.type.toString().startsWith('Int')
       const custom = root && isQuery && isScalarType(named) && named.name === 'JSON'
@@ -224,12 +259,13 @@ export function measureBreadth(schema: GraphQLSchema, document: DocumentNode, op
     return fields.length
   }
   const fields = walk(operation.selectionSet, rootType, 1, true)
-  return { fields, rows, widest, calls, introspection, aliases, capped }
+  return { fields, rows, widest, calls, introspection, aliases, capped, metaRepeat }
 }
 
 /** The reason a measured document is refused, or null when it is within every limit. */
 export function breadthRefusal(b: Breadth, limits = { fields: API_MAX_ROOT_FIELDS, rows: API_MAX_ROOT_ROWS }): string | null {
   if (b.capped) return `The request runs ${b.capped.field} ${b.capped.count} times; at most ${b.capped.cap} ${b.capped.cap === 1 ? 'is' : 'are'} allowed in one request.`
+  if (b.metaRepeat) return `The admin meta query ${b.metaRepeat}; ask for each field once, and for one item's view only through list(key:).`
   if (b.introspection > API_MAX_INTROSPECTION_FIELDS) return `The query asks for ${b.introspection} introspection fields; at most ${API_MAX_INTROSPECTION_FIELDS} are allowed.`
   if (b.widest > API_MAX_SELECTION_FIELDS && b.fields <= limits.fields) return `A selection asks for ${b.widest} fields at once; at most ${API_MAX_SELECTION_FIELDS} are allowed.`
   if (b.fields > limits.fields) return `The query runs ${b.fields} top-level fields; at most ${limits.fields} are allowed in one request.`

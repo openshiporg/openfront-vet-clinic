@@ -25,6 +25,7 @@ import * as fees from './fees'
 import * as estimates from './estimates'
 import * as billing from './billing'
 import * as payLinks from './payLinks'
+import * as labSetup from './labSetup'
 import * as insurance from './insurance'
 import * as wellness from './wellness'
 import * as diagnostics from './diagnostics'
@@ -64,6 +65,10 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         updateActiveUser(data: UserUpdateProfileInput!): User
         loadPracticeSetup(idempotencyKey: String!): JSON
         loadClinicSetup(idempotencyKey: String!): JSON
+        loadInHouseLabCatalog(idempotencyKey: String!): JSON
+        saveLaboratory(labId: ID, code: String, name: String!, kind: String!, intake: String!, accountNumber: String, status: String, expectedVersion: Int, idempotencyKey: String!): JSON
+        saveLabTest(testId: ID, labId: ID!, code: String, name: String!, feeItemId: ID, turnaroundHours: Int!, speciesCodes: [String!], status: String, idempotencyKey: String!): JSON
+        mapLabCode(labId: ID!, externalCode: String!, analyteCode: String!, analyteName: String, unit: String, factor: String, idempotencyKey: String!): JSON
         decideApprovalRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         cancelApprovalRequest(requestId: ID!, expectedVersion: Int!, reason: String, idempotencyKey: String!): JSON
         requestPracticeControls(changes: JSON!, reason: String!, idempotencyKey: String!): JSON
@@ -292,6 +297,10 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         updateActiveUser,
         loadPracticeSetup: op(setup.loadPracticeSetup),
         loadClinicSetup: op(setup.loadClinicSetup),
+        loadInHouseLabCatalog: op(labSetup.loadInHouseLabCatalog),
+        saveLaboratory: op(labSetup.saveLaboratory),
+        saveLabTest: op(labSetup.saveLabTest),
+        mapLabCode: op(labSetup.mapLabCode),
         decideApprovalRequest: op(approvals.decideApprovalRequest),
         cancelApprovalRequest: op(approvals.cancelApprovalRequest),
         requestPracticeControls: op(approvals.requestPracticeControls),

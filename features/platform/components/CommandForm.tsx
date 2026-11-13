@@ -178,6 +178,19 @@ const BUILDERS: Record<string, (v: Record<string, string>) => Record<string, unk
     }
     return out;
   },
+  // Lab set-up: turnaround hours become a number, species a list; everything else stays text (codes and factors are checked on the server).
+  labSetup: (v) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, raw] of Object.entries(v)) {
+      const t = (raw ?? '').trim();
+      if (!t) continue;
+      if (k === 'turnaroundHours') out[k] = ints(t, 'Turnaround (hours)', 0, 2000);
+      else if (k === 'expectedVersion') out[k] = Number(t);
+      else if (k === 'speciesCodes') out[k] = t.split(',').map((x) => x.trim()).filter(Boolean);
+      else out[k] = t;
+    }
+    return out;
+  },
   // Phase 6: lab work, records requests, pay. Version numbers become numbers; result lines are typed one per line as "code value unit".
   phase6: (v) => {
     const out: Record<string, unknown> = {};

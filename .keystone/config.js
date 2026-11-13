@@ -85,10 +85,10 @@ var init_errors = __esm({
   "features/keystone/lib/errors.ts"() {
     "use strict";
     DomainError = class extends Error {
-      constructor(code, message, details = {}) {
+      constructor(code2, message, details = {}) {
         super(message);
         this.name = "DomainError";
-        this.code = code;
+        this.code = code2;
         this.details = details;
       }
     };
@@ -5901,6 +5901,11 @@ var API_MAX_TAKE = 500;
 for (const list24 of Object.values(models)) {
   list24.graphql = { ...list24.graphql ?? {}, maxTake: API_MAX_TAKE };
 }
+for (const list24 of Object.values(models)) {
+  const query = typeof list24.access === "object" ? list24.access.operation?.query : void 0;
+  if (!query || list24.ui?.isHidden !== void 0) continue;
+  list24.ui = { ...list24.ui ?? {}, isHidden: async ({ session }) => !await query({ session }) };
+}
 registerListAccess(models);
 
 // features/keystone/index.ts
@@ -6140,8 +6145,8 @@ async function command(db, spec, work) {
       }, { requestId: spec.requestId ?? null, now: spec.now });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const code = error?.code ?? "";
-      if (attempt < 4 && (RETRYABLE.test(message) || RETRYABLE.test(code))) continue;
+      const code2 = error?.code ?? "";
+      if (attempt < 4 && (RETRYABLE.test(message) || RETRYABLE.test(code2))) continue;
       throw invariantError(error) ?? error;
     }
   }
@@ -6154,10 +6159,10 @@ function prismaToDomain(error) {
   if (isDomainError(error)) return error;
   const guarded = invariantError(error);
   if (guarded) return guarded;
-  const code = String(error?.code ?? error?.extensions?.prisma?.code ?? "");
+  const code2 = String(error?.code ?? error?.extensions?.prisma?.code ?? "");
   const meta4 = error?.meta ?? error?.extensions?.prisma?.meta ?? {};
   const target = Array.isArray(meta4?.target) ? meta4.target.join(", ") : String(meta4?.target ?? "");
-  switch (code) {
+  switch (code2) {
     case "P2002":
       return new DomainError(Codes.GUARD_FAILED, `That ${target && !/[_"]/.test(target) ? target : "value"} is already in use.`, { reason: "unique" });
     case "P2003":
@@ -7211,13 +7216,13 @@ async function seedPractice(uow, actor) {
   }
   created.calendarExceptions += await loadDays(uow, actor, federal.id, US_FED_HOLIDAYS.map((date) => ({ date, kind: "holiday", note: "Federal holiday (observed)" })));
   for (const loc of LOCATIONS) {
-    const code = `${loc.code}-CAL`;
-    let cal = await tx.businessCalendar.findUnique({ where: { code } });
+    const code2 = `${loc.code}-CAL`;
+    let cal = await tx.businessCalendar.findUnique({ where: { code: code2 } });
     if (!cal) {
       cal = await tx.businessCalendar.create({
-        data: { id: `seed_cal_${loc.id.replace("seed_loc_", "")}`, code, name: `${loc.name} hours`, timeZone: loc.timeZone, kind: "location", weekendDays: [0, 6], regularOpen: loc.regularOpen, regularClose: loc.regularClose, coverageThrough: DAY(US_FED.coverageThrough), source: "Practice closures + US federal holidays", composedOf: { connect: [{ id: federal.id }] } }
+        data: { id: `seed_cal_${loc.id.replace("seed_loc_", "")}`, code: code2, name: `${loc.name} hours`, timeZone: loc.timeZone, kind: "location", weekendDays: [0, 6], regularOpen: loc.regularOpen, regularClose: loc.regularClose, coverageThrough: DAY(US_FED.coverageThrough), source: "Practice closures + US federal holidays", composedOf: { connect: [{ id: federal.id }] } }
       });
-      auditCreate(uow, actor, "BusinessCalendar", cal.id, "calendar.created", { code }, meta);
+      auditCreate(uow, actor, "BusinessCalendar", cal.id, "calendar.created", { code: code2 }, meta);
       created.calendars += 1;
     }
     created.calendarExceptions += await loadDays(uow, actor, cal.id, loc.closures.map((date) => ({ date, kind: "closed", note: "Practice closed" })));
@@ -7293,7 +7298,7 @@ async function seedPractice(uow, actor) {
     created.deaRegistrations = newDea.length;
   }
   await tx.practiceSettings.updateMany({ where: { id: 1, medicalDirectorId: null }, data: { medicalDirectorId: "seed_staff_marsh" } });
-  const packId = (code) => `seed_pp_${code.replace(/[^A-Za-z0-9]+/g, "_").toLowerCase()}`;
+  const packId = (code2) => `seed_pp_${code2.replace(/[^A-Za-z0-9]+/g, "_").toLowerCase()}`;
   const packIds = new Map((await tx.policyPack.findMany({ where: { code: { in: POLICY_PACKS.map((p) => p.code) } }, select: { id: true, code: true } })).map((r) => [r.code, r.id]));
   const newPacks = POLICY_PACKS.filter((p) => !packIds.has(p.code));
   if (newPacks.length) {
@@ -7443,10 +7448,10 @@ async function logAgentAction(prisma, actor, tool, args, outcome, errorCode) {
   await prisma.agentAction.create({ data: { agentId, tool, argsHash: argsHash(args), outcome, errorCode: errorCode ?? "" } });
 }
 var outcomeOf = (error) => {
-  const code = isDomainError(error) ? error.code : "ERROR";
-  if (code === Codes.SCOPE_DENIED) return "scope_denied";
-  if (code === Codes.NEVER_ALLOWED_FOR_AGENTS) return "never_allowed";
-  if (code === Codes.FEATURE_DISABLED && error.details?.reason === "kill_switch") return "killed";
+  const code2 = isDomainError(error) ? error.code : "ERROR";
+  if (code2 === Codes.SCOPE_DENIED) return "scope_denied";
+  if (code2 === Codes.NEVER_ALLOWED_FOR_AGENTS) return "never_allowed";
+  if (code2 === Codes.FEATURE_DISABLED && error.details?.reason === "kill_switch") return "killed";
   if (isDomainError(error)) return "guard_failed";
   return "error";
 };
@@ -7912,7 +7917,7 @@ async function seedClinical(uow, actor, count) {
   }
   const haveVx = new Set((await tx.vaccineProduct.findMany({ where: { id: { in: VACCINE_PRODUCTS.map((v) => v.id) } }, select: { id: true } })).map((v) => v.id));
   for (const v of VACCINE_PRODUCTS.filter((v2) => !haveVx.has(v2.id))) {
-    await tx.vaccineProduct.create({ data: { id: v.id, name: v.name, manufacturer: v.manufacturer, antigens: [...v.antigens], licensedDoiMonths: v.doi, minAgeWeeks: v.minAgeWeeks, isRabies: v.isRabies, usdaProductCode: "", defaultRoute: v.route, reminderTypeId: v.type, active: true, species: { connect: v.species.map((code) => ({ id: species.get(code) })) } } });
+    await tx.vaccineProduct.create({ data: { id: v.id, name: v.name, manufacturer: v.manufacturer, antigens: [...v.antigens], licensedDoiMonths: v.doi, minAgeWeeks: v.minAgeWeeks, isRabies: v.isRabies, usdaProductCode: "", defaultRoute: v.route, reminderTypeId: v.type, active: true, species: { connect: v.species.map((code2) => ({ id: species.get(code2) })) } } });
     auditCreate(uow, actor, "VaccineProduct", v.id, "vaccine_product.created", { name: v.name, doiMonths: v.doi, isRabies: v.isRabies }, meta2);
     count("vaccineProducts", 1);
   }
@@ -7938,12 +7943,12 @@ async function seedClinical(uow, actor, count) {
   for (const w of WARDS) {
     if (await tx.ward.findUnique({ where: { id: w.id }, select: { id: true } })) continue;
     await tx.ward.create({ data: { id: w.id, locationId: w.location, name: w.name, kind: w.kind } });
-    await tx.cage.createMany({ data: w.cages.map(([code, size]) => ({ id: `seed_cage_${code.toLowerCase().replace(/[^a-z0-9]/g, "")}`, wardId: w.id, code, size, features: {}, active: true })) });
+    await tx.cage.createMany({ data: w.cages.map(([code2, size]) => ({ id: `seed_cage_${code2.toLowerCase().replace(/[^a-z0-9]/g, "")}`, wardId: w.id, code: code2, size, features: {}, active: true })) });
     count("cages", w.cages.length);
   }
   const haveCodes = new Set((await tx.diagnosisCode.findMany({ where: { codeSystem: "practice" }, select: { code: true } })).map((c) => c.code));
-  for (const [code, term, sp] of DIAGNOSIS_CODES.filter(([code2]) => !haveCodes.has(code2))) {
-    await tx.diagnosisCode.create({ data: { codeSystem: "practice", code, term, active: true, species: { connect: sp.map((s) => species.get(s)).filter((id2) => !!id2).map((id2) => ({ id: id2 })) } } });
+  for (const [code2, term, sp] of DIAGNOSIS_CODES.filter(([code3]) => !haveCodes.has(code3))) {
+    await tx.diagnosisCode.create({ data: { codeSystem: "practice", code: code2, term, active: true, species: { connect: sp.map((s) => species.get(s)).filter((id2) => !!id2).map((id2) => ({ id: id2 })) } } });
     count("diagnosisCodes", 1);
   }
   const haveTpl = new Set((await tx.recordTemplate.findMany({ where: { id: { in: RECORD_TEMPLATES.map((t) => t.id) } }, select: { id: true } })).map((t) => t.id));
@@ -8195,100 +8200,6 @@ async function seedPhase5(uow, actor, count) {
     auditCreate(uow, actor, "WellnessPlanVersion", v.id, "wellness.plan_published", { code: p.code, versionNo: 1, seeded: true });
   }
   count("wellnessPlans", PLANS.length);
-}
-
-// features/keystone/seed/labs.ts
-var LABS = [
-  { id: "seed_lab_reference", code: "REFLAB", name: "Sacramento Veterinary Reference Laboratory", kind: "reference", intake: "file_drop", accountNumber: "SVRL-20418" },
-  { id: "seed_lab_inhouse", code: "INHOUSE", name: "In-house analysers", kind: "in_house", intake: "manual", accountNumber: "" }
-];
-var ANALYTES = [
-  { code: "WBC", name: "White blood cells", unit: "10^9/L" },
-  { code: "HCT", name: "Haematocrit", unit: "%" },
-  { code: "PLT", name: "Platelets", unit: "10^9/L" },
-  { code: "GLU", name: "Glucose", unit: "mmol/L" },
-  { code: "BUN", name: "Urea nitrogen", unit: "mmol/L" },
-  { code: "CREA", name: "Creatinine", unit: "umol/L" },
-  { code: "ALT", name: "Alanine aminotransferase", unit: "U/L" },
-  { code: "TP", name: "Total protein", unit: "g/L" },
-  { code: "T4", name: "Total thyroxine", unit: "nmol/L" },
-  { code: "USG", name: "Urine specific gravity", unit: "" }
-];
-var TESTS = [
-  ["seed_lab_reference", "CBCCHEM", "Complete blood count and chemistry", "LAB-CBC-CHEM", 24, ["WBC", "HCT", "PLT", "GLU", "BUN", "CREA", "ALT", "TP"]],
-  ["seed_lab_reference", "T4", "Total thyroxine (T4)", "LAB-T4", 48, ["T4"]],
-  ["seed_lab_reference", "UA", "Urinalysis", "LAB-UA", 24, ["USG"]],
-  ["seed_lab_inhouse", "GLU", "Blood glucose", "LAB-IH-GLUCOSE", 1, ["GLU"]],
-  ["seed_lab_inhouse", "PCVTP", "Packed cell volume and total protein", "LAB-IH-PCV-TP", 1, ["HCT", "TP"]]
-];
-var REF_MAPS = {
-  WBC: { ext: "WBC" },
-  HCT: { ext: "HCT" },
-  PLT: { ext: "PLT" },
-  GLU: { ext: "GLUC", factor: "0.0555" },
-  BUN: { ext: "BUN", factor: "0.357" },
-  CREA: { ext: "CREAT", factor: "88.4" },
-  ALT: { ext: "ALT" },
-  TP: { ext: "TPROT", factor: "10" },
-  T4: { ext: "TT4" },
-  USG: { ext: "SG" }
-};
-var RANGES = [
-  ["WBC", "seed_sp_canine", "5.5", "16.9", null, "40"],
-  ["WBC", "seed_sp_feline", "5.5", "19.5", null, "40"],
-  ["HCT", "seed_sp_canine", "37", "55", "20", null],
-  ["HCT", "seed_sp_feline", "30", "45", "15", null],
-  ["PLT", "seed_sp_canine", "175", "500", "50", null],
-  ["PLT", "seed_sp_feline", "175", "600", "50", null],
-  ["GLU", "seed_sp_canine", "4.1", "7.9", "3.0", "20"],
-  ["GLU", "seed_sp_feline", "4.0", "8.8", "3.0", "25"],
-  ["BUN", "seed_sp_canine", "2.5", "9.6", null, "30"],
-  ["BUN", "seed_sp_feline", "5.7", "12.9", null, "30"],
-  ["CREA", "seed_sp_canine", "44", "159", null, "500"],
-  ["CREA", "seed_sp_feline", "71", "212", null, "500"],
-  ["ALT", "seed_sp_canine", "10", "125", null, "1000"],
-  ["ALT", "seed_sp_feline", "12", "130", null, "1000"],
-  ["TP", "seed_sp_canine", "52", "82", "35", null],
-  ["TP", "seed_sp_feline", "57", "89", "35", null],
-  ["T4", "seed_sp_canine", "13", "51", null, null],
-  ["T4", "seed_sp_feline", "10", "60", null, null],
-  ["USG", "seed_sp_canine", "1.015", "1.045", null, null],
-  ["USG", "seed_sp_feline", "1.035", "1.060", null, null]
-];
-async function seedLabs(uow, actor, count) {
-  const { tx } = uow;
-  if (await tx.laboratory.findFirst({ select: { id: true } })) return;
-  const species = new Set((await tx.species.findMany({ select: { id: true } })).map((s) => s.id));
-  await tx.laboratory.createMany({ data: LABS.map((l) => ({ ...l, status: "active" })) });
-  await tx.analyte.createMany({ data: ANALYTES.map((a) => ({ id: `seed_analyte_${a.code.toLowerCase()}`, code: a.code, name: a.name, canonicalUnit: a.unit })) });
-  const analytes = new Map(ANALYTES.map((a) => [a.code, `seed_analyte_${a.code.toLowerCase()}`]));
-  const fees = new Map((await tx.feeItem.findMany({ where: { code: { startsWith: "LAB-" }, version: { status: "published" } }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
-  const dogCat = ["seed_sp_canine", "seed_sp_feline"].filter((id2) => species.has(id2));
-  const testId = (lab, code) => `${lab}_${code.toLowerCase()}`;
-  await tx.labTest.createMany({ data: TESTS.map(([labId, code, name, fee, hours]) => ({ id: testId(labId, code), labId, code, name, feeItemId: fees.get(fee) ?? null, turnaroundHours: hours, status: "active" })) });
-  const pairs = TESTS.flatMap(([labId, code]) => dogCat.map((sp) => [testId(labId, code), sp]));
-  if (pairs.length) await tx.$executeRawUnsafe(`INSERT INTO "_LabTest_species" ("A", "B") VALUES ${pairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}`, ...pairs.flat());
-  const maps = [
-    ...ANALYTES.map((a) => ({ labId: "seed_lab_inhouse", externalCode: a.code, analyteId: analytes.get(a.code), unitConversion: void 0 })),
-    ...ANALYTES.map((a) => ({ labId: "seed_lab_reference", externalCode: REF_MAPS[a.code].ext, analyteId: analytes.get(a.code), unitConversion: REF_MAPS[a.code].factor ? { factor: REF_MAPS[a.code].factor } : void 0 }))
-  ];
-  await tx.labAnalyteMap.createMany({ data: maps });
-  const ranges = RANGES.filter((r) => species.has(r[1])).map(([a, sp, low, high, cl, ch]) => ({
-    analyteId: analytes.get(a),
-    speciesId: sp,
-    ageClass: "any",
-    labId: null,
-    low,
-    high,
-    criticalLow: cl,
-    criticalHigh: ch,
-    unit: ANALYTES.find((x) => x.code === a).unit,
-    source: "Typical adult reference interval; replace with your analyser\u2019s own."
-  }));
-  await tx.referenceRange.createMany({ data: ranges });
-  auditCreate(uow, actor, "Laboratory", LABS[0].id, "lab.setup_seeded", { labs: LABS.length, tests: TESTS.length, analytes: ANALYTES.length, ranges: ranges.length }, { metadata: { seed: true } });
-  count("laboratories", LABS.length);
-  count("labTests", TESTS.length);
 }
 
 // features/keystone/seed/clinicData.ts
@@ -8626,7 +8537,7 @@ async function seedClinic(uow, actor) {
         vcprQualifying: t.vcprQualifying,
         colour: t.colour,
         active: true,
-        ...t.species ? { species: { connect: t.species.map((code) => ({ id: speciesByCode.get(code) })) } } : {}
+        ...t.species ? { species: { connect: t.species.map((code2) => ({ id: speciesByCode.get(code2) })) } } : {}
       },
       select: { id: true }
     });
@@ -8788,7 +8699,6 @@ async function seedClinic(uow, actor) {
   await seedInventory(uow, actor, count);
   await seedBilling(uow, actor, count);
   await seedPhase5(uow, actor, count);
-  await seedLabs(uow, actor, count);
   return created;
 }
 
@@ -9124,16 +9034,16 @@ async function requireDeaRegistration(tx, input) {
   const location = await locationOf(tx, input.locationId);
   const onDate = localDate({ timeZone: location.timeZone }, input.at);
   if (input.schedule === "CI") throw new DomainError(Codes.DEA_REGISTRATION_INVALID, "Schedule I substances have no veterinary use under a practitioner registration.");
-  const code = DEA_SCHEDULE_CODE[input.schedule];
+  const code2 = DEA_SCHEDULE_CODE[input.schedule];
   const registrations = await tx.deaRegistration.findMany({
     where: { locationId: location.id, ...input.registrantStaffMemberId ? { staffMemberId: input.registrantStaffMemberId } : {} },
     orderBy: { expiresOn: "desc" }
   });
-  const covers = (r) => Array.isArray(r.schedules) && r.schedules.includes(code);
+  const covers = (r) => Array.isArray(r.schedules) && r.schedules.includes(code2);
   const valid = registrations.find((r) => r.status === "active" && (!r.issuedOn || day(r.issuedOn) <= onDate) && day(r.expiresOn) >= onDate && covers(r));
   if (!valid) {
     const latest = registrations[0];
-    const why = !latest ? "no DEA registration for this location" + (input.registrantStaffMemberId ? " held by this prescriber" : "") : latest.status !== "active" ? `the registration is ${latest.status}` : day(latest.expiresOn) < onDate ? `the registration expired on ${day(latest.expiresOn)}` : `the registration does not cover schedule ${code}`;
+    const why = !latest ? "no DEA registration for this location" + (input.registrantStaffMemberId ? " held by this prescriber" : "") : latest.status !== "active" ? `the registration is ${latest.status}` : day(latest.expiresOn) < onDate ? `the registration expired on ${day(latest.expiresOn)}` : `the registration does not cover schedule ${code2}`;
     throw new DomainError(Codes.DEA_REGISTRATION_INVALID, `This controlled-substance action needs a valid DEA registration: ${why}.`, { locationId: location.id, schedule: input.schedule, onDate });
   }
   const evaluation = await tx.licenseEvaluation.create({
@@ -9145,7 +9055,7 @@ async function requireDeaRegistration(tx, input) {
       onDate: /* @__PURE__ */ new Date(`${onDate}T00:00:00Z`),
       deaRegistrationId: valid.id,
       result: "allowed",
-      findings: { schedule: input.schedule, code }
+      findings: { schedule: input.schedule, code: code2 }
     }
   });
   return { evaluationId: evaluation.id, deaRegistrationId: valid.id, registrationNumber: valid.registrationNumber, onDate };
@@ -9279,9 +9189,9 @@ async function serviceCharge(uow, actor, input) {
   auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: input.sourceType, extendedMinor: net.toString(), discountMinor: discount.toString(), taxMinor: tax.toString() });
   return row;
 }
-async function serviceItemCharge(uow, actor, code, rest) {
-  const item = await uow.tx.serviceItem.findFirst({ where: { code, active: true } });
-  if (!item) throw new DomainError(Codes.GUARD_FAILED, "That service has no price in the price list.", { code });
+async function serviceItemCharge(uow, actor, code2, rest) {
+  const item = await uow.tx.serviceItem.findFirst({ where: { code: code2, active: true } });
+  if (!item) throw new DomainError(Codes.GUARD_FAILED, "That service has no price in the price list.", { code: code2 });
   return serviceCharge(uow, actor, { ...rest, unitPriceMinor: item.priceMinor, taxCategory: item.taxCategory, description: rest.description ?? item.name });
 }
 
@@ -9328,10 +9238,10 @@ function parseEntitlements(value) {
   const out = [];
   for (const raw of value) {
     const r = raw;
-    const code = String(r?.code ?? "").trim();
+    const code2 = String(r?.code ?? "").trim();
     const qty2 = Number.parseInt(String(r?.qty), 10);
-    if (!code || !Number.isInteger(qty2) || qty2 < 0) continue;
-    out.push({ code, label: String(r.label ?? code), qty: qty2, retailValueMinor: BigInt(String(r.retailValueMinor ?? "0").replace(/\D/g, "") || "0") });
+    if (!code2 || !Number.isInteger(qty2) || qty2 < 0) continue;
+    out.push({ code: code2, label: String(r.label ?? code2), qty: qty2, retailValueMinor: BigInt(String(r.retailValueMinor ?? "0").replace(/\D/g, "") || "0") });
   }
   return out;
 }
@@ -11358,8 +11268,8 @@ async function endCall(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
-async function publishedProtocol(uow, code = "phone_triage") {
-  const version = await uow.tx.triageProtocolVersion.findFirst({ where: { status: "published", protocol: { code } }, orderBy: { versionNumber: "desc" } });
+async function publishedProtocol(uow, code2 = "phone_triage") {
+  const version = await uow.tx.triageProtocolVersion.findFirst({ where: { status: "published", protocol: { code: code2 } }, orderBy: { versionNumber: "desc" } });
   if (!version) throw new DomainError(Codes.POLICY_UNRESOLVED, "No triage protocol is published. The front desk transfers every sick-pet call until one is.");
   return { version, protocol: parseProtocol({ questions: version.questions, redFlags: version.redFlags, levelRules: version.levelRules, scripts: version.scripts }) };
 }
@@ -11714,7 +11624,7 @@ function calendarDayText(isoDay3) {
 // features/keystone/lib/documents.ts
 var import_node_crypto11 = require("node:crypto");
 var esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-var words = (code) => String(code ?? "").replace(/_/g, " ");
+var words = (code2) => String(code2 ?? "").replace(/_/g, " ");
 var zoned = (iso, timeZone) => new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(iso));
 var instant = (iso, timeZone) => {
   if (!iso) return "";
@@ -11992,15 +11902,15 @@ async function addDiagnosis(_root, args, context) {
     const result = await command(context.prisma, { name: "record.diagnosis", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const staff = await staffOf(uow, actor);
       const enc = await chartableEncounter(uow, args.encounterId);
-      const code = args.codeId ? await uow.tx.diagnosisCode.findUnique({ where: { id: args.codeId }, select: { id: true, term: true, active: true } }) : null;
-      if (args.codeId && (!code || !code.active)) throw new DomainError(Codes.NOT_FOUND, "Diagnosis code not found.");
-      const term = code?.term ?? text20(args.term, "term", 200);
+      const code2 = args.codeId ? await uow.tx.diagnosisCode.findUnique({ where: { id: args.codeId }, select: { id: true, term: true, active: true } }) : null;
+      if (args.codeId && (!code2 || !code2.active)) throw new DomainError(Codes.NOT_FOUND, "Diagnosis code not found.");
+      const term = code2?.term ?? text20(args.term, "term", 200);
       let problemId = null;
       if (args.addToProblems && args.certainty !== "ruled_out") {
         const open = await uow.tx.problem.findFirst({ where: { patientId: enc.patientId, term, status: "active" }, select: { id: true } });
-        problemId = open?.id ?? (await uow.tx.problem.create({ data: { patientId: enc.patientId, encounterId: enc.id, codeId: code?.id ?? null, term, status: "active", chronic: args.chronic === true, onset: /* @__PURE__ */ new Date(`${uow.now.toISOString().slice(0, 10)}T00:00:00Z`) } })).id;
+        problemId = open?.id ?? (await uow.tx.problem.create({ data: { patientId: enc.patientId, encounterId: enc.id, codeId: code2?.id ?? null, term, status: "active", chronic: args.chronic === true, onset: /* @__PURE__ */ new Date(`${uow.now.toISOString().slice(0, 10)}T00:00:00Z`) } })).id;
       }
-      const row = await uow.tx.diagnosis.create({ data: { encounterId: enc.id, patientId: enc.patientId, codeId: code?.id ?? null, term, certainty: args.certainty, problemId, byId: staff.id } });
+      const row = await uow.tx.diagnosis.create({ data: { encounterId: enc.id, patientId: enc.patientId, codeId: code2?.id ?? null, term, certainty: args.certainty, problemId, byId: staff.id } });
       await markInProgress(uow, enc);
       auditCreate(uow, actor, "Diagnosis", row.id, "record.diagnosis_added", { encounterId: enc.id, term, certainty: args.certainty, problemId });
       return { id: row.id, problemId };
@@ -14673,8 +14583,8 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
     case "patients": {
       const owner = await findMapped(uow, `${batch.system}:clients`, "Client", row.clientExternalId);
       if (!owner) return { ...base, result: "failed", errors: [`Client ${row.clientExternalId} has not been imported yet; import clients first.`] };
-      const code = importSpeciesCode(row.species, species);
-      const speciesRow = code ? await uow.tx.species.findUnique({ where: { code }, select: { id: true } }) : null;
+      const code2 = importSpeciesCode(row.species, species);
+      const speciesRow = code2 ? await uow.tx.species.findUnique({ where: { code: code2 }, select: { id: true } }) : null;
       if (!speciesRow) return { ...base, result: "failed", errors: [`Species "${row.species}" is not set up.`] };
       const breed = row.breed ? await uow.tx.breed.findFirst({ where: { speciesId: speciesRow.id, name: { equals: row.breed.trim(), mode: "insensitive" } }, select: { id: true } }) : null;
       const { sex, reproductiveStatus } = importSex(row.sex ?? "");
@@ -15735,13 +15645,208 @@ async function checkLinkPayment(_root, args, context) {
   return shown(await resolveUnknownPayment(context.prisma, systemActor("payment-link"), String(args.paymentId)));
 }
 
+// features/keystone/mutations/labSetup.ts
+var import_client = require("@prisma/client");
+init_errors();
+
+// features/keystone/seed/labCatalog.ts
+var IN_HOUSE = { code: "INHOUSE", name: "In-house analysers", kind: "in_house", intake: "manual" };
+var ANALYTES = [
+  { code: "WBC", name: "White blood cells", unit: "10^9/L" },
+  { code: "HCT", name: "Haematocrit", unit: "%" },
+  { code: "PLT", name: "Platelets", unit: "10^9/L" },
+  { code: "GLU", name: "Glucose", unit: "mmol/L" },
+  { code: "BUN", name: "Urea nitrogen", unit: "mmol/L" },
+  { code: "CREA", name: "Creatinine", unit: "umol/L" },
+  { code: "ALT", name: "Alanine aminotransferase", unit: "U/L" },
+  { code: "TP", name: "Total protein", unit: "g/L" },
+  { code: "T4", name: "Total thyroxine", unit: "nmol/L" },
+  { code: "USG", name: "Urine specific gravity", unit: "" }
+];
+var TESTS = [
+  ["GLU", "Blood glucose", "LAB-IH-GLUCOSE", 1, ["GLU"]],
+  ["PCVTP", "Packed cell volume and total protein", "LAB-IH-PCV-TP", 1, ["HCT", "TP"]]
+];
+var RANGES = [
+  ["WBC", "canine", "5.5", "16.9", null, "40"],
+  ["WBC", "feline", "5.5", "19.5", null, "40"],
+  ["HCT", "canine", "37", "55", "20", null],
+  ["HCT", "feline", "30", "45", "15", null],
+  ["PLT", "canine", "175", "500", "50", null],
+  ["PLT", "feline", "175", "600", "50", null],
+  ["GLU", "canine", "4.1", "7.9", "3.0", "20"],
+  ["GLU", "feline", "4.0", "8.8", "3.0", "25"],
+  ["BUN", "canine", "2.5", "9.6", null, "30"],
+  ["BUN", "feline", "5.7", "12.9", null, "30"],
+  ["CREA", "canine", "44", "159", null, "500"],
+  ["CREA", "feline", "71", "212", null, "500"],
+  ["ALT", "canine", "10", "125", null, "1000"],
+  ["ALT", "feline", "12", "130", null, "1000"],
+  ["TP", "canine", "52", "82", "35", null],
+  ["TP", "feline", "57", "89", "35", null],
+  ["T4", "canine", "13", "51", null, null],
+  ["T4", "feline", "10", "60", null, null],
+  ["USG", "canine", "1.015", "1.045", null, null],
+  ["USG", "feline", "1.035", "1.060", null, null]
+];
+var IN_HOUSE_CATALOG = {
+  lab: IN_HOUSE.name,
+  tests: TESTS.map((t) => t[1]),
+  analytes: ANALYTES.length
+};
+
+// features/keystone/seed/labs.ts
+async function seedInHouseLabCatalog(uow, actor) {
+  const { tx } = uow;
+  const created = { laboratories: 0, analytes: 0, labTests: 0, labAnalyteMaps: 0, referenceRanges: 0 };
+  const spec = IN_HOUSE;
+  let lab = await tx.laboratory.findUnique({ where: { code: spec.code }, select: { id: true } });
+  if (!lab) {
+    lab = await tx.laboratory.create({ data: { code: spec.code, name: spec.name, kind: spec.kind, intake: spec.intake, accountNumber: "", status: "active" }, select: { id: true } });
+    created.laboratories += 1;
+  }
+  const labId = lab.id;
+  const analyteIds = /* @__PURE__ */ new Map();
+  for (const a of ANALYTES) {
+    let row = await tx.analyte.findUnique({ where: { code: a.code }, select: { id: true } });
+    if (!row) {
+      row = await tx.analyte.create({ data: { code: a.code, name: a.name, canonicalUnit: a.unit }, select: { id: true } });
+      created.analytes += 1;
+    }
+    analyteIds.set(a.code, row.id);
+  }
+  const fees = new Map((await tx.feeItem.findMany({ where: { code: { startsWith: "LAB-IH-" }, version: { status: "published" } }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
+  const species = await tx.species.findMany({ where: { code: { in: ["canine", "feline"] } }, select: { id: true, code: true } });
+  for (const [code2, name, fee, hours] of TESTS) {
+    if (await tx.labTest.findFirst({ where: { labId, code: code2 }, select: { id: true } })) continue;
+    await tx.labTest.create({ data: { labId, code: code2, name, feeItemId: fees.get(fee) ?? null, turnaroundHours: hours, status: "active", species: { connect: species.map((s) => ({ id: s.id })) } } });
+    created.labTests += 1;
+  }
+  for (const a of ANALYTES) {
+    if (await tx.labAnalyteMap.findFirst({ where: { labId, externalCode: a.code }, select: { id: true } })) continue;
+    await tx.labAnalyteMap.create({ data: { labId, externalCode: a.code, analyteId: analyteIds.get(a.code) } });
+    created.labAnalyteMaps += 1;
+  }
+  const speciesId = new Map(species.map((s) => [s.code, s.id]));
+  for (const [a, sp, low, high, cl, ch] of RANGES) {
+    const sid = speciesId.get(sp);
+    if (!sid) continue;
+    const analyteId = analyteIds.get(a);
+    if (await tx.referenceRange.findFirst({ where: { analyteId, speciesId: sid, labId: null }, select: { id: true } })) continue;
+    await tx.referenceRange.create({ data: { analyteId, speciesId: sid, ageClass: "any", labId: null, low, high, criticalLow: cl, criticalHigh: ch, unit: ANALYTES.find((x) => x.code === a).unit, source: "Typical adult reference interval; replace with your analyser\u2019s own." } });
+    created.referenceRanges += 1;
+  }
+  if (Object.values(created).some((n) => n > 0)) auditCreate(uow, actor, "Laboratory", labId, "lab.catalog_loaded", created);
+  return created;
+}
+
+// features/keystone/mutations/labSetup.ts
+var SETUP = ["canManageIntegrations", "canManagePractice"];
+var KINDS2 = ["reference", "in_house"];
+var INTAKES = ["manual", "file_drop", "adapter"];
+var STATES = ["active", "retired"];
+var code = (value, field, max = 30) => {
+  const out = text20(value, field, max).toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]*$/.test(out)) throw new DomainError(Codes.INVALID_INPUT, `${field}: letters, digits, - and _ only.`, { field });
+  return out;
+};
+async function loadInHouseLabCatalog(_root, args, context) {
+  return gated(context, { permissions: [...SETUP, "canManageOnboarding"], tool: "lab.catalog.load", humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: "lab.catalog.load", actor, idempotencyKey: args.idempotencyKey, params: {} }, (uow) => seedInHouseLabCatalog(uow, actor));
+    return { replay: result.replay, created: result.value };
+  });
+}
+async function saveLaboratory(_root, args, context) {
+  return gated(context, { permissions: [...SETUP], tool: "lab.save", humanOnly: true }, args, async (actor) => {
+    const data = {
+      name: text20(args.name, "name", 120),
+      kind: pick(args.kind, KINDS2, "kind"),
+      intake: pick(args.intake, INTAKES, "how results arrive"),
+      accountNumber: text20(args.accountNumber, "account number", 60, false),
+      status: pick(args.status ?? "active", STATES, "status")
+    };
+    const result = await command(context.prisma, { name: "lab.save", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.labId) {
+        const row = await lockRow(uow.tx, "Laboratory", args.labId);
+        if (args.expectedVersion !== void 0 && args.expectedVersion !== null && args.expectedVersion !== Number(row.version)) throw new DomainError(Codes.STALE_STATE, "This laboratory changed since you loaded it. Reload and try again.");
+        await uow.tx.laboratory.update({ where: { id: row.id }, data: { ...data, version: { increment: 1 } } });
+        auditCreate(uow, actor, "Laboratory", row.id, "lab.updated", data);
+        return { id: row.id };
+      }
+      const c = code(args.code, "code");
+      if (await uow.tx.laboratory.findUnique({ where: { code: c }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `A laboratory with code ${c} already exists.`, { field: "code" });
+      const lab = await uow.tx.laboratory.create({ data: { code: c, ...data }, select: { id: true } });
+      auditCreate(uow, actor, "Laboratory", lab.id, "lab.created", { code: c, ...data });
+      return { id: lab.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function saveLabTest(_root, args, context) {
+  return gated(context, { permissions: [...SETUP], tool: "lab.test.save", humanOnly: true }, args, async (actor) => {
+    if (!Number.isInteger(args.turnaroundHours) || args.turnaroundHours < 0 || args.turnaroundHours > 2e3) throw new DomainError(Codes.INVALID_INPUT, "Turnaround is 0 to 2000 hours.", { field: "turnaroundHours" });
+    const name = text20(args.name, "name", 120);
+    const status = pick(args.status ?? "active", STATES, "status");
+    const result = await command(context.prisma, { name: "lab.test.save", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const lab = await uow.tx.laboratory.findUnique({ where: { id: args.labId }, select: { id: true } });
+      if (!lab) throw new DomainError(Codes.NOT_FOUND, "Laboratory not found.", { field: "labId" });
+      let feeItemId = null;
+      if (args.feeItemId) {
+        const fee = await uow.tx.feeItem.findUnique({ where: { id: args.feeItemId }, select: { id: true, version: { select: { status: true } } } });
+        if (!fee || fee.version?.status !== "published") throw new DomainError(Codes.GUARD_FAILED, "Choose a fee from the published price list.", { field: "feeItemId" });
+        feeItemId = fee.id;
+      }
+      const species = args.speciesCodes?.length ? await uow.tx.species.findMany({ where: { code: { in: args.speciesCodes } }, select: { id: true } }) : [];
+      if (args.speciesCodes?.length && species.length !== new Set(args.speciesCodes).size) throw new DomainError(Codes.INVALID_INPUT, "One of the species is not known.", { field: "speciesCodes" });
+      const data = { name, feeItemId, turnaroundHours: args.turnaroundHours, status };
+      if (args.testId) {
+        const t2 = await uow.tx.labTest.findUnique({ where: { id: args.testId }, select: { id: true, labId: true } });
+        if (!t2 || t2.labId !== lab.id) throw new DomainError(Codes.NOT_FOUND, "That test is not on this laboratory.", { field: "testId" });
+        await uow.tx.labTest.update({ where: { id: t2.id }, data: { ...data, ...args.speciesCodes ? { species: { set: species.map((s) => ({ id: s.id })) } } : {} } });
+        auditCreate(uow, actor, "LabTest", t2.id, "lab.test_updated", { ...data, speciesCodes: args.speciesCodes ?? void 0 });
+        return { id: t2.id };
+      }
+      const c = code(args.code, "code");
+      if (await uow.tx.labTest.findFirst({ where: { labId: lab.id, code: c }, select: { id: true } })) throw new DomainError(Codes.GUARD_FAILED, `This laboratory already has a test ${c}.`, { field: "code" });
+      const t = await uow.tx.labTest.create({ data: { labId: lab.id, code: c, ...data, species: { connect: species.map((s) => ({ id: s.id })) } }, select: { id: true } });
+      auditCreate(uow, actor, "LabTest", t.id, "lab.test_created", { labId: lab.id, code: c, ...data, speciesCodes: args.speciesCodes ?? [] });
+      return { id: t.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function mapLabCode(_root, args, context) {
+  return gated(context, { permissions: [...SETUP], tool: "lab.code.map", humanOnly: true }, args, async (actor) => {
+    const externalCode = text20(args.externalCode, "lab code", 40);
+    const analyteCode = code(args.analyteCode, "analyte code", 20);
+    const factor = args.factor ? String(args.factor).trim() : "";
+    if (factor && !/^\d{1,9}(\.\d{1,9})?$/.test(factor)) throw new DomainError(Codes.INVALID_INPUT, "The factor is a positive number, like 0.0555.", { field: "factor" });
+    if (factor && Number(factor) === 0) throw new DomainError(Codes.INVALID_INPUT, "The factor cannot be zero.", { field: "factor" });
+    const result = await command(context.prisma, { name: "lab.code.map", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const lab = await uow.tx.laboratory.findUnique({ where: { id: args.labId }, select: { id: true } });
+      if (!lab) throw new DomainError(Codes.NOT_FOUND, "Laboratory not found.", { field: "labId" });
+      let analyte = await uow.tx.analyte.findUnique({ where: { code: analyteCode }, select: { id: true } });
+      if (!analyte) {
+        analyte = await uow.tx.analyte.create({ data: { code: analyteCode, name: text20(args.analyteName, "analyte name", 120), canonicalUnit: text20(args.unit, "unit", 20) }, select: { id: true } });
+        auditCreate(uow, actor, "Analyte", analyte.id, "lab.analyte_created", { code: analyteCode });
+      }
+      const unitConversion = factor && factor !== "1" ? { factor } : void 0;
+      const existing = await uow.tx.labAnalyteMap.findFirst({ where: { labId: lab.id, externalCode }, select: { id: true } });
+      const map = existing ? await uow.tx.labAnalyteMap.update({ where: { id: existing.id }, data: { analyteId: analyte.id, unitConversion: unitConversion ?? import_client.Prisma.DbNull }, select: { id: true } }) : await uow.tx.labAnalyteMap.create({ data: { labId: lab.id, externalCode, analyteId: analyte.id, ...unitConversion ? { unitConversion } : {} }, select: { id: true } });
+      auditCreate(uow, actor, "LabAnalyteMap", map.id, existing ? "lab.code_remapped" : "lab.code_mapped", { labId: lab.id, externalCode, analyteCode, factor: factor || null });
+      return { id: map.id, analyteId: analyte.id };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+
 // features/keystone/mutations/insurance.ts
 init_errors();
 
 // features/keystone/lib/money.ts
 init_decimal();
 var MINOR_DIGITS = { USD: 2, EUR: 2, GBP: 2, CHF: 2, CAD: 2, AUD: 2, SEK: 2, JPY: 0, KRW: 0, BHD: 3, KWD: 3 };
-var isCurrencyCode = (code) => typeof code === "string" && /^[A-Z]{3}$/.test(code);
+var isCurrencyCode = (code2) => typeof code2 === "string" && /^[A-Z]{3}$/.test(code2);
 function minorDigits(currencyCode) {
   if (!isCurrencyCode(currencyCode)) throw new Error(`Invalid currency code: ${String(currencyCode).slice(0, 8)}`);
   return MINOR_DIGITS[currencyCode] ?? 2;
@@ -15899,8 +16004,8 @@ var day5 = (d) => d.toISOString().slice(0, 10);
 var asDate2 = (s) => /* @__PURE__ */ new Date(`${s}T00:00:00Z`);
 async function savePlanVersion(_root, args, context) {
   return gated(context, { permissions: ["canManagePractice"], tool: "wellness.save_plan", humanOnly: true }, args, async (actor) => {
-    const code = text20(args.code, "code", 40).toUpperCase().replace(/[^A-Z0-9_-]/g, "");
-    if (!code) throw new DomainError(Codes.INVALID_INPUT, "The plan code uses letters and numbers.", { field: "code" });
+    const code2 = text20(args.code, "code", 40).toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (!code2) throw new DomainError(Codes.INVALID_INPUT, "The plan code uses letters and numbers.", { field: "code" });
     const price = minorText(args.monthlyPriceMinor, "monthly price");
     if (!Number.isInteger(args.termMonths) || args.termMonths < 1 || args.termMonths > 24) throw new DomainError(Codes.INVALID_INPUT, "A term is 1 to 24 months.", { field: "termMonths" });
     const entitlements = parseEntitlements(args.entitlements);
@@ -15908,8 +16013,8 @@ async function savePlanVersion(_root, args, context) {
     const bps = args.otherServicesDiscountBps ?? 0;
     if (!Number.isInteger(bps) || bps < 0 || bps > 1e4) throw new DomainError(Codes.INVALID_INPUT, "The discount is 0 to 100 percent.", { field: "otherServicesDiscountBps" });
     const result = await command(context.prisma, { name: "wellness.save_plan", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
-      await advisoryLock(uow.tx, `wellness-plan:${code}`);
-      const plan = await uow.tx.wellnessPlan.findUnique({ where: { code } }) ?? await uow.tx.wellnessPlan.create({ data: { code, name: text20(args.name, "name", 80), summary: text20(args.summary ?? "", "summary", 300, false), status: "active" } });
+      await advisoryLock(uow.tx, `wellness-plan:${code2}`);
+      const plan = await uow.tx.wellnessPlan.findUnique({ where: { code: code2 } }) ?? await uow.tx.wellnessPlan.create({ data: { code: code2, name: text20(args.name, "name", 80), summary: text20(args.summary ?? "", "summary", 300, false), status: "active" } });
       const last = await uow.tx.wellnessPlanVersion.findFirst({ where: { planId: plan.id }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
       if (last) await uow.tx.wellnessPlanVersion.updateMany({ where: { planId: plan.id, status: "published" }, data: { status: "retired" } });
       const version = await uow.tx.wellnessPlanVersion.create({
@@ -15930,7 +16035,7 @@ async function savePlanVersion(_root, args, context) {
           publishedAt: uow.now
         }
       });
-      auditCreate(uow, actor, "WellnessPlanVersion", version.id, "wellness.plan_published", { code, versionNo: version.versionNo, monthlyPriceMinor: price.toString() });
+      auditCreate(uow, actor, "WellnessPlanVersion", version.id, "wellness.plan_published", { code: code2, versionNo: version.versionNo, monthlyPriceMinor: price.toString() });
       return { id: version.id, planId: plan.id, versionNo: version.versionNo };
     });
     return { replay: result.replay, ...result.value };
@@ -16400,12 +16505,12 @@ function parseLabFile(input) {
       if (f[0] === "OBR") accession = (f[3] || f[2] || "").split("^")[0].trim();
       if (f[0] === "OBX") {
         if (!accession) throw new Error("A result line came before any accession number.");
-        const code = (f[3] ?? "").split("^")[0].trim();
+        const code2 = (f[3] ?? "").split("^")[0].trim();
         const value = (f[5] ?? "").trim();
-        if (!code || !value) continue;
+        if (!code2 || !value) continue;
         const status = STATUS[(f[11] ?? "F").trim().toLowerCase()] ?? "final";
         const numeric = NUMERIC.test(value);
-        add(accession, status, { code, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: (f[6] ?? "").split("^")[0].trim() });
+        add(accession, status, { code: code2, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: (f[6] ?? "").split("^")[0].trim() });
       }
     }
   } else {
@@ -16420,12 +16525,12 @@ function parseLabFile(input) {
     if (a < 0 || c < 0 || v < 0) throw new Error("The file needs accession, code and value columns.");
     for (const r of rows.slice(1)) {
       const accession = (r[a] ?? "").trim();
-      const code = (r[c] ?? "").trim();
+      const code2 = (r[c] ?? "").trim();
       const value = (r[v] ?? "").trim();
-      if (!accession || !code || !value) continue;
+      if (!accession || !code2 || !value) continue;
       const status = STATUS[(s >= 0 ? r[s] ?? "final" : "final").trim().toLowerCase()] ?? "final";
       const numeric = NUMERIC.test(value);
-      add(accession, status, { code, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: u >= 0 ? (r[u] ?? "").trim() : "" });
+      add(accession, status, { code: code2, value: numeric ? value.replace(/[<>\s]/g, "") : "", text: numeric ? "" : value, unit: u >= 0 ? (r[u] ?? "").trim() : "" });
     }
   }
   if (!reports.size) throw new Error("No results were found in the file.");
@@ -17024,12 +17129,12 @@ async function saveRunType(_root, args, context) {
     if (!Number.isInteger(args.runs) || args.runs < 0 || args.runs > 100) throw new DomainError(Codes.INVALID_INPUT, "The number of runs is 0 to 100.", { field: "runs" });
     const result = await command(context.prisma, { name: "boarding.save_run_type", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       await locationDay(uow, args.locationId, uow.now);
-      const code = text20(args.code, "code", 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
-      const data = { code, name: text20(args.name, "name", 60), locationId: args.locationId, speciesCodes: args.speciesCodes?.length ? args.speciesCodes : void 0, maxWeightKg: args.maxWeightKg ?? null, nightlyRateMinor: rate2, depositMinor: deposit, active: true };
+      const code2 = text20(args.code, "code", 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      const data = { code: code2, name: text20(args.name, "name", 60), locationId: args.locationId, speciesCodes: args.speciesCodes?.length ? args.speciesCodes : void 0, maxWeightKg: args.maxWeightKg ?? null, nightlyRateMinor: rate2, depositMinor: deposit, active: true };
       const rt = args.runTypeId ? await uow.tx.runType.update({ where: { id: args.runTypeId }, data }) : await uow.tx.runType.create({ data });
       const have = await uow.tx.run.count({ where: { runTypeId: rt.id } });
       for (let i = have; i < args.runs; i += 1) await uow.tx.run.create({ data: { label: `${rt.name} ${i + 1}`, runTypeId: rt.id, locationId: args.locationId, status: "available" } });
-      auditCreate(uow, actor, "RunType", rt.id, "boarding.run_type_saved", { code, runs: args.runs });
+      auditCreate(uow, actor, "RunType", rt.id, "boarding.run_type_saved", { code: code2, runs: args.runs });
       return { id: rt.id };
     });
     return { replay: result.replay, ...result.value };
@@ -17499,6 +17604,10 @@ function extendGraphqlSchema(baseSchema) {
         updateActiveUser(data: UserUpdateProfileInput!): User
         loadPracticeSetup(idempotencyKey: String!): JSON
         loadClinicSetup(idempotencyKey: String!): JSON
+        loadInHouseLabCatalog(idempotencyKey: String!): JSON
+        saveLaboratory(labId: ID, code: String, name: String!, kind: String!, intake: String!, accountNumber: String, status: String, expectedVersion: Int, idempotencyKey: String!): JSON
+        saveLabTest(testId: ID, labId: ID!, code: String, name: String!, feeItemId: ID, turnaroundHours: Int!, speciesCodes: [String!], status: String, idempotencyKey: String!): JSON
+        mapLabCode(labId: ID!, externalCode: String!, analyteCode: String!, analyteName: String, unit: String, factor: String, idempotencyKey: String!): JSON
         decideApprovalRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         cancelApprovalRequest(requestId: ID!, expectedVersion: Int!, reason: String, idempotencyKey: String!): JSON
         requestPracticeControls(changes: JSON!, reason: String!, idempotencyKey: String!): JSON
@@ -17727,6 +17836,10 @@ function extendGraphqlSchema(baseSchema) {
         updateActiveUser: updateActiveUser_default,
         loadPracticeSetup: op(loadPracticeSetup),
         loadClinicSetup: op(loadClinicSetup),
+        loadInHouseLabCatalog: op(loadInHouseLabCatalog),
+        saveLaboratory: op(saveLaboratory),
+        saveLabTest: op(saveLabTest),
+        mapLabCode: op(mapLabCode),
         decideApprovalRequest: op(decideApprovalRequest),
         cancelApprovalRequest: op(cancelApprovalRequest),
         requestPracticeControls: op(requestPracticeControls),

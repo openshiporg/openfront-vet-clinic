@@ -25041,6 +25041,10 @@ type Mutation {
   updateActiveUser(data: UserUpdateProfileInput!): User
   loadPracticeSetup(idempotencyKey: String!): JSON
   loadClinicSetup(idempotencyKey: String!): JSON
+  loadInHouseLabCatalog(idempotencyKey: String!): JSON
+  saveLaboratory(labId: ID, code: String, name: String!, kind: String!, intake: String!, accountNumber: String, status: String, expectedVersion: Int, idempotencyKey: String!): JSON
+  saveLabTest(testId: ID, labId: ID!, code: String, name: String!, feeItemId: ID, turnaroundHours: Int!, speciesCodes: [String!], status: String, idempotencyKey: String!): JSON
+  mapLabCode(labId: ID!, externalCode: String!, analyteCode: String!, analyteName: String, unit: String, factor: String, idempotencyKey: String!): JSON
   decideApprovalRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
   cancelApprovalRequest(requestId: ID!, expectedVersion: Int!, reason: String, idempotencyKey: String!): JSON
   requestPracticeControls(changes: JSON!, reason: String!, idempotencyKey: String!): JSON

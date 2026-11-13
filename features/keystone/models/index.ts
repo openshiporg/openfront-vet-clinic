@@ -122,6 +122,17 @@ for (const list of Object.values(models) as { graphql?: Record<string, unknown> 
   list.graphql = { ...(list.graphql ?? {}), maxTake: API_MAX_TAKE }
 }
 
+/**
+ * A list the signed-in role cannot read is hidden from its navigation (fleet rule: links a role cannot use are hidden). The sidebar
+ * hides a list, and a platform screen named after a list (Encounters), by this per-session flag. A list's own `ui.isHidden` still wins.
+ */
+type QueryAccess = (args: { session?: unknown }) => boolean | Promise<boolean>
+for (const list of Object.values(models) as { access?: { operation?: { query?: QueryAccess } } | QueryAccess; ui?: Record<string, unknown> }[]) {
+  const query = typeof list.access === 'object' ? list.access.operation?.query : undefined
+  if (!query || list.ui?.isHidden !== undefined) continue
+  list.ui = { ...(list.ui ?? {}), isHidden: async ({ session }: { session?: unknown }) => !(await query({ session } as never)) }
+}
+
 // Relationship filter/order access follows each target list's read access (guardedRelationship.ts).
 registerListAccess(models as never)
 

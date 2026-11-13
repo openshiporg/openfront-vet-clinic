@@ -52,6 +52,11 @@ const OPS: Record<string, Record<string, string>> = {
   addMemorialItem: { orderId: 'ID!', kind: 'String!', description: 'String' },
   // Phase 6: diagnostics, records releases, production and pay.
   suggestCharges: { locationId: 'ID' },
+  // Lab set-up: the practice's own labs, tests and result codes; the in-house catalog in one step.
+  loadInHouseLabCatalog: {},
+  saveLaboratory: { labId: 'ID', code: 'String', name: 'String!', kind: 'String!', intake: 'String!', accountNumber: 'String', status: 'String', expectedVersion: 'Int' },
+  saveLabTest: { testId: 'ID', labId: 'ID!', code: 'String', name: 'String!', feeItemId: 'ID', turnaroundHours: 'Int!', speciesCodes: '[String!]', status: 'String' },
+  mapLabCode: { labId: 'ID!', externalCode: 'String!', analyteCode: 'String!', analyteName: 'String', unit: 'String', factor: 'String' },
   orderLab: { patientId: 'ID!', labId: 'ID!', testIds: '[ID!]!', encounterId: 'ID', locationId: 'ID' },
   collectSpecimen: { labOrderId: 'ID!', kind: 'String!', containerId: 'String', expectedVersion: 'Int!' },
   sendLabOrder: { labOrderId: 'ID!', accessionId: 'String!', expectedVersion: 'Int!' },

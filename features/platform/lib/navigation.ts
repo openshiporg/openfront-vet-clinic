@@ -40,6 +40,7 @@ export const platformNavItems: PlatformNavItem[] = [
   { title: 'Prescriptions', href: '/platform/prescriptions', color: 'violet', description: 'Prescriptions and the refill queue.', icon: Pill, group: 'medical' },
   { title: 'Controlled substances', href: '/platform/controlled', color: 'rose', description: 'Register, counts, discrepancies, PDMP.', icon: FileLock2, group: 'medical' },
   { title: 'Results', href: '/platform/results', color: 'violet', description: 'Lab orders, results and reviews.', icon: FlaskConical, group: 'medical' },
+  { title: 'Lab set-up', href: '/platform/laboratories', color: 'violet', description: 'Laboratories, their tests and prices, result codes.', icon: FlaskConical, group: 'admin' },
   { title: 'Inventory', href: '/platform/inventory', color: 'cyan', description: 'Items, lots, orders and counts.', icon: Warehouse, group: 'medical' },
 
   { title: 'Billing', href: '/platform/billing', color: 'emerald', description: 'Estimates, invoices, payments, insurance.', icon: Receipt, group: 'clients' },
@@ -67,7 +68,7 @@ export const platformNavItems: PlatformNavItem[] = [
 export const SHIPPED_ROUTES = new Set<string>([
   '/platform/today', '/platform/approvals', '/platform/schedule', '/platform/whiteboard', '/platform/waitlist', '/platform/clients',
   '/platform/patients', '/platform/calls', '/platform/messages', '/platform/records-requests', '/platform/agents', '/platform/team', '/platform/policies', '/platform/compliance', '/platform/read-audit', '/platform/audit', '/platform/settings',
-  '/platform/encounters', '/platform/hospital', '/platform/vaccines', '/platform/imports',
+  '/platform/encounters', '/platform/hospital', '/platform/laboratories', '/platform/vaccines', '/platform/imports',
   '/platform/prescriptions', '/platform/controlled', '/platform/inventory', '/platform/billing', '/platform/wellness', '/platform/boarding', '/platform/grooming', '/platform/end-of-life', '/platform/results', '/platform/pay',
 ])
 

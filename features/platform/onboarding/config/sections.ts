@@ -1,5 +1,6 @@
 import { APPROVAL_POLICIES, DEA_REGISTRATIONS, LOCATIONS, PRACTICE, ROLES, STAFF } from '@/features/keystone/seed/practice'
 import { POLICY_PACKS } from '@/features/keystone/seed/policies'
+import { IN_HOUSE_CATALOG } from '@/features/keystone/seed/labCatalog'
 import { APPOINTMENT_TYPES, HOUSEHOLD_COUNT, KNOWLEDGE_BASE, REFERRAL_HOSPITALS, RESOURCES, SPECIES } from '@/features/keystone/seed/clinicData'
 
 /**
@@ -39,6 +40,20 @@ export const SETUP_SECTIONS = [
       'The AI receptionist with its reception grants (voice stays off until approved)',
       `${HOUSEHOLD_COUNT} fictional households with pets, weights, microchips and alerts`,
       "Today's day sheet and the first controlled-substance containers",
+    ],
+  },
+  {
+    id: 'labs',
+    title: 'In-house lab catalog',
+    // Offered, not forced: a practice can untick it and set up its own labs under Lab set-up. It only adds what is missing.
+    optional: true,
+    mutation: 'mutation LoadInHouseLabCatalog($idempotencyKey: String!) { loadInHouseLabCatalog(idempotencyKey: $idempotencyKey) }',
+    field: 'loadInHouseLabCatalog',
+    items: [
+      IN_HOUSE_CATALOG.lab,
+      ...IN_HOUSE_CATALOG.tests.map(t => `${t}, priced from the fee list`),
+      `${IN_HOUSE_CATALOG.analytes} analytes with their result codes`,
+      'Typical dog and cat reference ranges you can change',
     ],
   },
 ] as const

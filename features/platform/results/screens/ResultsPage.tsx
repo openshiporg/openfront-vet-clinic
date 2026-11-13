@@ -62,7 +62,7 @@ export default async function ResultsPage() {
                 ]} />
               ) : null}
             </div>
-          )) : <Empty>No laboratories are set up yet. Add one under Laboratory in the admin lists.</Empty>}
+          )) : <Empty>No laboratories are set up yet. Add one under <Link className="underline" href="/dashboard/platform/laboratories">Lab set-up</Link>.</Empty>}
         </Section>
       ) : null}
       <Section title="Results">

@@ -168,3 +168,19 @@ describe('root fields capped per request (r7)', () => {
   })
   it('the audit page (one chain check) is allowed', () => expect(verdict('query { auditEventsCount verifyAuditChain }')).toBeUndefined())
 })
+
+/* Admin meta is schema config held in memory, not rows: the dashboard's full admin meta query must fit, its abuse must not. */
+describe('admin meta (live sidebar and list pages were refused as about 130k rows)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'features', 'dashboard', 'actions', 'getAdminMetaAction.ts'), 'utf8')
+  const ADMIN_META = src.slice(src.indexOf('query KsFetchAdminMeta'), src.lastIndexOf('`', src.indexOf('const response')))
+  it('the dashboard admin meta query (every list, every field) is allowed', () => {
+    expect(ADMIN_META).toMatch(/lists \{/)
+    expect(verdict(ADMIN_META)).toBeUndefined()
+  })
+  it('the item page admin meta for one list with itemView(id) is allowed', () => expect(verdict('query($id: ID!, $k: String!) { patient(where: { id: $id }) { id } keystone { adminMeta { list(key: $k) { fields { path itemView(id: $id) { fieldMode fieldPosition } } } } } }', { id: 'x', k: 'Patient' })).toBeUndefined())
+  it('two keystone roots are refused', () => expect(verdict('{ a: keystone { adminMeta { lists { key } } } b: keystone { adminMeta { lists { key } } } }')).toMatch(/keystone 2 times; at most 1/))
+  it('aliased lists inside admin meta are refused', () => expect(verdict(`{ keystone { adminMeta { ${Array.from({ length: 5 }, (_, i) => `l${i}: lists { key }`).join(' ')} } } }`)).toMatch(/repeats lists/))
+  it('aliased fields deeper inside are refused', () => expect(verdict('{ keystone { adminMeta { lists { fields { a: itemView { fieldMode } b: itemView { fieldMode } } } } } }')).toMatch(/repeats itemView/))
+  it('itemView(id) on every list (one database read per list) is refused', () => expect(verdict('{ keystone { adminMeta { lists { fields { itemView(id: "x") { fieldMode } } } } } }')).toMatch(/itemView\(id\) on every list/))
+  it('admin meta does not open a way around the row cap for real lists', () => expect(verdict('{ keystone { adminMeta { lists { key } } } patients(take: 500) { weights(take: 500) { id } } }')).toMatch(/rows/))
+})
