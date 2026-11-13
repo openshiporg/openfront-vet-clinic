@@ -55,7 +55,7 @@ async function Members() {
           { name: 'signerId', label: 'Who is signing', options: [{ value: '', label: 'Choose the signer' }, ...d.people.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName} · ${p.client?.displayName ?? ''}` }))] },
           { name: 'method', label: 'How it was signed', options: METHODS, defaultValue: 'in_person' },
           { name: 'affirmed', label: 'Read the renewal terms aloud and the signer agrees', options: [{ value: 'false', label: 'Not yet' }, { value: 'true', label: 'Yes, agreed' }], defaultValue: 'false' },
-          { name: 'paymentMethodId', label: 'Card token from the card form', hint: 'Test mode: pm_card_visa', placeholder: 'pm_card_visa' },
+          { name: 'paymentMethodId', label: 'Card token (Stripe payment method id)', placeholder: 'pm_…' },
         ]} />
         <Meta>The plan renews every term until the client cancels. The renewal terms and cancellation steps are shown to the signer and saved with their agreement.</Meta>
       </Section>
@@ -71,7 +71,7 @@ async function Members() {
                 <CommandForm op="useEntitlement" build="phase5" submit="Use included care" fixed={{ enrollmentId: e.id }} paths={[PATH]} fields={[{ name: 'code', label: 'Item code', placeholder: 'EXAM', width: 'sm' }, { name: 'qty', label: 'How many', defaultValue: '1', width: 'sm' }]} />
                 <CommandForm op="replacePlanCard" build="phase5" submit="Replace card" fixed={{ enrollmentId: e.id, affirmed: 'true' }} paths={[PATH]} fields={[
                   { name: 'signerId', label: 'Who is signing', options: [{ value: '', label: 'Choose the signer' }, ...d.people.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))] },
-                  { name: 'paymentMethodId', label: 'New card token', placeholder: 'pm_card_visa' },
+                  { name: 'paymentMethodId', label: 'New card token (Stripe payment method id)', placeholder: 'pm_…' },
                 ]} />
                 <ActionButton op="cancelEnrollment" vars={{ enrollmentId: e.id, expectedVersion: e.version }} ask="Why is this plan being cancelled?" confirm="Cancel this plan? Care used above what was paid is charged once." paths={[PATH]}>Cancel plan</ActionButton>
               </div>
