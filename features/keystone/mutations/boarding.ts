@@ -377,7 +377,7 @@ export async function advanceGroom(_root: unknown, args: { groomId: string; to: 
       if (to === 'cancelled' || to === 'no_show') data.cancelReason = text(args.reason ?? '', 'reason', 200)
       let chargeId: string | null = null
       if (to === 'completed') {
-        const line = await serviceItemCharge(uow, actor, `GROOM-${String(g.service).toUpperCase()}`, { patientId: g.patientId, clientId: g.clientId, locationId: g.locationId, sourceType: 'groom', sourceId: g.id })
+        const line = await serviceItemCharge(uow, actor, `GROOM-${String(g.service).toUpperCase()}`, { patientId: g.patientId, clientId: g.clientId, locationId: g.locationId, performedById: g.groomerId ?? null, sourceType: 'groom', sourceId: g.id })
         chargeId = line.id
         // Commission is a plain percentage of the price kept for the groomer, on the groomer's own record; only finance can read it.
         const bps = 4000

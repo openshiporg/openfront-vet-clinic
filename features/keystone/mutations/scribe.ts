@@ -52,7 +52,7 @@ export async function startScribeSession(_root: unknown, args: { encounterId: st
 
 /** Transcribe and draft. The adapters run outside the transaction; the draft is stored in one. */
 export async function draftScribeSession(_root: unknown, args: { sessionId: string; pastedTranscript?: string | null; idempotencyKey: string }, context: Ctx) {
-  return gated(context, { permissions: ['canWriteRecord'], tool: 'scribe.draft', humanOnly: true }, args, async actor => {
+  return gated(context, { permissions: ['canWriteRecord'], tool: 'scribe.draft', scope: 'scribe.draft' }, args, async actor => {
     const prisma = context.prisma
     const session = await prisma.scribeSession.findUnique({ where: { id: args.sessionId }, select: { id: true, status: true, encounter: { select: { id: true, status: true, patient: { select: { name: true, species: { select: { code: true } } } } } } } })
     if (!session) throw new DomainError(Codes.NOT_FOUND, 'Scribe session not found.')

@@ -19,7 +19,7 @@ export const ImportBatch = list({
     ref: systemText({ indexed: 'unique', required: true }),
     system: fixedChoice(['ezyvet', 'avimark', 'csv']),
     channel: fixedChoice(['csv', 'api', 'dbf']),
-    entity: fixedChoice(['clients', 'patients', 'weights', 'vaccinations', 'reminders', 'consults']),
+    entity: fixedChoice(['clients', 'patients', 'weights', 'vaccinations', 'reminders', 'consults', 'balances']),
     location: relationship({ ref: 'Location', ...readOnly }),
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),

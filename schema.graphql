@@ -25104,6 +25104,10 @@ type Mutation {
   reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
   requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
   exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+  exportData(kind: String!, idempotencyKey: String!): JSON
+  planCampaign(name: String!, purpose: String!, templateId: ID, locationId: ID, idempotencyKey: String!): JSON
+  approveCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  cancelCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   verifyReleasePacket(releaseId: ID!): JSON
   suggestCharges(locationId: ID, idempotencyKey: String!): JSON

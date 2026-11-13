@@ -13,6 +13,7 @@ import * as reception from './reception'
 import * as agents from './agents'
 import * as record from './record'
 import * as scribe from './scribe'
+import * as portability from './portability'
 import * as treatment from './treatment'
 import * as vaccines from './vaccines'
 import * as imports from './imports'
@@ -123,6 +124,10 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
         exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+        exportData(kind: String!, idempotencyKey: String!): JSON
+        planCampaign(name: String!, purpose: String!, templateId: ID, locationId: ID, idempotencyKey: String!): JSON
+        approveCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         verifyReleasePacket(releaseId: ID!): JSON
         suggestCharges(locationId: ID, idempotencyKey: String!): JSON
@@ -478,6 +483,10 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         reopenPayPeriod: op(production.reopenPayPeriod),
         requestPayPeriodApproval: op(production.requestPayPeriodApproval),
         exportPayPeriod: op(production.exportPayPeriod),
+        exportData: op(portability.exportData),
+        planCampaign: op(portability.planCampaign),
+        approveCampaign: op(portability.approveCampaign),
+        cancelCampaign: op(portability.cancelCampaign),
         lockPayPeriod: op(production.lockPayPeriod),
         suggestCharges: op(agentsWider.suggestCharges),
         clinicInsights: (root: unknown, args: any, context: any) => agentsWider.clinicInsights(root, args, context),

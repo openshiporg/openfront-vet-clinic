@@ -23,7 +23,9 @@ const ALL = permissionNames.filter(p => p !== 'canBreakGlass')
 const key = () => uniqueKey('k')
 const pgError = (e: unknown) => String((e as Error)?.message ?? e)
 const today = new Date().toISOString().slice(0, 7)
-const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+// The clinic's calendar day (not UTC's): after about 4 pm Pacific the UTC date is already tomorrow, and a stay cannot check in before its start.
+const clinicToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+const plusDays = (n: number) => new Date(new Date(`${clinicToday()}T12:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10)
 
 describe.skipIf(!hasTestDatabase)('Phase 5 r1 fixes (database)', () => {
   let prisma: PrismaClient

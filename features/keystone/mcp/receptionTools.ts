@@ -161,6 +161,13 @@ export const WIDER_TOOLS: DomainTool[] = [
     field: 'suggestCharges', writes: true,
   },
   {
+    name: 'scribe_draft',
+    description: 'Turn the transcript of a visit whose client consent a person has already recorded into a draft for the doctor. It writes nothing to the record: the doctor accepts or rejects each block, and signing is theirs.',
+    inputSchema: shape({ sessionId: id('Scribe session id'), pastedTranscript: str('Transcript text', 100000), idempotencyKey }, ['sessionId', 'idempotencyKey']),
+    document: 'mutation ScribeDraft($sessionId: ID!, $pastedTranscript: String, $idempotencyKey: String!) { draftScribeSession(sessionId: $sessionId, pastedTranscript: $pastedTranscript, idempotencyKey: $idempotencyKey) }',
+    field: 'draftScribeSession', writes: true,
+  },
+  {
     name: 'insights_read',
     description: 'Counts of what is late right now: result reviews, records requests, unsigned records. No names or values.',
     inputSchema: shape({}, []),

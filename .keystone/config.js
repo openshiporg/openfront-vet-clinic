@@ -5675,7 +5675,7 @@ var ImportBatch = (0, import_core23.list)({
     ref: systemText({ indexed: "unique", required: true }),
     system: fixedChoice(["ezyvet", "avimark", "csv"]),
     channel: fixedChoice(["csv", "api", "dbf"]),
-    entity: fixedChoice(["clients", "patients", "weights", "vaccinations", "reminders", "consults"]),
+    entity: fixedChoice(["clients", "patients", "weights", "vaccinations", "reminders", "consults", "balances"]),
     location: relationship({ ref: "Location", ...readOnly }),
     fileName: systemText(),
     fileHash: hiddenHash({ indexed: true }),
@@ -9170,7 +9170,7 @@ async function serviceCharge(uow, actor, input) {
   const discount = bps ? -adjustBps(net, -bps) : 0n;
   const tax = client?.taxExempt ? 0n : taxOn(await taxRulesFor(uow.tx, input.locationId, on), input.taxCategory, net - discount);
   const row = await uow.tx.chargeLine.create({
-    data: { clientId: input.clientId, patientId: input.patientId, locationId: input.locationId, description: input.description.slice(0, 200), qty: qty2.toString(), unitPriceMinor: input.unitPriceMinor, extendedMinor: net, discountMinor: discount, taxMinor: tax, taxCategory: input.taxCategory, sourceType: input.sourceType, sourceId: input.sourceId, capturedAt: uow.now }
+    data: { clientId: input.clientId, patientId: input.patientId, locationId: input.locationId, description: input.description.slice(0, 200), qty: qty2.toString(), unitPriceMinor: input.unitPriceMinor, extendedMinor: net, discountMinor: discount, taxMinor: tax, taxCategory: input.taxCategory, sourceType: input.sourceType, sourceId: input.sourceId, performedById: input.performedById ?? null, capturedAt: uow.now }
   });
   auditCreate(uow, actor, "ChargeLine", row.id, "charge.captured", { source: input.sourceType, extendedMinor: net.toString(), discountMinor: discount.toString(), taxMinor: tax.toString() });
   return row;
@@ -12199,7 +12199,7 @@ async function startScribeSession(_root, args, context) {
   });
 }
 async function draftScribeSession(_root, args, context) {
-  return gated(context, { permissions: ["canWriteRecord"], tool: "scribe.draft", humanOnly: true }, args, async (actor) => {
+  return gated(context, { permissions: ["canWriteRecord"], tool: "scribe.draft", scope: "scribe.draft" }, args, async (actor) => {
     const prisma = context.prisma;
     const session = await prisma.scribeSession.findUnique({ where: { id: args.sessionId }, select: { id: true, status: true, encounter: { select: { id: true, status: true, patient: { select: { name: true, species: { select: { code: true } } } } } } } });
     if (!session) throw new DomainError(Codes.NOT_FOUND, "Scribe session not found.");
@@ -12271,6 +12271,89 @@ async function rejectScribeDraft(_root, args, context) {
     return { replay: result.replay, ...result.value };
   });
 }
+
+// features/keystone/mutations/portability.ts
+init_errors();
+init_readAudit();
+var KINDS = ["clients", "patients", "balances"];
+var MAX = 5e4;
+async function build(tx, kind) {
+  if (kind === "clients") {
+    const list24 = await tx.client.findMany({ take: MAX, orderBy: { ref: "asc" }, select: { ref: true, displayName: true, status: true, kind: true } });
+    return { header: ["client", "name", "status", "kind"], rows: list24.map((c) => [c.ref, c.displayName, c.status, c.kind]) };
+  }
+  if (kind === "patients") {
+    const list24 = await tx.patient.findMany({ take: MAX, orderBy: { ref: "asc" }, select: { ref: true, name: true, status: true, sex: true, dateOfBirth: true, deceasedAt: true, species: { select: { name: true } } } });
+    return { header: ["patient", "name", "species", "sex", "date_of_birth", "status", "deceased_on"], rows: list24.map((p) => [p.ref, p.name, p.species?.name ?? "", p.sex, p.dateOfBirth ? p.dateOfBirth.toISOString().slice(0, 10) : "", p.status, p.deceasedAt ? p.deceasedAt.toISOString().slice(0, 10) : ""]) };
+  }
+  const sums = await tx.$queryRawUnsafe(`SELECT "client", SUM("amountMinor")::bigint AS total FROM "ClientLedgerEntry" GROUP BY "client" HAVING SUM("amountMinor") <> 0 ORDER BY "client" LIMIT ${MAX}`);
+  const clients2 = await tx.client.findMany({ where: { id: { in: sums.map((s) => s.client) } }, select: { id: true, ref: true } });
+  const ref = new Map(clients2.map((c) => [c.id, c.ref]));
+  return { header: ["client", "balance"], rows: sums.map((s) => [ref.get(s.client) ?? "", money2(BigInt(s.total))]).sort((a, b) => a[0].localeCompare(b[0])) };
+}
+async function exportData(_root, args, context) {
+  return gated(context, { permissions: ["canManageIntegrations", "canReadAudit"], tool: "data.export", humanOnly: true }, args, async (actor) => {
+    if (!KINDS.includes(args.kind)) throw new DomainError(Codes.INVALID_INPUT, "Choose clients, patients or balances.", { field: "kind" });
+    const result = await command(context.prisma, { name: "data.export", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const { header, rows } = await build(uow.tx, args.kind);
+      const csv = [header, ...rows].map((r) => r.map((v) => cell(String(v ?? ""))).join(",")).join("\n") + "\n";
+      const ref = await nextReference(uow.tx, "EXP", uow.now);
+      const job = await uow.tx.exportJob.create({ data: { ref, kind: args.kind, status: "built", rows: rows.length, contentHash: csvHash(csv), requestedById: actorUserId(actor), at: uow.now } });
+      auditCreate(uow, actor, "ExportJob", job.id, "data.exported", { kind: args.kind, rows: rows.length, contentHash: job.contentHash });
+      return { id: job.id, ref, rows: rows.length, contentHash: job.contentHash, csv };
+    });
+    if (!result.replay) {
+      const reader = actorFromSession2(context.session);
+      if (reader) await writeReadAudit(context.prisma, reader, [{ resourceType: "ExportJob", resourceId: result.value.id, fields: /* @__PURE__ */ new Set(["kind", "rows", "contentHash"]) }], "data_export", args.idempotencyKey);
+    }
+    return { replay: result.replay, ...result.value, csv: result.replay ? void 0 : result.value.csv };
+  });
+}
+var PURPOSES2 = ["transactional", "reminder", "marketing"];
+async function planCampaign(_root, args, context) {
+  return gated(context, { permissions: ["canMessageClients", "canManagePractice"], tool: "campaign.plan", humanOnly: true }, args, async (actor) => {
+    if (!PURPOSES2.includes(args.purpose)) throw new DomainError(Codes.INVALID_INPUT, "Choose a purpose.", { field: "purpose" });
+    const name = args.name?.trim();
+    if (!name) throw new DomainError(Codes.INVALID_INPUT, "Name the campaign.", { field: "name" });
+    const result = await command(context.prisma, { name: "campaign.plan", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      if (args.templateId) {
+        const t = await uow.tx.messageTemplate.findUnique({ where: { id: args.templateId }, select: { purpose: true, active: true, channel: true } });
+        if (!t || !t.active) throw new DomainError(Codes.NOT_FOUND, "Template not found or switched off.");
+        if (t.channel === "voice") throw new DomainError(Codes.GUARD_FAILED, "A campaign cannot use an outbound voice template.");
+        if (args.purpose === "marketing" && t.purpose !== "marketing") throw new DomainError(Codes.GUARD_FAILED, "A marketing campaign needs a marketing template.");
+      }
+      const consentPurpose = args.purpose === "marketing" ? "marketing" : "transactional";
+      const points = await uow.tx.contactPoint.findMany({ where: { status: "active", kind: { in: ["mobile", "email"] }, person: { client: { status: "active", ...args.locationId ? { primaryLocationId: args.locationId } : {} } } }, select: { id: true, person: { select: { clientId: true } } }, take: MAX });
+      const consents = await uow.tx.consentRecord.findMany({ where: { contactPointId: { in: points.map((p) => p.id) }, purpose: consentPurpose }, orderBy: [{ at: "asc" }, { id: "asc" }], select: { contactPointId: true, action: true } });
+      const state = /* @__PURE__ */ new Map();
+      for (const c of consents) state.set(c.contactPointId, c.action);
+      const clientIds = /* @__PURE__ */ new Set();
+      let excluded = 0;
+      for (const p of points) {
+        if (state.get(p.id) === "grant" && p.person?.clientId) clientIds.add(p.person.clientId);
+        else excluded++;
+      }
+      const audience = { consentPurpose, clients: clientIds.size, contactPointsExcluded: excluded, locationId: args.locationId ?? null, builtAt: uow.now.toISOString() };
+      const row = await uow.tx.campaign.create({ data: { name, purpose: args.purpose, templateId: args.templateId ?? null, audience, status: "draft", outboundVoice: false } });
+      auditCreate(uow, actor, "Campaign", row.id, "campaign.planned", { purpose: args.purpose, clients: audience.clients });
+      return { id: row.id, status: "draft", audience };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+async function move(args, context, to, from, tool, perms) {
+  return gated(context, { permissions: perms, tool, humanOnly: true }, args, async (actor) => {
+    const result = await command(context.prisma, { name: tool, actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
+      const cur = await lockRow(uow.tx, "Campaign", args.campaignId);
+      if (to === "approved" && !cur.audience?.clients) throw new DomainError(Codes.GUARD_FAILED, "The audience is empty; nothing to approve.");
+      const row = await transition(uow, { model: "Campaign", id: args.campaignId, from, to, expectedVersion: args.expectedVersion, actor, eventType: `campaign.${to}`, data: {}, metadata: {} });
+      return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var approveCampaign = (_r, args, context) => move(args, context, "approved", ["draft"], "campaign.approve", ["canMessageClients", "canManagePractice"]);
+var cancelCampaign = (_r, args, context) => move(args, context, "cancelled", ["draft", "approved"], "campaign.cancel", ["canMessageClients"]);
 
 // features/keystone/mutations/treatment.ts
 init_errors();
@@ -14131,6 +14214,11 @@ var FIELD_ALIASES = {
     reminder: { required: true, aliases: { any: ["reminder", "reminder type", "description", "service"] } },
     dueOn: { required: true, aliases: { any: ["due", "due date", "date due"] } }
   },
+  balances: {
+    clientExternalId: { required: true, aliases: { ezyvet: ["contact id", "contact code"], avimark: ["client number", "client id"], any: ["client id", "external id", "id"] } },
+    balance: { required: true, aliases: { ezyvet: ["balance", "outstanding"], avimark: ["balance", "account balance"], any: ["balance", "amount owing", "amount due", "outstanding"] } },
+    asOf: { required: true, aliases: { any: ["as of", "balance date", "date", "as at"] } }
+  },
   consults: {
     externalId: { required: true, aliases: { ezyvet: ["consult id"], avimark: ["medical history id", "entry id"], any: ["id", "visit id", "consult id"] } },
     patientExternalId: { required: true, aliases: { ezyvet: ["animal id"], avimark: ["patient number", "patient id"], any: ["patient id", "animal id"] } },
@@ -14252,6 +14340,7 @@ function ezyvetApiSource(config2) {
     weights: { path: "healthstatus", map: (r) => ({ patientExternalId: String(r.animal_id ?? ""), date: String(r.date ?? ""), weight: String(r.weight ?? ""), unit: "kg" }) },
     vaccinations: { path: "vaccination", map: (r) => ({ patientExternalId: String(r.animal_id ?? ""), vaccine: String(r.name ?? ""), givenOn: String(r.date_of_vaccination ?? ""), dueOn: String(r.date_of_next_due ?? ""), lotNumber: String(r.batch_number ?? "") }) },
     reminders: { path: "reminder", map: (r) => ({ patientExternalId: String(r.animal_id ?? ""), reminder: String(r.description ?? ""), dueOn: String(r.due_at ?? "") }) },
+    balances: { path: "contact", map: (r) => ({ clientExternalId: String(r.id ?? ""), balance: String(r.balance ?? "0"), asOf: String(r.modified_at ?? "").slice(0, 10) }) },
     consults: { path: "consult", map: (r) => ({ externalId: String(r.id ?? ""), patientExternalId: String(r.animal_id ?? ""), date: String(r.date ?? ""), vet: "", reason: String(r.presenting_problem ?? ""), notes: String(r.notes ?? "") }) }
   };
   async function token() {
@@ -14293,7 +14382,7 @@ function pimsSource(key2 = "manual-csv") {
 }
 
 // features/keystone/mutations/imports.ts
-var ENTITIES = ["clients", "patients", "weights", "vaccinations", "reminders", "consults"];
+var ENTITIES = ["clients", "patients", "weights", "vaccinations", "reminders", "consults", "balances"];
 var SYSTEMS = ["ezyvet", "avimark", "csv"];
 var CHUNK = 100;
 var MAX_ROWS = 5e4;
@@ -14309,9 +14398,11 @@ function rowKey(entity, row) {
       return `${row.patientExternalId}|${row.vaccine}|${row.givenOn}`;
     case "reminders":
       return `${row.patientExternalId}|${row.reminder}|${row.dueOn}`;
+    case "balances":
+      return `${row.clientExternalId}|${row.asOf}`;
   }
 }
-var RECORD_TYPE = { clients: "Client", patients: "Patient", weights: "WeightMeasurement", vaccinations: "PatientReminder", reminders: "PatientReminder", consults: "Encounter" };
+var RECORD_TYPE = { clients: "Client", patients: "Patient", weights: "WeightMeasurement", vaccinations: "PatientReminder", reminders: "PatientReminder", consults: "Encounter", balances: "ClientLedgerEntry" };
 var speciesList = (tx) => tx.species.findMany({ select: { code: true, name: true } });
 function validateRow(entity, row, species) {
   const errors = [];
@@ -14330,6 +14421,11 @@ function validateRow(entity, row, species) {
     need("name", "Name");
     if (!importSpeciesCode(row.species ?? "", species)) errors.push(`Species "${row.species ?? ""}" is not set up here (${species.map((s) => s.name).join(", ") || "no species yet"}).`);
     if (row.dateOfBirth && !importDate(row.dateOfBirth)) errors.push(`Date of birth "${row.dateOfBirth}" is not a date.`);
+  }
+  if (entity === "balances") {
+    need("clientExternalId", "Client id");
+    if (!importDate(row.asOf ?? "")) errors.push("Balance date is not a date.");
+    if (!/^-?\d{1,9}(\.\d{1,2})?$/.test((row.balance ?? "").replace(/[$,\s]/g, ""))) errors.push("Balance is not an amount in dollars and cents.");
   }
   if (entity === "weights") {
     if (!importDate(row.date ?? "")) errors.push("Weight date is not a date.");
@@ -14500,6 +14596,23 @@ async function applyRow(uow, actor, batch, row, rowNumber) {
       }
       await mapExternal(uow, sys2, "PatientReminder", reminder.id, key2);
       return { ...base, result: "created", recordType: "PatientReminder", recordId: reminder.id };
+    }
+    case "balances": {
+      const mapped = await findMapped(uow, `${batch.system}:clients`, "Client", row.clientExternalId);
+      if (!mapped) throw new DomainError(Codes.NOT_FOUND, `Client ${row.clientExternalId} has not been imported yet; import clients first.`);
+      const raw = row.balance.replace(/[$,\s]/g, "");
+      const neg = raw.startsWith("-");
+      const [whole, cents = ""] = raw.replace("-", "").split(".");
+      const minor2 = BigInt(whole) * 100n + BigInt(cents.padEnd(2, "0"));
+      if (!neg && minor2 > 0n) throw new DomainError(Codes.GUARD_FAILED, "A balance owed cannot be imported as a ledger entry. Raise an invoice for it; only credit balances (negative) import.");
+      const signed = -minor2;
+      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}:${importDate(row.asOf)}`;
+      if (signed === 0n) return { ...base, result: "skipped_existing", errors: ["Zero balance: nothing to post."] };
+      const { post: post2 } = await Promise.resolve().then(() => (init_ledger(), ledger_exports));
+      const posted = await post2(uow, { clientId: mapped.recordId, kind: "adjustment", amountMinor: signed, postedOn: importDate(row.asOf), entryKey, memo: `Opening balance from ${batch.system} (${batch.ref})` });
+      await mapExternal(uow, sys2, "ClientLedgerEntry", posted.id, key2);
+      auditCreate(uow, actor, "ClientLedgerEntry", posted.id, "balance.imported", { batch: batch.ref, rowNumber, amountMinor: signed.toString() });
+      return { ...base, result: "created", recordType: "ClientLedgerEntry", recordId: posted.id };
     }
     case "consults": {
       const patientId = await patientFor(row.patientExternalId);
@@ -16943,7 +17056,7 @@ async function advanceGroom(_root, args, context) {
       if (to === "cancelled" || to === "no_show") data.cancelReason = text20(args.reason ?? "", "reason", 200);
       let chargeId = null;
       if (to === "completed") {
-        const line = await serviceItemCharge(uow, actor, `GROOM-${String(g.service).toUpperCase()}`, { patientId: g.patientId, clientId: g.clientId, locationId: g.locationId, sourceType: "groom", sourceId: g.id });
+        const line = await serviceItemCharge(uow, actor, `GROOM-${String(g.service).toUpperCase()}`, { patientId: g.patientId, clientId: g.clientId, locationId: g.locationId, performedById: g.groomerId ?? null, sourceType: "groom", sourceId: g.id });
         chargeId = line.id;
         const bps = 4e3;
         data.commissionBps = bps;
@@ -17244,6 +17357,10 @@ function extendGraphqlSchema(baseSchema) {
         reopenPayPeriod(periodId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         requestPayPeriodApproval(periodId: ID!, idempotencyKey: String!): JSON
         exportPayPeriod(periodId: ID!, idempotencyKey: String!): JSON
+        exportData(kind: String!, idempotencyKey: String!): JSON
+        planCampaign(name: String!, purpose: String!, templateId: ID, locationId: ID, idempotencyKey: String!): JSON
+        approveCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        cancelCampaign(campaignId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         lockPayPeriod(periodId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         verifyReleasePacket(releaseId: ID!): JSON
         suggestCharges(locationId: ID, idempotencyKey: String!): JSON
@@ -17599,6 +17716,10 @@ function extendGraphqlSchema(baseSchema) {
         reopenPayPeriod: op(reopenPayPeriod),
         requestPayPeriodApproval: op(requestPayPeriodApproval),
         exportPayPeriod: op(exportPayPeriod),
+        exportData: op(exportData),
+        planCampaign: op(planCampaign),
+        approveCampaign: op(approveCampaign),
+        cancelCampaign: op(cancelCampaign),
         lockPayPeriod: op(lockPayPeriod),
         suggestCharges: op(suggestCharges),
         clinicInsights: (root, args, context) => clinicInsights(root, args, context),

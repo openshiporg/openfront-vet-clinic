@@ -7,6 +7,8 @@ import { cancelLabOrder, collectSpecimen, communicateLabResult, enterLabResult, 
 import { decideRecordsRequest, releaseRecords, startRecordsVerification, verifyRecordsRequest } from './recordsRelease'
 import { calculatePayPeriod, draftRuleVersion, exportPayPeriod, lockPayPeriod, openPayPeriod, requestPayPeriodApproval, requestProductionAdjustment, requestRulePublication } from './production'
 import { decideApprovalRequest } from './approvals'
+import { applyImport, previewImport } from './imports'
+import { approveCampaign, cancelCampaign, exportData, planCampaign } from './portability'
 import { addFeeCharge, draftInvoice, postInvoice } from './billing'
 
 /** Phase 6 exit gate against a real database: lab results, records releases, production and pay. */
@@ -261,4 +263,55 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     await expect(draftRuleVersion(null, { label: 'x', effectiveFrom: '2030-01-01', rules: { exam: { basis: 'performed', bps: 1 } }, idempotencyKey: key() }, reception)).rejects.toThrow()
     await expect(openPayPeriod(null, { startsOn: '2031-01-01', endsOn: '2031-01-14', idempotencyKey: key() }, reception)).rejects.toThrow()
   })
+  it('import: an opening balance posts once per client and date, and a second run adds nothing', async () => {
+    const ext = `AV-${Math.random().toString(36).slice(2, 8)}`
+    const email = `${ext.toLowerCase()}@cedarcreekvet.com`
+    const run = async (entity: 'clients' | 'balances', csv: string) => {
+      const preview = await previewImport(null, { system: 'avimark', entity, locationId, fileName: `${entity}.csv`, csv, idempotencyKey: key() }, ctx)
+      return applyImport(null, { batchId: preview.id, idempotencyKey: key() }, ctx)
+    }
+    const c = await run('clients', `Client ID,First Name,Last Name,Email\n${ext},Bal,Ance,${email}\n`)
+    expect(c.rowsCreated).toBe(1)
+    const bal = `Client ID,Balance,As Of\n${ext},"-$125.50",2026-11-01\n`
+    const first = await run('balances', bal)
+    expect(first.rowsCreated).toBe(1)
+    const second = await run('balances', bal)
+    expect(second.rowsCreated).toBe(0)
+    const mapped = await prisma.externalId.findFirstOrThrow({ where: { system: 'avimark:clients', value: ext } })
+    const entries = await prisma.clientLedgerEntry.findMany({ where: { clientId: mapped.recordId, kind: 'adjustment' } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0].amountMinor).toBe(-12550n)
+    const bad = await run('balances', `Client ID,Balance,As Of\n${ext},12.345,2026-11-02\nNOPE,-5,2026-11-02\n`)
+    expect(bad.rowsFailed).toBe(2)
+    const owed = await run('balances', `Client ID,Balance,As Of\n${ext},40.00,2026-11-03\n`)
+    expect(owed.rowsFailed).toBe(1)
+  }, 120_000)
+  it('export and campaigns: the export is audited and hashed; a campaign sends nothing and never targets without consent', async () => {
+    const k = key()
+    const out = (await exportData(null, { kind: 'clients', idempotencyKey: k }, ctx)) as { rows: number; csv: string; contentHash: string; ref: string; replay: boolean }
+    expect(out.rows).toBeGreaterThan(0)
+    expect(out.csv.split('\n')[0]).toBe('client,name,status,kind')
+    const again = (await exportData(null, { kind: 'clients', idempotencyKey: k }, ctx)) as { replay: boolean; csv?: string; contentHash: string }
+    expect(again.replay).toBe(true)
+    expect(again.csv).toBeUndefined()
+    expect(again.contentHash).toBe(out.contentHash)
+    expect(await prisma.readAudit.count({ where: { resourceType: 'ExportJob' } })).toBeGreaterThan(0)
+    const job = await prisma.exportJob.findFirstOrThrow({ where: { ref: out.ref } })
+    expect(job.contentHash).toBe(out.contentHash)
+    const reception = { session: sessionFor('seed_user_marsh', ['canAccessDashboard', 'canBook']), prisma }
+    await expect(exportData(null, { kind: 'clients', idempotencyKey: key() }, reception)).rejects.toThrow()
+
+    const before = await prisma.commsMessage.count()
+    const reminder = (await planCampaign(null, { name: 'Recall', purpose: 'reminder', idempotencyKey: key() }, ctx)) as { id: string; audience: { clients: number } }
+    const marketing = (await planCampaign(null, { name: 'Promo', purpose: 'marketing', idempotencyKey: key() }, ctx)) as { id: string; audience: { clients: number } }
+    expect(reminder.audience.clients).toBeGreaterThan(0)
+    expect(marketing.audience.clients).toBe(0)
+    await expect(approveCampaign(null, { campaignId: marketing.id, expectedVersion: 0, idempotencyKey: key() }, ctx)).rejects.toThrow(/audience is empty/)
+    const ok = (await approveCampaign(null, { campaignId: reminder.id, expectedVersion: 0, idempotencyKey: key() }, ctx)) as { status: string }
+    expect(ok.status).toBe('approved')
+    await expect(approveCampaign(null, { campaignId: reminder.id, expectedVersion: 1, idempotencyKey: key() }, ctx)).rejects.toThrow()
+    const c = (await cancelCampaign(null, { campaignId: reminder.id, expectedVersion: 1, idempotencyKey: key() }, ctx)) as { status: string }
+    expect(c.status).toBe('cancelled')
+    expect(await prisma.commsMessage.count()).toBe(before)
+  }, 120_000)
 })

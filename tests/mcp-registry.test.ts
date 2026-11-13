@@ -53,7 +53,8 @@ describe('MCP registry never-list', () => {
 describe('Phase 2 clinical commands stay off MCP', () => {
   // Charting, orders, administration, anaesthesia, vaccines and imports are clinical acts by a
   // person (humanOnly in the resolver too); no tool may reach them, whatever its name.
-  const CLINICAL = ['openEncounter', 'saveSoapSection', 'recordVitals', 'setExamFinding', 'addDiagnosis', 'submitEncounter', 'signEncounter', 'addAddendum', 'requestVoidEncounter', 'startScribeSession', 'draftScribeSession', 'acceptScribeDraft', 'placeOrder', 'recordAdministration', 'completeTreatmentTask', 'admitPatient', 'dischargePatient', 'openAnaesthesia', 'recordMonitoring', 'closeAnaesthesia', 'saveSurgeryReport', 'administerVaccine', 'recordOutsideVaccine', 'applyImport', 'previewDose']
+  // The scribe draft is the one exception (Phase 6): it needs a session a person started with recorded consent, writes nothing to the record, and accepting or rejecting stays human.
+  const CLINICAL = ['openEncounter', 'saveSoapSection', 'recordVitals', 'setExamFinding', 'addDiagnosis', 'submitEncounter', 'signEncounter', 'addAddendum', 'requestVoidEncounter', 'startScribeSession', 'acceptScribeDraft', 'placeOrder', 'recordAdministration', 'completeTreatmentTask', 'admitPatient', 'dischargePatient', 'openAnaesthesia', 'recordMonitoring', 'closeAnaesthesia', 'saveSurgeryReport', 'administerVaccine', 'recordOutsideVaccine', 'applyImport', 'previewDose']
   it('no registered tool document calls a clinical command', () => {
     for (const tool of DOMAIN_TOOLS) for (const op of CLINICAL) expect(tool.document, `${tool.name} → ${op}`).not.toMatch(new RegExp(`\\b${op}\\(`))
   })
@@ -83,5 +84,15 @@ describe('read audit walker', () => {
     expect(refs).toHaveLength(1)
     expect(refs[0].resourceId).toBe('p9')
     expect(collectReads({ document: parse('query { verifyAuditChain }'), data: { verifyAuditChain: { ok: true } }, typeOf })).toEqual([])
+  })
+})
+
+describe('Phase 6 agent tools', () => {
+  const names = DOMAIN_TOOLS.map(t => t.name)
+  it('exposes only the reviewed set', () => {
+    for (const n of ['results_notify_ready', 'records_send', 'charges_suggest', 'insights_read', 'scribe_draft']) expect(names).toContain(n)
+  })
+  it('no tool can review or interpret a result, decide a records request, touch pay, export data or approve a campaign', () => {
+    for (const t of DOMAIN_TOOLS) expect(t.field).not.toMatch(/^(reviewLabResult|communicateLabResult|enterLabResult|importLabFile|decideRecordsRequest|verifyRecordsRequest|requestProductionAdjustment|calculatePayPeriod|exportPayPeriod|lockPayPeriod|requestPayPeriodApproval|exportData|approveCampaign|planCampaign|acceptScribeDraft|startScribeSession)$/)
   })
 })

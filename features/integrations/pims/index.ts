@@ -16,7 +16,7 @@
  */
 
 export type PimsSystem = 'ezyvet' | 'avimark' | 'csv'
-export type ImportEntity = 'clients' | 'patients' | 'weights' | 'vaccinations' | 'reminders' | 'consults'
+export type ImportEntity = 'clients' | 'patients' | 'weights' | 'vaccinations' | 'reminders' | 'consults' | 'balances'
 export type Row = Record<string, string>
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, CRLF or LF, embedded newlines. */
@@ -94,6 +94,11 @@ export const FIELD_ALIASES: Record<ImportEntity, Record<string, { required?: boo
     patientExternalId: { required: true, aliases: { ezyvet: ['animal id'], avimark: ['patient number', 'patient id'], any: ['patient id', 'animal id'] } },
     reminder: { required: true, aliases: { any: ['reminder', 'reminder type', 'description', 'service'] } },
     dueOn: { required: true, aliases: { any: ['due', 'due date', 'date due'] } },
+  },
+  balances: {
+    clientExternalId: { required: true, aliases: { ezyvet: ['contact id', 'contact code'], avimark: ['client number', 'client id'], any: ['client id', 'external id', 'id'] } },
+    balance: { required: true, aliases: { ezyvet: ['balance', 'outstanding'], avimark: ['balance', 'account balance'], any: ['balance', 'amount owing', 'amount due', 'outstanding'] } },
+    asOf: { required: true, aliases: { any: ['as of', 'balance date', 'date', 'as at'] } },
   },
   consults: {
     externalId: { required: true, aliases: { ezyvet: ['consult id'], avimark: ['medical history id', 'entry id'], any: ['id', 'visit id', 'consult id'] } },
@@ -216,6 +221,7 @@ export function ezyvetApiSource(config: { baseUrl: string; partnerId: string; cl
     weights: { path: 'healthstatus', map: r => ({ patientExternalId: String(r.animal_id ?? ''), date: String(r.date ?? ''), weight: String(r.weight ?? ''), unit: 'kg' }) },
     vaccinations: { path: 'vaccination', map: r => ({ patientExternalId: String(r.animal_id ?? ''), vaccine: String(r.name ?? ''), givenOn: String(r.date_of_vaccination ?? ''), dueOn: String(r.date_of_next_due ?? ''), lotNumber: String(r.batch_number ?? '') }) },
     reminders: { path: 'reminder', map: r => ({ patientExternalId: String(r.animal_id ?? ''), reminder: String(r.description ?? ''), dueOn: String(r.due_at ?? '') }) },
+    balances: { path: 'contact', map: r => ({ clientExternalId: String(r.id ?? ''), balance: String(r.balance ?? '0'), asOf: String(r.modified_at ?? '').slice(0, 10) }) },
     consults: { path: 'consult', map: r => ({ externalId: String(r.id ?? ''), patientExternalId: String(r.animal_id ?? ''), date: String(r.date ?? ''), vet: '', reason: String(r.presenting_problem ?? ''), notes: String(r.notes ?? '') }) },
   }
   async function token() {

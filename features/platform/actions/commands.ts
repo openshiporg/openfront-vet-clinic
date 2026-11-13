@@ -78,6 +78,10 @@ const OPS: Record<string, Record<string, string>> = {
   reopenPayPeriod: { periodId: 'ID!', reason: 'String!', expectedVersion: 'Int!' },
   requestPayPeriodApproval: { periodId: 'ID!' },
   exportPayPeriod: { periodId: 'ID!' },
+  exportData: { kind: 'String!' },
+  planCampaign: { name: 'String!', purpose: 'String!', templateId: 'ID', locationId: 'ID' },
+  approveCampaign: { campaignId: 'ID!', expectedVersion: 'Int!' },
+  cancelCampaign: { campaignId: 'ID!', expectedVersion: 'Int!' },
   lockPayPeriod: { periodId: 'ID!', expectedVersion: 'Int!' },
   addPatientAlert: { patientId: 'ID!', kind: 'String!', severity: 'String!', text: 'String!' },
   // Phase 2: the medical record, orders, the treatment sheet, anaesthesia, vaccines, imports.

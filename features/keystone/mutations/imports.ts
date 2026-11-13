@@ -25,7 +25,7 @@ import type { Ctx } from './clinical'
  * frozen like any signed record and never VCPR-qualifying.
  */
 
-const ENTITIES: ImportEntity[] = ['clients', 'patients', 'weights', 'vaccinations', 'reminders', 'consults']
+const ENTITIES: ImportEntity[] = ['clients', 'patients', 'weights', 'vaccinations', 'reminders', 'consults', 'balances']
 const SYSTEMS: PimsSystem[] = ['ezyvet', 'avimark', 'csv']
 const CHUNK = 100
 const MAX_ROWS = 50_000
@@ -38,10 +38,11 @@ function rowKey(entity: ImportEntity, row: Row) {
     case 'weights': return `${row.patientExternalId}|${row.date}|${row.weight}${row.unit ?? ''}`
     case 'vaccinations': return `${row.patientExternalId}|${row.vaccine}|${row.givenOn}`
     case 'reminders': return `${row.patientExternalId}|${row.reminder}|${row.dueOn}`
+    case 'balances': return `${row.clientExternalId}|${row.asOf}`
   }
 }
 
-const RECORD_TYPE: Record<ImportEntity, string> = { clients: 'Client', patients: 'Patient', weights: 'WeightMeasurement', vaccinations: 'PatientReminder', reminders: 'PatientReminder', consults: 'Encounter' }
+const RECORD_TYPE: Record<ImportEntity, string> = { clients: 'Client', patients: 'Patient', weights: 'WeightMeasurement', vaccinations: 'PatientReminder', reminders: 'PatientReminder', consults: 'Encounter', balances: 'ClientLedgerEntry' }
 
 type SpeciesRow = { code: string; name: string }
 const speciesList = (tx: { species: { findMany: (a: { select: { code: true; name: true } }) => Promise<SpeciesRow[]> } }) => tx.species.findMany({ select: { code: true, name: true } })
@@ -59,6 +60,11 @@ function validateRow(entity: ImportEntity, row: Row, species: SpeciesRow[]): str
     need('externalId', 'Patient id'); need('clientExternalId', 'Client id'); need('name', 'Name')
     if (!importSpeciesCode(row.species ?? '', species)) errors.push(`Species "${row.species ?? ''}" is not set up here (${species.map(s => s.name).join(', ') || 'no species yet'}).`)
     if (row.dateOfBirth && !importDate(row.dateOfBirth)) errors.push(`Date of birth "${row.dateOfBirth}" is not a date.`)
+  }
+  if (entity === 'balances') {
+    need('clientExternalId', 'Client id')
+    if (!importDate(row.asOf ?? '')) errors.push('Balance date is not a date.')
+    if (!/^-?\d{1,9}(\.\d{1,2})?$/.test((row.balance ?? '').replace(/[$,\s]/g, ''))) errors.push('Balance is not an amount in dollars and cents.')
   }
   if (entity === 'weights') {
     if (!importDate(row.date ?? '')) errors.push('Weight date is not a date.')
@@ -225,6 +231,26 @@ async function applyRow(uow: UnitOfWork, actor: Actor, batch: { id: string; ref:
       }
       await mapExternal(uow, sys, 'PatientReminder', reminder.id, key)
       return { ...base, result: 'created', recordType: 'PatientReminder', recordId: reminder.id }
+    }
+    case 'balances': {
+      // An opening balance is one ledger adjustment per client and date, keyed so a re-import cannot post it twice.
+      const mapped = await findMapped(uow, `${batch.system}:clients`, 'Client', row.clientExternalId)
+      if (!mapped) throw new DomainError(Codes.NOT_FOUND, `Client ${row.clientExternalId} has not been imported yet; import clients first.`)
+      const raw = row.balance.replace(/[$,\s]/g, '')
+      const neg = raw.startsWith('-')
+      const [whole, cents = ''] = raw.replace('-', '').split('.')
+      const minor = BigInt(whole) * 100n + BigInt(cents.padEnd(2, '0'))
+      // Exports show money owed as positive. The ledger only holds credit without an invoice, so an amount owed is not
+      // imported here: it needs an invoice a person raises. A credit (negative in the file) becomes money on account.
+      if (!neg && minor > 0n) throw new DomainError(Codes.GUARD_FAILED, 'A balance owed cannot be imported as a ledger entry. Raise an invoice for it; only credit balances (negative) import.')
+      const signed = -minor
+      const entryKey = `import:${batch.system}:balance:${row.clientExternalId}:${importDate(row.asOf)}`
+      if (signed === 0n) return { ...base, result: 'skipped_existing', errors: ['Zero balance: nothing to post.'] }
+      const { post } = await import('../lib/ledger')
+      const posted = await post(uow, { clientId: mapped.recordId, kind: 'adjustment', amountMinor: signed, postedOn: importDate(row.asOf)!, entryKey, memo: `Opening balance from ${batch.system} (${batch.ref})` })
+      await mapExternal(uow, sys, 'ClientLedgerEntry', posted.id, key)
+      auditCreate(uow, actor, 'ClientLedgerEntry', posted.id, 'balance.imported', { batch: batch.ref, rowNumber, amountMinor: signed.toString() })
+      return { ...base, result: 'created', recordType: 'ClientLedgerEntry', recordId: posted.id }
     }
     case 'consults': {
       const patientId = await patientFor(row.patientExternalId)
