@@ -367,15 +367,17 @@ describe.skipIf(!hasTestDatabase)('Phase 4 billing (database)', () => {
     } finally { stripe.restore() }
   })
 
-  it('a link cannot be used to try card after card: five declines in an hour stop it', async () => {
+  it('a declined card on a link is a result, not a lockout: the client can try another card straight away', async () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
-    const stripe = fakeStripe({ status: () => 'requires_payment_method' })
+    let decline = true
+    const stripe = fakeStripe({ status: () => (decline ? 'requires_payment_method' : 'succeeded') })
     try {
       const inv = await postedInvoice(1)
-      for (let i = 0; i < 5; i += 1) expect(((await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: `pm_card_${i}`, idempotencyKey: uniqueKey('link') })) as { status: string }).status).toBe('failed')
-      await expect(payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: uniqueKey('link') })).rejects.toThrow(/Too many cards/)
-      expect(stripe.posts()).toBe(5)
-      expect(await balanceOfInvoice(prisma, inv.id)).toBe(inv.total)
+      for (let i = 0; i < 6; i += 1) expect(((await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: `pm_card_${i}`, idempotencyKey: uniqueKey('link') })) as { status: string }).status).toBe('failed')
+      decline = false
+      expect(((await payInvoiceByLink(prisma, { invoiceId: inv.id, paymentMethodId: 'pm_card_visa', idempotencyKey: uniqueKey('link') })) as { status: string }).status).toBe('succeeded')
+      expect(stripe.posts()).toBe(7)
+      expect(await balanceOfInvoice(prisma, inv.id)).toBe(0n)
     } finally { stripe.restore() }
   })
 })

@@ -364,7 +364,6 @@ export async function payInvoiceByLink(prisma: any, args: { invoiceId: string; p
 }
 
 /** Failed link payments allowed per invoice per hour, so a link cannot be used to try card after card. */
-const LINK_FAILURES_PER_HOUR = 5
 const CARD_METHODS = ['card_on_file', 'payment_link']
 
 async function chargeCard(prisma: any, actor: Actor, a: { clientId: string; invoiceId?: string | null; depositId?: string | null; amount: bigint | 'balance'; paymentMethodId?: string | null; idempotencyKey: string; method: 'card_on_file' | 'payment_link'; params: unknown }) {
@@ -378,10 +377,6 @@ async function chargeCard(prisma: any, actor: Actor, a: { clientId: string; invo
     const target = a.invoiceId ? { forInvoiceId: a.invoiceId } : { forDepositId: a.depositId ?? '' }
     const open = await uow.tx.payment.findFirst({ where: { method: { in: CARD_METHODS }, status: { in: ['pending', 'unknown'] }, ...target }, select: { ref: true } })
     if (open) throw new DomainError(Codes.GUARD_FAILED, `Card payment ${open.ref} has no final answer yet. Use "Check status" on it before charging again.`, { reason: 'card_in_flight' })
-    if (a.method === 'payment_link') {
-      const failures = await uow.tx.payment.count({ where: { method: 'payment_link', status: 'failed', createdAt: { gte: new Date(uow.now.getTime() - 3_600_000) }, ...target } })
-      if (failures >= LINK_FAILURES_PER_HOUR) throw new DomainError(Codes.GUARD_FAILED, 'Too many cards were declined for this invoice. Try again in an hour, or call the practice.', { reason: 'too_many_declines' })
-    }
     const amount = a.amount === 'balance' ? await balanceOfInvoice(uow.tx, a.invoiceId!) : a.amount
     if (amount <= ZERO) throw new DomainError(Codes.GUARD_FAILED, 'That invoice is already paid.')
     const pay = await newPayment(uow, actor, { clientId: a.clientId, method: a.method, provider: 'stripe', amountMinor: amount, target: { invoiceId: a.invoiceId, depositId: a.depositId } })
