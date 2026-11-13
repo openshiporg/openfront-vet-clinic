@@ -71,6 +71,7 @@ const OPS: Record<string, Record<string, string>> = {
   addImagingReport: { imagingOrderId: 'ID!', author: 'String!', authorName: 'String', text: 'String!', expectedVersion: 'Int!' },
   communicateImaging: { imagingOrderId: 'ID!', expectedVersion: 'Int!' },
   startRecordsVerification: { requestId: 'ID!', expectedVersion: 'Int!' },
+  attachRecordsProof: { requestId: 'ID!', fileName: 'String!', mimeType: 'String!', contentBase64: 'String!' },
   verifyRecordsRequest: { requestId: 'ID!', note: 'String!', authorisationDocumentId: 'ID', expectedVersion: 'Int!' },
   decideRecordsRequest: { requestId: 'ID!', decision: 'String!', reason: 'String', expectedVersion: 'Int!' },
   withdrawRecordsRequest: { requestId: 'ID!', reason: 'String!', expectedVersion: 'Int!' },

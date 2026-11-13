@@ -397,6 +397,7 @@ model Document {
   retentionUntil                              DateTime?              @postgresql.Date
   signedAt                                    DateTime?
   esignEnvelopeId                             String                 @default("")
+  content                                     String                 @default("")
   createdAt                                   DateTime               @default(now())
   updatedAt                                   DateTime               @default(now()) @updatedAt
   from_Document_supersedes                    Document[]             @relation("Document_supersedes")

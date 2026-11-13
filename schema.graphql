@@ -25098,6 +25098,7 @@ type Mutation {
   addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
   communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
   startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+  attachRecordsProof(requestId: ID!, fileName: String!, mimeType: String!, contentBase64: String!, idempotencyKey: String!): JSON
   verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
   decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
   withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON

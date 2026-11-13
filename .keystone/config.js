@@ -1441,6 +1441,8 @@ var Document = (0, import_core7.list)({
     retentionUntil: (0, import_fields8.calendarDay)(),
     signedAt: (0, import_fields8.timestamp)({ ...readOnly }),
     esignEnvelopeId: systemText(),
+    /** The file itself (base64) when the database is the store (storageKey "db:<sha256>"); never returned by the API. */
+    content: hiddenHash(),
     ...trackingFields
   }
 });
@@ -16910,6 +16912,7 @@ async function clinicInsights(_root, _args, context) {
 // features/keystone/mutations/recordsRelease.ts
 init_errors();
 init_readAudit();
+var import_node_crypto16 = require("node:crypto");
 var PROCESSORS = ["canProcessRecordsRequests"];
 var THIRD_PARTY = /* @__PURE__ */ new Set(["authorised_person", "referral_with_authorisation", "insurer_with_authorisation", "court_order", "subpoena", "public_health"]);
 var SHARE_CHANNELS = ["email", "portal", "fax", "mail", "in_person"];
@@ -16921,6 +16924,29 @@ async function startRecordsVerification(_root, args, context) {
     const result = await command(context.prisma, { name: "records.start_verification", actor, idempotencyKey: args.idempotencyKey, params: args }, async (uow) => {
       const row = await transition(uow, { model: "RecordsRequest", id: args.requestId, from: ["received"], to: "verifying_authority", expectedVersion: args.expectedVersion, actor, eventType: "records.verification_started" });
       return { id: row.id, status: row.status };
+    });
+    return { replay: result.replay, ...result.value };
+  });
+}
+var PROOF_TYPES = /* @__PURE__ */ new Set(["application/pdf", "image/png", "image/jpeg", "image/heic", "image/webp"]);
+var PROOF_MAX_BYTES = 4e6;
+async function attachRecordsProof(_root, args, context) {
+  const { contentBase64, ...rest } = args;
+  return gated(context, { permissions: [...PROCESSORS], tool: "records.attach_proof", humanOnly: true }, rest, async (actor) => {
+    const fileName = text20(args.fileName, "file name", 200);
+    if (!PROOF_TYPES.has(args.mimeType)) throw new DomainError(Codes.INVALID_INPUT, "Attach a PDF or a photo (PNG, JPEG, HEIC or WebP).", { field: "authorisationFile" });
+    const b64 = String(contentBase64 ?? "");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) throw new DomainError(Codes.INVALID_INPUT, "The file could not be read.", { field: "authorisationFile" });
+    const bytes = Buffer.from(b64, "base64");
+    if (!bytes.length || bytes.length > PROOF_MAX_BYTES) throw new DomainError(Codes.INVALID_INPUT, "The file must be under 4 MB.", { field: "authorisationFile" });
+    const hash2 = (0, import_node_crypto16.createHash)("sha256").update(bytes).digest("hex");
+    const result = await command(context.prisma, { name: "records.attach_proof", actor, idempotencyKey: args.idempotencyKey, params: { ...rest, sha256: hash2 } }, async (uow) => {
+      const request = await uow.tx.recordsRequest.findUnique({ where: { id: args.requestId }, select: { id: true, ref: true, status: true } });
+      if (!request) throw new DomainError(Codes.NOT_FOUND, "Records request not found.");
+      if (!["received", "verifying_authority"].includes(request.status)) throw new DomainError(Codes.GUARD_FAILED, "Proof is attached while the request is being checked.");
+      const doc = await uow.tx.document.create({ data: { title: `${request.ref} proof: ${fileName}`, kind: "consent", storageKey: `db:${hash2}`, sha256: hash2, mimeType: args.mimeType, sizeBytes: bytes.length, visibility: "internal", content: bytes.toString("base64") }, select: { id: true } });
+      auditCreate(uow, actor, "Document", doc.id, "records.proof_attached", { requestId: request.id, sha256: hash2, sizeBytes: bytes.length, mimeType: args.mimeType });
+      return { id: doc.id, sha256: hash2 };
     });
     return { replay: result.replay, ...result.value };
   });
@@ -17055,7 +17081,7 @@ async function verifyReleasePacket(_root, args, context) {
 }
 
 // features/keystone/mutations/boarding.ts
-var import_node_crypto16 = require("node:crypto");
+var import_node_crypto17 = require("node:crypto");
 init_errors();
 var BOARDERS = ["canManageBoarding", "canBook", "canCheckIn"];
 var GROOMERS = ["canGroom", "canManageBoarding", "canBook", "canCheckIn"];
@@ -17315,7 +17341,7 @@ async function checkOutBoarding(_root, args, context) {
       await transition(uow, { model: "BoardingStay", id: stay.id, from: ["in_house"], to: "checked_out", actor, eventType: "boarding.checked_out", data: { checkedOutAt: uow.now } });
       await transition(uow, { model: "BoardingReservation", id: r.id, from: ["checked_in"], to: "checked_out", actor, eventType: "boarding.completed" });
       const lines = await uow.tx.chargeLine.findMany({ where: { clientId: stay.clientId, invoiceId: null, reversedAt: null, sourceType: "boarding_night", sourceId: { startsWith: `${stay.id}:` } }, select: { id: true } });
-      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto16.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: "draft", currencyCode: "USD", note: "" } });
+      const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${(0, import_node_crypto17.randomUUID)().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: "draft", currencyCode: "USD", note: "" } });
       await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map((l) => l.id) } }, data: { invoiceId: draft.id } });
       const posted = await postDraftInvoice(uow, actor, draft.id, void 0);
       const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: "paid" }, select: { id: true } });
@@ -17421,15 +17447,15 @@ function limitNestedLists(schema) {
 }
 
 // features/keystone/security/signInLimit.ts
-var import_node_crypto18 = require("node:crypto");
+var import_node_crypto19 = require("node:crypto");
 
 // features/keystone/security/internalIdentity.ts
-var import_node_crypto17 = require("node:crypto");
+var import_node_crypto18 = require("node:crypto");
 var INTERNAL_IDENTITY_MAX_AGE_MS = 9e4;
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto17.timingSafeEqual)(leftBuffer, rightBuffer);
+  return leftBuffer.length === rightBuffer.length && (0, import_node_crypto18.timingSafeEqual)(leftBuffer, rightBuffer);
 }
 function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   const loopback = /^(?:127\.|::1$|::ffff:127\.)/.test(String(socketAddress || ""));
@@ -17440,7 +17466,7 @@ function verifiedInternalIdentity(headers, socketAddress, secret2, now) {
   if (!/^[a-f0-9]{64}$/.test(identity) || !/^\d{10}$/.test(timestamp22) || !/^[a-f0-9]{64}$/.test(signature)) return null;
   const age = Math.abs(now - Number(timestamp22) * 1e3);
   if (!Number.isFinite(age) || age > INTERNAL_IDENTITY_MAX_AGE_MS) return null;
-  const expected = (0, import_node_crypto17.createHmac)("sha256", secret2).update(`${timestamp22}:${identity}`).digest("hex");
+  const expected = (0, import_node_crypto18.createHmac)("sha256", secret2).update(`${timestamp22}:${identity}`).digest("hex");
   return safeEqual(signature, expected) ? `forwarded:${identity}` : null;
 }
 
@@ -17467,7 +17493,7 @@ var SIGN_IN_ACCOUNT_SLOW_AFTER = 10;
 var SIGN_IN_KNOWN_DAYS = 90;
 var SIGN_IN_SWEEP_PER_ATTEMPT = 50;
 var SIGN_IN_LOCKED_MESSAGE = "Too many sign-in attempts. Try again later.";
-var hash = (value) => (0, import_node_crypto18.createHash)("sha256").update(value).digest("hex");
+var hash = (value) => (0, import_node_crypto19.createHash)("sha256").update(value).digest("hex");
 var normalEmail = (email) => email.trim().toLowerCase();
 var UNKNOWN_ADDRESS = "unknown-address";
 var where = (address) => hash(address);
@@ -17488,7 +17514,7 @@ function clientAddress(req) {
 }
 async function countAttempt(prisma, key3) {
   const rows = await prisma.$queryRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto18.randomUUID)()}, ${key3}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto19.randomUUID)()}, ${key3}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET
       "count" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN 1 ELSE COALESCE("RateLimitBucket"."count", 0) + 1 END,
       "windowStart" = CASE WHEN "RateLimitBucket"."windowStart" < now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES}::int) THEN now() ELSE "RateLimitBucket"."windowStart" END
@@ -17530,7 +17556,7 @@ async function signInAttempt(prisma, email, address, sessionUserId = null) {
 async function rememberAddress(prisma, userId, address) {
   if (address === UNKNOWN_ADDRESS) return;
   await prisma.$executeRaw`
-    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto18.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
+    INSERT INTO "RateLimitBucket" ("id", "key", "windowStart", "count") VALUES (${(0, import_node_crypto19.randomUUID)()}, ${knownAddressKey(userId, address)}, now(), 1)
     ON CONFLICT ("key") DO UPDATE SET "windowStart" = now(), "count" = 1`;
 }
 async function signInSucceeded(prisma, userId, address) {
@@ -17661,6 +17687,7 @@ function extendGraphqlSchema(baseSchema) {
         addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        attachRecordsProof(requestId: ID!, fileName: String!, mimeType: String!, contentBase64: String!, idempotencyKey: String!): JSON
         verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
         decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
@@ -18028,6 +18055,7 @@ function extendGraphqlSchema(baseSchema) {
         addImagingReport: op(addImagingReport),
         communicateImaging: op(communicateImaging),
         startRecordsVerification: op(startRecordsVerification),
+        attachRecordsProof: op(attachRecordsProof),
         verifyRecordsRequest: op(verifyRecordsRequest),
         decideRecordsRequest: op(decideRecordsRequest),
         withdrawRecordsRequest: op(withdrawRecordsRequest),

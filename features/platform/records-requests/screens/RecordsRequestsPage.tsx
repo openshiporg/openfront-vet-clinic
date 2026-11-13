@@ -4,6 +4,7 @@ import { when, label } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
 import { CommandForm } from '../../components/CommandForm';
 import { ActionButton } from '../../components/ActionButton';
+import { VerifyRequestForm } from '../components/VerifyRequestForm';
 
 type Req = {
   id: string; ref: string; requesterKind: string; requesterName: string; channel: string; basis: string; scope: string; status: string; version: number; responseDueAt: string | null; createdAt: string;
@@ -17,6 +18,8 @@ type Contact = { id: string; kind: string; value: string; person: { client: { id
 const PATH = '/dashboard/platform/records-requests';
 const SHARE = ['email', 'portal', 'fax', 'mail', 'in_person'].map(v => ({ value: v, label: label(v) }));
 const OPEN = ['received', 'verifying_authority', 'approved'];
+/** Bases the client's signed form is not needed for (the server says the same). */
+const NO_SIGNED_FORM = new Set(['court_order', 'subpoena', 'public_health']);
 
 /** Optional reads for the release form: a role without them still gets the page, just not the release choices. */
 async function maybe<T>(query: string, fallback: T): Promise<T> {
@@ -73,10 +76,7 @@ export default async function RecordsRequestsPage() {
                 ) : null}
                 {proc && r.status === 'verifying_authority' ? (
                   <>
-                    <CommandForm op="verifyRecordsRequest" build="phase6" submit={r.verifiedAt ? 'Check again' : 'Checked'} fixed={{ requestId: r.id, expectedVersion: String(r.version) }} paths={[PATH]} fields={[
-                      { name: 'note', label: 'What you checked', placeholder: 'Called the client on the number on file', width: 'lg' },
-                      ...(r.basis !== 'client_of_record' ? [{ name: 'authorisationDocumentId', label: 'Signed authorisation (document id)', hint: 'Not needed for a court order, subpoena or public health request.' }] : []),
-                    ]} />
+                    <VerifyRequestForm requestId={r.id} expectedVersion={r.version} needsProof={r.basis !== 'client_of_record'} proofOptional={NO_SIGNED_FORM.has(r.basis)} again={Boolean(r.verifiedAt)} path={PATH} />
                     {r.verifiedAt ? (
                       <div className="flex flex-wrap gap-2">
                         <ActionButton op="decideRecordsRequest" vars={{ requestId: r.id, decision: 'approve', expectedVersion: r.version }} paths={[PATH]}>Approve</ActionButton>

@@ -210,6 +210,8 @@ export const Document = list({
     retentionUntil: calendarDay(),
     signedAt: timestamp({ ...readOnly }),
     esignEnvelopeId: systemText(),
+    /** The file itself (base64) when the database is the store (storageKey "db:<sha256>"); never returned by the API. */
+    content: hiddenHash(),
     ...trackingFields,
   },
 })

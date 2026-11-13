@@ -8,6 +8,7 @@ import { writeReadAudit } from '../security/readAudit'
 import { gated } from './agentGuard'
 import { text, type Ctx } from './clinical'
 import { pick } from './billingInput'
+import { createHash } from 'node:crypto'
 
 /*
  * Records releases (STATE-MACHINES §19). received → verifying_authority → approved → released (or denied / withdrawn).
@@ -32,6 +33,35 @@ export async function startRecordsVerification(_root: unknown, args: { requestId
     const result = await command(context.prisma, { name: 'records.start_verification', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const row = await transition<Record<string, any>>(uow, { model: 'RecordsRequest', id: args.requestId, from: ['received'], to: 'verifying_authority', expectedVersion: args.expectedVersion, actor, eventType: 'records.verification_started' })
       return { id: row.id, status: row.status }
+    })
+    return { replay: result.replay, ...result.value }
+  })
+}
+
+const PROOF_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/webp'])
+const PROOF_MAX_BYTES = 4_000_000
+
+/**
+ * The person checking a request attaches the proof they were given (the client's signed authorisation, a court order): the file is
+ * kept in the database with its sha256 and the returned document id goes on the verification. The receipt keeps only the hash.
+ */
+export async function attachRecordsProof(_root: unknown, args: { requestId: string; fileName: string; mimeType: string; contentBase64: string; idempotencyKey: string }, context: Ctx) {
+  const { contentBase64, ...rest } = args
+  return gated(context, { permissions: [...PROCESSORS], tool: 'records.attach_proof', humanOnly: true }, rest, async actor => {
+    const fileName = text(args.fileName, 'file name', 200)
+    if (!PROOF_TYPES.has(args.mimeType)) throw new DomainError(Codes.INVALID_INPUT, 'Attach a PDF or a photo (PNG, JPEG, HEIC or WebP).', { field: 'authorisationFile' })
+    const b64 = String(contentBase64 ?? '')
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) throw new DomainError(Codes.INVALID_INPUT, 'The file could not be read.', { field: 'authorisationFile' })
+    const bytes = Buffer.from(b64, 'base64')
+    if (!bytes.length || bytes.length > PROOF_MAX_BYTES) throw new DomainError(Codes.INVALID_INPUT, 'The file must be under 4 MB.', { field: 'authorisationFile' })
+    const hash = createHash('sha256').update(bytes).digest('hex')
+    const result = await command(context.prisma, { name: 'records.attach_proof', actor, idempotencyKey: args.idempotencyKey, params: { ...rest, sha256: hash } }, async uow => {
+      const request = await uow.tx.recordsRequest.findUnique({ where: { id: args.requestId }, select: { id: true, ref: true, status: true } })
+      if (!request) throw new DomainError(Codes.NOT_FOUND, 'Records request not found.')
+      if (!['received', 'verifying_authority'].includes(request.status)) throw new DomainError(Codes.GUARD_FAILED, 'Proof is attached while the request is being checked.')
+      const doc = await uow.tx.document.create({ data: { title: `${request.ref} proof: ${fileName}`, kind: 'consent', storageKey: `db:${hash}`, sha256: hash, mimeType: args.mimeType, sizeBytes: bytes.length, visibility: 'internal', content: bytes.toString('base64') }, select: { id: true } })
+      auditCreate(uow, actor, 'Document', doc.id, 'records.proof_attached', { requestId: request.id, sha256: hash, sizeBytes: bytes.length, mimeType: args.mimeType })
+      return { id: doc.id, sha256: hash }
     })
     return { replay: result.replay, ...result.value }
   })

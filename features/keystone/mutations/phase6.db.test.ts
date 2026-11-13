@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { hasTestDatabase, resetDatabase, testPrisma, uniqueKey } from '../../../tests/helpers/db'
 import { permissionNames } from '../access'
 import { loadClinicSetup, loadPracticeSetup } from './setup'
+import { createHash } from 'node:crypto'
 import { loadInHouseLabCatalog, mapLabCode, saveLaboratory, saveLabTest } from './labSetup'
 import { cancelLabOrder, collectSpecimen, communicateLabResult, enterLabResult, importLabFile, notifyResultsReady, orderLab, reviewLabResult, sendLabOrder } from './diagnostics'
-import { decideRecordsRequest, releaseRecords, startRecordsVerification, verifyRecordsRequest } from './recordsRelease'
+import { decideRecordsRequest, releaseRecords, startRecordsVerification, verifyRecordsRequest, attachRecordsProof } from './recordsRelease'
 import { calculatePayPeriod, draftRuleVersion, exportPayPeriod, lockPayPeriod, openPayPeriod, requestPayPeriodApproval, requestProductionAdjustment, requestRulePublication } from './production'
 import { decideApprovalRequest } from './approvals'
 import { applyImport, previewImport } from './imports'
@@ -205,7 +206,15 @@ describe.skipIf(!hasTestDatabase)('Phase 6 (database)', () => {
     await expect(decideRecordsRequest(null, { requestId: r.id, decision: 'approve', expectedVersion: v, idempotencyKey: key() }, ctx)).rejects.toThrow(/verify/i)
     // A third party needs the client's authorisation on file.
     await expect(verifyRecordsRequest(null, { requestId: r.id, note: 'Called the insurer', expectedVersion: v, idempotencyKey: key() }, ctx)).rejects.toThrow(/authorisation/i)
-    const auth = await prisma.document.create({ data: { title: 'Signed authorisation', kind: 'authorisation', storageKey: 'k/auth', sha256: 'c'.repeat(64) } as never })
+    // The person checking attaches the signed form they were given; only a PDF or photo under 4 MB is kept, with its hash.
+    const pdf = Buffer.from('%PDF-1.4 signed authorisation for the insurer')
+    await expect(attachRecordsProof(null, { requestId: r.id, fileName: 'x.exe', mimeType: 'application/x-msdownload', contentBase64: pdf.toString('base64'), idempotencyKey: key() }, ctx)).rejects.toThrow(/PDF or a photo/)
+    await expect(attachRecordsProof(null, { requestId: r.id, fileName: 'big.pdf', mimeType: 'application/pdf', contentBase64: Buffer.alloc(4_000_001).toString('base64'), idempotencyKey: key() }, ctx)).rejects.toThrow(/4 MB/)
+    const auth = (await attachRecordsProof(null, { requestId: r.id, fileName: 'authorisation.pdf', mimeType: 'application/pdf', contentBase64: pdf.toString('base64'), idempotencyKey: key() }, ctx)) as { id: string; sha256: string }
+    const stored = await prisma.document.findUniqueOrThrow({ where: { id: auth.id } })
+    expect(stored.sha256).toBe(createHash('sha256').update(pdf).digest('hex'))
+    expect(Buffer.from(stored.content, 'base64').equals(pdf)).toBe(true)
+    expect(stored.storageKey).toBe(`db:${stored.sha256}`)
     await verifyRecordsRequest(null, { requestId: r.id, note: 'Signed form on file', authorisationDocumentId: auth.id, expectedVersion: v, idempotencyKey: key() }, ctx)
     v = (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).version
     await decideRecordsRequest(null, { requestId: r.id, decision: 'approve', expectedVersion: v, idempotencyKey: key() }, ctx)

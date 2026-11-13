@@ -122,6 +122,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         addImagingReport(imagingOrderId: ID!, author: String!, authorName: String, text: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
         communicateImaging(imagingOrderId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
         startRecordsVerification(requestId: ID!, expectedVersion: Int!, idempotencyKey: String!): JSON
+        attachRecordsProof(requestId: ID!, fileName: String!, mimeType: String!, contentBase64: String!, idempotencyKey: String!): JSON
         verifyRecordsRequest(requestId: ID!, note: String!, authorisationDocumentId: ID, expectedVersion: Int!, idempotencyKey: String!): JSON
         decideRecordsRequest(requestId: ID!, decision: String!, reason: String, expectedVersion: Int!, idempotencyKey: String!): JSON
         withdrawRecordsRequest(requestId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): JSON
@@ -489,6 +490,7 @@ export function extendGraphqlSchema(baseSchema: GraphQLSchema) {
         addImagingReport: op(diagnostics.addImagingReport),
         communicateImaging: op(diagnostics.communicateImaging),
         startRecordsVerification: op(recordsRelease.startRecordsVerification),
+        attachRecordsProof: op(recordsRelease.attachRecordsProof),
         verifyRecordsRequest: op(recordsRelease.verifyRecordsRequest),
         decideRecordsRequest: op(recordsRelease.decideRecordsRequest),
         withdrawRecordsRequest: op(recordsRelease.withdrawRecordsRequest),
