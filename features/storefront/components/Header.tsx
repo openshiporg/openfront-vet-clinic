@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { CalendarDays, Phone, PillBottle } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import { phoneLabel } from '../lib/format'
 import { currentClient } from '../server/session'
 import { getSite, getVisitTypes } from '../server/site'
-import { Logo } from './art'
+import { BottleIcon, CalendarIcon, LogoStacked, LogoWide } from './art'
 import { NavLinks } from './NavLinks'
 
 /** "Cedar Creek Animal Hospital" reads as two lines: the place, then what it is. */
@@ -22,7 +22,8 @@ export async function Header() {
     <header className="sf-wrap">
       <div className="sf-top">
         <Link href="/" className="sf-brand" aria-label={`${site.name} home`}>
-          <Logo />
+          <LogoWide className="sf-logo sf-logo-wide" />
+          <LogoStacked className="sf-logo sf-logo-phone" />
           <span className="sf-brand-text">
             <span className="sf-brand-name">{first}</span>
             {second ? <span className="sf-brand-sub">{second}</span> : null}
@@ -36,13 +37,13 @@ export async function Header() {
         ) : null}
       </div>
       <div className="sf-navrow">
-        <NavLinks services={visits.map(v => ({ id: v.id, name: v.name }))} signedIn={!!client} />
+        <NavLinks services={visits.map(v => ({ id: v.id, name: v.name }))} signedIn={!!client} boarding={site.offers.boarding} wellnessPlans={site.offers.wellnessPlans} />
         <div className="sf-cta">
           <Link href="/book" className="sf-btn sf-btn-yellow">
-            <CalendarDays aria-hidden="true" /> Book a visit
+            <CalendarIcon /> Book a visit
           </Link>
           <Link href="/refill" className="sf-btn sf-btn-line">
-            <PillBottle aria-hidden="true" /> Refill a prescription
+            <BottleIcon /> Refill a prescription
           </Link>
         </div>
       </div>

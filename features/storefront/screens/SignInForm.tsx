@@ -10,7 +10,7 @@ export function SignInForm({ next }: { next: string }) {
       <input type="hidden" name="next" value={next} />
       <label className="sf-field">
         <span>Phone number or email</span>
-        <input className="sf-input" name="contact" autoComplete="username" inputMode="email" required placeholder="(916) 555-0131" />
+        <input className="sf-input" name="contact" autoComplete="username" inputMode="email" required />
         <small>The one we have on file for you.</small>
       </label>
       <label className="sf-field">

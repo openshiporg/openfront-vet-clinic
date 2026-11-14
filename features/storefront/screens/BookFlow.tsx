@@ -2,12 +2,12 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { CalendarDays, Check } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { bookVisitAction, openTimesAction } from '../actions'
-import { PetAvatar } from '../components/art'
+import { CalendarIcon, PetAvatar } from '../components/art'
 import { calendarDayLabel, longDayLabel, timeLabel } from '../lib/format'
 
-type Pet = { id: string; name: string; speciesCode: string; speciesName: string; breedName: string }
+type Pet = { id: string; name: string; speciesCode: string; speciesName: string; breedName: string; photoUrl: string | null }
 type Visit = { id: string; name: string; description: string; durationMinutes: number; mode: 'book' | 'request' }
 type Place = { id: string; name: string; city: string }
 type Day = { date: string; times: { startsAt: string; endsAt: string; providerName: string }[] }
@@ -40,6 +40,7 @@ export function BookFlow(props: {
   const request = React.useRef(0)
 
   const visit = visits.find(v => v.id === visitId) ?? null
+  const missing = [petIds.length ? '' : 'a pet', visit ? '' : 'the reason', placeId ? '' : 'a location', startsAt ? '' : 'a time'].filter(Boolean)
   const asRequest = visit?.mode === 'request' || props.firstVisitIsRequest
 
   const load = React.useCallback(async (typeId: string, locationId: string, from: string | null, append: boolean) => {
@@ -101,11 +102,11 @@ export function BookFlow(props: {
     return (
       <section className="sf-done sf-stack" data-testid="booked">
         <h2 className="sf-h2">{booked.status === 'requested' ? 'Request sent.' : 'You’re booked.'}</h2>
-        <p style={{ fontSize: 22 }}>
+        <p className="sf-big">
           <b>{visit?.name}</b> for {names} on <b>{longDayLabel(booked.startsAt, zone)}</b> at <b>{timeLabel(booked.startsAt, zone)}</b>.
         </p>
         <p>
-          {booked.status === 'requested' ? 'We’re holding this time for you. Our team will confirm it; you can check it any time under My account.' : 'Your time is saved. You can see or cancel it any time under My account.'} Your reference is <b data-testid="booked-ref">{booked.ref}</b>.
+          {booked.status === 'requested' ? 'We’re holding this time for you. Our team will confirm it; you can check it any time under My account.' : 'Your time is saved. You can see or cancel it any time under My account.'} Your reference is <b className="sf-ref" data-testid="booked-ref">{booked.ref}</b>.
         </p>
         <div className="sf-row">
           <Link href="/account" className="sf-btn sf-btn-teal">My account</Link>
@@ -122,7 +123,7 @@ export function BookFlow(props: {
         <div className="sf-choices">
           {pets.map(pet => (
             <button key={pet.id} type="button" className="sf-choice" aria-pressed={petIds.includes(pet.id)} onClick={() => togglePet(pet.id)}>
-              <PetAvatar speciesCode={pet.speciesCode} speciesName={pet.speciesName} />
+              <PetAvatar speciesCode={pet.speciesCode} speciesName={pet.speciesName} photoUrl={pet.photoUrl} />
               <span>{pet.name}<small>{pet.breedName || pet.speciesName}</small></span>
             </button>
           ))}
@@ -138,13 +139,13 @@ export function BookFlow(props: {
             </button>
           ))}
         </div>
-        <p className="sf-muted sf-small" style={{ marginTop: 14 }}>Is your pet sick or hurt? Call {props.phone || 'us'} so we can see them sooner. For an emergency, call now.</p>
+        <p className="sf-muted sf-small" style={{ marginTop: '0.7em' }}>Is your pet sick or hurt? Call {props.phone || 'us'} so we can see them sooner. For an emergency, call now.</p>
       </section>
 
       <section className="sf-card">
         <div className="sf-step"><span className="sf-step-no">3</span><h2 className="sf-h3">Pick an open time</h2></div>
         {places.length > 1 ? (
-          <div className="sf-row" style={{ marginBottom: 16 }}>
+          <div className="sf-row" style={{ marginBottom: '0.7em' }}>
             {places.map(place => (
               <button key={place.id} type="button" className="sf-choice" style={{ width: 'auto' }} aria-pressed={placeId === place.id} onClick={() => { setPlaceId(place.id); setStartsAt(null) }}>
                 <span>{place.name}<small>{place.city}</small></span>
@@ -186,14 +187,14 @@ export function BookFlow(props: {
       </section>
 
       <section className="sf-card sf-card-yellow sf-stack">
-        <div className="sf-step" style={{ marginBottom: 0 }}><span className="sf-step-no"><Check size={20} aria-hidden="true" /></span><h2 className="sf-h3">{asRequest ? 'Request this visit' : 'Book this visit'}</h2></div>
+        <div className="sf-step" style={{ marginBottom: 0 }}><span className="sf-step-no"><Check aria-hidden="true" /></span><h2 className="sf-h3">{asRequest ? 'Request this visit' : 'Book this visit'}</h2></div>
         {ready && visit && startsAt ? (
-          <p style={{ fontSize: 21 }}>
+          <p className="sf-big">
             <b>{visit.name}</b> for {pets.filter(p => petIds.includes(p.id)).map(p => p.name).join(' and ')} on <b>{longDayLabel(startsAt, zone)}</b> at <b>{timeLabel(startsAt, zone)}</b>
             {day?.times.find(t => t.startsAt === startsAt)?.providerName ? <> with {day.times.find(t => t.startsAt === startsAt)?.providerName}</> : null}.
           </p>
         ) : (
-          <p className="sf-muted">Choose {petIds.length ? '' : 'a pet, '}{visit ? '' : 'the reason, '}{startsAt ? '' : 'a time'} to finish.</p>
+          <p className="sf-muted">Choose {missing.length > 1 ? `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}` : missing[0]} to finish.</p>
         )}
         <label className="sf-field">
           <span>Anything we should know?</span>
@@ -202,7 +203,7 @@ export function BookFlow(props: {
         {error ? <p role="alert" className="sf-error">{error} {signIn ? <Link href="/sign-in?next=/book" style={{ textDecoration: 'underline' }}>Sign in</Link> : null}</p> : null}
         <div>
           <button type="button" className="sf-btn sf-btn-teal" disabled={!ready || pending} onClick={submit}>
-            <CalendarDays aria-hidden="true" /> {pending ? 'Saving' : asRequest ? 'Request this visit' : 'Book this visit'}
+            <CalendarIcon /> {pending ? 'Saving' : asRequest ? 'Request this visit' : 'Book this visit'}
           </button>
         </div>
       </section>

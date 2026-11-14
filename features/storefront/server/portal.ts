@@ -7,6 +7,7 @@ import { balanceOfInvoice } from '@/features/keystone/lib/ledger'
 import { signPayLink } from '@/features/keystone/lib/payLink'
 import { nextReference, nextSerial, publicCode } from '@/features/keystone/lib/sequence'
 import { buildSegments, verifySlot, type SegmentTemplate } from '@/features/keystone/domain/scheduling'
+import { reminderStatusOn } from '@/features/keystone/domain/vaccines'
 import { contactHash, normaliseContact, type ContactKind } from '@/features/keystone/domain/contact'
 import type { UnitOfWork } from '@/features/keystone/lib/unitOfWork'
 import { clientActor, db } from './db'
@@ -35,33 +36,65 @@ const MAX_OPEN_REFILLS = 10
 
 export type Pet = {
   id: string; name: string; status: string; speciesCode: string; speciesName: string; breedName: string; dateOfBirth: string | null
-  /** The most pressing reminder: overdue or due now, or coming up within 30 days. */
-  due: { name: string; dueOn: string; status: string } | null
+  /** Where the pet's photo is served from, when the practice has put one on the record and shared it with the client. */
+  photoUrl: string | null
+  /** The most pressing reminder that is due now or overdue. */
+  due: { name: string; dueOn: string; status: 'due' | 'overdue' } | null
 }
+
+/** Image types a pet photo is served as. */
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+/** A photo is shown to the client only when it is stored with the record and the practice marked it for clients. */
+export const photoIsShared = (photo: { storageKey?: string | null; mimeType?: string | null; visibility?: string | null } | null | undefined) =>
+  !!photo && String(photo.storageKey ?? '').startsWith('db:') && PHOTO_TYPES.includes(String(photo.mimeType ?? '')) && ['client', 'public'].includes(String(photo.visibility ?? ''))
 
 export async function myPets(client: SignedInClient): Promise<Pet[]> {
   const p = db()
   const rows = await p.patient.findMany({
     where: { status: { in: ['active', 'pending'] }, ownerships: { some: { clientId: client.clientId, effectiveTo: null } } },
-    orderBy: [{ name: 'asc' }],
-    select: { id: true, name: true, status: true, dateOfBirth: true, species: { select: { code: true, name: true } }, breed: { select: { name: true } } },
+    // The order the pets joined the practice, so the list never reshuffles.
+    orderBy: [{ ref: 'asc' }],
+    select: {
+      id: true, name: true, status: true, dateOfBirth: true, species: { select: { code: true, name: true } }, breed: { select: { name: true } },
+      photo: { select: { sha256: true, storageKey: true, mimeType: true, visibility: true } },
+    },
     take: 60,
   })
   if (!rows.length) return []
-  const soon = addDays(new Date().toISOString().slice(0, 10), 30)
+  const site = await getSite()
+  const today = localDate({ timeZone: site.timeZone }, new Date())
+  // Reminder states move with the calendar. They are worked out here, on read, with the same rule the staff refresh uses
+  // (lead, grace and lapse days from the reminder's rule), so the page is right even before anyone presses that button.
   const reminders = await p.patientReminder.findMany({
-    where: { patientId: { in: rows.map((r: { id: string }) => r.id) }, OR: [{ status: { in: ['due', 'overdue'] } }, { status: 'scheduled', dueOn: { lte: new Date(`${soon}T00:00:00Z`) } }] },
+    where: { patientId: { in: rows.map((r: { id: string }) => r.id) }, status: { in: ['scheduled', 'due', 'overdue', 'lapsed'] }, dueOn: { lte: new Date(`${addDays(today, 370)}T00:00:00Z`) } },
     orderBy: [{ dueOn: 'asc' }],
-    select: { patientId: true, dueOn: true, status: true, type: { select: { name: true } } },
+    select: { patientId: true, dueOn: true, status: true, type: { select: { name: true } }, rule: { select: { leadDays: true, graceDays: true, lapseDays: true } } },
   })
-  return rows.map((r: any) => {
-    const first = reminders.find((x: any) => x.patientId === r.id)
-    return {
-      id: r.id, name: r.name, status: r.status, speciesCode: r.species?.code ?? '', speciesName: r.species?.name ?? '', breedName: r.breed?.name ?? '',
-      dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString().slice(0, 10) : null,
-      due: first ? { name: first.type?.name ?? 'Visit', dueOn: first.dueOn.toISOString().slice(0, 10), status: first.status } : null,
-    }
+  const due = new Map<string, NonNullable<Pet['due']>>()
+  for (const r of reminders) {
+    if (due.has(r.patientId)) continue
+    const dueOn = r.dueOn.toISOString().slice(0, 10)
+    const state = reminderStatusOn({ dueOn, status: r.status }, { leadDays: r.rule?.leadDays ?? 30, graceDays: r.rule?.graceDays ?? 30, lapseDays: r.rule?.lapseDays ?? 180 }, today)
+    if (state === 'scheduled') continue
+    due.set(r.patientId, { name: r.type?.name || 'Visit', dueOn, status: state === 'due' ? 'due' : 'overdue' })
+  }
+  return rows.map((r: any) => ({
+    id: r.id, name: r.name, status: r.status, speciesCode: r.species?.code ?? '', speciesName: r.species?.name ?? '', breedName: r.breed?.name ?? '',
+    dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString().slice(0, 10) : null,
+    photoUrl: photoIsShared(r.photo) ? `/account/pets/${r.id}/photo?v=${String(r.photo.sha256 ?? '').slice(0, 12)}` : null,
+    due: due.get(r.id) ?? null,
+  }))
+}
+
+/** A pet's photo for its own household: the stored image, or null when there is none to show. */
+export async function myPetPhoto(client: SignedInClient, patientId: string): Promise<{ mimeType: string; bytes: Buffer } | null> {
+  const row = await db().patient.findFirst({
+    where: { id: String(patientId), status: { in: ['active', 'pending'] }, ownerships: { some: { clientId: client.clientId, effectiveTo: null } } },
+    select: { photo: { select: { storageKey: true, mimeType: true, visibility: true, content: true } } },
   })
+  if (!row?.photo || !photoIsShared(row.photo) || !row.photo.content) return null
+  const bytes = Buffer.from(String(row.photo.content), 'base64')
+  return bytes.length ? { mimeType: row.photo.mimeType, bytes } : null
 }
 
 export type Medication = { id: string; patientId: string; name: string; directions: string; refillsAuthorised: number }

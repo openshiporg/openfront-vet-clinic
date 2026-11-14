@@ -27,7 +27,7 @@ export default async function RefillPage({ searchParams }: { searchParams: Promi
         <section className="sf-card"><p>We have no pets on your account yet. Call us{phone ? ` at ${phone}` : ''} and we’ll help.</p></section>
       ) : (
         <RefillForm
-          pets={pets.map(p => ({ id: p.id, name: p.name, speciesCode: p.speciesCode, speciesName: p.speciesName, breedName: p.breedName }))}
+          pets={pets.map(p => ({ id: p.id, name: p.name, speciesCode: p.speciesCode, speciesName: p.speciesName, breedName: p.breedName, photoUrl: p.photoUrl }))}
           medications={medications.map(m => ({ id: m.id, patientId: m.patientId, name: m.name, directions: m.directions }))}
           places={mineFirst.map(l => ({ id: l.id, name: l.name }))}
           initialPetId={petParam}

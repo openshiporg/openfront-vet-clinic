@@ -1,4 +1,4 @@
-import { PawPrint } from 'lucide-react'
+import { Paw } from '../components/art'
 import { getTeam } from '../server/site'
 
 export const metadata = { title: 'Our team' }
@@ -23,7 +23,7 @@ export default async function TeamPage() {
               <div className="sf-grid-3">
                 {people.map(person => (
                   <article key={person.id} className="sf-card sf-row" style={{ flexWrap: 'nowrap' }}>
-                    <span className="sf-avatar sf-avatar-plain" style={{ width: 64, height: 64 }} aria-hidden="true"><PawPrint /></span>
+                    <span className="sf-avatar sf-avatar-plain sf-avatar-small" aria-hidden="true"><Paw className="sf-icon" /></span>
                     <div>
                       <h3 className="sf-h3">{person.name}</h3>
                       <p className="sf-muted">{[person.credentials, person.locationName].filter(Boolean).join(' · ')}</p>

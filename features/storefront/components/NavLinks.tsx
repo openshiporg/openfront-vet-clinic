@@ -2,16 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown } from 'lucide-react'
+import { Caret } from './art'
 
 type Item = { href: string; label: string }
 
-export function NavLinks({ services, signedIn }: { services: { id: string; name: string }[]; signedIn: boolean }) {
-  const path = usePathname()
+export function NavLinks({ services, signedIn, boarding, wellnessPlans }: { services: { id: string; name: string }[]; signedIn: boolean; boarding: boolean; wellnessPlans: boolean }) {
+  const path = usePathname() ?? ''
   const current = (href: string) => (path === href || path.startsWith(`${href}/`) ? 'page' : undefined)
   const items: Item[] = [
-    { href: '/wellness-plans', label: 'Wellness plans' },
-    { href: '/boarding', label: 'Boarding' },
+    ...(wellnessPlans ? [{ href: '/wellness-plans', label: 'Wellness plans' }] : []),
+    ...(boarding ? [{ href: '/boarding', label: 'Boarding' }] : []),
     { href: '/team', label: 'Our team' },
     signedIn ? { href: '/account', label: 'My account' } : { href: '/sign-in', label: 'Client sign in' },
   ]
@@ -19,7 +19,7 @@ export function NavLinks({ services, signedIn }: { services: { id: string; name:
     <nav className="sf-nav" aria-label="Main">
       <div className="sf-menu">
         <Link href="/services" aria-current={current('/services')}>
-          Services <ChevronDown aria-hidden="true" />
+          Services <Caret />
         </Link>
         {services.length ? (
           <div className="sf-menu-list">

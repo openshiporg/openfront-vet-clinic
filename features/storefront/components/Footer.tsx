@@ -33,7 +33,7 @@ export async function Footer() {
               <p>{[location.addressLine1, location.addressLine2].filter(Boolean).join(', ')}</p>
               <p>{[location.city, location.stateCode.replace(/^US-/, ''), location.postalCode].filter(Boolean).join(' ')}</p>
               {location.phone ? <p><a href={`tel:${location.phone}`}>{phoneLabel(location.phone)}</a></p> : null}
-              <dl style={{ marginTop: 8 }}>
+              <dl>
                 {hoursRows(location).map(row => (
                   <div key={row.days} style={{ display: 'contents' }}>
                     <dt>{row.days}</dt>
@@ -49,8 +49,8 @@ export async function Footer() {
               <li><Link href="/book">Book a visit</Link></li>
               <li><Link href="/refill">Refill a prescription</Link></li>
               <li><Link href="/services">Services</Link></li>
-              <li><Link href="/wellness-plans">Wellness plans</Link></li>
-              <li><Link href="/boarding">Boarding</Link></li>
+              {site.offers.wellnessPlans ? <li><Link href="/wellness-plans">Wellness plans</Link></li> : null}
+              {site.offers.boarding ? <li><Link href="/boarding">Boarding</Link></li> : null}
               <li><Link href="/team">Our team</Link></li>
             </ul>
           </section>
@@ -71,7 +71,7 @@ export async function Footer() {
                 {site.newClientMode !== 'off' ? <li><Link href="/new-client">New client</Link></li> : null}
               </ul>
             )}
-            <p style={{ marginTop: 10 }}><Link href="/dashboard">Staff sign in</Link></p>
+            <p style={{ marginTop: '0.5em' }}><Link href="/dashboard">Staff sign in</Link></p>
           </section>
         </div>
         <p className="sf-foot-base">

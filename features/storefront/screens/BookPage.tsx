@@ -39,7 +39,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
         <section className="sf-card"><p>No visits can be booked online right now. Call us{phone ? ` at ${phone}` : ''} and we’ll book you in.</p></section>
       ) : (
         <BookFlow
-          pets={pets.map(p => ({ id: p.id, name: p.name, speciesCode: p.speciesCode, speciesName: p.speciesName, breedName: p.breedName }))}
+          pets={pets.map(p => ({ id: p.id, name: p.name, speciesCode: p.speciesCode, speciesName: p.speciesName, breedName: p.breedName, photoUrl: p.photoUrl }))}
           visits={visits.map(v => ({ id: v.id, name: v.name, description: v.description, durationMinutes: v.durationMinutes, mode: v.mode }))}
           places={site.locations.map(l => ({ id: l.id, name: l.name, city: l.city }))}
           initial={{ petId: one(params.pet), visitId: one(params.type), placeId: one(params.loc) ?? client.locationId, at: one(params.at) }}

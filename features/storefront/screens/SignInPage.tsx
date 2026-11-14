@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { PawPrint } from 'lucide-react'
+import { Paw } from '../components/art'
 import { phoneLabel } from '../lib/format'
 import { currentClient } from '../server/session'
 import { getSite } from '../server/site'
@@ -24,15 +24,15 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         <p className="sf-lede">See what your pets are due for, book a visit and refill a prescription.</p>
       </div>
       <div className="sf-split">
-        <section className="sf-card sf-narrow">
-          <SignInForm next={next} />
+        <section className="sf-card">
+          <div className="sf-narrow"><SignInForm next={next} /></div>
         </section>
         <aside className="sf-stack">
           {site.newClientMode !== 'off' ? (
             <section className="sf-card sf-card-yellow sf-stack">
               <h2 className="sf-h3">New to {site.name}?</h2>
               <p>Tell us about you and your pet and pick a time for your first visit.</p>
-              <Link href="/new-client" className="sf-btn sf-btn-yellow"><PawPrint aria-hidden="true" /> I’m a new client</Link>
+              <Link href="/new-client" className="sf-btn sf-btn-yellow"><Paw className="sf-icon" /> I’m a new client</Link>
             </section>
           ) : null}
           <section className="sf-card sf-card-mint sf-stack">

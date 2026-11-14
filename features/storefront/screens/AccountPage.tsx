@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { CalendarDays, PawPrint, PillBottle, Receipt } from 'lucide-react'
+import { Receipt } from 'lucide-react'
 import { signOutAction } from '../actions'
-import { PetAvatar } from '../components/art'
+import { BottleIcon, CalendarIcon, Paw, PetAvatar } from '../components/art'
 import { ageLabel, calendarDayLabel, longDayLabel, money, sentence, timeLabel } from '../lib/format'
 import { myBills, myPets, myRefills, myVisits } from '../server/portal'
 import { currentClient } from '../server/session'
@@ -32,7 +32,7 @@ export default async function AccountPage() {
       <div className="sf-split">
         <div className="sf-stack-lg">
           <section className="sf-card">
-            <h2 className="sf-card-head"><CalendarDays aria-hidden="true" /> Upcoming visits</h2>
+            <h2 className="sf-card-head"><CalendarIcon /> Upcoming visits</h2>
             {visits.length ? (
               <ul className="sf-list">
                 {visits.map(v => (
@@ -52,21 +52,21 @@ export default async function AccountPage() {
             ) : (
               <p className="sf-muted">No upcoming visits.</p>
             )}
-            <p style={{ marginTop: 18 }}><Link href="/book" className="sf-btn sf-btn-yellow sf-btn-small"><CalendarDays aria-hidden="true" /> Book a visit</Link></p>
+            <p style={{ marginTop: '0.8em' }}><Link href="/book" className="sf-btn sf-btn-yellow sf-btn-small"><CalendarIcon /> Book a visit</Link></p>
           </section>
 
           <section className="sf-card">
-            <h2 className="sf-card-head"><PawPrint aria-hidden="true" /> Your pets</h2>
+            <h2 className="sf-card-head"><Paw className="sf-icon" /> Your pets</h2>
             {pets.length ? (
               <ul className="sf-list">
                 {pets.map(pet => (
                   <li key={pet.id}>
                     <div className="sf-row">
-                      <span style={{ width: 64 }}><PetAvatar speciesCode={pet.speciesCode} speciesName={pet.speciesName} /></span>
+                      <PetAvatar speciesCode={pet.speciesCode} speciesName={pet.speciesName} photoUrl={pet.photoUrl} name={pet.name} small />
                       <div>
                         <p className="sf-h3">{pet.name}</p>
                         <p className="sf-muted">{[pet.breedName || pet.speciesName, ageLabel(pet.dateOfBirth, today)].filter(Boolean).join(' • ')}</p>
-                        {pet.due ? <p className="sf-tag" style={{ marginTop: 6 }}>{pet.due.name} {pet.due.status === 'overdue' ? 'overdue' : pet.due.status === 'due' ? 'due' : `due ${calendarDayLabel(pet.due.dueOn)}`}</p> : null}
+                        {pet.due ? <p className="sf-tag" style={{ marginTop: '0.35em' }}>{pet.due.name} {pet.due.status === 'overdue' ? 'overdue' : 'due'}</p> : null}
                       </div>
                     </div>
                     <div className="sf-row">
@@ -103,7 +103,7 @@ export default async function AccountPage() {
           </section>
 
           <section className="sf-card">
-            <h2 className="sf-card-head"><PillBottle aria-hidden="true" /> Refill requests</h2>
+            <h2 className="sf-card-head"><BottleIcon /> Refill requests</h2>
             {refills.length ? (
               <ul className="sf-list">
                 {refills.map(r => (
@@ -119,7 +119,7 @@ export default async function AccountPage() {
             ) : (
               <p className="sf-muted">No refill requests yet.</p>
             )}
-            <p style={{ marginTop: 18 }}><Link href="/refill" className="sf-btn sf-btn-line sf-btn-small"><PillBottle aria-hidden="true" /> Refill a prescription</Link></p>
+            <p style={{ marginTop: '0.8em' }}><Link href="/refill" className="sf-btn sf-btn-line sf-btn-small"><BottleIcon /> Refill a prescription</Link></p>
           </section>
         </div>
       </div>

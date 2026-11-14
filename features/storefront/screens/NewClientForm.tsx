@@ -14,10 +14,10 @@ export function NewClientForm({ species, locations }: { species: { code: string;
       <div className="sf-grid-2">
         <label className="sf-field"><span>First name</span><input className="sf-input" name="firstName" autoComplete="given-name" required maxLength={80} /></label>
         <label className="sf-field"><span>Last name</span><input className="sf-input" name="lastName" autoComplete="family-name" required maxLength={80} /></label>
-        <label className="sf-field"><span>Mobile phone</span><input className="sf-input" name="phone" type="tel" autoComplete="tel" required placeholder="(916) 555-0131" /></label>
+        <label className="sf-field"><span>Mobile phone</span><input className="sf-input" name="phone" type="tel" autoComplete="tel" required /></label>
         <label className="sf-field"><span>Email</span><input className="sf-input" name="email" type="email" autoComplete="email" /><small>Optional.</small></label>
       </div>
-      <h2 className="sf-h3" style={{ marginTop: 8 }}>About your pet</h2>
+      <h2 className="sf-h3" style={{ marginTop: '0.4em' }}>About your pet</h2>
       <div className="sf-grid-2">
         <label className="sf-field"><span>Pet’s name</span><input className="sf-input" name="petName" required maxLength={80} /></label>
         <label className="sf-field">

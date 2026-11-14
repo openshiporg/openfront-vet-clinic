@@ -20,12 +20,14 @@ export type Site = {
   newClientMode: 'book' | 'request' | 'off'
   bookingWindowDays: number
   minimumNoticeMinutes: number
+  /** Services the practice has switched on in its settings; a switched-off one has no page or link here. */
+  offers: { boarding: boolean; wellnessPlans: boolean }
 }
 
 export const getSite = cache(async (): Promise<Site> => {
   const p = db()
   const [practice, profile, locations] = await Promise.all([
-    p.practiceSettings.findUnique({ where: { id: 1 }, select: { displayName: true, homeTimeZone: true, currencyCode: true } }),
+    p.practiceSettings.findUnique({ where: { id: 1 }, select: { displayName: true, homeTimeZone: true, currencyCode: true, features: true } }),
     p.publicSiteProfile.findFirst({ select: { headline: true, onlineBookingEnabled: true, newClientBookingMode: true, bookingWindowDays: true, minimumNoticeMinutes: true } }),
     p.location.findMany({
       where: { active: true }, orderBy: [{ name: 'asc' }],
@@ -34,6 +36,7 @@ export const getSite = cache(async (): Promise<Site> => {
   ])
   const main = locations.find((l: SiteLocation) => l.kind === 'general_practice') ?? locations[0] ?? null
   const ordered = main ? [main, ...locations.filter((l: SiteLocation) => l.id !== main.id)] : []
+  const features = (practice?.features ?? {}) as Record<string, unknown>
   return {
     name: practice?.displayName || profile?.headline || main?.name || 'Animal hospital',
     timeZone: main?.timeZone || practice?.homeTimeZone || 'America/Los_Angeles',
@@ -44,6 +47,7 @@ export const getSite = cache(async (): Promise<Site> => {
     newClientMode: (['book', 'request', 'off'].includes(profile?.newClientBookingMode) ? profile.newClientBookingMode : 'request') as Site['newClientMode'],
     bookingWindowDays: profile?.bookingWindowDays ?? 60,
     minimumNoticeMinutes: profile?.minimumNoticeMinutes ?? 120,
+    offers: { boarding: features.boarding !== false, wellnessPlans: features.wellnessPlans !== false },
   }
 })
 

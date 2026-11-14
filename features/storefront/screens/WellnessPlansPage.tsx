@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import { Check } from 'lucide-react'
 import { money, phoneLabel } from '../lib/format'
 import { getPlans, getSite, getSpecies } from '../server/site'
@@ -6,6 +7,7 @@ export const metadata = { title: 'Wellness plans' }
 
 export default async function WellnessPlansPage() {
   const [site, plans, species] = await Promise.all([getSite(), getPlans(), getSpecies()])
+  if (!site.offers.wellnessPlans) notFound()
   const speciesName = (code: string) => species.find(s => s.code === code)?.name ?? code
   return (
     <div className="sf-wrap">

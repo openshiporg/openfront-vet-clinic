@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CalendarDays } from 'lucide-react'
+import { CalendarIcon } from '../components/art'
 import { money, phoneLabel, sentence } from '../lib/format'
 import { getPrices, getSite, getVisitTypes } from '../server/site'
 
@@ -25,7 +25,7 @@ export default async function ServicesPage() {
                 <h2 className="sf-h3">{v.name}</h2>
                 <p className="sf-row"><span className="sf-tag sf-tag-mint">{lengthOf(v.durationMinutes)}</span>{v.mode === 'request' ? <span className="sf-tag">We confirm the day</span> : null}{v.newClients ? <span className="sf-tag">New clients welcome</span> : null}</p>
                 {v.description ? <p>{v.description}</p> : null}
-                <p style={{ marginTop: 'auto' }}><Link href={`/book?type=${v.id}`} className="sf-btn sf-btn-yellow sf-btn-small"><CalendarDays aria-hidden="true" /> {v.mode === 'request' ? 'Request' : 'Book'}</Link></p>
+                <p style={{ marginTop: 'auto' }}><Link href={`/book?type=${v.id}`} className="sf-btn sf-btn-yellow sf-btn-small"><CalendarIcon /> {v.mode === 'request' ? 'Request' : 'Book'}</Link></p>
               </article>
             ))}
           </div>

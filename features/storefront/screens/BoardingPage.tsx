@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import { money, phoneLabel } from '../lib/format'
 import { getRuns, getSite, getSpecies } from '../server/site'
 
@@ -5,6 +6,7 @@ export const metadata = { title: 'Boarding' }
 
 export default async function BoardingPage() {
   const [site, runs, species] = await Promise.all([getSite(), getRuns(), getSpecies()])
+  if (!site.offers.boarding) notFound()
   const speciesName = (code: string) => species.find(s => s.code === code)?.name ?? code
   return (
     <div className="sf-wrap">
