@@ -45,7 +45,15 @@ export async function payByLink(_root: unknown, args: { token: string; paymentMe
   const invoiceId = verifyPayLink(String(args.token ?? ''))
   if (!invoiceId) throw invalid()
   if (!KEY.test(String(args.idempotencyKey ?? ''))) throw new DomainError(Codes.INVALID_INPUT, 'Reload the page and try again.')
-  return shown((await payInvoiceByLink(context.prisma, { invoiceId, paymentMethodId: String(args.paymentMethodId ?? ''), idempotencyKey: args.idempotencyKey })) as never)
+  try {
+    return shown((await payInvoiceByLink(context.prisma, { invoiceId, paymentMethodId: String(args.paymentMethodId ?? ''), idempotencyKey: args.idempotencyKey })) as never)
+  } catch (e) {
+    if (e instanceof DomainError) throw e
+    // Something broke after the payment row was saved (the card processor's answer was lost): ask the processor about that same payment. Reads only, never a second charge.
+    const open = await context.prisma.payment.findFirst({ where: { forInvoiceId: invoiceId, method: 'payment_link', status: { in: ['pending', 'unknown'] } }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+    if (!open) throw e
+    return shown((await resolveUnknownPayment(context.prisma, systemActor('payment-link'), open.id)) as never)
+  }
 }
 
 /** Public: after the bank's check (3-D Secure), the processor's answer on that same link payment. */
