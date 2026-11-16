@@ -21,7 +21,7 @@ export function BookFlow(props: {
   timeZone: string
 }) {
   const { pets, visits, places, initial } = props
-  const [petIds, setPetIds] = React.useState<string[]>(() => (initial.petId && pets.some(p => p.id === initial.petId) ? [initial.petId] : pets.length === 1 ? [pets[0].id] : []))
+  const [petIds, setPetIds] = React.useState<string[]>(() => (initial.petId && pets.some(p => p.id === initial.petId) ? [initial.petId] : pets.length ? [pets[0].id] : []))
   const [visitId, setVisitId] = React.useState<string | null>(() => (initial.visitId && visits.some(v => v.id === initial.visitId) ? initial.visitId : visits.length === 1 ? visits[0].id : null))
   const [placeId, setPlaceId] = React.useState<string>(() => (initial.placeId && places.some(p => p.id === initial.placeId) ? initial.placeId : places[0]?.id ?? ''))
   const [days, setDays] = React.useState<Day[]>([])
@@ -76,7 +76,7 @@ export function BookFlow(props: {
   const nextFrom = days.length ? new Date(Date.parse(`${days[days.length - 1].date}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : null
   const ready = petIds.length > 0 && !!visit && !!placeId && !!startsAt
 
-  const togglePet = (id: string) => setPetIds(current => (current.includes(id) ? current.filter(x => x !== id) : [...current, id]))
+  const choosePet = (id: string) => setPetIds([id])
 
   const submit = () => {
     if (!ready || !visit || !startsAt) return
@@ -122,7 +122,7 @@ export function BookFlow(props: {
         <div className="sf-step"><span className="sf-step-no">1</span><h2 className="sf-h3">Who is the visit for?</h2></div>
         <div className="sf-choices">
           {pets.map(pet => (
-            <button key={pet.id} type="button" className="sf-choice" aria-pressed={petIds.includes(pet.id)} onClick={() => togglePet(pet.id)}>
+            <button key={pet.id} type="button" className="sf-choice" aria-pressed={petIds.includes(pet.id)} onClick={() => choosePet(pet.id)}>
               <PetAvatar speciesCode={pet.speciesCode} speciesName={pet.speciesName} photoUrl={pet.photoUrl} />
               <span>{pet.name}<small>{pet.breedName || pet.speciesName}</small></span>
             </button>
