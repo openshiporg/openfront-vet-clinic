@@ -46,6 +46,12 @@ export async function paymentTotals(db: Reader, paymentId: string): Promise<{ al
   return { allocated: big(a[0]?.s), refunded: big(r[0]?.s) }
 }
 
+/** The one invoice a payment was applied to; null when it was applied to none or to several. */
+export function soleAllocatedInvoice(rows: { invoiceId: string | null }[]): string | null {
+  const ids = new Set(rows.map(r => r.invoiceId).filter((v): v is string => !!v))
+  return ids.size === 1 ? [...ids][0] : null
+}
+
 /** What a plan has used so far: ordered and done items at what they were charged, else what they were expected to cost. */
 export async function planSpend(db: Reader, planId: string): Promise<bigint> {
   const rows = await (db as Tx).$queryRaw<{ s: bigint | null }[]>`SELECT COALESCE(SUM(COALESCE("chargedMinor", "projectedMinor")), 0) AS s FROM "TreatmentPlanItem" WHERE "plan" = ${planId} AND status IN ('ordered', 'done')`

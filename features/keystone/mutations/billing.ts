@@ -7,7 +7,7 @@ import { registerApplier } from '../lib/approvalAppliers'
 import { actorUserId, can, systemActor, type Actor } from '../lib/actor'
 import { DomainError, Codes, isDomainError } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
-import { balanceOfInvoice, paymentTotals, post } from '../lib/ledger'
+import { balanceOfInvoice, paymentTotals, post, soleAllocatedInvoice } from '../lib/ledger'
 import { activeFeeVersion, feeItemFor, priceCharge, taxRulesFor } from '../lib/pricing'
 import { adjustBps } from '../domain/billing'
 import { adapterFor, cardConfigured, PAYMENT_METHOD_ID, type ChargeResult } from '../../integrations/payment'
@@ -589,6 +589,8 @@ export async function requestRefund(_root: unknown, args: { paymentId: string; i
     const made = await command(context.prisma, { name: 'refund.request', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
       const pay = await lockRow<{ id: string; clientId: string; status: string; amountMinor: bigint }>(uow.tx, 'Payment', args.paymentId)
       if (pay.status !== 'succeeded') throw new DomainError(Codes.GUARD_FAILED, 'Only a payment that went through can be refunded.')
+      // No invoice given: use the one this payment was applied to, so the refund reaches that invoice and not the money held on account.
+      const invoiceId = args.invoiceId || soleAllocatedInvoice(await uow.tx.paymentAllocation.findMany({ where: { paymentId: pay.id }, select: { invoiceId: true } }))
       if (args.invoiceId) {
         const inv = await uow.tx.invoice.findUnique({ where: { id: args.invoiceId }, select: { clientId: true } })
         if (!inv || inv.clientId !== pay.clientId) throw new DomainError(Codes.NOT_FOUND, 'Invoice not found for this client.')
@@ -603,7 +605,7 @@ export async function requestRefund(_root: unknown, args: { paymentId: string; i
       const staff = await staffOf(uow, actor).catch(() => null)
       const ref = await nextReference(uow.tx, 'REF', uow.now)
       const needsApproval = amount > settings.refundApprovalThresholdMinor
-      const refund = await uow.tx.refund.create({ data: { ref, paymentId: pay.id, invoiceId: args.invoiceId ?? null, amountMinor: amount, currencyCode: 'USD', reason, status: 'requested', providerIdempotencyKey: `vet-refund-${randomUUID()}`, requestedById: staff?.id ?? null } })
+      const refund = await uow.tx.refund.create({ data: { ref, paymentId: pay.id, invoiceId, amountMinor: amount, currencyCode: 'USD', reason, status: 'requested', providerIdempotencyKey: `vet-refund-${randomUUID()}`, requestedById: staff?.id ?? null } })
       let approvalId: string | null = null
       if (needsApproval) {
         const req = await requestApproval(uow, actor, { action: 'refund.issue', targetList: 'Refund', targetId: refund.id, payload: { refundId: refund.id, amountMinor: amount.toString() }, requiredPermission: 'canIssueRefunds', summary: `Refund ${ref}` })
