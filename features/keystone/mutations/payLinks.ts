@@ -45,6 +45,13 @@ export async function payByLink(_root: unknown, args: { token: string; paymentMe
   const invoiceId = verifyPayLink(String(args.token ?? ''))
   if (!invoiceId) throw invalid()
   if (!KEY.test(String(args.idempotencyKey ?? ''))) throw new DomainError(Codes.INVALID_INPUT, 'Reload the page and try again.')
+  // An earlier link payment left open (the answer was lost, or the process died before it was recorded) would block this Pay: ask the processor about that same payment first. Reads only, never a charge.
+  // Paid: done. Failed: a new charge may go. Still open: payInvoiceByLink refuses with the in-flight message, so there is never a second charge.
+  const stuck = await context.prisma.payment.findFirst({ where: { forInvoiceId: invoiceId, method: 'payment_link', status: { in: ['pending', 'unknown'] } }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+  if (stuck) {
+    const settled = await resolveUnknownPayment(context.prisma, systemActor('payment-link'), stuck.id).catch(() => null)
+    if (settled?.status === 'succeeded') return shown(settled as never)
+  }
   try {
     return shown((await payInvoiceByLink(context.prisma, { invoiceId, paymentMethodId: String(args.paymentMethodId ?? ''), idempotencyKey: args.idempotencyKey })) as never)
   } catch (e) {
