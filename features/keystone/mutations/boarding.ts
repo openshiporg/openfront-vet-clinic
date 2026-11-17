@@ -191,11 +191,13 @@ export async function confirmBoarding(_root: unknown, args: { reservationId: str
         // The hold lapsed before anyone confirmed: it is released now, and the person is told, not given a stale booking.
         await giveBackNights(uow, r.runTypeId, nightsBetween(day(r.checkInOn), day(r.checkOutOn)))
         await transition(uow, { model: 'BoardingReservation', id: r.id, from: ['requested'], to: 'cancelled', actor, eventType: 'boarding.hold_lapsed', data: { cancelReason: 'The hold ran out' } })
-        throw new DomainError(Codes.GUARD_FAILED, 'The hold on this request ran out. Make a new booking.', { reason: 'hold_lapsed' })
+        return { id: r.id, ref: r.ref, status: 'cancelled', lapsed: true }
       }
       const row = await transition(uow, { model: 'BoardingReservation', id: r.id, from: ['requested'], to: 'confirmed', expectedVersion: args.expectedVersion, actor, eventType: 'boarding.confirmed', data: { holdExpiresAt: null } })
-      return { id: r.id, ref: r.ref, status: row.status }
+      return { id: r.id, ref: r.ref, status: row.status, lapsed: false }
     })
+    // Raised after the release has committed: raising inside the command would undo it.
+    if (result.value.lapsed) throw new DomainError(Codes.GUARD_FAILED, 'The hold on this request ran out. Make a new booking.', { reason: 'hold_lapsed' })
     return { replay: result.replay, ...result.value }
   })
 }

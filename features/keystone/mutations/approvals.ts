@@ -17,6 +17,7 @@ export async function decideApprovalRequest(_root: unknown, args: { requestId: s
   const result = await command(context.prisma, { name: 'approval.decide', actor, idempotencyKey: args.idempotencyKey, params: { requestId: args.requestId, decision: args.decision, reason: args.reason ?? '', expectedVersion: args.expectedVersion } }, async uow => {
     const practice = await uow.tx.practiceSettings.findUnique({ where: { id: 1 }, select: { strictAgentOwnerSoD: true } })
     const decided = await decideApproval(uow, actor, { requestId: args.requestId, decision: args.decision, reason: args.reason ?? undefined, expectedVersion: args.expectedVersion, strictAgentOwner: practice?.strictAgentOwnerSoD ?? true })
+    if (decided.status === 'expired') return { id: decided.id, status: 'expired', applied: null }
     let applied: unknown = null
     const registration = applierFor(String(decided.action))
     if (args.decision === 'approve' && registration?.applyOnApprove) {
@@ -26,6 +27,7 @@ export async function decideApprovalRequest(_root: unknown, args: { requestId: s
     }
     return { id: decided.id, status: decided.status, applied }
   })
+  if (result.value.status === 'expired') throw new DomainError(Codes.GUARD_FAILED, 'This approval request has expired.')
   return { replay: result.replay, ...result.value }
 }
 

@@ -58,8 +58,8 @@ export async function decideApproval(uow: UnitOfWork, actor: Actor, input: { req
     throw new DomainError(Codes.NOT_AUTHORIZED, `Deciding this needs the ${request.requiredPermission} permission.`)
   }
   if (request.expiresAt && new Date(request.expiresAt).getTime() <= uow.now.getTime()) {
-    await transition(uow, { model: 'ApprovalRequest', id: input.requestId, from: ['pending'], to: 'expired', actor, eventType: 'approval.expired' })
-    throw new DomainError(Codes.GUARD_FAILED, 'This approval request has expired.')
+    // Returned, not thrown: the caller raises the error after this commits, so the request is left expired, not pending.
+    return transition<Record<string, any>>(uow, { model: 'ApprovalRequest', id: input.requestId, from: ['pending'], to: 'expired', actor, eventType: 'approval.expired' })
   }
   const to = input.decision === 'approve' ? 'approved' : 'rejected'
   const updated = await transition(uow, {
