@@ -90,3 +90,18 @@ export function allocateOldestFirst(amountMinor: bigint, open: { id: string; bal
 }
 
 export const quantityText = (v: string) => toScale(dec(v), 'qty')
+
+/**
+ * How much of a refund is credit the client already holds on account for this invoice (moved there by a credit note on a paid
+ * invoice). That part leaves the account; only the rest is owed on the invoice again.
+ */
+export function creditReturnedByRefund(refundMinor: bigint, creditStillHeldForInvoiceMinor: bigint, accountCreditMinor: bigint): bigint {
+  const least = [refundMinor, creditStillHeldForInvoiceMinor, accountCreditMinor].reduce((a, b) => (b < a ? b : a))
+  return least > 0n ? least : 0n
+}
+
+/** A month can be closed once the clinic's day is past its last day (`YYYY-MM-DD` strings). */
+export const periodHasEnded = (lastDay: string, today: string) => today > lastDay
+
+/** What a paid deposit still holds: the payment, less what was refunded or has a refund asked for. Never below zero. */
+export const depositHeld = (paidMinor: bigint, refundedMinor: bigint) => (paidMinor > refundedMinor ? paidMinor - refundedMinor : 0n)

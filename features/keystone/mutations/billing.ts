@@ -9,13 +9,14 @@ import { DomainError, Codes, isDomainError } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
 import { balanceOfInvoice, paymentTotals, post, soleAllocatedInvoice } from '../lib/ledger'
 import { activeFeeVersion, feeItemFor, priceCharge, taxRulesFor } from '../lib/pricing'
-import { adjustBps } from '../domain/billing'
+import { adjustBps, creditReturnedByRefund, depositHeld, periodHasEnded } from '../domain/billing'
 import { adapterFor, cardConfigured, PAYMENT_METHOD_ID, type ChargeResult } from '../../integrations/payment'
 import { PAYMENT_METHODS } from '../models/billing'
 import type { UnitOfWork } from '../lib/unitOfWork'
 import { gated } from './agentGuard'
 import { memberDiscountBps } from './serviceCharge'
 import { decimalText, locationDay, staffOf, text, type Ctx } from './clinical'
+import { localDate } from '../lib/calendar'
 import { billingSettings, dateOnly, minorText, pick } from './billingInput'
 const money = (minor: bigint) => `$${minor / 100n}.${String(minor % 100n).padStart(2, '0')}`
 
@@ -678,7 +679,11 @@ registerApplier('invoice.writeoff', async (uow, actor, request) => writeOff(uow,
 export async function closeArPeriod(_root: unknown, args: { periodId: string; expectedVersion: number; idempotencyKey: string }, context: Ctx) {
   return gated(context, { permissions: ['canManagePayments', 'canViewFinance'], tool: 'period.close', humanOnly: true }, args, async actor => {
     const result = await command(context.prisma, { name: 'period.close', actor, idempotencyKey: args.idempotencyKey, params: args }, async uow => {
-      const period = await lockRow<{ id: string; endsOn: Date }>(uow.tx, 'ArPeriod', args.periodId)
+      const period = await lockRow<{ id: string; endsOn: Date; label: string }>(uow.tx, 'ArPeriod', args.periodId)
+      // A month is closed after its last day, at every location: closing it early would refuse the payments still to be taken in it.
+      const lastDay = period.endsOn.toISOString().slice(0, 10)
+      const zones = await uow.tx.location.findMany({ select: { timeZone: true } })
+      if (zones.some(z => !periodHasEnded(lastDay, localDate({ timeZone: z.timeZone }, uow.now)))) throw new DomainError(Codes.GUARD_FAILED, `${period.label} has not ended yet. Close it after its last day.`, { reason: 'period_not_ended' })
       const staff = await staffOf(uow, actor).catch(() => null)
       const drafts = await uow.tx.invoice.count({ where: { status: 'draft', createdAt: { lte: new Date(period.endsOn.getTime() + 86_400_000) } } })
       const pending = await uow.tx.payment.count({ where: { status: { in: ['pending', 'unknown'] }, createdAt: { lte: new Date(period.endsOn.getTime() + 86_400_000) } } })
