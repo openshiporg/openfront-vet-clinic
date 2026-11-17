@@ -560,7 +560,27 @@ async function runRefund(prisma: any, actor: Actor, refundId: string, key: strin
         // A refunded plan month stays paid: an offsetting credit on the same invoice keeps its balance at zero. Nothing is charged again.
         await post(uow, { clientId: pay.clientId!, invoiceId: r.invoiceId, paymentId: r.paymentId, kind: 'adjustment', amountMinor: -r.amountMinor, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}:plan_settled`, memo: `${r.ref}: refunded plan month` })
         auditCreate(uow, actor, 'Refund', r.id, 'refund.plan_month_kept_paid', { invoiceId: r.invoiceId })
-      } else if (r.invoiceId) await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref)
+      } else if (r.invoiceId) {
+        // A credit note on this invoice moved what was already paid to the client's account. This refund hands that money back,
+        // so it comes off the account and the invoice is not reopened for it.
+        const sum = async (where: Record<string, unknown>) => (await uow.tx.clientLedgerEntry.aggregate({ where, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO
+        const moved = await sum({ invoiceId: r.invoiceId, entryKey: { startsWith: 'credit:', endsWith: ':excess:invoice' } })
+        const returned = -(await sum({ invoiceId: r.invoiceId, entryKey: { startsWith: 'refund:', endsWith: ':credit_returned:invoice' } }))
+        const onAccount = -(await sum({ clientId: pay.clientId, invoiceId: null }))
+        const back = creditReturnedByRefund(r.amountMinor, moved - returned, onAccount)
+        if (back > ZERO) {
+          await post(uow, { clientId: pay.clientId!, invoiceId: r.invoiceId, kind: 'adjustment', amountMinor: -back, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}:credit_returned:invoice`, memo: `${r.ref}: credit held on account refunded` })
+          await post(uow, { clientId: pay.clientId!, kind: 'adjustment', amountMinor: back, currencyCode: pay.currencyCode, postedOn: on, entryKey: `refund:${r.id}:credit_returned:account`, memo: `${r.ref}: credit held on account refunded` })
+        }
+        await syncInvoiceStatus(uow, actor, r.invoiceId, r.ref)
+      }
+      // All the money for a deposit that was never used has gone back: the deposit is refunded, so check-out does not try to apply it.
+      const heldDeposit = await uow.tx.deposit.findFirst({ where: { paymentId: r.paymentId, status: 'paid' }, select: { id: true, payment: { select: { amountMinor: true } } } })
+      const returnedBefore = heldDeposit ? (await uow.tx.refund.aggregate({ where: { paymentId: r.paymentId, status: 'succeeded', id: { not: r.id } }, _sum: { amountMinor: true } }))._sum.amountMinor ?? ZERO : ZERO
+      if (heldDeposit && depositHeld(heldDeposit.payment!.amountMinor, returnedBefore + r.amountMinor) === ZERO) {
+        const dep = await lockRow<{ id: string; status: string; version: number }>(uow.tx, 'Deposit', heldDeposit.id)
+        if (dep.status === 'paid') await casUpdate(uow, { model: 'Deposit', id: dep.id, version: dep.version, from: ['paid'], to: 'refunded', actor, eventType: 'deposit.refunded', metadata: { refund: r.ref } })
+      }
       await casUpdate(uow, { model: 'Refund', id: r.id, version: r.version, from: [r.status], to: 'succeeded', actor, eventType: 'refund.succeeded', data: { providerRef: out.providerRef ?? '', processedAt: uow.now, message: out.message.slice(0, 200) } })
     } else if (out.outcome === 'failed') {
       await casUpdate(uow, { model: 'Refund', id: r.id, version: r.version, from: [r.status], to: 'failed', actor, eventType: 'refund.failed', data: { message: out.message.slice(0, 200) } })
