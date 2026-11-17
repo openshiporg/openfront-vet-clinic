@@ -92,8 +92,11 @@ export async function captureVisitCharges(_root: unknown, args: { encounterId: s
         if (o.vaccineId) await add('administration', a.id, { vaccineId: o.vaccineId }, '1', { performedById: a.givenById })
         else if (o.drugId) await add('administration', a.id, { drugId: o.drugId }, a.qty.toString(), { performedById: a.givenById, injection: false })
       }
-      const dispenses = await uow.tx.dispense.findMany({ where: { prescription: { patientId: enc.patientId }, dispensedAt: { gte: new Date(uow.now.getTime() - 86_400_000) } }, select: { id: true, quantity: true, productId: true, dispensedById: true } })
-      for (const d of dispenses) if (d.productId) await add('dispense', d.id, { drugId: d.productId }, d.quantity.toString(), { performedById: d.dispensedById, dispensing: true })
+      // Every medicine handed over for this patient that was never charged, whenever it was dispensed (a refill with no visit, or a visit captured days later).
+      // A dispense that already has a charge on any visit, live or reversed, is left alone: it is never charged twice, and a charge staff took off stays off.
+      const dispenses = await uow.tx.dispense.findMany({ where: { prescription: { patientId: enc.patientId } }, select: { id: true, quantity: true, productId: true, dispensedById: true } })
+      const charged = new Set((await uow.tx.chargeLine.findMany({ where: { sourceType: 'dispense', sourceId: { in: dispenses.map(d => d.id) } }, select: { sourceId: true } })).map(c => c.sourceId))
+      for (const d of dispenses) if (d.productId && !charged.has(d.id)) await add('dispense', d.id, { drugId: d.productId }, d.quantity.toString(), { performedById: d.dispensedById, dispensing: true })
       return { made, unpriced }
     })
     return { replay: result.replay, ...result.value }
