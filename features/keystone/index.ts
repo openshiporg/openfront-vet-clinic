@@ -12,6 +12,11 @@ import { throwKeystonePrismaErrors } from './lib/keystonePrismaErrors'
 
 const databaseURL = process.env.DATABASE_URL || "file:./keystone.db";
 
+// A deployment never signs staff sessions with the published development string.
+if (!process.env.SESSION_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("SESSION_SECRET is required in production");
+}
+
 const sessionConfig = {
   maxAge: 60 * 60 * 24 * 360, // How long they stay signed in?
   secret:
