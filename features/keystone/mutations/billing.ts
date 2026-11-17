@@ -474,13 +474,17 @@ async function applyPaymentEventOnce(prisma: any, actor: Actor, event: { provide
 export async function applyDepositTo(uow: UnitOfWork, actor: Actor, depositId: string, invoiceId: string) {
   const dep = await lockRow<{ id: string; clientId: string; status: string; paymentId: string | null; currencyCode: string; version: number }>(uow.tx, 'Deposit', depositId)
   if (dep.status === 'applied') throw new DomainError(Codes.GUARD_FAILED, 'This deposit was already applied.', { reason: 'already_applied' })
+  if (dep.status === 'refunded') throw new DomainError(Codes.GUARD_FAILED, 'This deposit was refunded.', { reason: 'deposit_refunded' })
   if (dep.status !== 'paid') throw new DomainError(Codes.GUARD_FAILED, 'This deposit has not been paid yet.')
   const inv = await lockRow<Inv>(uow.tx, 'Invoice', invoiceId)
   if (inv.clientId !== dep.clientId) throw new DomainError(Codes.GUARD_FAILED, 'A deposit can only go against the same client\u2019s invoice.')
   if (!['posted', 'partially_paid'].includes(inv.status)) throw new DomainError(Codes.GUARD_FAILED, 'That invoice cannot take a deposit.')
-  const pay = await uow.tx.payment.findUniqueOrThrow({ where: { id: dep.paymentId! }, select: { amountMinor: true } })
+  // Only what is still held can be applied: the payment, less what was refunded or has a refund asked for.
+  const pay = await lockRow<{ id: string; amountMinor: bigint }>(uow.tx, 'Payment', dep.paymentId!)
+  const held = depositHeld(pay.amountMinor, (await paymentTotals(uow.tx, pay.id)).refunded)
+  if (held === ZERO) throw new DomainError(Codes.GUARD_FAILED, 'This deposit has a refund asked for or made. Nothing is left to apply.', { reason: 'deposit_refunded' })
   const balance = await balanceOfInvoice(uow.tx, inv.id)
-  const apply = pay.amountMinor < balance ? pay.amountMinor : balance
+  const apply = held < balance ? held : balance
   const { on } = await locationDay(uow, inv.locationId, uow.now)
   await post(uow, { clientId: dep.clientId, kind: 'deposit_released', amountMinor: apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:release`, memo: 'Deposit applied' })
   await post(uow, { clientId: dep.clientId, invoiceId: inv.id, kind: 'deposit_applied', amountMinor: -apply, currencyCode: dep.currencyCode, postedOn: on, entryKey: `deposit:${dep.id}:apply`, memo: 'Deposit applied' })

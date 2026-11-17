@@ -324,8 +324,11 @@ export async function checkOutBoarding(_root: unknown, args: { stayId: string; e
       const draft = await uow.tx.invoice.create({ data: { ref: `DRAFT-${randomUUID().slice(0, 8).toUpperCase()}`, clientId: stay.clientId, locationId: stay.locationId, status: 'draft', currencyCode: 'USD', note: '' } })
       await uow.tx.chargeLine.updateMany({ where: { id: { in: lines.map(l => l.id) } }, data: { invoiceId: draft.id } })
       const posted = await postDraftInvoice(uow, actor, draft.id, undefined)
-      const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: 'paid' }, select: { id: true } })
-      const applied = deposit ? await applyDepositTo(uow, actor, deposit.id, draft.id) : null
+      const deposit = await uow.tx.deposit.findFirst({ where: { reservationId: r.id, status: 'paid' }, select: { id: true, paymentId: true } })
+      // A deposit whose money has all been refunded (or has a refund asked for) is left alone: the pet still goes home, and the invoice is owed in full.
+      const pay = deposit?.paymentId ? await uow.tx.payment.findUnique({ where: { id: deposit.paymentId }, select: { amountMinor: true } }) : null
+      const held = deposit?.paymentId && pay ? depositHeld(pay.amountMinor, (await paymentTotals(uow.tx, deposit.paymentId)).refunded) : 0n
+      const applied = deposit && held > 0n ? await applyDepositTo(uow, actor, deposit.id, draft.id) : null
       await uow.tx.boardingStay.update({ where: { id: stay.id }, data: { invoiceId: draft.id, version: { increment: 1 } } })
       return { id: stay.id, status: 'checked_out', nights: stayed.length, invoiceId: draft.id, invoiceRef: posted.ref, totalMinor: posted.totalMinor, depositAppliedMinor: applied?.appliedMinor ?? '0' }
     })
