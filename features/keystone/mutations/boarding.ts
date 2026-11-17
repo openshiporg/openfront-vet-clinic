@@ -6,6 +6,10 @@ import { DomainError, Codes } from '../lib/errors'
 import { nextReference } from '../lib/sequence'
 import { resolvePolicy } from '../domain/policy'
 import { addDays } from '../domain/wellness'
+import { nightsBetween, nightsStayed } from '../domain/boarding'
+import { paymentTotals } from '../lib/ledger'
+import { depositHeld } from '../domain/billing'
+import { localDate } from '../lib/calendar'
 import { applyDepositTo, clientOfPatient, postDraftInvoice } from './billing'
 import { serviceCharge, serviceItemCharge } from './serviceCharge'
 import { gated } from './agentGuard'
@@ -28,11 +32,7 @@ const ZERO = 0n
 const asDate = (s: string) => new Date(`${s}T00:00:00Z`)
 const day = (d: Date) => d.toISOString().slice(0, 10)
 
-export function nightsBetween(checkIn: string, checkOut: string): string[] {
-  const out: string[] = []
-  for (let d = checkIn; d < checkOut; d = addDays(d, 1)) out.push(d)
-  return out
-}
+export { nightsBetween }
 
 /** Nights this reservation holds right now: a request whose hold lapsed holds nothing. */
 export const holdsNights = (r: { status: string; holdExpiresAt: Date | null }, now: Date) => r.status === 'confirmed' || r.status === 'checked_in' || (r.status === 'requested' && (!r.holdExpiresAt || r.holdExpiresAt > now))
@@ -309,11 +309,8 @@ export async function checkOutBoarding(_root: unknown, args: { stayId: string; e
       if (left) throw new DomainError(Codes.GUARD_FAILED, `${left} ${left === 1 ? 'belonging has' : 'belongings have'} not been handed back yet.`, { reason: 'belongings' })
       const r = await lockRow<any>(uow.tx, 'BoardingReservation', stay.reservationId)
       const rt = await uow.tx.runType.findUniqueOrThrow({ where: { id: r.runTypeId } })
-      const { on } = await locationDay(uow, stay.locationId, uow.now)
-      const startedOn = day(stay.checkedInAt) < day(r.checkInOn) ? day(r.checkInOn) : day(stay.checkedInAt)
-      const lastNight = on < day(r.checkOutOn) ? on : day(r.checkOutOn)
-      // The night of the day they leave is not charged; a same-day pick-up is charged one night.
-      const stayed = startedOn >= lastNight ? [startedOn] : nightsBetween(startedOn, lastNight)
+      const { on, location } = await locationDay(uow, stay.locationId, uow.now)
+      const stayed = nightsStayed(localDate({ timeZone: location.timeZone }, stay.checkedInAt), day(r.checkInOn), day(r.checkOutOn), on)
       for (const night of stayed) {
         await serviceCharge(uow, actor, { unitPriceMinor: rt.nightlyRateMinor, taxCategory: 'boarding', description: `Boarding, ${rt.name}: night of ${night}`, patientId: stay.patientId, clientId: stay.clientId, locationId: stay.locationId, sourceType: 'boarding_night', sourceId: `${stay.id}:${night}` })
       }
