@@ -257,6 +257,8 @@ export async function finishAttempt(prisma: any, actor: Actor, attemptId: string
 
 // ── Run billing, Retry, Check status, Replace card ──────────────────────────────────────────
 
+const BILLING_PAGE = 500
+
 /**
  * The staff button. Charges every enrolment that is due for the month, once. Pressing it again (or from two screens) finds the
  * attempts already there and charges nothing twice. The run row is written when the work is done, so it is never "running".
@@ -268,14 +270,19 @@ export async function runPlanBilling(_root: unknown, args: { periodKey?: string 
     if (!location) throw new DomainError(Codes.NOT_FOUND, 'Location not found.')
     const periodKey = args.periodKey?.trim() || monthOf(localDate({ timeZone: location.timeZone }, new Date()))
     if (!PERIOD.test(periodKey)) throw new DomainError(Codes.INVALID_INPUT, 'Choose the month as YYYY-MM.', { field: 'periodKey' })
-    const due = await context.prisma.enrollment.findMany({
-      where: { status: { in: ['pending_payment', 'active'] }, patient: { deceasedAt: null, status: { not: 'deceased' } }, ...(args.locationId ? { locationId: args.locationId } : {}) },
-      orderBy: { ref: 'asc' }, take: 500, select: { id: true, ref: true },
-    })
     const skipped: { ref: string; reason: string }[] = []
-    for (const e of due) {
-      const out = await chargeEnrollment(context.prisma, actor, { enrollmentId: e.id, periodKey, runKey: args.idempotencyKey })
-      if (out.status === 'skipped') skipped.push({ ref: e.ref, reason: out.message })
+    // Every due enrolment, a page at a time in reference order, so a practice with more than one page of members is charged in full.
+    for (let after = ''; ;) {
+      const due: { id: string; ref: string }[] = await context.prisma.enrollment.findMany({
+        where: { status: { in: ['pending_payment', 'active'] }, patient: { deceasedAt: null, status: { not: 'deceased' } }, ...(args.locationId ? { locationId: args.locationId } : {}), ...(after ? { ref: { gt: after } } : {}) },
+        orderBy: { ref: 'asc' }, take: BILLING_PAGE, select: { id: true, ref: true },
+      })
+      for (const e of due) {
+        const out = await chargeEnrollment(context.prisma, actor, { enrollmentId: e.id, periodKey, runKey: args.idempotencyKey })
+        if (out.status === 'skipped') skipped.push({ ref: e.ref, reason: out.message })
+      }
+      if (due.length < BILLING_PAGE) break
+      after = due[due.length - 1].ref
     }
     const done = await command(context.prisma, { name: 'wellness.run_billing', actor, idempotencyKey: `${args.idempotencyKey}:run`, params: args }, async uow => {
       const staff = await staffOf(uow, actor).catch(() => null)
