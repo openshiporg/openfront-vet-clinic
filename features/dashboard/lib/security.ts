@@ -52,7 +52,10 @@ export function publicGraphQLErrorMessage(error: unknown): string {
       if (names?.length) messages.push(`A record with this ${names.join(' and ')} already exists.`);
       continue;
     }
-    if (typeof code !== 'string' || !USER_FACING_CODES.has(code)) continue;
+    // The practice's own business-rule refusals (DomainError codes such as GUARD_FAILED: "Only $20.00 of this payment can
+    // still be refunded.") are written for staff too; the server's op() has already kept database detail out of them.
+    const domain = typeof code === 'string' && /^[A-Z][A-Z_]+$/.test(code) && !code.startsWith('KS_') && !SAFE_CODES.has(code);
+    if (typeof code !== 'string' || (!USER_FACING_CODES.has(code) && !domain)) continue;
     const cleaned = cleanMessage(message);
     if (cleaned) messages.push(cleaned);
   }

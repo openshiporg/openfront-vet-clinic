@@ -260,7 +260,7 @@ async function Payments() {
               <Status value={p.status} />
               {['unknown', 'pending'].includes(p.status) || (p.status === 'failed' && ['card_on_file', 'payment_link'].includes(p.method)) ? <ActionButton op="checkPaymentStatus" vars={{ paymentId: p.id }} paths={[PATH]}>Check status</ActionButton> : null}
             </Row>
-            {p.status === 'succeeded' ? <CommandForm className="mt-2" op="requestRefund" build="billing" submit="Refund" fixed={{ paymentId: p.id, invoiceId: p.forInvoice?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Refund (dollars)', width: 'sm' }, { name: 'reason', label: 'Reason' }]} /> : null}
+            {p.status === 'succeeded' && BigInt(p.refundedMinor) < BigInt(p.amountMinor) ? <CommandForm className="mt-2" op="requestRefund" build="billing" submit="Refund" fixed={{ paymentId: p.id, invoiceId: p.forInvoice?.id ?? '' }} paths={[PATH]} fields={[{ name: 'amount', label: 'Refund (dollars)', width: 'sm' }, { name: 'reason', label: 'Reason' }]} /> : null}
           </div>
         )) : <Empty>No payments yet.</Empty>}
       </Section>
