@@ -14,7 +14,9 @@ export function invariantError(error: unknown): DomainError | null {
   const message = error instanceof Error ? error.message : String(error)
   const constraint = /constraint "([A-Za-z0-9_]+)"/.exec(message)?.[1] ?? ''
   if (/23P01|exclusion constraint|_no_overlap/.test(message)) return new DomainError(Codes.SLOT_TAKEN, 'That time was just taken. Pick another slot.', { reason: constraint || 'overlap' })
-  const raised = /(?:ERROR|Message): ?`?([^`\n]*(?:cannot|can't|never|must|needs|frozen|append-only)[^`\n]*)/i.exec(message)?.[1]
+  // The guard's own sentence: Postgres's message field when Prisma wraps it, else the raised text.
+  const raised = /PostgresError \{[^}]*?message: "([^"]+)"/.exec(message)?.[1]
+    ?? /(?:ERROR|Message): ?`?([^`\n]*(?:cannot|can't|never|must|needs|frozen|append-only)[^`\n]*)/i.exec(message)?.[1]
   if (raised) return new DomainError(Codes.GUARD_FAILED, raised.trim().slice(0, 240), { reason: 'database_guard' })
   if (/23514|check constraint/.test(message)) return new DomainError(Codes.GUARD_FAILED, `A database rule refused this change (${constraint || 'check'}).`, { reason: constraint || 'check' })
   return null

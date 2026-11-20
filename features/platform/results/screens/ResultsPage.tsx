@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { q, practiceTimeZone, myPermissions } from '../../lib/server';
 import { when, label } from '../../lib/format';
 import { Page, Row, Empty, Status, Meta, Section, Stat } from '../../components/ui';
@@ -32,8 +33,10 @@ export default async function ResultsPage() {
       patients(where: { status: { equals: "active" } }, orderBy: { name: asc }, take: 300) { id name }
     }`),
     practiceTimeZone(),
-    myPermissions(['canOrder', 'canWriteRecord', 'canSignRecord', 'canMessageClients', 'canBook'] as const),
+    myPermissions(['canOrder', 'canWriteRecord', 'canSignRecord', 'canMessageClients', 'canBook', 'canReadClinical'] as const),
   ]);
+  // A role that cannot read lab orders has no Results screen (not an empty one).
+  if (!can.canReadClinical && !can.canOrder) notFound();
   const canOrder = can.canOrder;
   const canWork = can.canOrder || can.canWriteRecord;
   const canReview = can.canOrder || can.canSignRecord;

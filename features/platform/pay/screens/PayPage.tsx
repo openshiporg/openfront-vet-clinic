@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { q, practiceTimeZone, myPermissions } from '../../lib/server';
 import { when } from '../../lib/format';
 import { money } from '../../lib/format';
@@ -24,6 +25,7 @@ export default async function PayPage() {
     myPermissions(['canViewFinance', 'canManagePayments'] as const),
   ]);
   const pay = can.canViewFinance || can.canManagePayments;
+  if (!pay) notFound();
   const sum = (p: Period, k: 'productionMinor' | 'commissionMinor') => (p.totals ?? []).reduce((a, t) => a + BigInt(t[k]), 0n).toString();
   const rulesText = (r: Rule) => Object.entries(r.rules ?? {}).map(([g, x]) => `${g} ${x.bps / 100}%${x.basis === 'ordered' ? ' (ordering vet)' : ''}`).join(' · ');
   return (

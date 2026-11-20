@@ -140,12 +140,14 @@ describe('totals and the payroll file', () => {
     const rows = [{ staffId: 's2', name: '=cmd|x', employeeRef: 'employee', productionMinor: 2_900n, commissionMinor: 0n }, { staffId: 's1', name: 'Dr. "Ann" Lee', employeeRef: 'employee', productionMinor: 100n, commissionMinor: 40n }]
     const csv = payrollCsv({ ref: 'PAY-1', startsOn: '2026-11-01', endsOn: '2026-11-15' }, rows)
     expect(csv).toBe([
-      'period,starts_on,ends_on,staff_id,employee_ref,name,production,commission,total',
+      'period,starts_on,ends_on,staff_id,employment,name,production,commission,total',
       'PAY-1,2026-11-01,2026-11-15,s1,employee,"Dr. ""Ann"" Lee",1.00,0.40,1.40',
       "PAY-1,2026-11-01,2026-11-15,s2,employee,'=cmd|x,29.00,0.00,29.00",
       '',
     ].join('\n'))
     expect(payrollCsv({ ref: 'PAY-1', startsOn: '2026-11-01', endsOn: '2026-11-15' }, [...rows].reverse())).toBe(csv)
     expect(csvCell('-1+1')).toBe("'-1+1")
+    expect(csvCell(' =1+1')).toBe("' =1+1")
+    expect(csvCell('-25.00')).toBe('-25.00')
   })
 })

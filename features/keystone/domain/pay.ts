@@ -71,14 +71,15 @@ export const totalsHash = (totals: StaffTotal[]) => createHash('sha256').update(
 
 const cell = (value: string) => {
   // A spreadsheet treats a leading = + - @ as a formula: neutralise it.
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+  // A plain number ("-25.00") stays a number.
+  const safe = !/^-?\d+(\.\d+)?$/.test(value) && /^\s*[=+\-@\t\r]/.test(value) ? `'${value}` : value
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 export const money = (minor: bigint) => `${minor < 0n ? '-' : ''}${(minor < 0n ? -minor : minor) / 100n}.${String((minor < 0n ? -minor : minor) % 100n).padStart(2, '0')}`
 
 /** The payroll file: one row per staff member. Lines are sorted so the same period always gives the same bytes. */
 export function payrollCsv(period: { ref: string; startsOn: string; endsOn: string }, rows: { staffId: string; name: string; employeeRef: string; productionMinor: bigint; commissionMinor: bigint }[]) {
-  const header = ['period', 'starts_on', 'ends_on', 'staff_id', 'employee_ref', 'name', 'production', 'commission', 'total']
+  const header = ['period', 'starts_on', 'ends_on', 'staff_id', 'employment', 'name', 'production', 'commission', 'total']
   const lines = [...rows].sort((a, b) => a.staffId.localeCompare(b.staffId)).map(r =>
     [period.ref, period.startsOn, period.endsOn, r.staffId, r.employeeRef, r.name, money(r.productionMinor), money(r.commissionMinor), money(r.productionMinor + r.commissionMinor)].map(cell).join(','))
   return [header.join(','), ...lines].join('\n') + '\n'

@@ -33,6 +33,16 @@ describe('lists a role cannot read are hidden from its navigation', () => {
     expect(items).toContain('/platform/laboratories') // the manager sets up labs
     expect(items).toContain('/platform/patients')
   })
+  it('Results and Production and pay follow LabOrder and PayPeriod: gone from the CSR and groomer menus', async () => {
+    for (const role of ['Client Service Representative', 'Groomer']) {
+      const lists = await Promise.all([['LabOrder', 'lab-orders'], ['PayPeriod', 'pay-periods']].map(async ([key, path]) => ({ key, path, isHidden: await hidden(key, role) })))
+      const items = visiblePlatformItems(platformNavItems, lists, { role: { canAccessDashboard: true } }).map(i => i.href)
+      expect(items).not.toContain('/platform/results')
+      expect(items).not.toContain('/platform/pay')
+    }
+    const pm = await Promise.all([['LabOrder', 'lab-orders'], ['PayPeriod', 'pay-periods']].map(async ([key, path]) => ({ key, path, isHidden: await hidden(key, 'Practice Manager') })))
+    expect(visiblePlatformItems(platformNavItems, pm, { role: { canAccessDashboard: true } }).map(i => i.href)).toContain('/platform/pay')
+  })
   it('lists marked hidden in their own config stay hidden for everyone', async () => {
     const own = Object.entries(models as Record<string, { ui?: { isHidden?: unknown } }>).filter(([, l]) => l.ui?.isHidden === true)
     expect(own.length).toBeGreaterThan(0)
