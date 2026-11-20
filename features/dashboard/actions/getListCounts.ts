@@ -7,6 +7,7 @@
 
 import { PUBLIC_REQUEST_ERROR, safeErrorSummary } from '@/features/dashboard/lib/security';
 import { keystoneClient } from '../lib/keystoneClient'
+import { API_MAX_ROOT_FIELDS } from '@/features/keystone/security/breadthLimit'
 
 export async function getListCounts(
   lists: Array<{
@@ -37,20 +38,24 @@ export async function getListCounts(
     const selections = [...countQueries, ...singletonQueries]
     if (selections.length === 0) return { success: true, data: {} }
 
-    const query = `query GetListCounts { ${selections.join('\n')} }`
-    
-    const response = await keystoneClient(
-      query,
-      {},
-      {
-        next: {
-          revalidate: 60, // Cache for 1 minute since counts change frequently
-          tags: ['list-counts'],
-        },
-      }
+    // The API runs at most API_MAX_ROOT_FIELDS (20) top-level fields per request, so ask in batches of 20.
+    // A batch that fails leaves only its own cards without a count.
+    const batches: string[][] = []
+    for (let i = 0; i < selections.length; i += API_MAX_ROOT_FIELDS) batches.push(selections.slice(i, i + API_MAX_ROOT_FIELDS))
+    const responses = await Promise.all(
+      batches.map((batch) =>
+        keystoneClient(`query GetListCounts { ${batch.join('\n')} }`, {}, {
+          next: {
+            revalidate: 60, // Cache for 1 minute since counts change frequently
+            tags: ['list-counts'],
+          },
+        })
+      )
     )
-
-    return response
+    const data: Record<string, unknown> = {}
+    for (const response of responses) if (response.success && response.data) Object.assign(data, response.data)
+    if (responses.every((response) => !response.success)) return responses[0]
+    return { success: true, data }
   } catch (error: unknown) {
     console.error('Error fetching list counts:', safeErrorSummary(error))
     const errorMessage =
